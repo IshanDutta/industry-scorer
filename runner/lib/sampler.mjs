@@ -1,0 +1,220 @@
+// Claude for the headless page, on your own Anthropic API key.
+//
+// Every call the page makes (`sample.json` with a prompt, a model tier and sometimes page tools) becomes a
+// Messages API request. In "batch" mode requests are collected for a few seconds and sent together through the
+// Message Batches API (half price); tool rounds re-send the conversation with a prompt-cache breakpoint so each
+// later round re-reads it at the cache price. Results are kept by request hash, so a job that continues in a
+// new session picks up answers (and batches still running) instead of paying for them twice.
+import { createHash } from "node:crypto";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const hash = (o) => createHash("sha256").update(JSON.stringify(o)).digest("hex").slice(0, 40);
+
+// USD per million tokens for Claude Opus 5.5 (platform.claude.com pricing). Batch halves input and output.
+export const PRICES = {
+  "claude-opus-5-5": { input: 4, output: 20, cacheWrite: 5, cacheRead: 0.2 },
+  "claude-sonnet-5-5": { input: 2, output: 10, cacheWrite: 2.5, cacheRead: 0.1 },
+};
+
+const FRAMING_JSON = "Your reply will be read by a program as one JSON value. Reply with only the JSON value the instructions ask for, with no text, Markdown fence or commentary before or after it.";
+const FRAMING_TOOLS = " You may call the tools provided to gather what you need; your final message, after any tool use, is the one that is parsed.";
+
+/** The platform's tolerant JSON read: the whole reply; else one fenced block; else first { or [ to last } or ]. */
+export function parseJsonReply(text) {
+  const t = String(text || "").trim();
+  try { return { ok: true, value: JSON.parse(t) }; } catch {}
+  const fence = t.match(/```(?:json)?\s*\n?([\s\S]*?)```/i);
+  if (fence) { try { return { ok: true, value: JSON.parse(fence[1].trim()) }; } catch {} }
+  const a = t.search(/[[{]/), b = Math.max(t.lastIndexOf("}"), t.lastIndexOf("]"));
+  if (a >= 0 && b > a) { try { return { ok: true, value: JSON.parse(t.slice(a, b + 1)) }; } catch {} }
+  return { ok: false };
+}
+
+function toMessages(input) {
+  if (typeof input === "string") return [{ role: "user", content: input }];
+  const out = [];
+  for (const m of Array.isArray(input) ? input : []) {
+    const role = m.role === "assistant" ? "assistant" : "user";
+    if (out.length && out[out.length - 1].role === role) out[out.length - 1].content += "\n\n" + m.content;
+    else out.push({ role, content: String(m.content || "") });
+  }
+  return out;
+}
+
+/** Put one cache breakpoint on the last block of the last user message (for multi-round tool calls). */
+function withCacheBreakpoint(messages) {
+  const msgs = messages.map((m) => ({ ...m, content: typeof m.content === "string" ? [{ type: "text", text: m.content }] : m.content.map((b) => { const { cache_control, ...x } = b; return x; }) }));
+  for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === "user") { const c = msgs[i].content; c[c.length - 1] = { ...c[c.length - 1], cache_control: { type: "ephemeral" } }; break; }
+  return msgs;
+}
+
+export class Sampler {
+  constructor({ apiKey, baseUrl = "https://api.anthropic.com", model = "claude-opus-5-5", mode = "batch", effort = { complex: "high", default: "medium", quick: "low" },
+    maxTokens = 64000, maxRounds = 6, flushMs = 4000, pollMs = 20000, directConcurrency = 6, execTool, log = console.log }) {
+    Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), model, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
+    this.done = new Map();      // request hash -> API message (successful results, kept for continuation)
+    this.pending = new Map();   // request hash -> {batch, custom_id} submitted but not yet collected
+    this.waiters = new Map();   // request hash -> [{resolve, reject}]
+    this.queue = [];            // [{key, params}] waiting to be sent
+    this.batches = new Map();   // batch id -> Set(custom_id)
+    this.cancelled = new Set();
+    this.params = new Map();    // request hash -> params, while sent and not settled (to resend once)
+    this.usage = { requests: 0, cached_results: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, batches: 0 };
+    this.fatal = null;
+    this.inflight = 0;
+    this.timer = null; this.poller = null;
+  }
+
+  // ------------------------------------------------------------------ state for continuing in a new session
+  state() { return { v: 1, done: Object.fromEntries(this.done), pending: Object.fromEntries(this.pending), usage: this.usage }; }
+  load(st) {
+    if (!st || st.v !== 1) return;
+    for (const [k, v] of Object.entries(st.done || {})) this.done.set(k, v);
+    for (const [k, v] of Object.entries(st.pending || {})) { this.pending.set(k, v); if (!this.batches.has(v.batch)) this.batches.set(v.batch, new Set()); this.batches.get(v.batch).add(v.custom_id); }
+    if (st.usage) this.usage = { ...this.usage, ...st.usage };
+    if (this.batches.size) this.startPolling();
+  }
+
+  // ------------------------------------------------------------------ one page call (prompt -> JSON or text)
+  cancel(id) { this.cancelled.add(id); }
+  async ask(id, { verb, input, modelTier = "default", tools = [] }) {
+    if (this.fatal) return { error: this.fatal };
+    const system = verb === "json" ? FRAMING_JSON + (tools.length ? FRAMING_TOOLS : "") : (tools.length ? FRAMING_TOOLS.trim() : undefined);
+    let messages = toMessages(input);
+    const apiTools = tools.map((t) => ({ name: t.name, description: String(t.description || "").slice(0, 1024), input_schema: t.inputSchema || { type: "object", properties: {} } }));
+    const texts = [];
+    for (let round = 1; round <= this.maxRounds; round++) {
+      if (this.cancelled.has(id)) return { error: { code: "cancelled", message: "cancelled" } };
+      const last = round === this.maxRounds;
+      const params = { model: this.model, max_tokens: this.maxTokens, output_config: { effort: this.effort[modelTier] || "medium" },
+        ...(system ? { system } : {}), messages: apiTools.length ? withCacheBreakpoint(messages) : messages,
+        ...(apiTools.length ? { tools: apiTools, ...(last ? { tool_choice: { type: "none" } } : {}) } : {}) };
+      let msg;
+      try { msg = await this.send(params); }
+      catch (e) { return { error: e?.code ? e : { code: "upstream_error", message: String(e?.message || e) } }; }
+      const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+      if (msg.stop_reason === "refusal") return { error: { code: "refused", message: "Claude declined this request." } };
+      const uses = (msg.content || []).filter((b) => b.type === "tool_use");
+      if (msg.stop_reason === "tool_use" && uses.length && !last) {
+        if (text.trim()) texts.push(text);
+        const results = await Promise.all(uses.map(async (u) => {
+          let r; try { r = await this.execTool(id, u.name, u.input); } catch (e) { r = { error: String(e?.message || e) }; }
+          const content = r?.error ? "Error: " + r.error : String(r?.ok ?? "").slice(0, 32768);
+          return { type: "tool_result", tool_use_id: u.id, content: content || "(empty)", ...(r?.error ? { is_error: true } : {}) };
+        }));
+        messages = [...messages, { role: "assistant", content: msg.content }, { role: "user", content: results }];
+        continue;
+      }
+      const truncated = msg.stop_reason === "max_tokens";
+      const all = [...texts, text].filter((x) => x.trim()).join("\n\n");
+      if (verb === "json") {
+        const p = parseJsonReply(text);
+        if (!p.ok || truncated) return { error: { code: "invalid_json", message: truncated ? "The answer was cut short." : "No JSON value in the reply.", text: tools.length ? all : text } };
+        return { value: p.value, text: all };
+      }
+      if (!all.trim()) return { error: { code: "empty_completion", message: "No text." } };
+      return { text: all, truncated };
+    }
+    return { error: { code: "empty_completion", message: "No final answer after the tool rounds." } };
+  }
+
+  // ------------------------------------------------------------------ transport
+  async send(params) {
+    const key = hash(params);
+    if (this.done.has(key)) { this.usage.cached_results++; return this.done.get(key); }
+    if (this.mode === "direct") return this.direct(key, params);
+    return new Promise((resolve, reject) => {
+      if (!this.waiters.has(key)) this.waiters.set(key, []);
+      this.waiters.get(key).push({ resolve, reject });
+      if (this.pending.has(key) || this.queue.some((q) => q.key === key)) return; // already on its way
+      this.queue.push({ key, params });
+      if (this.queue.length >= 200) this.flush();
+      else if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs);
+    });
+  }
+  settle(key, fn) { const ws = this.waiters.get(key) || []; this.waiters.delete(key); for (const w of ws) fn(w); }
+  record(key, msg) {
+    this.done.set(key, msg); this.pending.delete(key); this.params.delete(key);
+    const u = msg.usage || {}, p = PRICES[this.model] || PRICES["claude-opus-5-5"], f = this.mode === "batch" ? 0.5 : 1;
+    this.usage.requests++;
+    this.usage.input += u.input_tokens || 0; this.usage.output += u.output_tokens || 0;
+    this.usage.cacheWrite += u.cache_creation_input_tokens || 0; this.usage.cacheRead += u.cache_read_input_tokens || 0;
+    this.usage.usd += f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+  }
+  headers() { return { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }; }
+
+  /** An API failure as the page's error codes: credits/auth stop the run; overload and 5xx are retried here. */
+  apiError(status, body) {
+    const msg = body?.error?.message || `HTTP ${status}`;
+    if (status === 401 || status === 403) return { code: "not_granted", message: "Anthropic rejected the API key: " + msg, fatal: true };
+    if (status === 400 && /credit balance|billing|spend limit|usage limit/i.test(msg)) return { code: "rate_limited", message: "Anthropic API: " + msg, fatal: true };
+    if (status === 413 || /too long|prompt is too long/i.test(msg)) return { code: "prompt_too_large", message: msg };
+    if (status === 400) return { code: "invalid_request", message: msg };
+    return { code: "upstream_error", message: msg, retry: true };
+  }
+  async http(path, { method = "GET", body = null, raw = false } = {}) {
+    for (let attempt = 1; ; attempt++) {
+      let res;
+      try { res = await fetch(path.startsWith("http") ? path : this.baseUrl + path, { method, headers: this.headers(), body: body ? JSON.stringify(body) : undefined }); }
+      catch (e) { if (attempt >= 8) throw { code: "upstream_error", message: "Network: " + (e?.message || e) }; await sleep(Math.min(60000, 2000 * attempt)); continue; }
+      if (res.ok) return raw ? res.text() : res.json();
+      const j = await res.json().catch(() => null);
+      if ((res.status === 429 || res.status >= 500) && attempt < 10) { const ra = Number(res.headers.get("retry-after")); await sleep(ra > 0 ? ra * 1000 : Math.min(120000, 3000 * 2 ** Math.min(attempt, 5))); continue; }
+      const err = this.apiError(res.status, j);
+      if (err.fatal) this.fatal = err;
+      throw err;
+    }
+  }
+  async direct(key, params) {
+    while (this.inflight >= this.directConcurrency) await sleep(200);
+    this.inflight++;
+    try { const msg = await this.http("/v1/messages", { method: "POST", body: params }); this.record(key, msg); return msg; }
+    finally { this.inflight--; }
+  }
+  async flush() {
+    clearTimeout(this.timer); this.timer = null;
+    const items = this.queue.splice(0, 10000);
+    if (!items.length) return;
+    try {
+      const requests = items.map((q, i) => ({ custom_id: `r${Date.now().toString(36)}${i}`, params: q.params }));
+      const b = await this.http("/v1/messages/batches", { method: "POST", body: { requests } });
+      this.usage.batches++;
+      const ids = new Set();
+      requests.forEach((r, i) => { this.pending.set(items[i].key, { batch: b.id, custom_id: r.custom_id }); this.params.set(items[i].key, items[i].params); ids.add(r.custom_id); });
+      this.batches.set(b.id, ids);
+      this.log(`[claude] batch ${b.id}: ${items.length} request${items.length === 1 ? "" : "s"}`);
+      this.startPolling();
+    } catch (e) {
+      for (const q of items) this.settle(q.key, (w) => w.reject(e));
+    }
+  }
+  startPolling() {
+    if (this.poller) return;
+    const tick = async () => {
+      try { await this.poll(); } catch (e) { this.log("[claude] poll error: " + (e?.message || JSON.stringify(e))); }
+      this.poller = this.batches.size ? setTimeout(tick, this.pollMs) : null;
+    };
+    this.poller = setTimeout(tick, Math.min(this.pollMs, 10000));
+  }
+  async poll() {
+    for (const [id] of [...this.batches]) {
+      const b = await this.http(`/v1/messages/batches/${id}`);
+      if (b.processing_status !== "ended") continue;
+      const text = await this.http(b.results_url, { raw: true });
+      const byCustom = new Map();
+      for (const line of text.split("\n")) { if (!line.trim()) continue; try { const r = JSON.parse(line); byCustom.set(r.custom_id, r.result); } catch {} }
+      for (const [key, p] of [...this.pending]) {
+        if (p.batch !== id) continue;
+        const r = byCustom.get(p.custom_id);
+        this.pending.delete(key);
+        if (r?.type === "succeeded") { this.record(key, r.message); this.settle(key, (w) => w.resolve(r.message)); continue; }
+        const err = r?.type === "errored" ? this.apiError(r.error?.error?.type === "invalid_request_error" ? 400 : 500, r.error) : { code: "upstream_error", message: `Request ${r?.type || "missing"}`, retry: true };
+        // Expired, canceled or a transient error: send it again once in the next batch; otherwise fail the call.
+        const ws = this.waiters.get(key);
+        if (err.retry && ws?.length && !ws.retried) { ws.retried = true; const params = this.params.get(key); if (params) { this.queue.push({ key, params }); if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs); continue; } }
+        this.params.delete(key); this.settle(key, (w) => w.reject(err));
+      }
+      this.batches.delete(id);
+    }
+  }
+}

@@ -1,0 +1,129 @@
+# Industry Scorer: analyze every industry in a sector on your own API keys.
+#
+# Run it by hand: Actions → "Sector run" → Run workflow → type a sector (e.g. Consumer Defensive).
+# Nightly: every sector listed in runner/nightly-sectors.txt (edit that file; leave it empty to turn nightly off).
+# A run longer than one GitHub session (about 5.5 hours) saves a checkpoint and continues in a new run by itself.
+# When it finishes, download the "results-..." artifact and import the .json.gz file in Industry Scorer.
+#
+# Secrets (Settings → Secrets and variables → Actions → New repository secret):
+#   ANTHROPIC_API_KEY   your Anthropic API key (console.anthropic.com)
+#   FMP_MCP_URL         the URL of your FMP MCP server (the one your claude.ai FMP connector uses)
+#   EODHD_MCP_URL       the URL of your EODHD MCP server (optional but recommended)
+#   FMP_MCP_HEADERS / EODHD_MCP_HEADERS   only if the server needs a header, as JSON: {"Authorization":"Bearer ..."}
+name: Sector run
+
+on:
+  workflow_dispatch:
+    inputs:
+      sector:
+        description: "Sector to analyze, e.g. Consumer Defensive (empty = every sector in runner/nightly-sectors.txt)"
+        required: false
+        default: ""
+      fresh:
+        description: "Start over instead of continuing an unfinished run"
+        type: boolean
+        default: false
+      continue_from:
+        description: "(set automatically) the run whose checkpoint to continue from"
+        required: false
+        default: ""
+  schedule:
+    - cron: "17 9 * * *" # every night at 09:17 UTC (2:17 am Pacific daylight time)
+
+permissions:
+  contents: read
+  actions: write # to start the continuation run and read the previous run's checkpoint
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      sectors: ${{ steps.p.outputs.sectors }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        env:
+          SECTOR: ${{ inputs.sector }}
+        run: |
+          if [ -n "$SECTOR" ]; then
+            echo "sectors=$(jq -cn --arg s "$SECTOR" '[$s]')" >> "$GITHUB_OUTPUT"
+          else
+            echo "sectors=$( (grep -v '^[[:space:]]*#' runner/nightly-sectors.txt || true) | sed '/^[[:space:]]*$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+          fi
+
+  run:
+    needs: plan
+    if: needs.plan.outputs.sectors != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # one sector at a time, so data calls stay within your FMP plan's rate limit
+      matrix:
+        sector: ${{ fromJson(needs.plan.outputs.sectors) }}
+    concurrency:
+      group: sector-${{ matrix.sector }}
+      cancel-in-progress: false
+    env:
+      SECTOR: ${{ matrix.sector }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: slug
+        run: echo "slug=$(echo "$SECTOR" | tr '[:upper:]' '[:lower:]' | sed -e 's/&/and/g' -e 's/[^a-z0-9]\+/-/g' -e 's/^-//' -e 's/-$//')" >> "$GITHUB_OUTPUT"
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: runner
+        run: npx playwright install --with-deps chromium
+      - name: Get the checkpoint to continue from
+        if: inputs.continue_from != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: checkpoint-${{ steps.slug.outputs.slug }}
+          run-id: ${{ inputs.continue_from }}
+          github-token: ${{ github.token }}
+          path: resume
+      - name: Analyze ${{ matrix.sector }}
+        id: run
+        working-directory: runner
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          EODHD_MCP_URL: ${{ secrets.EODHD_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
+          FRESH: ${{ inputs.fresh }}
+        run: |
+          set +e
+          args=(--sector "$SECTOR" --out ../out --deadline-min 320)
+          [ -f ../resume/checkpoint.json.gz ] && args+=(--resume ../resume/checkpoint.json.gz)
+          [ "$FRESH" = "true" ] && [ ! -f ../resume/checkpoint.json.gz ] && args+=(--fresh)
+          node run.mjs "${args[@]}"
+          code=$?
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ $code -ne 0 ] && [ $code -ne 75 ]; then exit $code; fi
+      - name: Save results
+        if: always() && hashFiles('out/results-*.json.gz') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ steps.slug.outputs.slug }}-${{ github.run_id }}
+          path: out/results-*.json.gz
+          retention-days: 30
+          compression-level: 0
+      - name: Save checkpoint
+        if: always() && hashFiles('out/checkpoint.json.gz') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoint-${{ steps.slug.outputs.slug }}
+          path: out/checkpoint.json.gz
+          retention-days: 7
+          compression-level: 0
+      - name: Continue in a new run
+        if: steps.run.outputs.code == '75'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}"

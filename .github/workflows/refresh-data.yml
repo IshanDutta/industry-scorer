@@ -1,0 +1,84 @@
+name: Refresh data
+
+# Runs the pipeline with your API keys (stored as GitHub secrets), then commits
+# the results in data/processed. Streamlit Community Cloud redeploys on each push,
+# so the website always shows the latest run.
+
+on:
+  schedule:
+    # 02:17 UTC Tuesday-Saturday = evening after each US trading day,
+    # once EODHD has published end-of-day prices.
+    - cron: "17 2 * * 2-6"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "all = every FMP industry; default = industries listed in config/settings.yaml"
+        type: choice
+        options: [all, default]
+        default: all
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore API response cache
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: api-cache-${{ github.run_id }}
+          restore-keys: api-cache-
+
+      - name: Check secrets are set
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+        run: |
+          if [ -z "$FMP_API_KEY" ] || [ -z "$EODHD_API_KEY" ]; then
+            echo "::error::Add FMP_API_KEY and EODHD_API_KEY under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Run pipeline
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          EODHD_API_KEY: ${{ secrets.EODHD_API_KEY }}
+          SCOPE: ${{ github.event.inputs.scope || 'all' }}
+        run: |
+          if [ "$SCOPE" = "all" ]; then
+            python -m industry_scorer.pipeline --all
+          else
+            python -m industry_scorer.pipeline
+          fi
+
+      - name: Run tests
+        run: pytest -q
+
+      - name: Commit results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/processed
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "Refresh data $(date -u +%F)"
+          git push
