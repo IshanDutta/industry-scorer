@@ -58,11 +58,13 @@ function withCacheBreakpoint(messages) {
 
 export class Sampler {
   constructor({ apiKey, baseUrl = "https://api.anthropic.com", model = "claude-opus-5-5", mode = "batch", effort = { complex: "high", default: "medium", quick: "low" },
-    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, execTool, log = console.log }) {
+    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, directAfterMin = 0, execTool, log = console.log }) {
     Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), model, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
     // A batch still running after this long has its requests re-sent at the standard price (0 = never).
     this.stragglerMs = Math.max(0, Number(stragglerMin) || 0) * 60000;
     this.batchAt = new Map();   // batch id -> when it was sent (Infinity once its requests were re-sent)
+    // Time budget: after this long, everything still to do goes at the standard price (0 = never).
+    this.directAfterMs = Math.max(0, Number(directAfterMin) || 0) * 60000; this.t0 = Date.now(); this.switched = false;
     this.done = new Map();      // request hash -> API message (successful results, kept for continuation)
     this.pending = new Map();   // request hash -> {batch, custom_id} submitted but not yet collected
     this.waiters = new Map();   // request hash -> [{resolve, reject}]
@@ -142,10 +144,18 @@ export class Sampler {
   }
 
   // ------------------------------------------------------------------ transport
+  /** Past the time budget: stop batching, and re-send whatever is still waiting in batches. */
+  switchToDirect() {
+    if (this.switched) return; this.switched = true;
+    this.log(`[claude] ${Math.round(this.directAfterMs / 60000)} minutes in: sending everything that's left at the standard price to finish on time`);
+    for (const id of [...this.batches.keys()]) this.rescue(id);
+    if (this.queue.length) this.flush();
+  }
   async send(params) {
     const key = hash(params);
     if (this.done.has(key)) { this.usage.cached_results++; return this.done.get(key); }
-    if (this.mode === "direct") return this.direct(key, params);
+    if (this.directAfterMs && !this.switched && Date.now() - this.t0 > this.directAfterMs) this.switchToDirect();
+    if (this.mode === "direct" || this.switched) return this.direct(key, params);
     return new Promise((resolve, reject) => {
       if (!this.waiters.has(key)) this.waiters.set(key, []);
       this.waiters.get(key).push({ resolve, reject });
@@ -214,7 +224,7 @@ export class Sampler {
     this.batchAt.set(id, Infinity);
     const mine = [...this.pending].filter(([key, p]) => p.batch === id && this.waiters.get(key)?.length && this.params.has(key));
     if (!mine.length) return;
-    this.log(`[claude] batch ${id} is still running after ${Math.round(this.stragglerMs / 60000)} min: re-sending its ${mine.length} request${mine.length === 1 ? "" : "s"} at the standard price`);
+    this.log(`[claude] batch ${id} ${this.switched ? "is still running" : `is still running after ${Math.round(this.stragglerMs / 60000)} min`}: re-sending its ${mine.length} request${mine.length === 1 ? "" : "s"} at the standard price`);
     try { await this.http(`/v1/messages/batches/${id}/cancel`, { method: "POST" }); } catch {}
     for (const [key] of mine) {
       const params = this.params.get(key);
@@ -226,6 +236,7 @@ export class Sampler {
     clearTimeout(this.timer); this.timer = null;
     const items = this.queue.splice(0, 10000);
     if (!items.length) return;
+    if (this.switched) { for (const q of items) this.direct(q.key, q.params).then((m) => this.settle(q.key, (w) => w.resolve(m)), (e) => this.settle(q.key, (w) => w.reject(e))); return; }
     try {
       const requests = items.map((q, i) => ({ custom_id: `r${Date.now().toString(36)}${i}`, params: q.params }));
       const b = await this.http("/v1/messages/batches", { method: "POST", body: { requests } });
@@ -249,6 +260,8 @@ export class Sampler {
   }
   async poll() {
     for (const [id] of [...this.batches]) {
+      if (this.directAfterMs && !this.switched && Date.now() - this.t0 > this.directAfterMs) { this.switchToDirect(); }
+      if (this.batchAt.get(id) === Infinity && ![...this.pending.values()].some((p) => p.batch === id)) { this.batches.delete(id); this.batchAt.delete(id); continue; }
       const b = await this.http(`/v1/messages/batches/${id}`);
       if (b.processing_status !== "ended") { if (this.stragglerMs && Date.now() - (this.batchAt.get(id) ?? Date.now()) > this.stragglerMs) await this.rescue(id); continue; }
       const text = await this.http(b.results_url, { raw: true });

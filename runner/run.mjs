@@ -17,8 +17,9 @@
 //   CLAUDE_MODEL                default claude-opus-5-5
 //   CLAUDE_MODE                 batch (default) or direct (full price, faster)
 //   CLAUDE_STRAGGLER_MIN        a batch still running after this many minutes is re-sent at the standard price (default 20; 0 = never)
+//   CLAUDE_DIRECT_AFTER_MIN     after this many minutes, send everything left at the standard price (default never)
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
-//   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 4, 4, 4)
+//   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
 //   ANTHROPIC_BASE_URL          for testing only
 //
 // Exit codes: 0 finished (results written) · 75 out of time, checkpoint written (continue in a new session)
@@ -60,7 +61,7 @@ async function main() {
   const sampler = new Sampler({
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined, model: env.CLAUDE_MODEL || "claude-opus-5-5",
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
-    flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000), stragglerMin: env.CLAUDE_STRAGGLER_MIN ?? 20,
+    flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000), stragglerMin: env.CLAUDE_STRAGGLER_MIN ?? 20, directAfterMin: env.CLAUDE_DIRECT_AFTER_MIN || 0,
     execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]),
   });
   let checkpoint = null;
@@ -80,7 +81,7 @@ async function main() {
   await page.exposeFunction("__job_cancel", (id) => sampler.cancel(id));
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: Number(env.JOB_INDUSTRIES || 4), pool: Number(env.JOB_POOL || 4), bodies: Number(env.JOB_BODIES || 4), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230) };
+  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   // The page is served from a file so its saved runs (IndexedDB) persist for the whole session.
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8");

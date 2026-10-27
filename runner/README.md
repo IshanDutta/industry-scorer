@@ -36,6 +36,8 @@ Only the connections change:
 - **Every sector at once:** type `all`. Each sector gets its own machine and they run in parallel (their starts are
   staggered 6 minutes apart so data pulls don't all hit FMP together; if FMP says to slow down, the job waits and
   retries, so no data is lost).
+- **Fast:** tick **fast** to finish a sector in about 3 hours. Batches that aren't back in 5 minutes are re-sent at the
+  standard price, and after 90 minutes everything left goes at the standard price. It costs more (roughly 1.3–1.6×).
 - **Nightly:** list sectors in `runner/nightly-sectors.txt` (one per line). Empty the list to turn nightly runs off.
 - A run takes several hours: the work has about 30–40 steps in a row, and a batch usually returns in 2–5 minutes but
   sometimes sits for an hour or more. Any batch still running after 20 minutes has its requests re-sent at the
@@ -66,7 +68,8 @@ workflow again for the same sector with `continue_from` set to that run's ID (fr
 |---|---|---|
 | `CLAUDE_MODEL` | `claude-opus-5-5` | The model for every step |
 | `CLAUDE_MODE` | `batch` | `direct` = full price, answers in seconds instead of minutes |
-| `JOB_INDUSTRIES`, `JOB_POOL`, `JOB_BODIES` | 4, 4, 4 | How much runs at once |
+| `JOB_INDUSTRIES`, `JOB_POOL`, `JOB_BODIES` (repository variables) | 10, 8, 12 | Industries, agents and regulators worked on at once |
+| `DIRECT_AFTER_MIN` (repository variable) | none | After this many minutes, everything left goes at the standard price |
 | `STRAGGLER_MIN` (repository variable) | 20 | Minutes before a slow batch is re-sent at the standard price (0 = never) |
 | `STAGGER_MIN` (repository variable) | 6 | Minutes between sector starts when several run at once |
 | `FMP_GAP_MS` (repository variable) | 230 | Pause between FMP calls; raise it if your FMP plan's rate limit is low |

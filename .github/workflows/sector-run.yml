@@ -25,6 +25,10 @@ on:
         description: "Start over instead of continuing an unfinished run"
         type: boolean
         default: false
+      fast:
+        description: "Fast: finish a sector in about 3 hours (slow batches re-sent after 5 min, everything at the standard price after 90 min; costs more)"
+        type: boolean
+        default: false
       continue_from:
         description: "(set automatically) the run whose checkpoint to continue from"
         required: false
@@ -113,7 +117,11 @@ jobs:
           EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
           FRESH: ${{ inputs.fresh }}
           JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
-          CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '20' }}
+          CLAUDE_STRAGGLER_MIN: ${{ inputs.fast && '5' || vars.STRAGGLER_MIN || '20' }}
+          CLAUDE_DIRECT_AFTER_MIN: ${{ inputs.fast && '90' || vars.DIRECT_AFTER_MIN || '' }}
+          JOB_INDUSTRIES: ${{ vars.JOB_INDUSTRIES || '10' }}
+          JOB_POOL: ${{ vars.JOB_POOL || '8' }}
+          JOB_BODIES: ${{ vars.JOB_BODIES || '12' }}
         run: |
           set +e
           # This GitHub session ends 6 hours after it began (including any staggered start): stop in time to save.
@@ -144,4 +152,4 @@ jobs:
         if: steps.run.outputs.code == '75'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}"
+        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f fast="${{ inputs.fast || false }}"

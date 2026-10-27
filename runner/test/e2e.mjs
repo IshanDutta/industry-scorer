@@ -106,4 +106,16 @@ if (which.includes("5")) {
   ok(r2.code === 0 && !!rec?.finished_at, `continued and finished (exit ${r2.code})`);
   fa.server.close();
 }
+if (which.includes("6")) {
+  console.log("\n=== 6. fast mode: after the time budget, everything goes at the standard price ===");
+  const fa = await fakeAnthropic(brain, { port: 7807, batchDelayMs: 3000 });
+  const out = join(tmp, "six");
+  const r = await run(7807, out, [], { CLAUDE_DIRECT_AFTER_MIN: "6.2", CLAUDE_STRAGGLER_MIN: "5" });
+  ok(r.code === 0, `finished (exit ${r.code})`);
+  ok(/sending everything that's left at the standard price/.test(r.log), "switched to the standard price at the time budget");
+  const f = resultsFile(out); const res = f && read(join(out, f));
+  ok(!!res?.records?.[`sector:${SECTOR.toLowerCase()}`]?.finished_at, "every industry finished");
+  ok(res?.job?.cost?.direct_requests > 0 && fa.stats.batches > 0, `some batched (${fa.stats.batches} batches), the rest standard (${res?.job?.cost?.direct_requests})`);
+  fa.server.close();
+}
 process.exit();
