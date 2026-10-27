@@ -24,7 +24,7 @@
 // Exit codes: 0 finished (results written) · 75 out of time, checkpoint written (continue in a new session)
 //             1 stopped by an error (results so far and a checkpoint are written).
 import { chromium } from "playwright";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,7 +70,8 @@ async function main() {
     log(`Continuing from a checkpoint saved ${checkpoint.exported_at} (${Object.keys(checkpoint.records || {}).length} saved records, ${sampler.done.size} Claude answers kept, ${sampler.pending.size} still in batches)`);
   }
 
-  const browser = await chromium.launch();
+  // The job (not Playwright) handles stop signals, so the page is still there to save a checkpoint from.
+  const browser = await chromium.launch({ handleSIGINT: false, handleSIGTERM: false, handleSIGHUP: false });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   page = await ctx.newPage();
   page.on("pageerror", (e) => log("[page error]", String(e).slice(0, 300)));
@@ -96,6 +97,20 @@ async function main() {
   log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.model}, ${sampler.mode} mode)`);
   await page.evaluate(([s, f]) => window.__industryScorer.start(s, { fresh: f }), [sector, fresh]);
 
+  // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
+  // limit), so there is always one to continue from.
+  const saveCheckpoint = async (why) => {
+    try {
+      const full = await page.evaluate((s) => window.__industryScorer.exportSector(s, { full: true }), sector);
+      if (!full) return;
+      const tmp = join(outDir, "checkpoint.json.gz.part");
+      writeGz(tmp, { ...full, sampler: sampler.state() }); renameSync(tmp, join(outDir, "checkpoint.json.gz"));
+      log(`Checkpoint saved (${why})`);
+    } catch (e) { log("Couldn't save a checkpoint: " + String(e?.message || e).slice(0, 200)); }
+  };
+  let lastSave = Date.now();
+  for (const sig of ["SIGINT", "SIGTERM"]) process.once(sig, async () => { log(`Stopping (${sig})`); await saveCheckpoint("the job was stopped"); process.exit(1); });
+
   // Watch it, and stop cleanly before the session runs out of time.
   let last = "", stopped = false, outOfTime = false;
   await page.waitForFunction(() => window.__industryScorer.status().busy, null, { timeout: 60000 }).catch(() => {});
@@ -105,6 +120,7 @@ async function main() {
     const line = `${st.phase || "-"} · ${st.label || ""}${st.working.length ? ` · working on: ${st.working.join(", ")}` : ""} · ${st.calls ?? 0} Claude calls · $${sampler.usage.usd.toFixed(2)}`;
     if (line !== last) { log(line); last = line; }
     if (!st.busy) break;
+    if (Date.now() - lastSave > 20 * 60000) { lastSave = Date.now(); await saveCheckpoint("every 20 minutes"); }
     if (!stopped && Date.now() > deadline) {
       log("Out of time for this session: stopping cleanly and saving a checkpoint to continue in the next one.");
       stopped = outOfTime = true;

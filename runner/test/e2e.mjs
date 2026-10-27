@@ -18,12 +18,13 @@ const SECTOR = "Technology";
 const read = (p) => JSON.parse(gunzipSync(readFileSync(p)).toString());
 const ok = (c, msg) => { console.log(`${c ? "PASS" : "FAIL"} ${msg}`); if (!c) process.exitCode = 1; };
 
-function run(port, out, extra = [], env = {}) {
+function run(port, out, extra = [], env = {}, killAfterMs = 0) {
   return new Promise((resolve) => {
     const p = spawn(process.execPath, [join(here, "../run.mjs"), "--sector", SECTOR, "--out", out, ...extra], {
       env: { ...process.env, ANTHROPIC_API_KEY: "test-key", ANTHROPIC_BASE_URL: `http://127.0.0.1:${port}`, FMP_MCP_URL: "http://127.0.0.1:7801/fmp", EODHD_MCP_URL: "http://127.0.0.1:7801/eodhd",
         CLAUDE_FLUSH_MS: "600", CLAUDE_POLL_MS: "1500", GITHUB_OUTPUT: "", GITHUB_STEP_SUMMARY: join(out, "summary.md"), ...env }, stdio: ["ignore", "pipe", "pipe"] });
     let log = ""; p.stdout.on("data", (d) => { log += d; process.stdout.write("    " + String(d).trimEnd().replace(/\n/g, "\n    ") + "\n"); }); p.stderr.on("data", (d) => { log += d; process.stderr.write(d); });
+    if (killAfterMs) setTimeout(() => p.kill("SIGINT"), killAfterMs);
     p.on("exit", (code) => resolve({ code, log }));
   });
 }
@@ -92,6 +93,17 @@ if (which.includes("4")) {
   const f = resultsFile(out); const res = f && read(join(out, f));
   ok(!!res?.records?.[`sector:${SECTOR.toLowerCase()}`]?.finished_at, "every industry finished");
   ok(res?.job?.cost?.direct_requests > 0, `cost counts the standard-price requests (${res?.job?.cost?.direct_requests})`);
+  fa.server.close();
+}
+if (which.includes("5")) {
+  console.log("\n=== 5. the job is cancelled mid-run, then continued ===");
+  const fa = await fakeAnthropic(brain, { port: 7806 });
+  const out1 = join(tmp, "five-a"), out2 = join(tmp, "five-b");
+  const r1 = await run(7806, out1, [], {}, 7 * 60000);
+  ok(/Checkpoint saved \(the job was stopped\)/.test(r1.log) && existsSync(join(out1, "checkpoint.json.gz")), "a cancelled job still leaves a checkpoint");
+  const r2 = await run(7806, out2, ["--resume", join(out1, "checkpoint.json.gz")]);
+  const f = resultsFile(out2); const rec = f && read(join(out2, f)).records[`sector:${SECTOR.toLowerCase()}`];
+  ok(r2.code === 0 && !!rec?.finished_at, `continued and finished (exit ${r2.code})`);
   fa.server.close();
 }
 process.exit();
