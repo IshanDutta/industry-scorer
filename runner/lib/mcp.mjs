@@ -6,6 +6,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const RATE_RE = /limit reach|rate limit|too many requests|\b429\b|requests per minute|exceeded the (?:allowed|maximum)|throttl/i;
 
 /** The viewer's `payload`: structuredContent, else the first text block parsed as JSON, else that text. */
 export function payloadOf(result) {
@@ -19,7 +20,7 @@ export class McpBridge {
   /** servers: { "FMP": {url, headers}, "EODHD": {url, headers} } (display names the page uses). */
   constructor(servers, { log = console.log, timeoutMs = 120000 } = {}) {
     this.servers = servers; this.log = log; this.timeoutMs = timeoutMs;
-    this.clients = new Map(); this.tools = new Map(); this.calls = 0; this.errors = 0;
+    this.clients = new Map(); this.tools = new Map(); this.calls = 0; this.errors = 0; this.throttled = 0;
   }
   async connect(name) {
     const cfg = this.servers[name]; if (!cfg?.url) return null;
@@ -53,6 +54,9 @@ export class McpBridge {
         const result = await this.clients.get(server).callTool({ name: tool, arguments: input || {} }, undefined, { timeout: this.timeoutMs });
         if (result?.isError) {
           const msg = (result.content || []).filter((b) => b.type === "text").map((b) => b.text).join(" ").slice(0, 500) || "The tool reported an error.";
+          // The data provider asking us to slow down (several sectors at once can reach a plan's per-minute limit):
+          // wait and try again rather than losing the data.
+          if (RATE_RE.test(msg) && attempt < 8) { this.throttled++; await sleep(Math.min(120000, 10000 * 2 ** Math.min(attempt - 1, 3)) + Math.random() * 5000); continue; }
           throw { code: "tool_error", server, message: msg, result };
         }
         return { content: result?.content || [], structuredContent: result?.structuredContent, payload: payloadOf(result) };
@@ -60,6 +64,7 @@ export class McpBridge {
         if (e?.code === "tool_error") { this.errors++; throw e; }
         // A protocol-level refusal (bad arguments, unknown tool) is the tool's answer, not a connection problem.
         if (typeof e?.code === "number" && e.code !== -32000 && e.code !== -32001) { this.errors++; throw { code: "tool_error", server, message: String(e.message || e).slice(0, 500), result: null }; }
+        if (RATE_RE.test(String(e?.message || "")) && attempt < 8) { this.throttled++; await sleep(Math.min(120000, 10000 * 2 ** Math.min(attempt - 1, 3)) + Math.random() * 5000); continue; }
         // Transport trouble: reconnect and try again a couple of times, then report it the way the viewer would.
         if (attempt < 3) { await sleep(1500 * attempt); try { await this.connect(server); } catch {} continue; }
         this.errors++;

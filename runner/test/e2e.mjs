@@ -82,4 +82,16 @@ if (which.includes("3")) {
   ok(existsSync(join(out, "checkpoint.json.gz")), "checkpoint written to continue once credit is added");
   fa.server.close();
 }
+if (which.includes("4")) {
+  console.log("\n=== 4. slow batches are re-sent at the standard price ===");
+  const fa = await fakeAnthropic(brain, { port: 7805, batchDelayMs: 10 * 60 * 1000 });
+  const out = join(tmp, "four");
+  const r = await run(7805, out, [], { CLAUDE_STRAGGLER_MIN: "0.1" });
+  ok(r.code === 0, `finished (exit ${r.code})`);
+  ok(fa.stats.cancels > 0 && fa.stats.direct > 0, `slow batches cancelled (${fa.stats.cancels}) and re-sent (${fa.stats.direct} streamed requests)`);
+  const f = resultsFile(out); const res = f && read(join(out, f));
+  ok(!!res?.records?.[`sector:${SECTOR.toLowerCase()}`]?.finished_at, "every industry finished");
+  ok(res?.job?.cost?.direct_requests > 0, `cost counts the standard-price requests (${res?.job?.cost?.direct_requests})`);
+  fa.server.close();
+}
 process.exit();

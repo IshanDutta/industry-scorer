@@ -6331,8 +6331,9 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
 
   // ------------------------------------------------------------- FMP calls
   let nextSlot = 0;
+  const FMP_GAP_MS = JOB?.fmpGapMs > 0 ? JOB.fmpGapMs : CALL_GAP_MS;
   async function fmp(tool, input) {
-    const now = Date.now(); const slot = Math.max(now, nextSlot); nextSlot = slot + CALL_GAP_MS;
+    const now = Date.now(); const slot = Math.max(now, nextSlot); nextSlot = slot + FMP_GAP_MS;
     if (slot > now) await sleep(slot - now);
     let res;
     try { res = await S.mcp.callTool(SERVER, tool, input); }
@@ -7898,18 +7899,30 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
     if (file.sector) S.sectorRec[file.sector] = file.records[secKey(file.sector)] || null;
     return n;
   }
-  async function importResultsFile(f) {
-    try {
-      let text;
-      if (/\.gz$/i.test(f.name) && typeof DecompressionStream !== "undefined") text = await new Response(f.stream().pipeThrough(new DecompressionStream("gzip"))).text();
-      else text = await f.text();
-      const file = JSON.parse(text);
-      const n = await importRecords(file);
+  /** Import one or more results files (one per sector); opens the first sector's overview. */
+  async function importResultsFiles(files) {
+    const done = [], failed = [];
+    for (const f of files) {
+      try {
+        let text;
+        if (/\.gz$/i.test(f.name) && typeof DecompressionStream !== "undefined") text = await new Response(f.stream().pipeThrough(new DecompressionStream("gzip"))).text();
+        else text = await f.text();
+        const file = JSON.parse(text);
+        const n = await importRecords(file);
+        done.push({ sector: file.sector, n, finished: file.finished, at: file.exported_at });
+      } catch (e) { failed.push(`${f.name}: ${e?.message || e}`); }
+    }
+    if (done.length) {
       if (_saveName) await flush();
       if (S.selected) forget(S.selected);
-      S.selected = null; S.sectorView = file.sector || null; S.pickerOpen = false; S.restored = null;
-      S.notices = [{ kind: "info", text: `Imported ${n} industr${n === 1 ? "y" : "ies"} from the overnight job (${file.sector || "results"}, run ${fmtDate(file.exported_at)})${file.finished ? "" : ". That run hadn't finished; what it finished is here"}.` }];
-    } catch (e) { S.notices = [{ kind: "err", text: `Couldn't import that file: ${e?.message || e}` }]; }
+      S.selected = null; S.sectorView = done[0].sector || null; S.pickerOpen = false; S.restored = null;
+    }
+    S.notices = [
+      ...(done.length ? [{ kind: "info", text: done.length === 1
+        ? `Imported ${done[0].n} industr${done[0].n === 1 ? "y" : "ies"} from the overnight job (${done[0].sector || "results"}, run ${fmtDate(done[0].at)})${done[0].finished ? "" : ". That run hadn't finished; what it finished is here"}.`
+        : `Imported ${done.length} sectors (${done.reduce((a, x) => a + x.n, 0)} industries): ${done.map((x) => `${x.sector}${x.finished ? "" : " (unfinished)"}`).join(", ")}. Open each sector from the picker to see its overview.` }] : []),
+      ...failed.map((t) => ({ kind: "err", text: `Couldn't import ${t}` })),
+    ];
     renderAll();
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
@@ -8175,13 +8188,13 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
       <div class="picker-list">${body}</div>
       ${(S.saved || []).length ? `<div class="small muted">${S.saved.length} run${S.saved.length === 1 ? "" : "s"} saved in this browser (the ${KEEP} most recent are kept). <button class="sm" id="clear-saved" ${busy() ? "disabled" : ""}>Delete saved runs</button></div>` : ""}
       <label class="check"><input type="checkbox" id="us-only" ${usOnly() ? "checked" : ""} ${busy() ? "disabled" : ""}> Count US-headquartered companies only (leaves out foreign companies listed in the US, like TSM and ASML)</label>
-      <div class="small muted">Ran a sector with the overnight job? <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import its results file</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" hidden></div>`;
+      <div class="small muted">Ran sectors with the overnight job? <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
     $("close-picker")?.addEventListener("click", () => { S.pickerOpen = false; S.filter = ""; renderPicker(); });
     $("clear-saved")?.addEventListener("click", async () => { if (!confirm("Delete every run saved in this browser, and the track record of their calls? What's on screen stays until you leave.")) return; for (const x of S.saved || []) { await idbDel("run:" + x.slug); await idbDel("calls:" + x.slug); } await idbDel("index"); await idbDel("last"); S.saved = []; S.savedAt = {}; S.restored = null; renderAll(); });
     const input = $("pick-filter");
     input.addEventListener("input", () => { S.filter = input.value; renderPicker(); });
     $("import-results")?.addEventListener("click", () => $("import-file")?.click());
-    $("import-file")?.addEventListener("change", (ev) => { const f = ev.target.files?.[0]; if (f) importResultsFile(f); });
+    $("import-file")?.addEventListener("change", (ev) => { const fs = [...(ev.target.files || [])]; if (fs.length) importResultsFiles(fs); });
   }
 
   // ------------------------------------------------------------- render: sector runs

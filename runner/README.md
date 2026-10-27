@@ -32,16 +32,22 @@ Only the connections change:
 ## Run it
 
 - **On demand:** Actions → **Sector run** → **Run workflow** → type the sector (spelled as in the page's sector list,
-  e.g. `Consumer Defensive`) → Run.
+  e.g. `Consumer Defensive`) → Run. Several at once: separate them with commas (`Energy, Utilities`).
+- **Every sector at once:** type `all`. Each sector gets its own machine and they run in parallel (their starts are
+  staggered 6 minutes apart so data pulls don't all hit FMP together; if FMP says to slow down, the job waits and
+  retries, so no data is lost).
 - **Nightly:** list sectors in `runner/nightly-sectors.txt` (one per line). Empty the list to turn nightly runs off.
-- A run takes a few hours (batches return in minutes to an hour each, and the work has about 30–40 steps in a row).
+- A run takes several hours: the work has about 30–40 steps in a row, and a batch usually returns in 2–5 minutes but
+  sometimes sits for an hour or more. Any batch still running after 20 minutes has its requests re-sent at the
+  standard price, which keeps a sector to roughly 10–20 hours at a little extra cost.
   If it needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run by
   itself; nothing finished is paid for twice.
 
 ## Get the results into Industry Scorer
 
 When the run finishes, open it in Actions, download the **results-…** artifact (a zip), and unzip it. In Industry
-Scorer, open the picker and click **Import its results file**, then choose the `.json.gz` file. The sector overview
+Scorer, open the picker and click **Import results files**, then choose the `.json.gz` file (or several at once, one
+per sector). The sector overview
 opens, and every industry's full report is saved in that browser like any other run.
 
 ## What it costs
@@ -61,6 +67,9 @@ workflow again for the same sector with `continue_from` set to that run's ID (fr
 | `CLAUDE_MODEL` | `claude-opus-5-5` | The model for every step |
 | `CLAUDE_MODE` | `batch` | `direct` = full price, answers in seconds instead of minutes |
 | `JOB_INDUSTRIES`, `JOB_POOL`, `JOB_BODIES` | 4, 4, 4 | How much runs at once |
+| `STRAGGLER_MIN` (repository variable) | 20 | Minutes before a slow batch is re-sent at the standard price (0 = never) |
+| `STAGGER_MIN` (repository variable) | 6 | Minutes between sector starts when several run at once |
+| `FMP_GAP_MS` (repository variable) | 230 | Pause between FMP calls; raise it if your FMP plan's rate limit is low |
 
 ## Test it offline
 

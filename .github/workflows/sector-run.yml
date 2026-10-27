@@ -1,6 +1,8 @@
 # Industry Scorer: analyze every industry in a sector on your own API keys.
 #
-# Run it by hand: Actions → "Sector run" → Run workflow → type a sector (e.g. Consumer Defensive).
+# Run it by hand: Actions → "Sector run" → Run workflow → type a sector (e.g. Consumer Defensive),
+# or "all" to analyze every sector at once (one machine per sector; their starts are staggered a few minutes
+# apart so data pulls don't pile onto your FMP plan at the same moment).
 # Nightly: every sector listed in runner/nightly-sectors.txt (edit that file; leave it empty to turn nightly off).
 # A run longer than one GitHub session (about 5.5 hours) saves a checkpoint and continues in a new run by itself.
 # When it finishes, download the "results-..." artifact and import the .json.gz file in Industry Scorer.
@@ -16,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       sector:
-        description: "Sector to analyze, e.g. Consumer Defensive (empty = every sector in runner/nightly-sectors.txt)"
+        description: "Sector to analyze (e.g. Consumer Defensive), several separated by commas, or all (empty = the sectors in runner/nightly-sectors.txt)"
         required: false
         default: ""
       fresh:
@@ -45,10 +47,14 @@ jobs:
         env:
           SECTOR: ${{ inputs.sector }}
         run: |
-          if [ -n "$SECTOR" ]; then
-            echo "sectors=$(jq -cn --arg s "$SECTOR" '[$s]')" >> "$GITHUB_OUTPUT"
+          list() { (grep -v '^[[:space:]]*#' "$1" || true) | sed '/^[[:space:]]*$/d' | jq -R . | jq -cs .; }
+          if [ "$(echo "$SECTOR" | tr '[:upper:]' '[:lower:]' | xargs)" = "all" ]; then
+            echo "sectors=$(list runner/all-sectors.txt)" >> "$GITHUB_OUTPUT"
+          elif [ -n "$SECTOR" ]; then
+            # one sector, or several separated by commas: "Energy, Utilities"
+            echo "sectors=$(echo "$SECTOR" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
           else
-            echo "sectors=$( (grep -v '^[[:space:]]*#' runner/nightly-sectors.txt || true) | sed '/^[[:space:]]*$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+            echo "sectors=$(list runner/nightly-sectors.txt)" >> "$GITHUB_OUTPUT"
           fi
 
   run:
@@ -58,7 +64,7 @@ jobs:
     timeout-minutes: 355
     strategy:
       fail-fast: false
-      max-parallel: 1 # one sector at a time, so data calls stay within your FMP plan's rate limit
+      max-parallel: 11 # every sector at once (starts staggered below; the job waits out FMP rate limits)
       matrix:
         sector: ${{ fromJson(needs.plan.outputs.sectors) }}
     concurrency:
@@ -73,6 +79,15 @@ jobs:
           node-version: 22
       - id: slug
         run: echo "slug=$(echo "$SECTOR" | tr '[:upper:]' '[:lower:]' | sed -e 's/&/and/g' -e 's/[^a-z0-9]\+/-/g' -e 's/^-//' -e 's/-$//')" >> "$GITHUB_OUTPUT"
+      - name: Stagger the start (several sectors at once)
+        if: strategy.job-total > 1 && strategy.job-index > 0 && inputs.continue_from == ''
+        env:
+          WAIT_MIN: ${{ vars.STAGGER_MIN || '6' }}
+          INDEX: ${{ strategy.job-index }}
+        run: |
+          echo "Starting $((INDEX * WAIT_MIN)) minutes after the first sector, so data pulls don't all hit FMP at once."
+          echo "STAGGERED_MIN=$((INDEX * WAIT_MIN))" >> "$GITHUB_ENV"
+          sleep $((INDEX * WAIT_MIN * 60))
       - name: Install
         working-directory: runner
         run: npm install --no-audit --no-fund
@@ -97,9 +112,12 @@ jobs:
           FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
           EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
           FRESH: ${{ inputs.fresh }}
+          JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
+          CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '20' }}
         run: |
           set +e
-          args=(--sector "$SECTOR" --out ../out --deadline-min 320)
+          # This GitHub session ends 6 hours after it began (including any staggered start): stop in time to save.
+          args=(--sector "$SECTOR" --out ../out --deadline-min $((320 - ${STAGGERED_MIN:-0})))
           [ -f ../resume/checkpoint.json.gz ] && args+=(--resume ../resume/checkpoint.json.gz)
           [ "$FRESH" = "true" ] && [ ! -f ../resume/checkpoint.json.gz ] && args+=(--fresh)
           node run.mjs "${args[@]}"

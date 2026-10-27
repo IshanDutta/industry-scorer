@@ -20,7 +20,21 @@ const textOf = (c) => (typeof c === "string" ? c : (c || []).filter((b) => b.typ
 
 /** Fake Anthropic API. opts.failAfter: after that many requests, batch creation fails with "credit balance too low". */
 export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs = 800 } = {}) {
-  const stats = { requests: 0, batches: 0, toolRounds: 0, direct: 0, prompts: [] };
+  const stats = { requests: 0, batches: 0, toolRounds: 0, direct: 0, cancels: 0, prompts: [] };
+  /** The same answer as server-sent events, the way the API streams it. */
+  const sse = (res, m) => {
+    res.writeHead(200, { "content-type": "text/event-stream" });
+    const ev = (e, d) => res.write(`event: ${e}\ndata: ${JSON.stringify({ type: e, ...d })}\n\n`);
+    ev("message_start", { message: { ...m, content: [], stop_reason: null, usage: { ...m.usage, output_tokens: 1 } } });
+    m.content.forEach((b, index) => {
+      if (b.type === "text") { ev("content_block_start", { index, content_block: { type: "text", text: "" } }); for (let k = 0; k < b.text.length; k += 400) ev("content_block_delta", { index, delta: { type: "text_delta", text: b.text.slice(k, k + 400) } }); }
+      else if (b.type === "thinking") { ev("content_block_start", { index, content_block: { type: "thinking", thinking: "" } }); ev("content_block_delta", { index, delta: { type: "signature_delta", signature: b.signature } }); }
+      else if (b.type === "tool_use") { ev("content_block_start", { index, content_block: { type: "tool_use", id: b.id, name: b.name, input: {} } }); ev("content_block_delta", { index, delta: { type: "input_json_delta", partial_json: JSON.stringify(b.input) } }); }
+      ev("content_block_stop", { index });
+    });
+    ev("message_delta", { delta: { stop_reason: m.stop_reason }, usage: { output_tokens: m.usage.output_tokens } });
+    ev("message_stop", {}); res.end();
+  };
   const batches = new Map();
   async function answer(params) {
     stats.requests++;
@@ -48,7 +62,9 @@ export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs 
     try {
       if (req.headers["x-api-key"] !== "test-key") return send(res, 401, { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } });
       const u = new URL(req.url, "http://x");
-      if (req.method === "POST" && u.pathname === "/v1/messages") { stats.direct++; return send(res, 200, await answer(await readBody(req))); }
+      if (req.method === "POST" && u.pathname === "/v1/messages") { stats.direct++; const body = await readBody(req); const m = await answer(body); return body.stream ? sse(res, m) : send(res, 200, m); }
+      const cm = u.pathname.match(/^\/v1\/messages\/batches\/([^/]+)\/cancel$/);
+      if (req.method === "POST" && cm) { stats.cancels++; const b = batches.get(cm[1]); if (b) { b.status = "ended"; b.results = b.results.length ? b.results : []; } return send(res, 200, { id: cm[1], processing_status: "canceling" }); }
       if (req.method === "POST" && u.pathname === "/v1/messages/batches") {
         const body = await readBody(req);
         if (stats.requests + body.requests.length > failAfter) return send(res, 400, { type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." } });

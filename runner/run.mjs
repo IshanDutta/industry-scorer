@@ -16,6 +16,8 @@
 //   FMP_MCP_HEADERS / EODHD_MCP_HEADERS   optional JSON of extra headers, e.g. {"Authorization":"Bearer ..."}
 //   CLAUDE_MODEL                default claude-opus-5-5
 //   CLAUDE_MODE                 batch (default) or direct (full price, faster)
+//   CLAUDE_STRAGGLER_MIN        a batch still running after this many minutes is re-sent at the standard price (default 20; 0 = never)
+//   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 4, 4, 4)
 //   ANTHROPIC_BASE_URL          for testing only
 //
@@ -58,7 +60,7 @@ async function main() {
   const sampler = new Sampler({
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined, model: env.CLAUDE_MODEL || "claude-opus-5-5",
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
-    flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000),
+    flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000), stragglerMin: env.CLAUDE_STRAGGLER_MIN ?? 20,
     execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]),
   });
   let checkpoint = null;
@@ -77,7 +79,7 @@ async function main() {
   await page.exposeFunction("__job_cancel", (id) => sampler.cancel(id));
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: Number(env.JOB_INDUSTRIES || 4), pool: Number(env.JOB_POOL || 4), bodies: Number(env.JOB_BODIES || 4) };
+  const job = { industries: Number(env.JOB_INDUSTRIES || 4), pool: Number(env.JOB_POOL || 4), bodies: Number(env.JOB_BODIES || 4), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   // The page is served from a file so its saved runs (IndexedDB) persist for the whole session.
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8");
@@ -117,7 +119,7 @@ async function main() {
   const results = await page.evaluate((s) => window.__industryScorer.exportSector(s), sector);
   const full = await page.evaluate((s) => window.__industryScorer.exportSector(s, { full: true }), sector);
   const rec = results?.records?.[`sector:${slug(sector)}`] || {};
-  const cost = { ...sampler.usage, usd: Math.round(sampler.usage.usd * 100) / 100, model: sampler.model, mode: sampler.mode, mcp_calls: mcp.calls, mcp_errors: mcp.errors, minutes: Math.round((Date.now() - t0) / 60000) };
+  const cost = { ...sampler.usage, usd: Math.round(sampler.usage.usd * 100) / 100, model: sampler.model, mode: sampler.mode, mcp_calls: mcp.calls, mcp_errors: mcp.errors, mcp_throttled: mcp.throttled, minutes: Math.round((Date.now() - t0) / 60000) };
   const stamp = new Date().toISOString().slice(0, 10);
   if (results) { results.job = { cost, finished: !!rec.finished_at }; writeGz(join(outDir, `results-${slug(sector)}-${stamp}.json.gz`), results); }
   if (full) writeGz(join(outDir, "checkpoint.json.gz"), { ...full, sampler: sampler.state() });
@@ -128,8 +130,8 @@ async function main() {
   log(`${finished ? "Finished" : outOfTime ? "Paused (out of time)" : "Stopped"}: ${done} of ${total} industries · ${cost.requests} Claude requests (${cost.cached_results} reused) in ${cost.batches} batches · $${cost.usd} · ${cost.minutes} min`);
   summary([`### ${sector}: ${finished ? "finished" : outOfTime ? "continuing in a new session" : "stopped"}`, "",
     `- Industries finished: **${done} of ${total}**${Object.keys(rec.skip || {}).length ? ` (left out: ${Object.entries(rec.skip).map(([n, w]) => `${n}: ${w}`).join("; ")})` : ""}`,
-    `- Claude (${cost.model}, ${cost.mode}): ${cost.requests} requests in ${cost.batches} batches, ${cost.cached_results} reused · input ${(cost.input / 1e6).toFixed(2)}M tokens, output ${(cost.output / 1e6).toFixed(2)}M, cache reads ${(cost.cacheRead / 1e6).toFixed(2)}M`,
-    `- **Estimated Claude cost this session: $${cost.usd}**`, `- Data calls: ${cost.mcp_calls} (${cost.mcp_errors} failed) · ${cost.minutes} minutes`,
+    `- Claude (${cost.model}, ${cost.mode}): ${cost.requests} requests in ${cost.batches} batches, ${cost.cached_results} reused, ${cost.resent || 0} slow ones re-sent at the standard price · input ${(cost.input / 1e6).toFixed(2)}M tokens, output ${(cost.output / 1e6).toFixed(2)}M, cache reads ${(cost.cacheRead / 1e6).toFixed(2)}M`,
+    `- **Estimated Claude cost this session: $${cost.usd}**`, `- Data calls: ${cost.mcp_calls} (${cost.mcp_errors} failed, ${cost.mcp_throttled} waits for the provider's rate limit) · ${cost.minutes} minutes`,
     ...(status.notices.length ? ["", ...status.notices.map((n) => `> ${n}`)] : []),
     ...((rec.failed_steps || []).length ? ["", "<details><summary>Steps that didn't finish</summary>", "", ...rec.failed_steps.map((x) => `- ${x}`), "</details>"] : []),
     "", finished ? "Download the **results** artifact below and import the .json.gz file in Industry Scorer (picker → Import its results file)." : ""].join("\n"));

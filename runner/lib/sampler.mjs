@@ -58,8 +58,11 @@ function withCacheBreakpoint(messages) {
 
 export class Sampler {
   constructor({ apiKey, baseUrl = "https://api.anthropic.com", model = "claude-opus-5-5", mode = "batch", effort = { complex: "high", default: "medium", quick: "low" },
-    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, execTool, log = console.log }) {
+    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, execTool, log = console.log }) {
     Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), model, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
+    // A batch still running after this long has its requests re-sent at the standard price (0 = never).
+    this.stragglerMs = Math.max(0, Number(stragglerMin) || 0) * 60000;
+    this.batchAt = new Map();   // batch id -> when it was sent (Infinity once its requests were re-sent)
     this.done = new Map();      // request hash -> API message (successful results, kept for continuation)
     this.pending = new Map();   // request hash -> {batch, custom_id} submitted but not yet collected
     this.waiters = new Map();   // request hash -> [{resolve, reject}]
@@ -67,7 +70,7 @@ export class Sampler {
     this.batches = new Map();   // batch id -> Set(custom_id)
     this.cancelled = new Set();
     this.params = new Map();    // request hash -> params, while sent and not settled (to resend once)
-    this.usage = { requests: 0, cached_results: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, batches: 0 };
+    this.usage = { requests: 0, cached_results: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, batches: 0, resent: 0, direct_requests: 0 };
     this.fatal = null;
     this.inflight = 0;
     this.timer = null; this.poller = null;
@@ -78,7 +81,7 @@ export class Sampler {
   load(st) {
     if (!st || st.v !== 1) return;
     for (const [k, v] of Object.entries(st.done || {})) this.done.set(k, v);
-    for (const [k, v] of Object.entries(st.pending || {})) { this.pending.set(k, v); if (!this.batches.has(v.batch)) this.batches.set(v.batch, new Set()); this.batches.get(v.batch).add(v.custom_id); }
+    for (const [k, v] of Object.entries(st.pending || {})) { this.pending.set(k, v); if (!this.batches.has(v.batch)) { this.batches.set(v.batch, new Set()); this.batchAt.set(v.batch, Date.now()); } this.batches.get(v.batch).add(v.custom_id); }
     if (st.usage) this.usage = { ...this.usage, ...st.usage };
     if (this.batches.size) this.startPolling();
   }
@@ -153,10 +156,10 @@ export class Sampler {
     });
   }
   settle(key, fn) { const ws = this.waiters.get(key) || []; this.waiters.delete(key); for (const w of ws) fn(w); }
-  record(key, msg) {
+  record(key, msg, direct = this.mode !== "batch") {
     this.done.set(key, msg); this.pending.delete(key); this.params.delete(key);
-    const u = msg.usage || {}, p = PRICES[this.model] || PRICES["claude-opus-5-5"], f = this.mode === "batch" ? 0.5 : 1;
-    this.usage.requests++;
+    const u = msg.usage || {}, p = PRICES[this.model] || PRICES["claude-opus-5-5"], f = direct ? 1 : 0.5;
+    this.usage.requests++; if (direct) this.usage.direct_requests++;
     this.usage.input += u.input_tokens || 0; this.usage.output += u.output_tokens || 0;
     this.usage.cacheWrite += u.cache_creation_input_tokens || 0; this.usage.cacheRead += u.cache_read_input_tokens || 0;
     this.usage.usd += f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
@@ -188,8 +191,36 @@ export class Sampler {
   async direct(key, params) {
     while (this.inflight >= this.directConcurrency) await sleep(200);
     this.inflight++;
-    try { const msg = await this.http("/v1/messages", { method: "POST", body: params }); this.record(key, msg); return msg; }
+    try { const msg = await this.stream(params); this.record(key, msg, true); return msg; }
     finally { this.inflight--; }
+  }
+  /** One request at the standard price, streamed (so a long answer never hits an idle-connection timeout). */
+  async stream(params) {
+    for (let attempt = 1; ; attempt++) {
+      let res;
+      try { res = await fetch(this.baseUrl + "/v1/messages", { method: "POST", headers: this.headers(), body: JSON.stringify({ ...params, stream: true }) }); }
+      catch (e) { if (attempt >= 8) throw { code: "upstream_error", message: "Network: " + (e?.message || e) }; await sleep(Math.min(60000, 2000 * attempt)); continue; }
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        if ((res.status === 429 || res.status >= 500) && attempt < 10) { const ra = Number(res.headers.get("retry-after")); await sleep(ra > 0 ? ra * 1000 : Math.min(120000, 3000 * 2 ** Math.min(attempt, 5))); continue; }
+        const err = this.apiError(res.status, j); if (err.fatal) this.fatal = err; throw err;
+      }
+      try { return await readStream(res.body); }
+      catch (e) { if (e?.retry && attempt < 8) { await sleep(Math.min(60000, 3000 * attempt)); continue; } throw e?.code ? e : { code: "upstream_error", message: String(e?.message || e) }; }
+    }
+  }
+  /** A batch that's taking too long: cancel it and send what's still needed at the standard price. */
+  async rescue(id) {
+    this.batchAt.set(id, Infinity);
+    const mine = [...this.pending].filter(([key, p]) => p.batch === id && this.waiters.get(key)?.length && this.params.has(key));
+    if (!mine.length) return;
+    this.log(`[claude] batch ${id} is still running after ${Math.round(this.stragglerMs / 60000)} min: re-sending its ${mine.length} request${mine.length === 1 ? "" : "s"} at the standard price`);
+    try { await this.http(`/v1/messages/batches/${id}/cancel`, { method: "POST" }); } catch {}
+    for (const [key] of mine) {
+      const params = this.params.get(key);
+      this.pending.delete(key); this.usage.resent++;
+      this.direct(key, params).then((msg) => this.settle(key, (w) => w.resolve(msg)), (err) => this.settle(key, (w) => w.reject(err)));
+    }
   }
   async flush() {
     clearTimeout(this.timer); this.timer = null;
@@ -201,7 +232,7 @@ export class Sampler {
       this.usage.batches++;
       const ids = new Set();
       requests.forEach((r, i) => { this.pending.set(items[i].key, { batch: b.id, custom_id: r.custom_id }); this.params.set(items[i].key, items[i].params); ids.add(r.custom_id); });
-      this.batches.set(b.id, ids);
+      this.batches.set(b.id, ids); this.batchAt.set(b.id, Date.now());
       this.log(`[claude] batch ${b.id}: ${items.length} request${items.length === 1 ? "" : "s"}`);
       this.startPolling();
     } catch (e) {
@@ -219,7 +250,7 @@ export class Sampler {
   async poll() {
     for (const [id] of [...this.batches]) {
       const b = await this.http(`/v1/messages/batches/${id}`);
-      if (b.processing_status !== "ended") continue;
+      if (b.processing_status !== "ended") { if (this.stragglerMs && Date.now() - (this.batchAt.get(id) ?? Date.now()) > this.stragglerMs) await this.rescue(id); continue; }
       const text = await this.http(b.results_url, { raw: true });
       const byCustom = new Map();
       for (const line of text.split("\n")) { if (!line.trim()) continue; try { const r = JSON.parse(line); byCustom.set(r.custom_id, r.result); } catch {} }
@@ -234,7 +265,40 @@ export class Sampler {
         if (err.retry && ws?.length && !ws.retried) { ws.retried = true; const params = this.params.get(key); if (params) { this.queue.push({ key, params }); if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs); continue; } }
         this.params.delete(key); this.settle(key, (w) => w.reject(err));
       }
-      this.batches.delete(id);
+      this.batches.delete(id); this.batchAt.delete(id);
     }
   }
+}
+
+/** Rebuild a Messages API response from its server-sent events. */
+export async function readStream(body) {
+  const dec = new TextDecoder(); let buf = "", msg = null, ended = false; const partial = new Map();
+  const handle = (ev, data) => {
+    if (ev === "error") { const t = data?.error?.type; throw { code: "upstream_error", message: data?.error?.message || "stream error", retry: t === "overloaded_error" || t === "api_error" }; }
+    if (ev === "message_start") { msg = { ...data.message, content: [] }; return; }
+    if (ev === "message_stop") { ended = true; return; }
+    if (!msg) return;
+    if (ev === "content_block_start") { msg.content[data.index] = { ...data.content_block }; if (data.content_block.type === "tool_use") partial.set(data.index, ""); return; }
+    if (ev === "content_block_delta") { const b = msg.content[data.index], d = data.delta; if (!b) return;
+      if (d.type === "text_delta") b.text = (b.text || "") + d.text;
+      else if (d.type === "thinking_delta") b.thinking = (b.thinking || "") + d.thinking;
+      else if (d.type === "signature_delta") b.signature = d.signature;
+      else if (d.type === "input_json_delta") partial.set(data.index, (partial.get(data.index) || "") + d.partial_json);
+      return; }
+    if (ev === "content_block_stop") { const b = msg.content[data.index]; if (b?.type === "tool_use") { try { b.input = JSON.parse(partial.get(data.index) || "{}"); } catch { b.input = {}; } } return; }
+    if (ev === "message_delta") { if (data.delta?.stop_reason) msg.stop_reason = data.delta.stop_reason; if (data.usage) msg.usage = { ...msg.usage, ...data.usage }; }
+  };
+  for await (const chunk of body) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n\n")) >= 0) {
+      const raw = buf.slice(0, i); buf = buf.slice(i + 2);
+      let ev = "message", data = "";
+      for (const line of raw.split("\n")) { if (line.startsWith("event:")) ev = line.slice(6).trim(); else if (line.startsWith("data:")) data += line.slice(5).trim(); }
+      if (data) handle(ev, JSON.parse(data));
+    }
+  }
+  if (!msg || !ended) throw { code: "upstream_error", message: "The answer stream ended early.", retry: true };
+  msg.content = msg.content.filter(Boolean);
+  return msg;
 }
