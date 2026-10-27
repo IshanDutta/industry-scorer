@@ -7401,7 +7401,16 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
     const step = async (label, fn, { hard = false, list = null } = {}) => {
       const L = list || sr.team;
       const en = { label, status: "thinking", t0: Date.now() }; L.push(en); if (!list && L.length > 60) L.splice(0, L.length - 60); renderReport();
-      try { await fn(en); en.status = "done"; return true; }
+      try {
+        try { await fn(en); }
+        catch (e) {
+          // A step the whole sector needs gets one more try before it stops the run (an unreadable answer is usually a one-off).
+          if (!hard || stopErr(e) || sr.cancel) throw e;
+          en.note = `retrying after: ${sampleErr(e)}`; en.status = "thinking"; renderReport();
+          await fn(en);
+        }
+        en.status = "done"; return true;
+      }
       catch (e) {
         en.status = "failed"; en.error = e?.code === "empty_book" ? "no rules came back" : FATAL.has(e?.code) ? errText(e) : sampleErr(e);
         if (stopErr(e) || hard) { sr.cancel = true; for (const c of sr.ctls) c.abort(); throw e; }

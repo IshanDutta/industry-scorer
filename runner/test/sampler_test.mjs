@@ -26,3 +26,19 @@ s.send = async () => ({ stop_reason: "max_tokens", content: [{ type: "text", tex
 const r2 = await s.ask("c2", { verb: "json", input: "x" });
 assert.strictEqual(r2.error.code, "invalid_json"); assert.ok(r2.error.text.startsWith('{"a"'));
 console.log("sampler tests passed");
+// an unreadable final answer gets one repair call; the last tool round says it is the last
+{
+  const s2 = new Sampler({ apiKey: "k", maxRounds: 2, execTool: async () => ({ ok: "x" }), log: () => {} });
+  const seen = [];
+  s2.send = async (params) => { seen.push(params);
+    if (seen.length === 1) return { stop_reason: "tool_use", content: [{ type: "tool_use", id: "t1", name: "look", input: {} }], usage: {} };
+    if (seen.length === 2) return { stop_reason: "end_turn", content: [{ type: "text", text: "I would like to search more before answering." }], usage: {} };
+    return { stop_reason: "end_turn", content: [{ type: "text", text: '{"ok":1}' }], usage: {} }; };
+  const r3 = await s2.ask("c3", { verb: "json", input: "Find", tools: [{ name: "look", description: "d" }] });
+  assert.deepStrictEqual(r3.value, { ok: 1 });
+  assert.strictEqual(seen[1].tool_choice.type, "none");
+  const lastUser = seen[1].messages[seen[1].messages.length - 1].content;
+  assert.ok(lastUser.some((b) => b.type === "text" && /last tool round/.test(b.text)), "the last round says it is the last");
+  assert.ok(/couldn't be read as one JSON value/.test(JSON.stringify(seen[2].messages[seen[2].messages.length - 1])), "repair call asks again");
+  console.log("repair tests passed");
+}

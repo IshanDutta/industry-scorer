@@ -18,6 +18,14 @@ export const PRICES = {
 
 const FRAMING_JSON = "Your reply will be read by a program as one JSON value. Reply with only the JSON value the instructions ask for, with no text, Markdown fence or commentary before or after it.";
 const FRAMING_TOOLS = " You may call the tools provided to gather what you need; your final message, after any tool use, is the one that is parsed.";
+const LAST_ROUND = "That was your last tool round: no more tool calls are available. Write your final answer now.";
+const LAST_ROUND_JSON = "That was your last tool round: no more tool calls are available. Write your final answer now, as only the JSON value the instructions ask for, complete, with nothing before or after it.";
+const REPAIR_JSON = "Your reply above couldn't be read as one JSON value. Reply again with only the JSON value the original instructions ask for, complete, with nothing before or after it.";
+/** Add a text turn after the last user message's content (tool results), so it sits in the same user turn. */
+const withNote = (messages, note) => { const m = messages.slice(); const last = m[m.length - 1];
+  if (last?.role === "user") m[m.length - 1] = { ...last, content: [...(typeof last.content === "string" ? [{ type: "text", text: last.content }] : last.content), { type: "text", text: note }] };
+  else m.push({ role: "user", content: note });
+  return m; };
 
 /** The platform's tolerant JSON read: the whole reply; else one fenced block; else first { or [ to last } or ]. */
 export function parseJsonReply(text) {
@@ -50,7 +58,7 @@ function withCacheBreakpoint(messages) {
 
 export class Sampler {
   constructor({ apiKey, baseUrl = "https://api.anthropic.com", model = "claude-opus-5-5", mode = "batch", effort = { complex: "high", default: "medium", quick: "low" },
-    maxTokens = 64000, maxRounds = 6, flushMs = 4000, pollMs = 20000, directConcurrency = 6, execTool, log = console.log }) {
+    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, execTool, log = console.log }) {
     Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), model, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
     this.done = new Map();      // request hash -> API message (successful results, kept for continuation)
     this.pending = new Map();   // request hash -> {batch, custom_id} submitted but not yet collected
@@ -86,8 +94,10 @@ export class Sampler {
     for (let round = 1; round <= this.maxRounds; round++) {
       if (this.cancelled.has(id)) return { error: { code: "cancelled", message: "cancelled" } };
       const last = round === this.maxRounds;
+      // The last round must be an answer: say so, and allow no more tool calls.
+      const msgsNow = last && apiTools.length ? withNote(messages, verb === "json" ? LAST_ROUND_JSON : LAST_ROUND) : messages;
       const params = { model: this.model, max_tokens: this.maxTokens, output_config: { effort: this.effort[modelTier] || "medium" },
-        ...(system ? { system } : {}), messages: apiTools.length ? withCacheBreakpoint(messages) : messages,
+        ...(system ? { system } : {}), messages: apiTools.length ? withCacheBreakpoint(msgsNow) : msgsNow,
         ...(apiTools.length ? { tools: apiTools, ...(last ? { tool_choice: { type: "none" } } : {}) } : {}) };
       let msg;
       try { msg = await this.send(params); }
@@ -108,7 +118,17 @@ export class Sampler {
       const truncated = msg.stop_reason === "max_tokens";
       const all = [...texts, text].filter((x) => x.trim()).join("\n\n");
       if (verb === "json") {
-        const p = parseJsonReply(text);
+        let p = parseJsonReply(text);
+        if (!p.ok && !truncated) {
+          // One more call to re-send the answer in the right format (the analysis is already in the conversation).
+          const repairMsgs = [...msgsNow, { role: "assistant", content: msg.content }, { role: "user", content: REPAIR_JSON }];
+          try {
+            const m2 = await this.send({ ...params, messages: apiTools.length ? withCacheBreakpoint(repairMsgs) : repairMsgs, ...(apiTools.length ? { tool_choice: { type: "none" } } : {}) });
+            const t2 = (m2.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+            const p2 = parseJsonReply(t2);
+            if (p2.ok && m2.stop_reason !== "max_tokens") return { value: p2.value, text: [all, t2].filter((x) => x.trim()).join("\n\n") };
+          } catch (e) { if (this.fatal) return { error: this.fatal }; }
+        }
         if (!p.ok || truncated) return { error: { code: "invalid_json", message: truncated ? "The answer was cut short." : "No JSON value in the reply.", text: tools.length ? all : text } };
         return { value: p.value, text: all };
       }
