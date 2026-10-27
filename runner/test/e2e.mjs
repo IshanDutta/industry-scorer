@@ -118,4 +118,18 @@ if (which.includes("6")) {
   ok(res?.job?.cost?.direct_requests > 0 && fa.stats.batches > 0, `some batched (${fa.stats.batches} batches), the rest standard (${res?.job?.cost?.direct_requests})`);
   fa.server.close();
 }
+if (which.includes("7")) {
+  console.log("\n=== 7. spending cap: stops before going over, saves, continues ===");
+  const fa = await fakeAnthropic(brain, { port: 7808 });
+  const out1 = join(tmp, "seven-a"), out2 = join(tmp, "seven-b");
+  const r1 = await run(7808, out1, [], { CLAUDE_BUDGET_USD: "0.5" });
+  const cost1 = JSON.parse(readFileSync(join(out1, "cost.json"), "utf8"));
+  ok(r1.code === 1 && /Spending cap reached/.test(r1.log), `stopped at the cap (exit ${r1.code})`);
+  ok(cost1.session_usd <= 0.5, `spent $${cost1.session_usd} of $0.50`);
+  ok(existsSync(join(out1, "checkpoint.json.gz")), "checkpoint written");
+  const r2 = await run(7808, out2, ["--resume", join(out1, "checkpoint.json.gz")], { CLAUDE_BUDGET_USD: "5" });
+  const f = resultsFile(out2); const rec = f && read(join(out2, f)).records[`sector:${SECTOR.toLowerCase()}`];
+  ok(r2.code === 0 && !!rec?.finished_at, `continued with a new cap and finished (exit ${r2.code})`);
+  fa.server.close();
+}
 process.exit();

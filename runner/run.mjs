@@ -14,9 +14,12 @@
 //   FMP_MCP_URL                 required  the FMP MCP server URL (including your key if it goes in the URL)
 //   EODHD_MCP_URL               optional  the EODHD MCP server URL
 //   FMP_MCP_HEADERS / EODHD_MCP_HEADERS   optional JSON of extra headers, e.g. {"Authorization":"Bearer ..."}
-//   CLAUDE_MODEL                default claude-opus-5-5
+//   CLAUDE_MODEL_COMPLEX        model for the page's "complex" steps (default claude-opus-5-5)
+//   CLAUDE_MODEL_DEFAULT        model for its "default" steps (default claude-sonnet-5-5); CLAUDE_MODEL sets both
+//   CLAUDE_EFFORT_COMPLEX/_DEFAULT   thinking effort (default: each model's own default, as in claude.ai)
+//   CLAUDE_BUDGET_USD           most this session may spend on Claude; it stops and saves before going over
 //   CLAUDE_MODE                 batch (default) or direct (full price, faster)
-//   CLAUDE_STRAGGLER_MIN        a batch still running after this many minutes is re-sent at the standard price (default 20; 0 = never)
+//   CLAUDE_STRAGGLER_MIN        a batch still running after this many minutes is re-sent at the standard price (default 20 here, 0 = never in the workflow)
 //   CLAUDE_DIRECT_AFTER_MIN     after this many minutes, send everything left at the standard price (default never)
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
@@ -59,7 +62,11 @@ async function main() {
 
   let page = null;
   const sampler = new Sampler({
-    apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined, model: env.CLAUDE_MODEL || "claude-opus-5-5",
+    apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
+    // As the page asks in claude.ai: the most capable model for "complex" steps, the balanced model for the rest.
+    models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5" },
+    effort: { ...(env.CLAUDE_EFFORT_COMPLEX ? { complex: env.CLAUDE_EFFORT_COMPLEX } : {}), ...(env.CLAUDE_EFFORT_DEFAULT ? { default: env.CLAUDE_EFFORT_DEFAULT } : {}) },
+    budgetUsd: env.CLAUDE_BUDGET_USD || 0, directConcurrency: Number(env.CLAUDE_DIRECT_CONCURRENCY || 12),
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
     flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000), stragglerMin: env.CLAUDE_STRAGGLER_MIN ?? 20, directAfterMin: env.CLAUDE_DIRECT_AFTER_MIN || 0,
     execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]),
@@ -67,7 +74,8 @@ async function main() {
   let checkpoint = null;
   if (args.resume && existsSync(args.resume)) {
     checkpoint = readMaybeGz(args.resume);
-    sampler.load(checkpoint.sampler);
+    // Keep the settings the run started with, unless this run sets a model or effort explicitly.
+    sampler.load(checkpoint.sampler, { keepSettings: !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
     log(`Continuing from a checkpoint saved ${checkpoint.exported_at} (${Object.keys(checkpoint.records || {}).length} saved records, ${sampler.done.size} Claude answers kept, ${sampler.pending.size} still in batches)`);
   }
 
@@ -95,7 +103,7 @@ async function main() {
     log(`Restored ${n} industries' saved progress`);
   }
   const fresh = args.fresh === "true" && !checkpoint;
-  log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.model}, ${sampler.mode} mode)`);
+  log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.models.complex} for complex steps and ${sampler.models.default} for the rest, ${sampler.mode} mode${sampler.budgetUsd ? `, spending cap $${sampler.budgetUsd}` : ""})`);
   await page.evaluate(([s, f]) => window.__industryScorer.start(s, { fresh: f }), [sector, fresh]);
 
   // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
@@ -130,13 +138,13 @@ async function main() {
   }
   const status = await page.evaluate(() => window.__industryScorer.status());
   for (const n of status.notices) log("[page]", n);
-  if (sampler.fatal) { log("[claude] " + sampler.fatal.message); status.notices.push(sampler.fatal.message + " Add credit or raise the spend limit at console.anthropic.com, then run the workflow again for this sector with continue_from set to this run's ID."); }
+  if (sampler.fatal) { log("[claude] " + sampler.fatal.message); status.notices.push(sampler.fatal.message + (sampler.fatal.budget ? ". To finish, run the workflow again for this sector with continue_from set to this run's ID (and a new spending cap)." : " Add credit or raise the spend limit at console.anthropic.com, then run the workflow again for this sector with continue_from set to this run's ID.")); }
 
   // Results (what the page imports) and a checkpoint (results plus the shared working parts and Claude answers).
   const results = await page.evaluate((s) => window.__industryScorer.exportSector(s), sector);
   const full = await page.evaluate((s) => window.__industryScorer.exportSector(s, { full: true }), sector);
   const rec = results?.records?.[`sector:${slug(sector)}`] || {};
-  const cost = { ...sampler.usage, usd: Math.round(sampler.usage.usd * 100) / 100, model: sampler.model, mode: sampler.mode, mcp_calls: mcp.calls, mcp_errors: mcp.errors, mcp_throttled: mcp.throttled, minutes: Math.round((Date.now() - t0) / 60000) };
+  const cost = { ...sampler.usage, usd: Math.round(sampler.usage.usd * 100) / 100, session_usd: Math.round((sampler.usage.usd - sampler.usdAtStart) * 100) / 100, model: `${sampler.models.complex} + ${sampler.models.default}`, mode: sampler.mode, mcp_calls: mcp.calls, mcp_errors: mcp.errors, mcp_throttled: mcp.throttled, minutes: Math.round((Date.now() - t0) / 60000) };
   const stamp = new Date().toISOString().slice(0, 10);
   if (results) { results.job = { cost, finished: !!rec.finished_at }; writeGz(join(outDir, `results-${slug(sector)}-${stamp}.json.gz`), results); }
   if (full) writeGz(join(outDir, "checkpoint.json.gz"), { ...full, sampler: sampler.state() });
@@ -148,11 +156,12 @@ async function main() {
   summary([`### ${sector}: ${finished ? "finished" : outOfTime ? "continuing in a new session" : "stopped"}`, "",
     `- Industries finished: **${done} of ${total}**${Object.keys(rec.skip || {}).length ? ` (left out: ${Object.entries(rec.skip).map(([n, w]) => `${n}: ${w}`).join("; ")})` : ""}`,
     `- Claude (${cost.model}, ${cost.mode}): ${cost.requests} requests in ${cost.batches} batches, ${cost.cached_results} reused, ${cost.resent || 0} slow ones re-sent at the standard price · input ${(cost.input / 1e6).toFixed(2)}M tokens, output ${(cost.output / 1e6).toFixed(2)}M, cache reads ${(cost.cacheRead / 1e6).toFixed(2)}M`,
-    `- **Estimated Claude cost this session: $${cost.usd}**`, `- Data calls: ${cost.mcp_calls} (${cost.mcp_errors} failed, ${cost.mcp_throttled} waits for the provider's rate limit) · ${cost.minutes} minutes`,
+    `- **Estimated Claude cost this session: $${cost.session_usd}**${cost.usd !== cost.session_usd ? ` (whole run including earlier sessions: $${cost.usd})` : ""}`, `- Data calls: ${cost.mcp_calls} (${cost.mcp_errors} failed, ${cost.mcp_throttled} waits for the provider's rate limit) · ${cost.minutes} minutes`,
     ...(status.notices.length ? ["", ...status.notices.map((n) => `> ${n}`)] : []),
     ...((rec.failed_steps || []).length ? ["", "<details><summary>Steps that didn't finish</summary>", "", ...rec.failed_steps.map((x) => `- ${x}`), "</details>"] : []),
     "", finished ? "Download the **results** artifact below and import the .json.gz file in Industry Scorer (picker → Import its results file)." : ""].join("\n"));
   setOutput("finished", finished); setOutput("continue", outOfTime && !finished);
+  if (sampler.budgetUsd) setOutput("budget_left", Math.max(0, sampler.budgetUsd - cost.session_usd).toFixed(2));
 
   await browser.close(); await mcp.close();
   process.exit(finished ? 0 : outOfTime ? 75 : 1);

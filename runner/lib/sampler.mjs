@@ -57,9 +57,12 @@ function withCacheBreakpoint(messages) {
 }
 
 export class Sampler {
-  constructor({ apiKey, baseUrl = "https://api.anthropic.com", model = "claude-opus-5-5", mode = "batch", effort = { complex: "high", default: "medium", quick: "low" },
+  // Models per tier, as the claude.ai page asks for them: "complex" = the most capable model, "default" = the
+  // balanced everyday model, "quick" = the fast one. Each at its own default thinking effort (effort = {} leaves the
+  // model's default; pass e.g. {complex: "high"} to override).
+  constructor({ apiKey, baseUrl = "https://api.anthropic.com", models = { complex: "claude-opus-5-5", default: "claude-sonnet-5-5", quick: "claude-sonnet-5-5" }, mode = "batch", effort = {}, budgetUsd = 0,
     maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, directAfterMin = 0, execTool, log = console.log }) {
-    Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), model, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
+    Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), models, model: models.complex, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
     // A batch still running after this long has its requests re-sent at the standard price (0 = never).
     this.stragglerMs = Math.max(0, Number(stragglerMin) || 0) * 60000;
     this.batchAt = new Map();   // batch id -> when it was sent (Infinity once its requests were re-sent)
@@ -74,17 +77,29 @@ export class Sampler {
     this.params = new Map();    // request hash -> params, while sent and not settled (to resend once)
     this.usage = { requests: 0, cached_results: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, batches: 0, resent: 0, direct_requests: 0 };
     this.fatal = null;
+    this.budgetUsd = Math.max(0, Number(budgetUsd) || 0); this.usdAtStart = 0; this.requestsAtStart = 0;
     this.inflight = 0;
     this.timer = null; this.poller = null;
   }
 
   // ------------------------------------------------------------------ state for continuing in a new session
-  state() { return { v: 1, done: Object.fromEntries(this.done), pending: Object.fromEntries(this.pending), usage: this.usage }; }
-  load(st) {
+  state() { return { v: 1, settings: { models: this.models, effort: this.effort }, done: Object.fromEntries(this.done), pending: Object.fromEntries(this.pending), usage: this.usage }; }
+  /**
+   * Continue from a saved state. A continued run keeps the models and effort it started with (unless keepSettings
+   * is false), so every industry in a sector is analyzed the same way and answers already paid for are reused.
+   */
+  load(st, { keepSettings = true } = {}) {
     if (!st || st.v !== 1) return;
+    if (keepSettings) {
+      // Runs saved before settings were recorded used Opus 5.5 everywhere, effort high/medium/low by tier.
+      const prev = st.settings || { models: { complex: "claude-opus-5-5", default: "claude-opus-5-5", quick: "claude-opus-5-5" }, effort: { complex: "high", default: "medium", quick: "low" } };
+      this.models = { ...prev.models }; this.model = this.models.complex; this.effort = { ...(prev.effort || {}) };
+    }
     for (const [k, v] of Object.entries(st.done || {})) this.done.set(k, v);
     for (const [k, v] of Object.entries(st.pending || {})) { this.pending.set(k, v); if (!this.batches.has(v.batch)) { this.batches.set(v.batch, new Set()); this.batchAt.set(v.batch, Date.now()); } this.batches.get(v.batch).add(v.custom_id); }
     if (st.usage) this.usage = { ...this.usage, ...st.usage };
+    // The spending cap counts only what this session spends.
+    this.usdAtStart = this.usage.usd; this.requestsAtStart = this.usage.requests;
     if (this.batches.size) this.startPolling();
   }
 
@@ -101,7 +116,8 @@ export class Sampler {
       const last = round === this.maxRounds;
       // The last round must be an answer: say so, and allow no more tool calls.
       const msgsNow = last && apiTools.length ? withNote(messages, verb === "json" ? LAST_ROUND_JSON : LAST_ROUND) : messages;
-      const params = { model: this.model, max_tokens: this.maxTokens, output_config: { effort: this.effort[modelTier] || "medium" },
+      const eff = this.effort[modelTier];
+      const params = { model: this.models[modelTier] || this.models.default, max_tokens: this.maxTokens, ...(eff ? { output_config: { effort: eff } } : {}),
         ...(system ? { system } : {}), messages: apiTools.length ? withCacheBreakpoint(msgsNow) : msgsNow,
         ...(apiTools.length ? { tools: apiTools, ...(last ? { tool_choice: { type: "none" } } : {}) } : {}) };
       let msg;
@@ -151,9 +167,20 @@ export class Sampler {
     for (const id of [...this.batches.keys()]) this.rescue(id);
     if (this.queue.length) this.flush();
   }
+  /** This session's spend so far, plus a reserve for requests already sent and not yet billed. */
+  committed() {
+    const spent = this.usage.usd - this.usdAtStart, n = Math.max(1, this.usage.requests - this.requestsAtStart);
+    const avg = this.usage.requests > this.requestsAtStart ? spent / n : 0.2;
+    return spent + avg * (this.waiters.size + this.inflight + 1); // requests being waited on now, plus the one about to start
+  }
   async send(params) {
     const key = hash(params);
     if (this.done.has(key)) { this.usage.cached_results++; return this.done.get(key); }
+    // Spending cap for this session: stop before it, never after (the run saves a checkpoint to continue later).
+    if (this.budgetUsd && this.committed() >= this.budgetUsd) {
+      if (!this.fatal) { this.fatal = { code: "rate_limited", message: `Spending cap reached: this run has used about $${(this.usage.usd - this.usdAtStart).toFixed(2)} of its $${this.budgetUsd} limit`, budget: true }; this.log("[claude] " + this.fatal.message); }
+      throw this.fatal;
+    }
     if (this.directAfterMs && !this.switched && Date.now() - this.t0 > this.directAfterMs) this.switchToDirect();
     if (this.mode === "direct" || this.switched) return this.direct(key, params);
     return new Promise((resolve, reject) => {
@@ -168,7 +195,7 @@ export class Sampler {
   settle(key, fn) { const ws = this.waiters.get(key) || []; this.waiters.delete(key); for (const w of ws) fn(w); }
   record(key, msg, direct = this.mode !== "batch") {
     this.done.set(key, msg); this.pending.delete(key); this.params.delete(key);
-    const u = msg.usage || {}, p = PRICES[this.model] || PRICES["claude-opus-5-5"], f = direct ? 1 : 0.5;
+    const u = msg.usage || {}, p = PRICES[msg.model] || PRICES[String(msg.model || "").replace(/-\d{8}$/, "")] || PRICES[this.model] || PRICES["claude-opus-5-5"], f = direct ? 1 : 0.5;
     this.usage.requests++; if (direct) this.usage.direct_requests++;
     this.usage.input += u.input_tokens || 0; this.usage.output += u.output_tokens || 0;
     this.usage.cacheWrite += u.cache_creation_input_tokens || 0; this.usage.cacheRead += u.cache_read_input_tokens || 0;

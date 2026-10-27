@@ -17,7 +17,8 @@ s.send = async (params) => { sent.push(params); return sent.length === 1
   : { stop_reason: "end_turn", content: [{ type: "text", text: '{"done":true}' }], usage: {} }; };
 const r = await s.ask("c1", { verb: "json", input: "Find it", modelTier: "complex", tools: [{ name: "look", description: "d", inputSchema: { type: "object", properties: {} } }] });
 assert.deepStrictEqual(r.value, { done: true });
-assert.strictEqual(sent[0].output_config.effort, "high");
+assert.strictEqual(sent[0].model, "claude-opus-5-5", "complex steps on the most capable model");
+assert.strictEqual(sent[0].output_config, undefined, "each model's own default effort, as in claude.ai");
 const last = sent[1].messages[sent[1].messages.length - 1];
 assert.strictEqual(last.role, "user"); assert.strictEqual(last.content[0].type, "tool_result"); assert.ok(last.content[last.content.length - 1].cache_control);
 assert.strictEqual(sent[1].messages[1].content[0].type, "thinking", "thinking blocks go back unchanged");
@@ -41,4 +42,33 @@ console.log("sampler tests passed");
   assert.ok(lastUser.some((b) => b.type === "text" && /last tool round/.test(b.text)), "the last round says it is the last");
   assert.ok(/couldn't be read as one JSON value/.test(JSON.stringify(seen[2].messages[seen[2].messages.length - 1])), "repair call asks again");
   console.log("repair tests passed");
+}
+// routine ("default") steps go to the balanced model; the spending cap stops before going over
+{
+  const s3 = new Sampler({ apiKey: "k", budgetUsd: 1, mode: "direct", execTool: async () => ({ ok: "x" }), log: () => {} });
+  const models = [];
+  s3.stream = async (params) => { models.push(params.model); return { model: params.model, stop_reason: "end_turn", content: [{ type: "text", text: '{"a":1}' }], usage: { input_tokens: 100000, output_tokens: 10000 } }; };
+  const a = await s3.ask("d1", { verb: "json", input: "x", modelTier: "default" });
+  assert.deepStrictEqual(a.value, { a: 1 }); assert.strictEqual(models[0], "claude-sonnet-5-5");
+  // $0.30 per call at Sonnet prices: three calls reach $0.90; a fourth would pass $1, so it is refused
+  await s3.ask("d2", { verb: "json", input: "y", modelTier: "default" });
+  await s3.ask("d3", { verb: "json", input: "w", modelTier: "default" });
+  const c = await s3.ask("d4", { verb: "json", input: "z", modelTier: "default" });
+  assert.strictEqual(c.error?.code, "rate_limited"); assert.ok(c.error.budget && /Spending cap/.test(c.error.message));
+  assert.ok(s3.usage.usd <= 1.0001, `spent $${s3.usage.usd} of a $1 cap`);
+  console.log("tier and cap tests passed");
+}
+// a continued run keeps the settings it started with (old checkpoints: Opus everywhere, high effort for complex)
+{
+  const s4 = new Sampler({ apiKey: "k", execTool: async () => ({}), log: () => {} });
+  s4.load({ v: 1, done: {}, pending: {}, usage: { usd: 95 } });
+  assert.strictEqual(s4.models.default, "claude-opus-5-5"); assert.strictEqual(s4.effort.complex, "high");
+  assert.strictEqual(s4.usdAtStart, 95, "the cap counts only this session");
+  const s5 = new Sampler({ apiKey: "k", execTool: async () => ({}), log: () => {} });
+  s5.load({ v: 1, settings: { models: { complex: "claude-opus-5-5", default: "claude-sonnet-5-5" }, effort: {} }, done: {}, pending: {} });
+  assert.strictEqual(s5.models.default, "claude-sonnet-5-5"); assert.strictEqual(s5.effort.complex, undefined);
+  const s6 = new Sampler({ apiKey: "k", execTool: async () => ({}), log: () => {} });
+  s6.load({ v: 1, done: {}, pending: {} }, { keepSettings: false });
+  assert.strictEqual(s6.models.default, "claude-sonnet-5-5", "an explicit setting wins");
+  console.log("settings tests passed");
 }
