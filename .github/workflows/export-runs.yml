@@ -1,0 +1,41 @@
+# Copies saved sector runs (checkpoints) into the "exports" branch, so they can be read without downloading
+# GitHub's artifact zips. It only copies files; it runs no analysis and makes no Claude calls.
+name: Export saved runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "Run IDs to copy, separated by spaces"
+        required: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Copy each run's checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          git fetch origin exports && git checkout exports || git checkout --orphan exports
+          git rm -rq --cached . 2>/dev/null || true
+          find . -mindepth 1 -maxdepth 1 ! -name .git ! -name runs -exec rm -rf {} +
+          mkdir -p runs
+          for r in $RUNS; do
+            for name in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$r/artifacts" --jq '.artifacts[] | select(.name | startswith("checkpoint-")) | .name'); do
+              rm -rf dl && gh run download "$r" -n "$name" -D dl
+              cp dl/checkpoint.json.gz "runs/${name#checkpoint-}-$r.json.gz"
+              echo "Copied $name from run $r"
+            done
+          done
+          git add runs
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -m "Saved runs: $RUNS" || echo "Nothing new"
+          git push origin exports
