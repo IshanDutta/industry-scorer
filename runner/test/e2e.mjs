@@ -132,4 +132,30 @@ if (which.includes("7")) {
   ok(r2.code === 0 && !!rec?.finished_at, `continued with a new cap and finished (exit ${r2.code})`);
   fa.server.close();
 }
+if (which.includes("8")) {
+  console.log("\n=== 8. shared library: a later run reuses facts an earlier one researched ===");
+  const fa = await fakeAnthropic(brain, { port: 7809 });
+  const out1 = join(tmp, "eight-a"), out2 = join(tmp, "eight-b");
+  const r1 = await run(7809, out1, ["--fresh"]);
+  const c1 = JSON.parse(readFileSync(join(out1, "cost.json"), "utf8"));
+  ok(r1.code === 0 && existsSync(join(out1, "library.json.gz")), `first run finished and saved the library (exit ${r1.code})`);
+  const lib = read(join(out1, "library.json.gz"));
+  const nInst = Object.values(lib.bodies).reduce((a, b) => a + Object.keys(b.instruments).length, 0);
+  ok(Object.keys(lib.situations).length > 0 && Object.keys(lib.countries).length > 0 && nInst > 0 && lib.wire, `library has ${Object.keys(lib.situations).length} situations, ${Object.keys(lib.countries).length} countries, ${nInst} instruments, wire`);
+  ok(c1.reuse && c1.reuse.situations === 0 && c1.reuse.countries === 0 && c1.reuse.instruments === 0, "first run reused nothing (it runs as before)");
+  const before = { req: fa.stats.requests, out: fa.stats.outputTokens || 0 };
+  const r2 = await run(7809, out2, ["--fresh", "--library", join(out1, "library.json.gz")]);
+  const c2 = JSON.parse(readFileSync(join(out2, "cost.json"), "utf8"));
+  const f2 = resultsFile(out2); const res2 = f2 && read(join(out2, f2));
+  ok(r2.code === 0 && !!res2?.records?.[`sector:${SECTOR.toLowerCase()}`]?.finished_at, `second run finished (exit ${r2.code})`);
+  ok(c2.reuse?.situations > 0 && c2.reuse?.countries > 0 && c2.reuse?.instruments > 0 && c2.reuse?.wire, `second run reused ${c2.reuse?.situations} situations, ${c2.reuse?.countries} countries, ${c2.reuse?.instruments} instruments, wire ${c2.reuse?.wire}`);
+  const req2 = fa.stats.requests - before.req;
+  console.log(`    requests: first ${c1.requests}, second ${req2}; cost by step (second):`, JSON.stringify(c2.by_step));
+  ok(req2 < c1.requests, `second run made fewer requests (${req2} vs ${c1.requests})`);
+  // Reused facts keep their citations: every industry's world write-up still cites sources that exist.
+  const runs = Object.entries(res2.records).filter(([k]) => k.startsWith("run:"));
+  const worldOk = runs.every(([, v]) => { const w = v.reports?.find?.((r) => r.kind === "world") || Object.values(v.reports || {}).find((r) => r?.kind === "world"); return !w || (w.result?.dives || []).every((d) => d.now); });
+  ok(worldOk, "reused situation facts reach every industry's world write-up");
+  fa.server.close();
+}
 process.exit();

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Industry Scorer overnight job: analyze every industry in a sector on your own API keys.
 //
-//   node run.mjs --sector "Consumer Defensive" [--resume checkpoint.json.gz] [--out out] [--deadline-min 330] [--fresh]
+//   node run.mjs --sector "Consumer Defensive" [--resume checkpoint.json.gz] [--library library.json.gz] [--out out] [--deadline-min 330] [--fresh]
+//
+// --library: the shared facts earlier sectors researched (news wire, world situations, countries, regulator
+// instruments). The page reuses whatever applies and adds what it researches; out/library.json.gz is the result.
 //
 // It opens the real Industry Scorer page (web/industry-scorer.html) in headless Chromium and presses
 // "Analyze all", exactly as you would. The page's code is unchanged; only its connections are swapped:
@@ -102,6 +105,11 @@ async function main() {
     const n = await page.evaluate((f) => window.__industryScorer.importRecords(f), checkpoint);
     log(`Restored ${n} industries' saved progress`);
   }
+  // The shared library: facts earlier sectors researched. A checkpoint carries its own copy too.
+  for (const lib of [checkpoint?.library, args.library && existsSync(args.library) ? readMaybeGz(args.library) : null].filter(Boolean)) {
+    const n = await page.evaluate((l) => window.__industryScorer.importLibrary(l), lib);
+    log(`Shared library: ${n.situations} world situations, ${n.countries} countries, ${n.instruments} regulator instruments${n.wire ? ", a news wire" : ""} available to reuse`);
+  }
   const fresh = args.fresh === "true" && !checkpoint;
   log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.models.complex} for complex steps and ${sampler.models.default} for the rest, ${sampler.mode} mode${sampler.budgetUsd ? `, spending cap $${sampler.budgetUsd}` : ""})`);
   await page.evaluate(([s, f]) => window.__industryScorer.start(s, { fresh: f }), [sector, fresh]);
@@ -113,7 +121,9 @@ async function main() {
       const full = await page.evaluate((s) => window.__industryScorer.exportSector(s, { full: true }), sector);
       if (!full) return;
       const tmp = join(outDir, "checkpoint.json.gz.part");
-      writeGz(tmp, { ...full, sampler: sampler.state() }); renameSync(tmp, join(outDir, "checkpoint.json.gz"));
+      const library = await page.evaluate(() => window.__industryScorer.exportLibrary());
+      writeGz(tmp, { ...full, sampler: sampler.state(), library }); renameSync(tmp, join(outDir, "checkpoint.json.gz"));
+      writeGz(join(outDir, "library.json.gz"), library);
       log(`Checkpoint saved (${why})`);
     } catch (e) { log("Couldn't save a checkpoint: " + String(e?.message || e).slice(0, 200)); }
   };
@@ -147,16 +157,25 @@ async function main() {
   const cost = { ...sampler.usage, usd: Math.round(sampler.usage.usd * 100) / 100, session_usd: Math.round((sampler.usage.usd - sampler.usdAtStart) * 100) / 100, model: `${sampler.models.complex} + ${sampler.models.default}`, mode: sampler.mode, mcp_calls: mcp.calls, mcp_errors: mcp.errors, mcp_throttled: mcp.throttled, minutes: Math.round((Date.now() - t0) / 60000) };
   const stamp = new Date().toISOString().slice(0, 10);
   if (results) { results.job = { cost, finished: !!rec.finished_at }; writeGz(join(outDir, `results-${slug(sector)}-${stamp}.json.gz`), results); }
-  if (full) writeGz(join(outDir, "checkpoint.json.gz"), { ...full, sampler: sampler.state() });
+  const library = await page.evaluate(() => window.__industryScorer.exportLibrary());
+  writeGz(join(outDir, "library.json.gz"), library);
+  if (full) writeGz(join(outDir, "checkpoint.json.gz"), { ...full, sampler: sampler.state(), library });
+  cost.by_step = Object.fromEntries(Object.entries(sampler.byStep).sort((a, b) => b[1].usd - a[1].usd).map(([k, v]) => [k, { ...v, usd: Math.round(v.usd * 100) / 100 }]));
+  cost.reuse = status.reuse || null;
   writeFileSync(join(outDir, "cost.json"), JSON.stringify(cost, null, 2));
 
   const done = rec.done?.H?.length || 0, total = (rec.names || []).filter((n) => !rec.skip?.[n]).length;
   const finished = !!rec.finished_at;
+  for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
+  if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);
   log(`${finished ? "Finished" : outOfTime ? "Paused (out of time)" : "Stopped"}: ${done} of ${total} industries · ${cost.requests} Claude requests (${cost.cached_results} reused) in ${cost.batches} batches · $${cost.usd} · ${cost.minutes} min`);
   summary([`### ${sector}: ${finished ? "finished" : outOfTime ? "continuing in a new session" : "stopped"}`, "",
     `- Industries finished: **${done} of ${total}**${Object.keys(rec.skip || {}).length ? ` (left out: ${Object.entries(rec.skip).map(([n, w]) => `${n}: ${w}`).join("; ")})` : ""}`,
     `- Claude (${cost.model}, ${cost.mode}): ${cost.requests} requests in ${cost.batches} batches, ${cost.cached_results} reused, ${cost.resent || 0} slow ones re-sent at the standard price · input ${(cost.input / 1e6).toFixed(2)}M tokens, output ${(cost.output / 1e6).toFixed(2)}M, cache reads ${(cost.cacheRead / 1e6).toFixed(2)}M`,
     `- **Estimated Claude cost this session: $${cost.session_usd}**${cost.usd !== cost.session_usd ? ` (whole run including earlier sessions: $${cost.usd})` : ""}`, `- Data calls: ${cost.mcp_calls} (${cost.mcp_errors} failed, ${cost.mcp_throttled} waits for the provider's rate limit) · ${cost.minutes} minutes`,
+    ...(Object.keys(cost.by_step).length ? ["", "**Claude cost by step (this session)**", "", "| Step | Cost | Requests | Answers reused |", "|---|---:|---:|---:|",
+      ...Object.entries(cost.by_step).map(([k, v]) => `| ${k} | $${v.usd.toFixed(2)} | ${v.requests} | ${v.reused || 0} |`)] : []),
+    ...(cost.reuse ? ["", `**Taken from earlier sectors:** ${cost.reuse.situations} world situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} regulator instruments${cost.reuse.wire ? ", the news wire" : ""}. Added to the library for later sectors: ${cost.reuse.added.situations} situations, ${cost.reuse.added.countries} countries, ${cost.reuse.added.instruments} instruments.`] : []),
     ...(status.notices.length ? ["", ...status.notices.map((n) => `> ${n}`)] : []),
     ...((rec.failed_steps || []).length ? ["", "<details><summary>Steps that didn't finish</summary>", "", ...rec.failed_steps.map((x) => `- ${x}`), "</details>"] : []),
     "", finished ? "Download the **results** artifact below and import the .json.gz file in Industry Scorer (picker → Import its results file)." : ""].join("\n"));

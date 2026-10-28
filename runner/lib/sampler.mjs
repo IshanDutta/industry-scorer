@@ -56,6 +56,18 @@ function withCacheBreakpoint(messages) {
   return msgs;
 }
 
+/** The report's step names, from the page's step labels (or its phase when a call has no label). */
+export function stepCategory(step) {
+  const s = String(step || "");
+  const rules = [[/^Rule book/i, "Regulator rule books"], [/^Situation analyst/i, "World events (facts and impacts)"], [/^Trade-relations analyst/i, "Country facts"],
+    [/^Indicator analyst|^Finding the news behind/i, "Macro indicators"], [/^Macro planner/i, "Macro planner"], [/^World-events scout/i, "World-events scout"],
+    [/^Trade relations:/i, "Trade write-ups (each industry)"], [/^Supply-chain verdict/i, "Supply-chain verdicts"], [/^World events:/i, "World write-ups (each industry)"],
+    [/^kpi$/, "KPI and earnings-call analysts"], [/^team$/, "Trade map, customers & suppliers, regulation analysts"], [/^write$/, "Macro strategist, regulatory verdict, lead strategist"],
+    [/^shared$/, "Shared research (other)"], [/^macro$/, "Macro planner"], [/^scout$/, "World-events scout"]];
+  for (const [re, name] of rules) if (re.test(s)) return name;
+  return s ? s.replace(/:.*$/, "").slice(0, 60) : "Other";
+}
+
 export class Sampler {
   // Models per tier, as the claude.ai page asks for them: "complex" = the most capable model, "default" = the
   // balanced everyday model, "quick" = the fast one. Each at its own default thinking effort (effort = {} leaves the
@@ -75,6 +87,7 @@ export class Sampler {
     this.batches = new Map();   // batch id -> Set(custom_id)
     this.cancelled = new Set();
     this.params = new Map();    // request hash -> params, while sent and not settled (to resend once)
+    this.byStep = {}; this.stepOf = new Map();
     this.usage = { requests: 0, cached_results: 0, input: 0, output: 0, cacheWrite: 0, cacheRead: 0, usd: 0, batches: 0, resent: 0, direct_requests: 0 };
     this.fatal = null;
     this.budgetUsd = Math.max(0, Number(budgetUsd) || 0); this.usdAtStart = 0; this.requestsAtStart = 0;
@@ -105,7 +118,7 @@ export class Sampler {
 
   // ------------------------------------------------------------------ one page call (prompt -> JSON or text)
   cancel(id) { this.cancelled.add(id); }
-  async ask(id, { verb, input, modelTier = "default", tools = [] }) {
+  async ask(id, { verb, input, modelTier = "default", tools = [], step = null }) {
     if (this.fatal) return { error: this.fatal };
     const system = verb === "json" ? FRAMING_JSON + (tools.length ? FRAMING_TOOLS : "") : (tools.length ? FRAMING_TOOLS.trim() : undefined);
     let messages = toMessages(input);
@@ -121,7 +134,7 @@ export class Sampler {
         ...(system ? { system } : {}), messages: apiTools.length ? withCacheBreakpoint(msgsNow) : msgsNow,
         ...(apiTools.length ? { tools: apiTools, ...(last ? { tool_choice: { type: "none" } } : {}) } : {}) };
       let msg;
-      try { msg = await this.send(params); }
+      try { msg = await this.send(params, step); }
       catch (e) { return { error: e?.code ? e : { code: "upstream_error", message: String(e?.message || e) } }; }
       const text = (msg.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
       if (msg.stop_reason === "refusal") return { error: { code: "refused", message: "Claude declined this request." } };
@@ -144,7 +157,7 @@ export class Sampler {
           // One more call to re-send the answer in the right format (the analysis is already in the conversation).
           const repairMsgs = [...msgsNow, { role: "assistant", content: msg.content }, { role: "user", content: REPAIR_JSON }];
           try {
-            const m2 = await this.send({ ...params, messages: apiTools.length ? withCacheBreakpoint(repairMsgs) : repairMsgs, ...(apiTools.length ? { tool_choice: { type: "none" } } : {}) });
+            const m2 = await this.send({ ...params, messages: apiTools.length ? withCacheBreakpoint(repairMsgs) : repairMsgs, ...(apiTools.length ? { tool_choice: { type: "none" } } : {}) }, step);
             const t2 = (m2.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
             const p2 = parseJsonReply(t2);
             if (p2.ok && m2.stop_reason !== "max_tokens") return { value: p2.value, text: [all, t2].filter((x) => x.trim()).join("\n\n") };
@@ -173,9 +186,11 @@ export class Sampler {
     const avg = this.usage.requests > this.requestsAtStart ? spent / n : 0.2;
     return spent + avg * (this.waiters.size + this.inflight + 1); // requests being waited on now, plus the one about to start
   }
-  async send(params) {
+  async send(params, step = null) {
     const key = hash(params);
-    if (this.done.has(key)) { this.usage.cached_results++; return this.done.get(key); }
+    const cat = stepCategory(step);
+    if (this.done.has(key)) { this.usage.cached_results++; (this.byStep[cat] ||= { usd: 0, requests: 0, reused: 0 }).reused++; return this.done.get(key); }
+    if (!this.stepOf.has(key)) this.stepOf.set(key, cat);
     // Spending cap for this session: stop before it, never after (the run saves a checkpoint to continue later).
     if (this.budgetUsd && this.committed() >= this.budgetUsd) {
       if (!this.fatal) { this.fatal = { code: "rate_limited", message: `Spending cap reached: this run has used about $${(this.usage.usd - this.usdAtStart).toFixed(2)} of its $${this.budgetUsd} limit`, budget: true }; this.log("[claude] " + this.fatal.message); }
@@ -199,7 +214,9 @@ export class Sampler {
     this.usage.requests++; if (direct) this.usage.direct_requests++;
     this.usage.input += u.input_tokens || 0; this.usage.output += u.output_tokens || 0;
     this.usage.cacheWrite += u.cache_creation_input_tokens || 0; this.usage.cacheRead += u.cache_read_input_tokens || 0;
-    this.usage.usd += f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+    const usd = f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+    this.usage.usd += usd;
+    const s = (this.byStep[this.stepOf.get(key) || "Other"] ||= { usd: 0, requests: 0, reused: 0 }); s.usd += usd; s.requests++; this.stepOf.delete(key);
   }
   headers() { return { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }; }
 

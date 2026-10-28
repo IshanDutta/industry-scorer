@@ -1,11 +1,13 @@
 # Industry Scorer: analyze every industry in a sector on your own API keys.
 #
-# Run it by hand: Actions → "Sector run" → Run workflow → type a sector (e.g. Consumer Defensive),
-# or "all" to analyze every sector at once (one machine per sector; their starts are staggered a few minutes
-# apart so data pulls don't pile onto your FMP plan at the same moment).
-# Nightly: every sector listed in runner/nightly-sectors.txt (edit that file; leave it empty to turn nightly off).
+# Easiest: Actions → "Run <Sector>" (one workflow per sector) → Run workflow.
+# Or here: Actions → "Sector run" → Run workflow → type a sector, several separated by commas, or "all".
+# Shared library: each run starts from the facts earlier sectors researched (the news wire, world situations,
+# countries, regulator instruments; kept in the "library" branch), reuses what applies, and adds what it
+# researched. Run sectors one after another to get the most reuse.
 # A run longer than one GitHub session (about 5.5 hours) saves a checkpoint and continues in a new run by itself.
-# When it finishes, download the "results-..." artifact and import the .json.gz file in Industry Scorer.
+# Results: the latest checkpoint of every sector is kept in the "exports" branch (runs/<sector>.json.gz) and as
+# the run's "checkpoint-..." artifact; import it in Industry Scorer.
 #
 # Secrets (Settings → Secrets and variables → Actions → New repository secret):
 #   ANTHROPIC_API_KEY   your Anthropic API key (console.anthropic.com)
@@ -26,23 +28,30 @@ on:
         type: boolean
         default: false
       speed:
-        description: "cheap = half-price batches (slower, often 6-12 hours); quick = standard price (about 1-3 hours, roughly twice the cost)"
+        description: "cheap = half-price batches (slower, often several hours); quick = standard price (about 1-2 hours, roughly twice the cost)"
         type: choice
         options: [cheap, quick]
         default: cheap
       budget:
-        description: "Most to spend on Claude in this run, in US dollars. It stops and saves before going over; continue later with continue_from."
+        description: "Most to spend on Claude per sector in this run, in US dollars. It stops and saves before going over; continue later with continue_from."
         required: true
-        default: "40"
+        default: "150"
       continue_from:
         description: "(set automatically) the run whose checkpoint to continue from"
         required: false
         default: ""
+  workflow_call:
+    inputs:
+      sector: { type: string, required: true }
+      fresh: { type: boolean, default: false }
+      speed: { type: string, default: cheap }
+      budget: { type: string, default: "150" }
+      continue_from: { type: string, default: "" }
   schedule:
     - cron: "17 9 * * *" # every night at 09:17 UTC (2:17 am Pacific daylight time)
 
 permissions:
-  contents: read
+  contents: write # to save the shared library and the latest results in their branches
   actions: write # to start the continuation run and read the previous run's checkpoint
 
 jobs:
@@ -83,6 +92,8 @@ jobs:
       SECTOR: ${{ matrix.sector }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -111,6 +122,21 @@ jobs:
           run-id: ${{ inputs.continue_from }}
           github-token: ${{ github.token }}
           path: resume
+      - name: Pick up this sector's unfinished run, if there is one
+        if: inputs.continue_from == '' && !inputs.fresh
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          if git fetch -q origin exports 2>/dev/null && git show "FETCH_HEAD:runs/$SLUG.json.gz" > last.json.gz 2>/dev/null; then
+            if node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("last.json.gz")));process.exit(j.finished?1:0)'; then
+              mkdir -p resume && mv last.json.gz resume/checkpoint.json.gz && echo "Continuing the unfinished $SECTOR run (only what's left is done)."
+            else echo "The last $SECTOR run finished; starting a new one."; fi
+          else echo "No earlier $SECTOR run."; fi
+          rm -f last.json.gz
+      - name: Get the shared library (what earlier sectors researched)
+        run: |
+          mkdir -p library
+          if git fetch -q origin library 2>/dev/null; then git show FETCH_HEAD:library.json.gz > library/library.json.gz && echo "Library found." || rm -f library/library.json.gz; else echo "No library yet: this sector runs as the first one."; fi
       - name: Analyze ${{ matrix.sector }}
         id: run
         working-directory: runner
@@ -124,7 +150,7 @@ jobs:
           JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
           CLAUDE_MODE: ${{ inputs.speed == 'quick' && 'direct' || 'batch' }}
           CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '0' }}
-          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.BUDGET_USD || '40' }}
+          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.BUDGET_USD || '150' }}
           CLAUDE_DIRECT_CONCURRENCY: ${{ vars.DIRECT_CONCURRENCY || '16' }}
           JOB_INDUSTRIES: ${{ vars.JOB_INDUSTRIES || '10' }}
           JOB_POOL: ${{ vars.JOB_POOL || '8' }}
@@ -134,6 +160,7 @@ jobs:
           # This GitHub session ends 6 hours after it began (including any staggered start): stop in time to save.
           args=(--sector "$SECTOR" --out ../out --deadline-min $((320 - ${STAGGERED_MIN:-0})))
           [ -f ../resume/checkpoint.json.gz ] && args+=(--resume ../resume/checkpoint.json.gz)
+          [ -f ../library/library.json.gz ] && args+=(--library ../library/library.json.gz)
           [ "$FRESH" = "true" ] && [ ! -f ../resume/checkpoint.json.gz ] && args+=(--fresh)
           node run.mjs "${args[@]}"
           code=$?
@@ -155,8 +182,31 @@ jobs:
           path: out/checkpoint.json.gz
           retention-days: 7
           compression-level: 0
+      - name: Add what this sector researched to the shared library
+        if: always() && hashFiles('out/library.json.gz') != ''
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          # Other sectors may save at the same time: merge with the latest and retry.
+          for i in 1 2 3 4 5 6; do
+            rm -rf lib-wt; git fetch -q origin library 2>/dev/null && git worktree add -q lib-wt FETCH_HEAD 2>/dev/null || { git worktree add -q --detach lib-wt HEAD && (cd lib-wt && git checkout -q --orphan tmp && git rm -rqf .); }
+            node runner/lib/libmerge.mjs lib-wt/library.json.gz lib-wt/library.json.gz out/library.json.gz
+            (cd lib-wt && git add library.json.gz && { git diff --cached --quiet || git commit -qm "Library: $SECTOR (run ${{ github.run_id }})"; } && git push -q origin HEAD:refs/heads/library) && break
+            git worktree remove --force lib-wt; sleep $((RANDOM % 20 + 5))
+          done
+      - name: Keep the latest results in the exports branch
+        if: always() && hashFiles('out/checkpoint.json.gz') != ''
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          for i in 1 2 3 4 5 6; do
+            rm -rf ex-wt; git fetch -q origin exports 2>/dev/null && git worktree add -q ex-wt FETCH_HEAD 2>/dev/null || { git worktree add -q --detach ex-wt HEAD && (cd ex-wt && git checkout -q --orphan tmp && git rm -rqf .); }
+            mkdir -p ex-wt/runs && cp out/checkpoint.json.gz "ex-wt/runs/$SLUG.json.gz"
+            (cd ex-wt && git add runs && { git diff --cached --quiet || git commit -qm "Latest $SECTOR (run ${{ github.run_id }})"; } && git push -q origin HEAD:refs/heads/exports) && break
+            git worktree remove --force ex-wt; sleep $((RANDOM % 20 + 5))
+          done
       - name: Continue in a new run
         if: steps.run.outputs.code == '75'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f speed="${{ inputs.speed || 'cheap' }}" -f budget="${{ steps.run.outputs.budget_left || inputs.budget || '40' }}"
+        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f speed="${{ inputs.speed || 'cheap' }}" -f budget="${{ steps.run.outputs.budget_left || inputs.budget || '150' }}"

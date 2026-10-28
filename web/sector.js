@@ -141,7 +141,11 @@ Cover EVERY indicator listed, in the same order.`;
 INDUSTRIES
 ${inds.map((i) => brief(i, { companies: 8, segs: 600, kpi: 600 })).join("\n\n")}
 
-${Team.wireBlock(ctx.wire)}
+${Team.wireBlock(ctx.wire)}${ctx.known?.length ? `
+
+SITUATIONS ALREADY RESEARCHED FOR OTHER SECTORS (their facts are written; only how they reach these industries is new)
+If one of your situations is the same real-world situation as one below, use its title EXACTLY as written here, so its research is reused. Decide relevance, stance and channel for these industries yourself, and include a situation only if it genuinely matters to them.
+${ctx.known.map((k) => `- ${k.title} (${k.status || "status n/a"}; since ${k.since || "n/a"}): ${trim(k.now, 260)}`).join("\n")}` : ""}
 ${ctx.tools ? "\nYou can call read_article to read a wire item in full and search_news_by_topic to pull more coverage on a topic before deciding. Cite what they return by ID." : ""}
 
 ${Team.RULES}
@@ -337,7 +341,11 @@ ${inds.map((i) => brief(i, { companies: 10, segs: 500, kpi: 500 })).join("\n\n")
 REGULATORY BODY: ${body.name} (${body.jurisdiction || "jurisdiction n/a"})
 Why it matters: ${body.why || "n/a"}
 Levers: ${(body.levers || []).join("; ") || "n/a"}
-What it is doing now: ${body.current || "n/a"}
+What it is doing now: ${body.current || "n/a"}${ctx.known?.length ? `
+
+INSTRUMENTS OF THIS BODY ALREADY WRITTEN UP FOR OTHER SECTORS
+When you pick one of these, use its name EXACTLY as written here so its write-up is reused. Still choose and rank for the industries above on their own merits: include one only if it is among their most material, and add others as needed.
+${ctx.known.map((k) => `- ${k.name}${k.citation ? ` — ${k.citation}` : ""}`).join("\n")}` : ""}
 
 RETRIEVED SOURCES ON THIS BODY (past 12 months; cite by ID)
 ${sources.map(evLine).join("\n") || "(none retrieved)"}

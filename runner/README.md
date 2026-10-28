@@ -9,9 +9,9 @@ Only the connections change:
 
 | In the claude.ai page | In the job |
 |---|---|
-| Claude, on your Claude plan | Claude Opus 5.5 on your Anthropic API key, through the Message Batches API |
+| Claude, on your Claude plan | Claude Opus 5.5 / Sonnet 5.5 on your Anthropic API key (half-price batches, or standard price) |
 | Your FMP and EODHD connectors | The same FMP and EODHD MCP servers, at their URLs |
-| One industry at a time, two agents at once | 4 industries, 4 agents and 4 regulators at once (so batches are large) |
+| One industry at a time, two agents at once | 10 industries, 8 agents and 12 regulators at once |
 
 ## Set up (once, about 15 minutes)
 
@@ -31,38 +31,37 @@ Only the connections change:
 
 ## Run it
 
-- **On demand:** Actions → **Sector run** → **Run workflow** → type the sector (spelled as in the page's sector list,
-  e.g. `Consumer Defensive`) → Run. Several at once: separate them with commas (`Energy, Utilities`).
-- **Every sector at once:** type `all`. Each sector gets its own machine and they run in parallel (their starts are
-  staggered 6 minutes apart so data pulls don't all hit FMP together; if FMP says to slow down, the job waits and
-  retries, so no data is lost).
-- **Spending cap (budget):** the most this run may spend on Claude, in dollars (default 40). The job stops and saves
-  a checkpoint before going over; continue later with `continue_from` and a new cap.
+- **One sector:** Actions → **Run <Sector>** (e.g. "Run Technology") → **Run workflow**. Choose the speed and the
+  spending cap, then Run. Each sector page in Industry Scorer also has a **Run <Sector> on GitHub** link to it.
+  If that sector has an unfinished run, it continues it (only what's left is done); tick "fresh" to start over.
+- **Shared library (reuse between sectors):** every run starts from what earlier sectors researched, kept in the
+  `library` branch: the news wire (3 days), each world situation's facts (7 days), each country's facts (30 days)
+  and each regulator instrument's facts (30 days). A later sector reuses whatever applies and writes only what is
+  specific to its own industries; everything about a particular industry (KPIs, trade map, verdicts, the lead
+  strategist) is always written fresh. The first sector runs exactly as before. **Run sectors one after another**
+  for the most reuse: two sectors running at the same time can't share with each other.
+- **Spending cap (budget):** the most this run may spend on Claude, in dollars (default 150). The job stops and
+  saves before going over; run the same sector again to continue.
 - **Speed:** `cheap` uses half-price batches only (slower: often several hours); `quick` uses the standard price
-  (about 1–3 hours, roughly twice the cost per call).
-- **Models:** like the page in claude.ai, the page's "complex" steps run on Claude Opus 5.5 and its "default" steps
-  on Claude Sonnet 5.5, each at its own default thinking effort. A run continued from a checkpoint keeps the settings
-  it started with, so a sector is analyzed one way throughout and answers already paid for are reused.
-- **Nightly:** list sectors in `runner/nightly-sectors.txt` (one per line). Empty the list to turn nightly runs off.
-- A run takes several hours: the work has about 30–40 steps in a row, and a batch usually returns in 2–5 minutes but
-  sometimes sits for an hour or more. Any batch still running after 20 minutes has its requests re-sent at the
-  standard price, which keeps a sector to roughly 10–20 hours at a little extra cost.
-  If it needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run by
-  itself; nothing finished is paid for twice.
+  (about 1–2 hours, roughly twice the cost per call).
+- **Models:** like the page in claude.ai, "complex" steps run on Claude Opus 5.5 and "default" steps on Claude
+  Sonnet 5.5, each at its own default thinking effort. A continued run keeps the settings it started with.
+- **Several sectors at once:** Actions → **Sector run** → type sectors separated by commas, or `all`.
+- If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
+  by itself; nothing finished is paid for twice.
 
 ## Get the results into Industry Scorer
 
-When the run finishes, open it in Actions, download the **results-…** artifact (a zip), and unzip it. In Industry
-Scorer, open the picker and click **Import results files**, then choose the `.json.gz` file (or several at once, one
-per sector). The sector overview
-opens, and every industry's full report is saved in that browser like any other run.
+The latest run of every sector is kept in the `exports` branch (`runs/<sector>.json.gz`). In Industry Scorer, open
+the sector and click **Download latest results**, then in the industry picker click **Import results files** and
+choose the file. Unfinished runs import too: they open where they stopped.
 
 ## What it costs
 
-Each run's summary (the run's page in Actions) shows the Claude requests, tokens and the **estimated cost** for that
-session, at batch prices for Claude Opus 5.5 ($2 per million input tokens, $10 per million output, cache reads $0.10).
-GitHub Actions: private repositories get 2,000 free minutes a month; after that standard Linux runners cost about
-$0.006 a minute (a 4-hour run is about $1.50).
+Each run's summary (the run's page in Actions) shows the Claude requests, tokens, the **estimated cost**, a
+**cost-by-step table** (rule books, world events, countries, lead strategists, ...) and what was taken from earlier
+sectors. GitHub Actions: private repositories get 2,000 free minutes a month; after that standard Linux runners
+cost about $0.006 a minute.
 
 If the API credit runs out mid-run, the run stops with that message and saves a checkpoint. Add credit, then run the
 workflow again for the same sector with `continue_from` set to that run's ID (from its URL).
@@ -75,11 +74,12 @@ workflow again for the same sector with `continue_from` set to that run's ID (fr
 | `CLAUDE_MODE` | `batch` | `direct` = full price, answers in seconds instead of minutes |
 | `JOB_INDUSTRIES`, `JOB_POOL`, `JOB_BODIES` (repository variables) | 10, 8, 12 | Industries, agents and regulators worked on at once |
 | `DIRECT_AFTER_MIN` (repository variable) | none | After this many minutes, everything left goes at the standard price |
-| `STRAGGLER_MIN` (repository variable) | 20 | Minutes before a slow batch is re-sent at the standard price (0 = never) |
+| `STRAGGLER_MIN` (repository variable) | 0 (never) | Minutes before a slow batch is re-sent at the standard price (0 = never) |
 | `STAGGER_MIN` (repository variable) | 6 | Minutes between sector starts when several run at once |
 | `FMP_GAP_MS` (repository variable) | 230 | Pause between FMP calls; raise it if your FMP plan's rate limit is low |
 
 ## Test it offline
 
 `npm install`, then `node test/e2e.mjs <mock_brain.js>` runs a whole sector against fake Anthropic and MCP servers:
-one session, a session that runs out of time and continues, and an API key that runs out of credit.
+one session, a session that runs out of time and continues, an API key that runs out of credit, slow batches,
+a cancelled job, the spending cap, and (test 8) a second run that reuses the first one's library.

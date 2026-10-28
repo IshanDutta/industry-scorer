@@ -21,7 +21,7 @@
     if (opts.signal && opts.signal.aborted) throw { code: "cancelled", message: "cancelled" };
     const list = Array.isArray(opts.tools) ? opts.tools : [];
     if (list.length) tools.set(id, list);
-    const payload = { verb, input, modelTier: opts.modelTier || "default",
+    const payload = { verb, input, modelTier: opts.modelTier || "default", step: opts.jobStep ? String(opts.jobStep).slice(0, 120) : null,
       tools: list.map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema || { type: "object", properties: {} } })) };
     let onAbort = null;
     const aborted = new Promise((_, rej) => {

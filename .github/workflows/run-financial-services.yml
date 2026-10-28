@@ -1,0 +1,33 @@
+# One click: Actions → "Run Financial Services" → Run workflow. Uses the shared library from earlier sectors.
+name: Run Financial Services
+
+on:
+  workflow_dispatch:
+    inputs:
+      speed:
+        description: "cheap = half-price batches (slower, often several hours); quick = standard price (about 1-2 hours, roughly twice the cost)"
+        type: choice
+        options: [cheap, quick]
+        default: cheap
+      budget:
+        description: "Most to spend on Claude in this run, in US dollars (it stops and saves before going over)"
+        required: true
+        default: "150"
+      fresh:
+        description: "Start over instead of continuing an unfinished run"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sector:
+    uses: ./.github/workflows/sector-run.yml
+    with:
+      sector: "Financial Services"
+      speed: ${{ inputs.speed }}
+      budget: ${{ inputs.budget }}
+      fresh: ${{ inputs.fresh }}
+    secrets: inherit

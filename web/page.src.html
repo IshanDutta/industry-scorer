@@ -287,6 +287,8 @@ table.sec-ov td.ind button { all: unset; cursor: pointer; color: var(--accent); 
 .gate { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--sunk); }
 .gate .small { max-width: 80ch; }
 button.sm { padding: 5px 10px; font-size: 13px; }
+a.btnlink { display: inline-block; font: 600 13px var(--body); border-radius: 8px; padding: 4px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); text-decoration: none; margin: 2px 0; }
+a.btnlink:hover { border-color: var(--accent); }
 .rule { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
 .rule > summary { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 500; }
 .rule-body { display: grid; gap: 10px; }
@@ -393,6 +395,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
     if (_tw && document.visibilityState === "hidden") { const id = ++_twId; _twWait.set(id, r); try { _tw.postMessage({ id, ms }); return; } catch { _twWait.delete(id); } }
     setTimeout(r, ms);
   });
+  const GH_REPO = "IshanDutta/industry-scorer"; // where the GitHub job runs (links only; the page never calls GitHub)
   const slug = (n) => n.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120);
   function pct(x, signed = true, d = 1) { x = num(x); if (!isNum(x)) return "—"; const s = (x * 100).toFixed(d) + "%"; return signed && x > 0 ? "+" + s : s; }
   function fix(x, d = 2) { x = num(x); return isNum(x) ? x.toFixed(d) : "—"; }
@@ -920,6 +923,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
   /** sample.json, but an answer that was cut short or wrapped in stray text is repaired instead of failing. */
   async function sampleJson(prompt, opts) {
     S.calls++; if (S.sectorRun) { const r = S.sectorRun; r.calls = (r.calls || 0) + 1; r.byPhase[r.phase] = (r.byPhase[r.phase] || 0) + 1; }
+    if (JOB) opts = { ...(opts || {}), jobStep: opts?.jobStep || (S.sectorRun ? S.sectorRun.phase : "single industry") };
     try { return await S.sample.json(prompt, opts); }
     catch (e) { if (e?.code === "invalid_json" && e.text) { const v = RegBook.repairJson(e.text); if (v && typeof v === "object") return v; } throw e; }
   }
@@ -1417,6 +1421,69 @@ button.sm { padding: 5px 10px; font-size: 13px; }
    * · F trade map, chain, regulation (each) · G dives, countries, indicators, rule books (shared, split per
    * industry) · H world, trade, macro write-ups, regulatory verdict, lead (each). Saved after every step.
    */
+  // ------------------------------------------------------------- shared library: what one sector researched, reused by the next
+  // Only facts that don't depend on the industry: the news wire, each world situation's facts, each country's
+  // facts, each regulator instrument's facts. Everything written about a specific industry is never reused.
+  const LIB_DAYS = { wire: 3, situation: 7, country: 30, body: 30 };
+  let LIB = null, libTimer = null;
+  const libEmpty = () => ({ v: 1, wire: null, situations: {}, countries: {}, bodies: {} });
+  async function libLoad() { if (!LIB) { const v = await idbGet("library"); LIB = v?.v === 1 ? v : libEmpty(); } return LIB; }
+  const libSave = () => { clearTimeout(libTimer); libTimer = setTimeout(() => { if (LIB) idbPut("library", jsonSafe(LIB)); }, 400); };
+  async function libFlush() { clearTimeout(libTimer); if (LIB) await idbPut("library", jsonSafe(LIB)); }
+  const libFresh = (e, kind) => !!e?.at && Date.now() - Date.parse(e.at) < LIB_DAYS[kind] * 864e5;
+  const libKey = (s) => String(s || "").toLowerCase().replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim();
+  const LIB_ID = /^[A-Z]{1,2}\d+$/;
+  /** Apply f to every citation ID in an object: a whole-string ID, or an ID inside [brackets]. */
+  const libCites = (o, f) => (typeof o === "string"
+    ? (LIB_ID.test(o) ? f(o) : o.replace(/\[([^\]]+)\]/g, (all, inner) => "[" + inner.split(/,\s*/).map((x) => (LIB_ID.test(x.trim()) ? f(x.trim()) : x)).join(", ") + "]"))
+    : Array.isArray(o) ? o.map((x) => libCites(x, f)) : o && typeof o === "object" ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, libCites(v, f)])) : o);
+  /** The sources an object cites, copied so they travel with it (macro rows travel as their label). */
+  function libItems(obj, pools, rows = []) {
+    const want = new Set(); libCites(obj, (id) => { want.add(id); return id; });
+    const out = [];
+    for (const id of want) {
+      const r = rows.find((x) => x.id === id); if (r) { out.push({ id, kind: "I", label: r.label }); continue; }
+      for (const p of pools) { const it = (p || []).find((x) => x.id === id); if (it) { const { text, ...lean } = it; out.push(lean); break; } }
+    }
+    return out;
+  }
+  /** Re-number an object's citations for this sector: each cited source is found here or added; macro rows by label. */
+  function libCarry(obj, items, resolve, rows = []) {
+    const map = new Map();
+    for (const it of items || []) {
+      if (it.kind === "I") { map.set(it.id, rows.find((r) => r.label === it.label)?.id || "I0"); continue; }
+      const id = resolve(it); if (id) map.set(it.id, id);
+    }
+    return libCites(obj, (id) => map.get(id) ?? id);
+  }
+  /** A regulator's short names: "(FTC)" in the name, and each acronym before " — " ("FTC / DOJ Antitrust Division" -> FTC, DOJ). */
+  const libAcr = (n) => { const s = String(n || ""), out = new Set();
+    for (const m of s.matchAll(/\(([A-Z][A-Z0-9.]{1,9})\)/g)) out.add(m[1].replace(/\./g, ""));
+    for (const part of s.split(/\s+[—–-]\s+/)[0].split(/\s*[\/&]\s*/)) { const w = part.trim().split(/\s+/)[0].replace(/\./g, ""); if (/^[A-Z][A-Z0-9]{1,9}$/.test(w)) out.add(w); }
+    for (const x of ["US", "USA", "UK", "EU", "DG", "UN"]) out.delete(x);
+    return out; };
+  /** The library's entries for a regulator (same key, or a shared acronym), as one: [key to save under, entry]. */
+  function libBodyOf(L, b) {
+    const a = libAcr(b.name);
+    const hits = Object.entries(L.bodies).filter(([k, v]) => k === b.key || [...libAcr(v.name)].some((x) => a.has(x)));
+    if (!hits.length) return [null, null];
+    const own = hits.find(([k]) => k === b.key) || hits[0];
+    const instruments = Object.assign({}, ...hits.filter((h) => h !== own).map(([, v]) => v.instruments || {}), own[1].instruments || {});
+    return [own[0], { ...own[1], instruments }];
+  }
+  /** Merge another library into this one (newer entries win). */
+  function libMerge(into, from) {
+    if (!from || from.v !== 1) return into;
+    const newer = (a, b) => (!a ? b : !b ? a : Date.parse(b.at || 0) > Date.parse(a.at || 0) ? b : a);
+    into.wire = newer(into.wire, from.wire);
+    for (const k of ["situations", "countries"]) for (const [key, e] of Object.entries(from[k] || {})) into[k][key] = newer(into[k][key], e);
+    for (const [key, b] of Object.entries(from.bodies || {})) {
+      const cur = into.bodies[key] || { name: b.name, at: b.at, instruments: {} };
+      for (const [ik, e] of Object.entries(b.instruments || {})) cur.instruments[ik] = newer(cur.instruments[ik], e);
+      cur.at = newer({ at: cur.at }, { at: b.at }).at; into.bodies[key] = cur;
+    }
+    return into;
+  }
   const secKey = (sector, part) => `sector:${slug(sector)}${part ? ":" + part : ""}`;
   const secGet = (sector, part = "") => idbGet(secKey(sector, part));
   const secPut = (sector, part, v) => idbPut(secKey(sector, part), jsonSafe(v));
@@ -1486,6 +1553,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
     const call = async (prompt, tier, en, tools = null) => {
       const ctl = new AbortController(); sr.ctls.add(ctl);
       const opts = { signal: ctl.signal, modelTier: tier, onText: () => { if (en && en.status !== "writing") { en.status = "writing"; renderReport(); } } };
+      if (JOB && en?.label) opts.jobStep = en.label; // the overnight job's cost-by-step report
       if (tools?.length) opts.tools = tools.slice(0, lim?.tools?.maxCount || tools.length); else opts.cache = false;
       try { return await sampleJson(fit(prompt), opts); } finally { sr.ctls.delete(ctl); }
     };
@@ -1567,9 +1635,23 @@ button.sm { padding: 5px 10px; font-size: 13px; }
         done: { B: [], C: false, D: [], E: false, F: [], dives: [], countries: [], ind: [], books: [], H: [] }, finished_at: null };
       sr.rec = rec;
       sr.store = World.makeStore(rec.store_n ? await loadStore(sector, rec.store_n) : []); sr.storeSaved = sr.store.items.length;
+      // What earlier sectors researched (the shared library): reused below wherever the facts are the same.
+      const L = await libLoad();
+      sr.reuse = { wire: false, situations: 0, countries: 0, instruments: 0, added: { situations: 0, countries: 0, instruments: 0 } };
+      const now = () => new Date().toISOString();
+      const lean = (it) => { const { id, kind, text, ...rest } = it; return rest; };
+      /** A source cited by reused facts: the same article in this sector's wire, else added to the sector's store. */
+      const resolveX = (it) => S.world.items.find((x) => x.url && x.url === it.url)?.id || sr.store.add(lean(it)).id;
       const wire = await secGet(sector, "wire");
       if (wire?.world) { S.world = wire.world; S.macroCat = wire.macroCat; S.macroCtx = { today: today(), isFatal, onStep: () => {}, eodTools: wire.eodTools || [] }; }
-      else { await sharedResearch(); await secPut(sector, "wire", { world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] }); }
+      else if (libFresh(L.wire, "wire") && L.wire.world) {
+        S.world = L.wire.world; S.macroCat = L.wire.macroCat; S.macroCtx = { today: today(), isFatal, onStep: () => {}, eodTools: L.wire.eodTools || [] };
+        await secPut(sector, "wire", { world: S.world, macroCat: S.macroCat, eodTools: L.wire.eodTools || [] }); sr.reuse.wire = true;
+      }
+      else {
+        await sharedResearch(); await secPut(sector, "wire", { world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] });
+        L.wire = { at: now(), sector, world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] }; libSave();
+      }
       for (const [k, part] of [["macro", "macro"], ["scout", "scout"], ["reads", "reads"], ["cov", "cov"]]) { const v = await secGet(sector, part); if (v) lib[k] = v; }
       if (lib.macro?.plan) { lib.plan = lib.macro.plan; lib.macro = lib.macro.macro; }
       for (const si of rec.done.dives) lib.dives[si] = await secGet(sector, "dive:" + si);
@@ -1628,7 +1710,9 @@ button.sm { padding: 5px 10px; font-size: 13px; }
         sr.phase = "scout"; sr.cur = null;
         await step(`World-events scout: the live situations for all ${names().length} industries`, async (en) => {
           const tools = lim?.tools ? World.scoutTools(eod(), { today: today(), onStep: (l) => { en.note = l; renderReport(); } }, S.world, sr.store) : null;
-          const raw = await call(Sector.scoutPrompt(sector, inds(), { today: today(), wire: S.world, tools: !!tools }), "complex", en, tools);
+          const known = Object.values(L.situations).filter((e) => libFresh(e, "situation") && e.facts).sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 15)
+            .map((e) => ({ title: e.title, status: e.facts.status, since: e.facts.since, now: e.facts.now, sector: e.sector }));
+          const raw = await call(Sector.scoutPrompt(sector, inds(), { today: today(), wire: S.world, tools: !!tools, known }), "complex", en, tools);
           lib.scout = Sector.cleanScout(raw, Team.index(null, null, null, S.world.items, sr.store.items), inds());
           if (!lib.scout.situations.length) throw { code: "empty_completion" };
           en.note = `${lib.scout.situations.length} situations`;
@@ -1656,6 +1740,9 @@ button.sm { padding: 5px 10px; font-size: 13px; }
           const coverage = await World.expand(eod(), dctx(en), sit, S.world, sr.store);
           const s2 = { ...sit, coverage };
           const out = { facts: null, impacts: {}, failed: [] };
+          // Researched for an earlier sector: its facts are reused, so every call writes only the impacts.
+          const le = L.situations[libKey(sit.title)];
+          if (libFresh(le, "situation") && le.facts) { out.facts = { ...libCarry(le.facts, le.items, resolveX, lib.macro?.rows || []), title: sit.title }; out.reused = le.sector || true; }
           for (const b of Sector.batches(members)) {
             if (sr.cancel) return;
             const batch = b.map((me, slot) => { const ind = indOf(me.name); return { ind, me, al: Sector.aliasFor(slot, ind) }; });
@@ -1669,6 +1756,8 @@ button.sm { padding: 5px 10px; font-size: 13px; }
             } catch (e) { if (stopErr(e)) throw e; out.failed.push(...b.map((x) => x.name)); }
           }
           if (!out.facts) throw { code: "empty_completion" };
+          if (out.reused) sr.reuse.situations++;
+          else { L.situations[libKey(sit.title)] = { at: now(), sector, title: sit.title, facts: out.facts, items: libItems(out.facts, [S.world.items, sr.store.items, coverage], lib.macro?.rows || []) }; sr.reuse.added.situations++; libSave(); }
           lib.dives[si] = out;
           await secPut(sector, "dive:" + si, out);
           rec.done.dives.push(si); await saveRec(sr);
@@ -1680,6 +1769,16 @@ button.sm { padding: 5px 10px; font-size: 13px; }
       // ---- G2: every country any industry's trade map named: the US relationship, risks, threats and policy, once (3 per call)
       const maps = Object.fromEntries(names().map((n) => [n, rep(n, "trademap")?.result]).filter(([, m]) => m?.countries?.length));
       const union = Sector.countryUnion(maps);
+      // Countries an earlier sector already wrote up: their facts (and the news behind them) are reused, no call.
+      for (const c of union) {
+        const k = lc(c.country), le = L.countries[libKey(c.country)];
+        if (rec.done.countries.includes(k) || !libFresh(le, "country") || !le.facts) continue;
+        const rows = lib.macro?.rows || [];
+        const news = (le.news || []).map(resolveX);
+        const v = { facts: { ...libCarry(le.facts, [...(le.items || []), ...(le.news || [])], resolveX, rows), country: c.country }, news, reused: le.sector || true };
+        lib.countries[k] = v; await secPut(sector, "country:" + k, v); rec.done.countries.push(k); sr.reuse.countries++;
+      }
+      await saveRec(sr);
       for (let pass = 1; pass <= 2 && !sr.cancel; pass++) {
         const todo = union.filter((c) => !rec.done.countries.includes(lc(c.country)));
         await spool(Sector.batches(todo).map((b) => async () => {
@@ -1689,7 +1788,8 @@ button.sm { padding: 5px 10px; font-size: 13px; }
             const got = Array.isArray(raw?.countries) ? raw.countries : [];
             let n = 0;
             for (const c of b) { const f = got.find((x) => lc(x?.country) === lc(c.country)) || (b.length === 1 && got.length === 1 ? got[0] : null); if (!f) continue;
-              const v = { facts: f, news: (c.news || []).map((x) => x.id) }; lib.countries[lc(c.country)] = v; await secPut(sector, "country:" + lc(c.country), v); rec.done.countries.push(lc(c.country)); n++; }
+              const v = { facts: f, news: (c.news || []).map((x) => x.id) }; lib.countries[lc(c.country)] = v; await secPut(sector, "country:" + lc(c.country), v); rec.done.countries.push(lc(c.country)); n++;
+              L.countries[libKey(c.country)] = { at: now(), sector, country: c.country, facts: f, news: (c.news || []).map((x) => ({ ...x, text: undefined })), items: libItems(f, [S.world.items, sr.store.items, c.news], lib.macro?.rows || []) }; sr.reuse.added.countries++; libSave(); }
             await saveRec(sr);
             if (!n) throw { code: "empty_completion" };
             en.note = `${n} of ${b.length} countries`;
@@ -1764,10 +1864,14 @@ button.sm { padding: 5px 10px; font-size: 13px; }
           const pre = await RegBook.preSearch(fmp, eod(), ctx, b, b.bi);
           const store = { items: pre.items, prefix };
           const tools = lim?.tools ? RegBook.buildTools(fmp, eod(), ctx, store) : null;
+          // Instruments of this body an earlier sector already wrote up: the list can pick them by name, and their facts are reused.
+          const [lbKey, lb] = libBodyOf(L, b);
+          const known = Object.values(lb?.instruments || {}).filter((e) => libFresh(e, "body") && e.facts).sort((x, y) => Date.parse(y.at) - Date.parse(x.at)).slice(0, 30).map((e) => ({ name: e.name, citation: e.citation }));
+          const resolveR = (it) => { const hit = store.items.find((x) => x.url && x.url === it.url); if (hit) return hit.id; const x = { ...lean(it), id: store.prefix + (store.items.length + 1), kind: "R" }; store.items.push(x); return x.id; };
           en.note = "choosing each industry's 5 most material instruments"; renderReport();
           let list;
-          try { list = await call(Sector.listPrompt(b, members.map(indOf), store.items, { sector, bi: b.bi, tools: !!tools }), "complex", en, tools); }
-          catch (e) { if (e?.code !== "invalid_json" || !tools) throw e; list = await call(Sector.listPrompt(b, members.map(indOf), store.items, { sector, bi: b.bi, tools: false }), "complex", en); }
+          try { list = await call(Sector.listPrompt(b, members.map(indOf), store.items, { sector, bi: b.bi, tools: !!tools, known }), "complex", en, tools); }
+          catch (e) { if (e?.code !== "invalid_json" || !tools) throw e; list = await call(Sector.listPrompt(b, members.map(indOf), store.items, { sector, bi: b.bi, tools: false, known }), "complex", en); }
           const rules = (Array.isArray(list?.rules) ? list.rules : []).filter((r) => r && String(r.name || "").trim()).slice(0, 8)
             .map((r) => ({ ...r, industries: (Array.isArray(r.industries) ? r.industries : []).map((x) => ({ ...x, name: members.find((n) => lc(n) === lc(x?.name)) })).filter((x) => x.name) }))
             .filter((r) => r.industries.length);
@@ -1777,6 +1881,8 @@ button.sm { padding: 5px 10px; font-size: 13px; }
           await spool(rules.map((r, k) => async () => {
             const mem = r.industries.map((me) => ({ me, ind: indOf(me.name) }));
             const w = { facts: null, impacts: [] };
+            const le = lb?.instruments?.[libKey(r.name)];
+            if (libFresh(le, "body") && le.facts) { w.facts = { ...libCarry(le.facts, le.items, resolveR), name: r.name }; w.reused = true; }
             for (const bt of Sector.batches(mem)) {
               try { const raw = await call(Sector.rulePrompt(b, r, bt, store.items, { bi: b.bi }, w.facts), "complex", en);
                 if (!w.facts && raw?.facts && typeof raw.facts === "object") w.facts = raw.facts;
@@ -1786,6 +1892,14 @@ button.sm { padding: 5px 10px; font-size: 13px; }
             }
             writes[k] = w; doneN++; en.note = `writing instruments: ${doneN} of ${rules.length} done`; renderReport();
           }), CONC.pool);
+          for (const [k, w] of writes.entries()) {
+            if (!w?.facts) continue;
+            if (w.reused) { sr.reuse.instruments++; continue; }
+            const body = (L.bodies[lbKey || b.key] ||= { name: b.name, at: now(), instruments: {} }); body.at = now();
+            body.instruments[libKey(rules[k].name)] = { at: now(), sector, name: rules[k].name, citation: rules[k].citation, facts: w.facts, items: libItems(w.facts, [store.items]) };
+            sr.reuse.added.instruments++;
+          }
+          libSave();
           const idx0 = Object.fromEntries(store.items.map((x) => [x.id, x]));
           const built = [];
           for (const name of members) {
@@ -1900,6 +2014,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
       S.notices.push({ kind: "err", text: JOB ? `The ${sector} run stopped: ${msg} Everything finished so far is in the checkpoint.` : `The ${sector} run stopped: ${msg} Everything finished so far is saved in this browser; ${e?.code === "rate_limited" ? "once the limit resets, " : ""}open the ${sector} sector and choose Resume to pick up from there.` });
     } finally {
       if (sr.rec) { sr.rec.failed_steps = [...new Set([...(sr.rec.failed_steps || []), ...sr.errors])].slice(-80); await saveRec(sr).catch(() => {}); }
+      await libFlush().catch(() => {}); S.lastReuse = sr.reuse || null;
       // A run the viewer stopped (or that hit a limit) waits for Resume; one cut off by closing the page carries on by itself.
       await idbDel("sectorActive");
       S.sectorRun = null; S.run = null; S.lastStop = null;
@@ -1989,6 +2104,8 @@ button.sm { padding: 5px 10px; font-size: 13px; }
     }
     await idbPut("index", idx); S.saved = idx;
     if (file.sector) S.sectorRec[file.sector] = file.records[secKey(file.sector)] || null;
+    // A checkpoint from the GitHub job carries the shared library: sector runs in this browser can reuse it too.
+    if (file.library?.v === 1) { libMerge(await libLoad(), file.library); await libFlush(); }
     return n;
   }
   /** Import one or more results files (one per sector); opens the first sector's overview. */
@@ -2017,12 +2134,44 @@ button.sm { padding: 5px 10px; font-size: 13px; }
     ];
     renderAll();
   }
+  /**
+   * The runs copied from GitHub travel with this page as files (runs/index.json lists them). Each is read the
+   * same way as an imported results file. A host may already have unzipped a .gz file, so the bytes decide.
+   */
+  async function pullFromGithub() {
+    if (busy() || S.pulling) return;
+    S.pulling = true; renderPicker();
+    try {
+      const r = await fetch("runs/index.json", { cache: "no-store" });
+      if (!r.ok) throw new Error("no runs have been copied from GitHub into this page yet");
+      const list = (await r.json())?.files || [];
+      if (!list.length) throw new Error("no runs have been copied from GitHub into this page yet");
+      const files = [];
+      for (const x of list) {
+        const b = await fetch("runs/" + x.path, { cache: "no-store" });
+        if (!b.ok) throw new Error(`${x.sector || x.path} couldn't be read (${b.status})`);
+        // Saved as base64 text (pages can't carry .gz files); the bytes are the run's .json.gz.
+        let bytes;
+        if (/\.b64\.txt$/i.test(x.path)) { const s = atob((await b.text()).replace(/\s+/g, "")); bytes = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i); }
+        else bytes = new Uint8Array(await b.arrayBuffer());
+        const gz = bytes[0] === 0x1f && bytes[1] === 0x8b;
+        files.push(new File([bytes], (x.sector || "run").replace(/\W+/g, "-") + (gz ? ".json.gz" : ".json")));
+      }
+      await importResultsFiles(files);
+    } catch (e) {
+      S.notices = [{ kind: "err", text: `Couldn't pull the runs from GitHub: ${e?.message || e}` }]; renderAll();
+    } finally { S.pulling = false; renderPicker(); }
+  }
   // The overnight job drives this page headlessly and reads/writes results through these.
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
     stop: () => { const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
-    status: () => { const r = S.sectorRun; return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [] }; },
+    status: () => { const r = S.sectorRun; return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [], reuse: r?.reuse || S.lastReuse || null }; },
+    /** The shared library (facts every sector can reuse): read it out, or merge one in before a run. */
+    exportLibrary: async () => { await libFlush(); return jsonSafe(await libLoad()); },
+    importLibrary: async (lib) => { const L = await libLoad(); libMerge(L, lib); await libFlush();
+      return { situations: Object.keys(L.situations).length, countries: Object.keys(L.countries).length, instruments: Object.values(L.bodies).reduce((a, b) => a + Object.keys(b.instruments || {}).length, 0), wire: !!L.wire }; },
   };
 
   /**
@@ -2280,12 +2429,13 @@ button.sm { padding: 5px 10px; font-size: 13px; }
       <div class="picker-list">${body}</div>
       ${(S.saved || []).length ? `<div class="small muted">${S.saved.length} run${S.saved.length === 1 ? "" : "s"} saved in this browser (the ${KEEP} most recent are kept). <button class="sm" id="clear-saved" ${busy() ? "disabled" : ""}>Delete saved runs</button></div>` : ""}
       <label class="check"><input type="checkbox" id="us-only" ${usOnly() ? "checked" : ""} ${busy() ? "disabled" : ""}> Count US-headquartered companies only (leaves out foreign companies listed in the US, like TSM and ASML)</label>
-      <div class="small muted">Ran sectors with the overnight job? <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
+      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling ? "Pulling…" : "Pull from GitHub"}</button> brings in every run copied from GitHub, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
     $("close-picker")?.addEventListener("click", () => { S.pickerOpen = false; S.filter = ""; renderPicker(); });
     $("clear-saved")?.addEventListener("click", async () => { if (!confirm("Delete every run saved in this browser, and the track record of their calls? What's on screen stays until you leave.")) return; for (const x of S.saved || []) { await idbDel("run:" + x.slug); await idbDel("calls:" + x.slug); } await idbDel("index"); await idbDel("last"); S.saved = []; S.savedAt = {}; S.restored = null; renderAll(); });
     const input = $("pick-filter");
     input.addEventListener("input", () => { S.filter = input.value; renderPicker(); });
     $("import-results")?.addEventListener("click", () => $("import-file")?.click());
+    $("pull-github")?.addEventListener("click", pullFromGithub);
     $("import-file")?.addEventListener("change", (ev) => { const fs = [...(ev.target.files || [])]; if (fs.length) importResultsFiles(fs); });
   }
 
@@ -2299,8 +2449,10 @@ button.sm { padding: 5px 10px; font-size: 13px; }
       : rec && !rec.finished_at ? `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Resume: ${left} of ${rec.names.length} industries left</button><button data-sector-view="${esc(sec)}">Progress so far</button><button data-sector-fresh="${esc(sec)}" ${dis}>Start over</button>`
       : rec?.finished_at ? `<button data-sector-view="${esc(sec)}" class="primary">Open the overview (${esc(ago(rec.finished_at))})</button><button data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} again</button>`
       : `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} industries</button>`;
+    const gh = `https://github.com/${GH_REPO}`;
+    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched. When it's done: <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
     return `<div class="sector-run"><div><b>Analyze every ${esc(sec)} industry with one click.</b> <span class="small muted">Each industry gets the full report it gets on its own: its data, scores, KPI and earnings-call analysts, customers and suppliers, macro, world events, trade relations, rule books, regulatory verdict and lead strategist. What the industries share is researched once for the whole sector (the macro series and what's driving them, the world situations and their facts, each country's relationship with the US, each regulator's rules and their fact-check), and each industry's analysts then write what it means for that industry. About ${est.sector.toLocaleString()} Claude calls instead of about ${est.single.toLocaleString()} running them one by one, on your own Claude usage. Keep this page open while it runs (it keeps going in a background tab); progress is saved after every step, and reopening the page carries on.</span></div>
-      <div class="actions">${btns}</div></div>`;
+      <div class="actions">${btns}</div>${ghRow}</div>`;
   }
   const SEC_PHASES = [["data", "Market data, metrics and research for each industry", "B"], ["macro", "Macro planner for the whole sector", "C"], ["kpi", "KPI and earnings-call analysts, each industry", "D"], ["scout", "World-events scout for the whole sector", "E"],
     ["team", "Trade map, customers and suppliers, regulation analyst, each industry", "F"], ["shared", "Shared research: situation deep dives, countries, indicator drivers, rule books", "G"], ["write", "Each industry's world, trade and macro write-ups, regulatory verdict and lead strategist", "H"]];
