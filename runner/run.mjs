@@ -112,7 +112,9 @@ async function main() {
   }
   const fresh = args.fresh === "true" && !checkpoint;
   log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.models.complex} for complex steps and ${sampler.models.default} for the rest, ${sampler.mode} mode${sampler.budgetUsd ? `, spending cap $${sampler.budgetUsd}` : ""})`);
-  await page.evaluate(([s, f]) => window.__industryScorer.start(s, { fresh: f }), [sector, fresh]);
+  const redoGaps = env.REDO_GAPS === "true";
+  if (redoGaps) log("Redo gaps: only the lead strategists whose 1M-12M calls left items out are rewritten");
+  await page.evaluate(([s, f, g]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g }), [sector, fresh, redoGaps]);
 
   // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
   // limit), so there is always one to continue from.

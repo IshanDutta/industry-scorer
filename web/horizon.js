@@ -205,7 +205,7 @@ ${rules}
 - Each horizon is its own judgment, not the 12-month view scaled down. What dominates differs by window: 1M = dated decisions and events inside it, momentum, breadth, positioning and sentiment; 3M = the earnings season's results and guidance, central-bank and policy decisions, near-term regulatory and trade actions, how the conflicts develop; 6M = estimate revisions, the policy path, rule books coming into force, the trajectory of wars and trade disputes; 12M = earnings power and valuation, which must agree with the scenarios' probability-weighted return (code checks).
 - "section_reads": one specific sentence per section for THAT window: ${keys.map((k) => `"${k}" (${labels[k]})`).join(", ")}. Say what that section's findings mean over this window, citing them; never "no change" without saying why.
 - "decisions": every important decision or dated event in the window, from the DATED CALENDAR (cite its C-IDs in "refs"; several dates of one series can share one entry). For each: what the plausible outcomes are and what each does to this industry, and which way you lean. Cover at least these C-IDs, which code checks: ${ORDER.map((h) => `${h}: ${req[h].events.join(", ") || "none"}`).join("; ")}. Add other decisions the dossier mentions even if they are not in the calendar (an election, a summit, a court ruling, a tariff deadline), citing their sources.
-- "conflicts": every war, armed conflict, invasion or blockade threat, sanctions fight and other live geopolitical situation, from STANDING SITUATIONS and the world and trade reports (cite S-IDs in "refs"). For each: what is likely to happen within THIS window (escalation, ceasefire, status quo, with a probability), and what that does to the industry's prices and earnings in the window, by ticker where it differs. Cover at least these S-IDs in EVERY horizon, which code checks: ${req["12M"].standing.join(", ") || "none"}.
+- "conflicts": every war, armed conflict, invasion or blockade threat, sanctions fight and other live geopolitical situation, AND every high-importance rule, policy, export control or other standing situation in the list below, from STANDING SITUATIONS and the world, trade and regulation reports (cite S-IDs in "refs"; several S-IDs about the same regulator or situation can share one entry, citing all of them). For each: what is likely to happen within THIS window (escalation, ceasefire, status quo, enforcement, a ruling or a change of the rule, with a probability), and what that does to the industry's prices and earnings in the window, by ticker where it differs. Cover at least these S-IDs in EVERY horizon, which code checks: ${req["12M"].standing.join(", ") || "none"}.
 - Size every decision and shock with the MEASURED MACRO SENSITIVITIES (e.g. a Fed outcome that moves the 10-year yield 25bp, a war that lifts oil 10%), and weigh POSITIONING (crowded or washed out), the direction of estimate REVISIONS and the BALANCE-SHEET CYCLE in every window. If there is a TRACK RECORD, use it to calibrate your ranges and probabilities.
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
@@ -228,8 +228,8 @@ Reply with ONLY this JSON:
       hz[h] = { call: en(x.call, ["bullish", "neutral", "bearish"], "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null,
         conviction: en(x.conviction, ["high", "medium", "low"], ""), drivers: clean(x.drivers, 1100), risk: clean(x.risk, 400), positioning: clean(x.positioning, 500),
         section_reads: Object.fromEntries(keys.map((k) => [k, clean(x.section_reads?.[k], 360)]).filter(([, t]) => t)),
-        decisions: arr(x.decisions, 14).map((d) => ({ refs: refs(d?.refs, cids), date: normDate(d?.date) ? String(d.date).slice(0, 10) : "", event: clean(d?.event, 200), outcomes: clean(d?.outcomes, 500), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral") })).filter((d) => d.event),
-        conflicts: arr(x.conflicts, 12).map((c) => ({ refs: refs(c?.refs, sids), situation: clean(c?.situation, 200), in_window: clean(c?.in_window, 500), impact: clean(c?.impact, 500) })).filter((c) => c.situation),
+        decisions: arr(x.decisions, 30).map((d) => ({ refs: refs(d?.refs, cids), date: normDate(d?.date) ? String(d.date).slice(0, 10) : "", event: clean(d?.event, 200), outcomes: clean(d?.outcomes, 500), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral") })).filter((d) => d.event),
+        conflicts: arr(x.conflicts, 30).map((c) => ({ refs: refs(c?.refs, sids), situation: clean(c?.situation, 200), in_window: clean(c?.in_window, 500), impact: clean(c?.impact, 500) })).filter((c) => c.situation),
         catalysts: arr(x.catalysts, 4).map((c) => ({ date: /^\d{4}-\d{2}(-\d{2})?$/.test(String(c?.date || "")) ? String(c.date) : "", event: clean(c?.event, 200), why: clean(c?.why, 260) })).filter((c) => c.event),
         sections: arr(x.sections, 4).map((y) => String(y).toLowerCase()).filter((y) => keys.includes(y)) };
     }
@@ -255,7 +255,11 @@ Reply with ONLY this JSON:
       const out = { h, mid: isNum(m) ? Math.round(m * 10) / 10 : null, sigma: f.sigma ?? null, z: isNum(m) && f.sigma ? Math.round((m / f.sigma) * 100) / 100 : null, issues };
       if (cal) {
         const req = required(cal, h);
-        const hasE = new Set((x.decisions || []).flatMap((d) => d.refs || [])), hasS = new Set((x.conflicts || []).flatMap((c) => c.refs || []));
+        // An item counts as covered wherever the call cites it: an entry's refs, or [C#]/[S#] in its text.
+        const cited = new Set([...(x.decisions || []).flatMap((d) => d.refs || []), ...(x.conflicts || []).flatMap((c) => c.refs || [])]);
+        const texts = [x.drivers, x.risk, x.positioning, ...Object.values(x.section_reads || {}), ...(x.decisions || []).flatMap((d) => [d.event, d.outcomes]), ...(x.conflicts || []).flatMap((c) => [c.situation, c.in_window, c.impact])];
+        for (const t of texts) for (const m of String(t || "").matchAll(/\[([^\]]+)\]/g)) for (const id of m[1].split(/,\s*/)) if (/^[CS]\d+$/.test(id.trim())) cited.add(id.trim());
+        const hasE = cited, hasS = cited;
         out.missing_events = req.events.filter((id) => !hasE.has(id));
         out.missing_standing = req.standing.filter((id) => !hasS.has(id));
         out.missing_sections = keys.length && x.section_reads ? keys.filter((k) => !x.section_reads[k]) : [];
@@ -266,7 +270,60 @@ Reply with ONLY this JSON:
     });
   }
 
-  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, horizonChecks };
+  // ---------------------------------------------------------------- filling what a call left out
+  /** From horizonChecks: what each horizon still has to address, or null when nothing is missing. */
+  function missingOf(checks) {
+    const out = {};
+    for (const c of checks || []) {
+      if (c.missing) continue; // no call at all: the review handles that
+      const e = c.missing_events || [], s = c.missing_standing || [], k = c.missing_sections || [];
+      if (e.length || s.length || k.length) out[c.h] = { events: e, standing: s, sections: k };
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  /** A focused follow-up: write ONLY the pieces each horizon left out, consistent with the call already made. */
+  function fixPrompt(doc, ctx, hz, miss, keys, labels, rules) {
+    const cal = ctx.calendar || { events: [], standing: [] };
+    const ids = new Set(Object.values(miss).flatMap((m) => [...m.events, ...m.standing]));
+    const items = [...(cal.events || []).filter((e) => ids.has(e.id)).map((e) => `[${e.id}] ${e.dates.slice(0, 4).join(", ")} · ${e.section} · ${e.kind} · ${e.importance} — ${e.title}${e.detail ? `. ${e.detail}` : ""}${e.refs?.length ? ` [${e.refs.join(", ")}]` : ""}`),
+      ...(cal.standing || []).filter((x) => ids.has(x.id)).map((x) => `[${x.id}] ${x.section} · ${x.kind} · ${x.importance} — ${x.title} (${x.status}). ${x.detail}${x.refs?.length ? ` [${x.refs.join(", ")}]` : ""}`)];
+    const calls = Object.fromEntries(Object.keys(miss).map((h) => { const x = hz?.[h] || {}; return [h, { call: x.call, expected_move: x.expected_move, probability_up: x.probability_up, drivers: x.drivers }]; }));
+    return `You are the head of research for the US-listed "${doc.name}" industry. Today is ${ctx.today}. Your 1M, 3M, 6M and 12M calls are written, but code found items some of them leave out. Write ONLY the missing pieces, consistent with each call as it stands (don't change the calls).
+
+THE CALLS AS THEY STAND
+${JSON.stringify(calls)}
+
+WHAT EACH CALL LEAVES OUT (code checks every ID)
+${Object.entries(miss).map(([h, m]) => `${h}: ${[m.standing.length ? `standing situations ${m.standing.join(", ")}` : "", m.events.length ? `decisions/events ${m.events.join(", ")}` : "", m.sections.length ? `section reads for ${m.sections.map((k) => `"${k}" (${labels[k] || k})`).join(", ")}` : ""].filter(Boolean).join("; ")}`).join("\n")}
+
+THE ITEMS (from the calendar and standing situations code built from every section)
+${items.join("\n") || "(none)"}
+
+${ctx.dossier || ""}
+
+${rules}
+- Every standing situation listed goes into "conflicts" for that horizon, citing its S-ID in "refs"; several S-IDs about the same regulator or situation can share one entry, citing all of them. Say what is likely to happen within THAT window (status quo, enforcement, escalation, a ruling or a change, with a probability) and what it does to the industry's prices and earnings in that window, by ticker where it differs.
+- Every decision/event listed goes into "decisions" for that horizon, citing its C-ID in "refs", with the plausible outcomes and which way you lean.
+- Every section listed gets one specific sentence in "section_reads" for that window, citing its findings.
+
+Reply with ONLY this JSON, with an entry for each horizon above:
+{"horizons": {${Object.keys(miss).map((h) => `"${h}": {"conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "...", "impact": "..."}], "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "...", "lean": "positive | negative | binary | neutral"}], "section_reads": {"key": "..."}}`).join(", ")}}}`;
+  }
+  /** Add the follow-up's pieces to the raw calls (new entries appended; missing section reads filled). */
+  function mergeFix(hz, fix) {
+    const out = { ...(hz || {}) };
+    for (const [h, f] of Object.entries(fix || {})) {
+      if (!out[h] || !f || typeof f !== "object") continue;
+      const x = { ...out[h] };
+      if (Array.isArray(f.conflicts)) x.conflicts = [...(Array.isArray(x.conflicts) ? x.conflicts : []), ...f.conflicts];
+      if (Array.isArray(f.decisions)) x.decisions = [...(Array.isArray(x.decisions) ? x.decisions : []), ...f.decisions];
+      if (f.section_reads && typeof f.section_reads === "object") x.section_reads = { ...f.section_reads, ...Object.fromEntries(Object.entries(x.section_reads || {}).filter(([, v]) => v)) };
+      out[h] = x;
+    }
+    return out;
+  }
+
+  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, horizonChecks, missingOf, fixPrompt, mergeFix };
   if (typeof module !== "undefined" && module.exports) module.exports = Horizon;
   else root.Horizon = Horizon;
 })(typeof window !== "undefined" ? window : globalThis);

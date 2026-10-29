@@ -5,8 +5,8 @@
 //   3. the API key running out of credit            -> exit 1, results so far and a checkpoint
 // Usage: node test/e2e.mjs path/to/mock_brain.js [which tests: 1,2,3]
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, rmSync, readdirSync } from "node:fs";
-import { gunzipSync } from "node:zlib";
+import { existsSync, readFileSync, rmSync, readdirSync, writeFileSync } from "node:fs";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadBrain, fakeAnthropic, fakeMcp } from "./fakes.mjs";
@@ -156,6 +156,30 @@ if (which.includes("8")) {
   const runs = Object.entries(res2.records).filter(([k]) => k.startsWith("run:"));
   const worldOk = runs.every(([, v]) => { const w = v.reports?.find?.((r) => r.kind === "world") || Object.values(v.reports || {}).find((r) => r?.kind === "world"); return !w || (w.result?.dives || []).every((d) => d.now); });
   ok(worldOk, "reused situation facts reach every industry's world write-up");
+  fa.server.close();
+}
+if (which.includes("9")) {
+  console.log("\n=== 9. every 1M-12M call covers what it must; 'redo gaps' rewrites only those lead strategists ===");
+  const fa = await fakeAnthropic(brain, { port: 7810 });
+  const out1 = join(tmp, "nine-a"), out2 = join(tmp, "nine-b");
+  const r1 = await run(7810, out1, ["--fresh"]);
+  const f1 = resultsFile(out1); const res1 = f1 && read(join(out1, f1));
+  const runs1 = Object.entries(res1?.records || {}).filter(([k]) => k.startsWith("run:"));
+  const gaps1 = runs1.filter(([, v]) => (v.agent?.result?.horizon_checks || []).some((c) => c.covered === false)).map(([k]) => k);
+  ok(r1.code === 0 && runs1.length === 3 && !gaps1.length, `no call leaves anything out after the follow-up (gaps in: ${gaps1.join(", ") || "none"})`);
+  ok(runs1.every(([, v]) => Object.keys(v.agent?.result?.horizons?.["3M"]?.section_reads || {}).length >= 9), "the follow-up filled what the first draft of a call left out (every section read is there)");
+  // Pretend one industry's calls still had a gap, then run "redo gaps" on the finished sector.
+  const cp = read(join(out1, "checkpoint.json.gz"));
+  const [key] = runs1[0]; const ag = cp.records[key].agent; ag.result.horizon_checks = ag.result.horizon_checks.map((c, i) => (i === 0 ? { ...c, covered: false, missing_standing: ["S1"] } : c));
+  writeFileSync(join(tmp, "nine-cp.json.gz"), gzipSync(Buffer.from(JSON.stringify(cp))));
+  const before = fa.stats.requests;
+  const r2 = await run(7810, out2, ["--resume", join(tmp, "nine-cp.json.gz")], { REDO_GAPS: "true" });
+  const req2 = fa.stats.requests - before;
+  const f2 = resultsFile(out2); const res2 = f2 && read(join(out2, f2));
+  const rec2 = res2?.records?.[`sector:${SECTOR.toLowerCase()}`];
+  ok(r2.code === 0 && !!rec2?.finished_at && rec2.done.H.length === 3, `redo finished the sector (exit ${r2.code})`);
+  ok(!(res2.records[key].agent?.result?.horizon_checks || []).some((c) => c.covered === false), "the redone industry's calls cover everything");
+  ok(req2 > 0 && req2 <= 14, `only that industry's lead strategist was rewritten (${req2} requests)`);
   fa.server.close();
 }
 process.exit();

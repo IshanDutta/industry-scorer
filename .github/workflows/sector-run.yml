@@ -36,6 +36,10 @@ on:
         description: "Most to spend on Claude per sector in this run, in US dollars. It stops and saves before going over; continue later with continue_from."
         required: true
         default: "150"
+      redo_gaps:
+        description: "Only rewrite the lead strategists whose 1M-12M calls left items out (a finished sector; nothing else is redone)"
+        type: boolean
+        default: false
       continue_from:
         description: "(set automatically) the run whose checkpoint to continue from"
         required: false
@@ -47,6 +51,7 @@ on:
       speed: { type: string, default: cheap }
       budget: { type: string, default: "150" }
       continue_from: { type: string, default: "" }
+      redo_gaps: { type: boolean, default: false }
   schedule:
     - cron: "17 9 * * *" # every night at 09:17 UTC (2:17 am Pacific daylight time)
 
@@ -126,9 +131,10 @@ jobs:
         if: inputs.continue_from == '' && !inputs.fresh
         env:
           SLUG: ${{ steps.slug.outputs.slug }}
+          REDO_GAPS: ${{ inputs.redo_gaps }}
         run: |
           if git fetch -q origin exports 2>/dev/null && git show "FETCH_HEAD:runs/$SLUG.json.gz" > last.json.gz 2>/dev/null; then
-            if node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("last.json.gz")));process.exit(j.finished?1:0)'; then
+            if [ "$REDO_GAPS" = "true" ] || node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("last.json.gz")));process.exit(j.finished?1:0)'; then
               mkdir -p resume && mv last.json.gz resume/checkpoint.json.gz && echo "Continuing the unfinished $SECTOR run (only what's left is done)."
             else echo "The last $SECTOR run finished; starting a new one."; fi
           else echo "No earlier $SECTOR run."; fi
@@ -147,6 +153,7 @@ jobs:
           FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
           EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
           FRESH: ${{ inputs.fresh }}
+          REDO_GAPS: ${{ inputs.redo_gaps }}
           JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
           CLAUDE_MODE: ${{ inputs.speed == 'quick' && 'direct' || 'batch' }}
           CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '0' }}

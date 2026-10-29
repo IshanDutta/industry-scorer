@@ -33,4 +33,24 @@ assert.strictEqual(s.all.n, 4); assert.strictEqual(s.by["3M"].hit_rate, 0); asse
 const d = T.digest([{ ...e, eval: ev2 }]);
 assert(d.includes("YOUR TRACK RECORD") && d.includes("3 matured horizon calls") && d.includes("Brier") && d.includes("2026-01-02: 1M bullish [2, 8]%") && !d.includes("undefined"), d);
 assert.strictEqual(T.digest([]), "");
+// Alpha: vs SPY, vs the sector ETF, beta-adjusted, and the alpha the call captured; open calls marked to market.
+{
+  const ser = (pairs) => ({ dates: pairs.map((x) => x[0]), closes: pairs.map((x) => x[1]) });
+  const e = { as_of: "2026-01-02", beta: 1.2, rf: 0.04, constituents: [{ symbol: "A", weight: 1, px: 100 }],
+    horizons: { "1M": { call: "bullish", expected_move: [2, 8], probability_up: 65 }, "3M": { call: "bearish", expected_move: [-6, 0], probability_up: 40 } } };
+  const A = ser([["2026-01-02", 100], ["2026-02-01", 110], ["2026-02-20", 112]]);
+  const spy = ser([["2026-01-02", 100], ["2026-02-01", 105], ["2026-02-20", 104]]), etf = ser([["2026-01-02", 100], ["2026-02-01", 103], ["2026-02-20", 103]]);
+  const ev = T.evaluate(e, () => A, { spy, etf }, "2026-02-20");
+  const m = ev.horizons["1M"];
+  assert(m.matured && m.realized === 10 && m.spy === 5 && m.etf === 3 && m.excess === 5 && m.excess_etf === 7, "1M returns and excess");
+  assert(Math.abs(m.alpha - 4.1) < 0.05 && Math.abs(m.call_alpha - 4.1) < 0.05 && m.rel_hit === true && m.hit === true && m.scored, "beta-adjusted alpha and call alpha");
+  const o = ev.horizons["3M"];
+  assert(!o.matured && o.realized === 12 && o.call_alpha < 0 && o.tracking === false && o.rel_hit === false, "open bearish call marked to market");
+  e.eval = ev;
+  const ev2 = T.evaluate(e, () => null, { spy: null }, "2026-03-01");
+  assert(ev2.horizons["1M"].alpha === m.alpha, "a scored matured call is kept, not re-priced");
+  const sm = T.summarize([{ ...e, eval: ev }]);
+  assert(sm.all.n === 1 && Math.abs(sm.all.call_alpha - 4.1) < 0.05 && sm.open.n === 1 && sm.open.tracking_rate === 0, "summary: matured and open");
+  assert(T.needsPrices({ ...e, eval: ev }) === true, "an open horizon still needs prices");
+}
 console.log("track tests passed");

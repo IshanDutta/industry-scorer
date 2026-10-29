@@ -149,13 +149,26 @@
   /** Compound an industry's daily average change over the last n trading days. */
   function trailing(rows, n, weights = null) { const s = levelSeries(rows, weights); const L = s.levels.length; return L > n ? s.levels[L - 1] / s.levels[L - 1 - n] - 1 : NaN; }
   /**
+   * Return over the last `months` calendar months, from a {dates, closes|levels} series: the last value on or
+   * before (end - months) to the last value. NaN only when the series doesn't reach back within 10 days of the start.
+   */
+  function trailingByDate(ser, end, months) {
+    const d = ser?.dates || [], v = ser?.closes || ser?.levels || []; if (!d.length) return NaN;
+    const last = d.length - 1, endD = end && end < d[last] ? end : d[last];
+    const t = new Date(endD + "T00:00:00Z"); t.setUTCMonth(t.getUTCMonth() - months); const start = t.toISOString().slice(0, 10);
+    let i = -1; for (let k = 0; k < d.length; k++) { if (d[k] <= start) i = k; else break; }
+    if (i < 0) { if (!d[0] || (Date.parse(d[0]) - Date.parse(start)) / 864e5 > 10) return NaN; i = 0; }
+    let j = last; while (j > 0 && d[j] > endD) j--;
+    return v[i] > 0 && v[j] > 0 ? v[j] / v[i] - 1 : NaN;
+  }
+  /**
    * peers: [{industry, rows (1 year of FMP performance), pe: {NASDAQ, NYSE}, companies, total_market_cap}]; self: the industry name.
    * Returns rows sorted by total market cap, with this industry's rank on 3M and 1Y return and P/E.
    */
   function peerTable(peers, self) {
     const rows = peers.map((p) => { const pe = isNum(p.pe_value) ? [p.pe_value] : [p.pe?.NASDAQ, p.pe?.NYSE].filter((x) => x > 0 && x < 500);
       return { industry: p.industry, self: p.industry === self, companies: p.companies, total_market_cap: p.total_market_cap,
-        r1m: trailing(p.rows, 21, p.weights), r3m: trailing(p.rows, 63, p.weights), r1y: trailing(p.rows, 252, p.weights), pe: pe.length ? mean(pe) : NaN }; });
+        ...(() => { const s = levelSeries(p.rows, p.weights); const r = (m) => trailingByDate(s, null, m); return { r1m: r(1), r3m: r(3), r6m: r(6), r1y: r(12) }; })(), pe: pe.length ? mean(pe) : NaN }; });
     const rank = (k, up) => { const v = rows.filter((r) => isNum(r[k])).sort((a, b) => (up ? b[k] - a[k] : a[k] - b[k])); const i = v.findIndex((r) => r.self); return i < 0 ? null : { rank: i + 1, of: v.length }; };
     return { rows: rows.sort((a, b) => (b.total_market_cap || 0) - (a.total_market_cap || 0)), rank_r3m: rank("r3m", true), rank_r1y: rank("r1y", true), rank_pe_cheapest: rank("pe", false),
       median_pe: quant(rows.map((r) => r.pe), 0.5), median_r1y: quant(rows.map((r) => r.r1y), 0.5) };
@@ -177,13 +190,13 @@
       L.push(`Base-rate chance the industry is higher: ${Object.entries(h.base_prob_up).map(([k, v]) => `${k} ${isNum(v) ? Math.round(v * 100) + "%" : "n/a"}`).join(", ")}. Start your probabilities from these and move them only for specific evidence.`);
     }
     if (peers?.rows?.length) {
-      L.push(`SECTOR PEERS (FMP industry data): ${peers.rows.slice(0, 14).map((r) => `${r.self ? "**" : ""}${r.industry}${r.self ? "**" : ""} P/E ${isNum(r.pe) ? r.pe.toFixed(1) : "n/a"}, 3M ${p(r.r3m)}, 1Y ${p(r.r1y)}`).join("; ")}. This industry ranks ${peers.rank_r1y ? `#${peers.rank_r1y.rank} of ${peers.rank_r1y.of} on 1-year return` : "n/a"}, ${peers.rank_r3m ? `#${peers.rank_r3m.rank} of ${peers.rank_r3m.of} on 3-month` : ""}, ${peers.rank_pe_cheapest ? `#${peers.rank_pe_cheapest.rank} cheapest of ${peers.rank_pe_cheapest.of} on P/E` : ""} (sector median P/E ${isNum(peers.median_pe) ? peers.median_pe.toFixed(1) : "n/a"}).`);
+      L.push(`SECTOR PEERS (FMP industry data): ${peers.rows.slice(0, 14).map((r) => `${r.self ? "**" : ""}${r.industry}${r.self ? "**" : ""} P/E ${isNum(r.pe) ? r.pe.toFixed(1) : "n/a"}, 1M ${p(r.r1m)}, 3M ${p(r.r3m)}, 6M ${p(r.r6m)}, 1Y ${p(r.r1y)}`).join("; ")}. This industry ranks ${peers.rank_r1y ? `#${peers.rank_r1y.rank} of ${peers.rank_r1y.of} on 1-year return` : "n/a"}, ${peers.rank_r3m ? `#${peers.rank_r3m.rank} of ${peers.rank_r3m.of} on 3-month` : ""}, ${peers.rank_pe_cheapest ? `#${peers.rank_pe_cheapest.rank} cheapest of ${peers.rank_pe_cheapest.of} on P/E` : ""} (sector median P/E ${isNum(peers.median_pe) ? peers.median_pe.toFixed(1) : "n/a"}).`);
     }
-    if (etf) L.push(`Sector ETF ${etf.symbol}: 3M ${p(etf.r3m)}, 1Y ${p(etf.r1y)}; the industry vs the ETF: 3M ${p(etf.vs_r3m)}, 1Y ${p(etf.vs_r1y)}.`);
+    if (etf) L.push(`Sector ETF ${etf.symbol}: 1M ${p(etf.r1m)}, 3M ${p(etf.r3m)}, 6M ${p(etf.r6m)}, 1Y ${p(etf.r1y)}; the industry vs the ETF: 3M ${p(etf.vs_r3m)}, 6M ${p(etf.vs_r6m)}, 1Y ${p(etf.vs_r1y)}.`);
     return L.join("\n");
   }
 
-  const History = { H, levelSeries, peSeries, drawdowns, analogs, valuation, seasonality, rateRegime, tracking, build, trailing, peerTable, digest, quant };
+  const History = { H, levelSeries, peSeries, drawdowns, analogs, valuation, seasonality, rateRegime, tracking, build, trailing, trailingByDate, peerTable, digest, quant };
   if (typeof module !== "undefined" && module.exports) module.exports = History;
   else root.History = History;
 })(typeof window !== "undefined" ? window : globalThis);

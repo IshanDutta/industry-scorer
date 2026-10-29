@@ -35,4 +35,15 @@ assert(Math.abs(pt.rows.find((x) => x.self).pe - 35) < 1e-9);
 const d = Hs.digest(b, pt, { symbol: "XLK", r3m: 0.05, r1y: 0.2, vs_r3m: 0.01, vs_r1y: 0.03 });
 assert(d.includes("LONG HISTORY AND BASE RATES") && d.includes("Drawdowns of 20%+") && d.includes("Setups most like today") && d.includes("percentile of its history") && d.includes("SECTOR PEERS") && d.includes("**Semis**") && d.includes("Sector ETF XLK") && d.includes("Base-rate chance") && !d.includes("undefined") && !/NaN/.test(d), d);
 assert.strictEqual(Hs.build({ perfRows: perf.slice(0, 100) }), null);
+// Calendar-date trailing returns survive missing days, and 6M is there
+{
+  const dates = [], closes = []; let v = 100; const t = new Date("2025-10-01T00:00:00Z");
+  for (let k = 0; k < 400; k++) { const d = t.toISOString().slice(0, 10); if (k % 7 !== 5 && k % 7 !== 6 && k % 11 !== 3) { dates.push(d); closes.push(v); } v *= 1.001; t.setUTCDate(t.getUTCDate() + 1); }
+  const ser = { dates, closes };
+  const r6 = Hs.trailingByDate(ser, null, 6), r12 = Hs.trailingByDate(ser, null, 12), r1 = Hs.trailingByDate(ser, null, 1);
+  assert(isFinite(r1) && isFinite(r6) && isFinite(r12) && r12 > r6 && r6 > r1, "1M < 6M < 1Y on a rising series with gaps");
+  assert(Number.isNaN(Hs.trailingByDate({ dates: dates.slice(-100), closes: closes.slice(-100) }, null, 12)), "NaN when the series doesn't reach back");
+  const rows = [{ industry: "A & B", rows: dates.map((d, k) => ({ date: d, exchange: "NYSE", averageChange: 0.1 })), weights: { NYSE: 1 }, companies: 20 }];
+  const pt = Hs.peerTable(rows, "A & B"); assert(isFinite(pt.rows[0].r6m) && isFinite(pt.rows[0].r1y), "peer table has 6M and 1Y");
+}
 console.log("history tests passed");

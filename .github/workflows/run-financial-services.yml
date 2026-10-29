@@ -17,6 +17,10 @@ on:
         description: "Start over instead of continuing an unfinished run"
         type: boolean
         default: false
+      redo_gaps:
+        description: "Only rewrite the lead strategists whose 1M-12M calls left items out (for a finished sector)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -30,4 +34,5 @@ jobs:
       speed: ${{ inputs.speed }}
       budget: ${{ inputs.budget }}
       fresh: ${{ inputs.fresh }}
+      redo_gaps: ${{ inputs.redo_gaps }}
     secrets: inherit

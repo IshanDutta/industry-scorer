@@ -143,6 +143,18 @@
     for (let i = 0; i < x.length; i++) { cov += (x[i] - mx) * (y[i] - my); v += (y[i] - my) ** 2; }
     return v > 0 ? cov / v : NaN;
   }
+  /**
+   * Jensen's alpha, annualized: the average daily return above what beta and the market explain, both net of the
+   * risk-free rate (r - rf = alpha + beta x (rm - rf)), times 252. Same days as beta.
+   */
+  function alpha(r, bench, rfDaily, b = NaN) {
+    const bm = new Map(bench.dates.map((d, i) => [d, bench.rets[i]]));
+    const x = [], y = [];
+    r.dates.forEach((d, i) => { const m = bm.get(d), rf = rfDaily?.get?.(d) ?? 0; if (isNum(m) && isNum(r.rets[i])) { x.push(r.rets[i] - rf); y.push(m - rf); } });
+    if (x.length < 20) return NaN;
+    const be = isNum(b) ? b : beta(r, bench);
+    return isNum(be) ? (mean(x) - be * mean(y)) * TRADING_DAYS : NaN;
+  }
   function annualVol(rets) { const a = rets.filter(isNum); return a.length > 1 ? std(a) * Math.sqrt(TRADING_DAYS) : NaN; }
   function downsideVol(rets, target = 0) {
     const a = rets.filter(isNum);
@@ -173,7 +185,7 @@
     const level = [1]; let l = 1;
     for (const x of r.rets) { l *= 1 + (isNum(x) ? x : 0); level.push(l); }
     return {
-      beta: beta(r, benchR), vol_1y: annualVol(r.rets), downside_vol_1y: downsideVol(r.rets),
+      beta: beta(r, benchR), alpha_1y: alpha(r, benchR, rfDaily), vol_1y: annualVol(r.rets), downside_vol_1y: downsideVol(r.rets),
       max_dd_1y: maxDrawdown(level), sharpe_1y: sharpe(r, rfDaily),
     };
   }
@@ -271,11 +283,13 @@
       const col = unionDates.map((d) => (m.has(d) ? m.get(d) : NaN));
       const r = pctChange(unionDates, col);
       u.beta = beta(r, benchR);
+      u.alpha = alpha(r, benchR, rfDaily, u.beta);
       u.vol_1y = annualVol(r.rets);
       u.max_dd_1y = maxDrawdown(s.closes);
     });
     Object.assign(summary, {
       beta_median: median(uni.map((u) => u.beta).filter(isNum)),
+      alpha_median: median(uni.map((u) => u.alpha).filter(isNum)),
       vol_1y_median: median(uni.map((u) => u.vol_1y).filter(isNum)),
       max_dd_1y_median: median(uni.map((u) => u.max_dd_1y).filter(isNum)),
     });
@@ -297,7 +311,7 @@
   const Engine = {
     TRADING_DAYS, addMonths, addDays, windowStart, mean, median, std,
     priceOnOrBefore, singleReturn, trailingReturns, capWeightedReturn,
-    reindexFfill, industryIndex, pctChange, beta, annualVol, downsideVol, maxDrawdown,
+    reindexFfill, industryIndex, pctChange, beta, alpha, annualVol, downsideVol, maxDrawdown,
     toDailyRf, sharpe, riskProfile, normalizeCompanyName, buildUniverse, analyzeIndustry,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = Engine;

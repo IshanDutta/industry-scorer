@@ -73,7 +73,7 @@ LARGEST COMPANIES (share of industry market cap): ${top}`;
     const s = doc.summary || {}, f = doc.fund || {};
     return `COMPUTED INDUSTRY METRICS (aggregated across the companies; authoritative, do not recompute)
 Performance cap-weighted vs SPY: 1M ${pct(s.excess_cw_1M)}, 3M ${pct(s.excess_cw_3M)}, 6M ${pct(s.excess_cw_6M)}, 1Y ${pct(s.excess_cw_1Y)}; breadth 1Y ${pct(s.breadth_1Y, 0)} beat SPY.
-Risk 1Y: beta ${num(s.beta, 2)}, vol ${pct(s.vol_1y)}, max drawdown ${pct(s.max_dd_1y)}, Sharpe ${num(s.sharpe_1y, 2)}.
+Risk 1Y: beta ${num(s.beta, 2)}, alpha ${pct(s.alpha_1y)} a year, vol ${pct(s.vol_1y)}, max drawdown ${pct(s.max_dd_1y)}, Sharpe ${num(s.sharpe_1y, 2)}.
 TTM: revenue growth ${pct(f.rev_growth)}, net income growth ${pct(f.ni_growth)}, gross margin ${pct(f.gross_margin)}, operating margin ${pct(f.op_margin)}, net margin ${pct(f.net_margin)}, ROE ${pct(f.roe)}, FCF margin ${pct(f.fcf_margin)}, ROIC ${pct(f.roic)}.
 Valuation: P/E ${f.pe_negative ? "negative" : num(f.pe)} vs 5Y median ${num(f.pe_hist_median)} (${pct(f.pe_hist_pct, 0)} percentile), P/S ${num(f.ps)}, EV/EBITDA ${num(f.ev_ebitda)}, dividend yield ${pct(f.div_yield, 2)}. Debt/equity ${num(f.de, 2)}, interest cover ${num(f.int_cover)}x.
 Earnings: beat rate ${pct(f.beat_rate, 0)} of ${f.beat_reports ?? 0} reports, median EPS surprise ${pct(f.eps_surprise_median)}, median revenue surprise ${pct(f.rev_surprise_median)}.`;

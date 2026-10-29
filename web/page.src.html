@@ -371,7 +371,7 @@ a.btnlink:hover { border-color: var(--accent); }
     selected: null, basis: "cw", pickerOpen: false, filter: "", saved: [], savedAt: {}, restored: null, storeError: false,
     sort: { key: "rank", dir: 1 }, run: null, notices: [], agentError: null,
     sector: null, sectorPull: {}, sectorOf: {}, track: {},
-    sectorRun: null, sectorRec: {}, macroBy: {}, calls: 0, cache: {},
+    sectorRun: null, sectorRec: {}, macroBy: {}, calls: 0, cache: {}, px: {}, trackAuto: {}, secTrack: {}, peersAuto: {},
   };
 
   // ------------------------------------------------------------- helpers
@@ -428,6 +428,9 @@ a.btnlink:hover { border-color: var(--accent); }
   let nextSlot = 0;
   const FMP_GAP_MS = JOB?.fmpGapMs > 0 ? JOB.fmpGapMs : CALL_GAP_MS;
   async function fmp(tool, input) {
+    // The FMP server puts arguments into the URL without encoding "&", so "Aerospace & Defense" comes back empty
+    // (the screener and industry history alike). Send it encoded.
+    if (input && typeof input === "object") input = Object.fromEntries(Object.entries(input).map(([k, v]) => [k, typeof v === "string" && v.includes("&") ? v.replace(/&/g, "%26") : v]));
     const now = Date.now(); const slot = Math.max(now, nextSlot); nextSlot = slot + FMP_GAP_MS;
     if (slot > now) await sleep(slot - now);
     let res;
@@ -694,24 +697,45 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Shared fetches reused across industries within 30 minutes (a sector run fetches each once). */
   async function cached(key, fn, ttl = 30 * 60 * 1000) {
     const c = S.cache[key]; if (c && Date.now() - c.at < ttl) return c.v;
-    const v = await fn(); S.cache[key] = { at: Date.now(), v }; return v;
+    // Several industries can ask at once (a sector run): they share one fetch.
+    const v = fn(); S.cache[key] = { at: Date.now(), v };
+    try { return await v; } catch (e) { delete S.cache[key]; throw e; }
   }
   async function fetchPeers(name, sector, org, bench) {
     const raw = await cached(`peers:${sector}`, () => fetchPeersRaw(sector, org, bench));
     return { table: History.peerTable(raw.peers, name), etf: raw.etf ? { ...raw.etf } : null };
+  }
+  /** Reports made before the peers fix have blank or missing peer returns: refill them from FMP (no Claude), once a day. */
+  async function refreshPeers(d) {
+    const sec = d?.sector, k = `${sec}|${d?.name}`;
+    if (!sec || !S.mcp || !S.bench || S.peersAuto[k] === today()) return;
+    S.peersAuto[k] = today();
+    try {
+      const org = await sectorUniverse(sec); if (!org) return;
+      const pe = await fetchPeers(d.name, sec, org, S.bench);
+      const sm = d.summary || {};
+      if (pe.etf) { pe.etf.vs_r3m = sm.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = sm.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = sm.ret_cw_1Y - pe.etf.r1y; }
+      d.peers = jsonSafe(pe.table); d.etf = jsonSafe(pe.etf);
+      const key = "run:" + slug(d.name), rec = await idbGet(key).catch(() => null);
+      if (rec?.industry) { rec.industry.peers = d.peers; rec.industry.etf = d.etf; await idbPut(key, rec).catch(() => {}); }
+      renderReport();
+    } catch {}
   }
   async function fetchPeersRaw(sector, org, bench) {
     const list = (org?.industries || []).slice(0, 24);
     const asOf = bench.as_of;
     const snap = {};
     for (const ex of ["NASDAQ", "NYSE"]) { const r = await optional(() => fmp("marketPerformance", { endpoint: "industry-PE-snapshot", date: asOf, exchange: ex }), []); for (const x of r || []) (snap[x.industry] ||= {})[ex] = Number(x.pe); }
-    const from = E.addDays(asOf, -380);
+    const from = E.addDays(asOf, -400);
     const peers = [];
     await pool(list, COMPANY_CONCURRENCY, async (ind) => {
       const w = exchangeWeights(ind.all || ind.top || []);
       const exs = Object.entries(w).filter(([, v]) => v >= 0.2).map(([e]) => e).slice(0, 2);
       const rows = [];
-      for (const ex of exs) { const r = await optional(() => fmp("marketPerformance", { endpoint: "historical-industry-performance", industry: ind.industry, exchange: ex, from_date: from, to_date: asOf }), []); rows.push(...(r || []).map((x) => ({ ...x, exchange: x.exchange || ex }))); }
+      const pull = async (ex) => { const r = await optional(() => fmp("marketPerformance", { endpoint: "historical-industry-performance", industry: ind.industry, exchange: ex, from_date: from, to_date: asOf }), []); return (r || []).map((x) => ({ ...x, exchange: x.exchange || ex })); };
+      for (const ex of exs) rows.push(...(await pull(ex)));
+      // FMP sometimes has an industry's history only on another exchange than where its biggest companies list.
+      if (!rows.length) for (const ex of ["NASDAQ", "NYSE", "AMEX"].filter((e) => !exs.includes(e))) { const got = await pull(ex); if (got.length) { rows.push(...got); w[ex] = w[ex] || 1; break; } }
       const pv = Object.entries(snap[ind.industry] || {}).filter(([e, v]) => v > 0 && v < 500 && w[e]);
       const pe = pv.length ? pv.reduce((a, [e, v]) => a + w[e] * v, 0) / pv.reduce((a, [e]) => a + w[e], 0) : NaN;
       // Per-exchange weights for the daily series
@@ -721,7 +745,7 @@ a.btnlink:hover { border-color: var(--accent); }
     let etf = null;
     const sym = Universe.ETF[sector];
     if (sym) { const ser = await optional(async () => toSeries(await fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: from, to_date: asOf })), null);
-      const c = ser?.closes || []; if (c.length > 64) etf = { symbol: sym, r3m: c[c.length - 1] / c[c.length - 64] - 1, r1y: c.length > 252 ? c[c.length - 1] / c[c.length - 253] - 1 : NaN }; }
+      if (ser?.dates?.length > 20) { const r = (m) => History.trailingByDate(ser, asOf, m); etf = { symbol: sym, r1m: r(1), r3m: r(3), r6m: r(6), r1y: r(12) }; } }
     return { peers, etf };
   }
   /** Score every logged call for this industry against the prices in hand; save the log. */
@@ -729,13 +753,15 @@ a.btnlink:hover { border-color: var(--accent); }
     const key = "calls:" + slug(name);
     const log = (await idbGet(key)) || [];
     if (!log.length) { S.track[slug(name)] = log; return log; }
-    for (const e of log) e.eval = Track.evaluate(e, getSeries, bench.spy, bench.as_of);
+    const doc = S.industries[slug(name)];
+    for (const e of log) if (Track.needsPrices(e)) e.eval = Track.evaluate(e, getSeries, { spy: bench.spy, rf: bench.rf_latest, beta: doc?.summary?.beta }, bench.as_of);
     await idbPut(key, log).catch(() => {});
     S.track[slug(name)] = log;
     return log;
   }
   async function logCalls(name, result, doc, runAt) {
-    const snap = Track.snapshot(result, doc, runAt); if (!snap) return;
+    const snap = Track.snapshot(result, doc, runAt, { etf: Universe.ETF[doc.sector] || null, rf: S.bench?.rf_latest });
+    if (!snap) return;
     const key = "calls:" + slug(name);
     const log = ((await idbGet(key)) || []).filter((x) => x.id !== snap.id);
     log.push(snap);
@@ -743,22 +769,68 @@ a.btnlink:hover { border-color: var(--accent); }
     await idbPut(key, kept).catch(() => {});
     S.track[slug(name)] = kept;
   }
-  /** "Check how past calls did": fetch prices for the logged companies (largest first) and score the calls. */
-  async function refreshTrack(name) {
-    const log = (await idbGet("calls:" + slug(name))) || S.track[slug(name)] || [];
-    if (!log.length || !S.mcp) return;
-    const from = log.reduce((a, e) => (e.as_of < a ? e.as_of : a), today());
-    const w = {}; for (const e of log) for (const c of e.constituents) w[c.symbol] = Math.max(w[c.symbol] || 0, c.weight);
-    const syms = Object.entries(w).sort((a, b) => b[1] - a[1]).slice(0, 30).map(([sym]) => sym);
-    S.trackBusy = true; renderReport();
-    const ser = {};
-    await pool(syms, COMPANY_CONCURRENCY, async (sym) => { const r = await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), []); ser[sym] = toSeries(r || []); });
-    const spy = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: "SPY", from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
-    const lastDate = spy.dates[spy.dates.length - 1] || today();
-    for (const e of log) e.eval = Track.evaluate(e, (s) => ser[s] || null, spy, lastDate);
-    await idbPut("calls:" + slug(name), log).catch(() => {});
-    S.track[slug(name)] = log; S.trackBusy = false; renderReport();
+  /** Daily prices, fetched once per symbol per day and shared by every industry's track record. */
+  async function trackSeries(sym, from) {
+    const c = S.px[sym]; if (c && c.from <= from && c.day === today()) return c.ser;
+    const ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
+    S.px[sym] = { from, day: today(), ser }; return ser;
   }
+  /**
+   * Score this industry's logged calls with today's prices: matured horizons are scored once and kept; open ones are
+   * marked to market. Runs by itself when the track record is shown (once a day), and from the button.
+   */
+  async function refreshTrack(name, { quiet = false, sector = null } = {}) {
+    const sl = slug(name);
+    const log = (await idbGet("calls:" + sl)) || S.track[sl] || [];
+    if (!log.length || !S.mcp) { S.track[sl] = log; return log; }
+    const need = log.filter((e) => Track.needsPrices(e));
+    if (!need.length) { S.track[sl] = log; return log; }
+    const doc = S.industries[sl], sec = sector || doc?.sector || need.find((e) => e.sector)?.sector || null;
+    const etfSym = need.find((e) => e.etf)?.etf || Universe.ETF[sec] || null;
+    const from = need.reduce((a, e) => (e.as_of < a ? e.as_of : a), today());
+    const w = {}; for (const e of need) for (const c of e.constituents) w[c.symbol] = Math.max(w[c.symbol] || 0, c.weight);
+    const syms = Object.entries(w).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([sym]) => sym);
+    S.trackBusy = sl; if (!quiet) renderReport();
+    try {
+      const ser = {};
+      await pool(syms, COMPANY_CONCURRENCY, async (sym) => { ser[sym] = await trackSeries(sym, from); }, null);
+      const spy = await trackSeries("SPY", from), etf = etfSym ? await trackSeries(etfSym, from) : null;
+      const lastDate = spy.dates[spy.dates.length - 1];
+      if (lastDate) for (const e of log) if (Track.needsPrices(e)) {
+        if (!e.etf && etfSym) e.etf = etfSym;
+        if (!e.sector && sec) e.sector = sec;
+        e.eval = Track.evaluate(e, (s) => ser[s] || null, { spy, etf: etf?.dates?.length ? etf : null, rf: S.bench?.rf_latest, beta: doc?.summary?.beta }, lastDate);
+      }
+      await idbPut("calls:" + sl, log).catch(() => {});
+      S.track[sl] = log;
+    } finally { S.trackBusy = false; renderReport(); }
+    return log;
+  }
+  /** Once a day per industry, score the calls without being asked. */
+  function autoTrack(name, sector = null) {
+    const sl = slug(name), log = S.track[sl];
+    if (!S.mcp || S.trackBusy || busy() || S.trackAuto[sl] === today() || !log?.some((e) => Track.needsPrices(e))) return;
+    S.trackAuto[sl] = today();
+    setTimeout(() => { refreshTrack(name, { quiet: true, sector }).catch(() => {}); }, 0);
+  }
+  /** Every industry's calls in a sector, for the sector's own track record: shown at once, then scored industry by industry. */
+  async function loadSectorTrack(sec, names) {
+    if (S.secTrack[sec]?.busy) return;
+    const logs = {};
+    for (const n of names) logs[n] = (await idbGet("calls:" + slug(n)).catch(() => null)) || [];
+    const flat = () => names.flatMap((n) => logs[n].map((e) => ({ ...e, industry: n })));
+    const todo = names.filter((n) => logs[n].some((e) => Track.needsPrices(e)) && S.trackAuto[slug(n)] !== today());
+    S.secTrack[sec] = { busy: !!(todo.length && S.mcp), entries: flat(), done: 0, of: todo.length }; renderReport();
+    try {
+      if (S.mcp) for (const n of todo) {
+        if (busy()) break;
+        S.trackAuto[slug(n)] = today();
+        logs[n] = await refreshTrack(n, { quiet: true, sector: sec }).catch(() => logs[n]);
+        S.secTrack[sec].done++; S.secTrack[sec].entries = flat(); renderReport();
+      }
+    } finally { S.secTrack[sec] = { busy: false, entries: flat(), at: today() }; renderReport(); }
+  }
+
 
   async function refreshIndustry(name, bench, onStep, run = S.run) {
     const rfDaily = E.toDailyRf(bench.rf, bench.spy.dates, 0.04);
@@ -841,7 +913,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (noRate.length) res.summary.warnings = [res.summary.warnings, `Left out of fundamentals because their reporting currency couldn't be converted: ${noRate.join(", ")}.`].filter(Boolean).join(" | ");
     const fund = Fund.aggregateIndustry(res.constituents.map((c) => ({ symbol: c.symbol, name: c.name, market_cap: c.market_cap, c: comp[c.symbol] })), { industry: name, today: today() });
     const keep = ["rank", "symbol", "formerly", "name", "exchange", "country", "market_cap", "weight", "ret_1M", "ret_3M", "ret_6M", "ret_1Y",
-      "excess_1M", "excess_3M", "excess_6M", "excess_1Y", "beta", "vol_1y", "max_dd_1y"];
+      "excess_1M", "excess_3M", "excess_6M", "excess_1Y", "beta", "alpha", "vol_1y", "max_dd_1y"];
     const { companies, ...fundAgg } = fund;
     // Forward view, what's priced in, measured sensitivities, positioning
     const pxOf = (sym) => { const p = prices[sym]; return p?.closes?.length ? p.closes[p.closes.length - 1] : NaN; };
@@ -864,7 +936,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const hraw = await fetchHistory(name, weights);
     const history = History.build({ perfRows: hraw.perfRows, peRows: hraw.peRows, primary: hraw.primary, weights, ief: hraw.ief, index: { dates: res.index.dates, levels: res.index.levels } });
     const pe = fallback ? { table: null, etf: null } : await fetchPeers(name, sector, org, bench);
-    if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }
+    if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = res.summary.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }
     const cmdi = S.eod ? await cached("cmdi", () => optionalEod(async () => { const a = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100 }); const b = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100, offset: 100 }).catch(() => null); return [...(a?.data || []), ...(b?.data || [])]; }, [])) : [];
     const doc = jsonSafe({
       name, sector, universe, as_of: bench.as_of, updated_at: new Date().toISOString(), us_only: usOnly(), history, peers: pe.table, etf: pe.etf,
@@ -1228,8 +1300,25 @@ a.btnlink:hover { border-color: var(--accent); }
         horizons = r?.horizons || r || {};
         const ck = pre({ ...syn, ...scen, horizons }).horizon_checks;
         const gaps = ck.filter((c) => c.missing || c.covered === false || !c.ok).length;
-        en.note = gaps ? `${gaps} of 4 horizons need fixing; the review step fixes them` : "every horizon covers every section, decision and conflict";
+        en.note = gaps ? `${gaps} of 4 horizons need fixing` : "every horizon covers every section, decision and conflict";
       });
+      if (R.cancel) return;
+      /** Anything a call left out (code checks every required decision, situation and section) is written in a focused follow-up. */
+      const fillGaps = async (hz, when) => {
+        for (let pass = 1; pass <= 2 && !R.cancel; pass++) {
+          const miss = Horizon.missingOf(pre({ ...syn, ...scen, horizons: hz }).horizon_checks);
+          if (!miss) break;
+          const n = Object.values(miss).reduce((a, m) => a + m.events.length + m.standing.length + m.sections.length, 0);
+          await step(`Lead strategist: covering ${n} item${n === 1 ? "" : "s"} the ${Object.keys(miss).join(", ")} call${Object.keys(miss).length === 1 ? "" : "s"} left out${when}`, async (en) => {
+            try { const fix = await call(Brain.horizonFixPrompt(d, { ...ctx, calendar: cal }, hz, miss), en); hz = Horizon.mergeFix(hz, fix?.horizons || fix); }
+            catch (e) { if (STOP_CODES.has(e?.code)) throw e; en.note = "the follow-up didn't come back"; return; }
+            const left = Horizon.missingOf(pre({ ...syn, ...scen, horizons: hz }).horizon_checks);
+            en.note = left ? `${Object.values(left).reduce((a, m) => a + m.events.length + m.standing.length + m.sections.length, 0)} still missing` : "every horizon now covers everything it must";
+          });
+        }
+        return hz;
+      };
+      horizons = await fillGaps(horizons, "");
       if (R.cancel) return;
       await step("Lead strategist: verdict for each investor type, section by section, and the scorecard", async (en) => { ver = await call(Brain.verdictsPrompt(d, { ...ctx, math: m0, calendar: cal }, { ...syn, ...scen, horizons }), en); });
       if (R.cancel) return;
@@ -1247,6 +1336,8 @@ a.btnlink:hover { border-color: var(--accent); }
         catch (e) { if (STOP_CODES.has(e?.code)) throw e; en.note = "review unavailable; draft kept"; }
         if (review) { const r = Brain.applyReview(draft, review); draft = r.merged; review = { issues: r.issues, applied: r.applied }; en.note = `${r.issues.length} issue${r.issues.length === 1 ? "" : "s"} found, ${r.applied.length} field${r.applied.length === 1 ? "" : "s"} revised`; }
       });
+      // The review may rewrite a call: check its coverage again.
+      if (!R.cancel && draft.horizons) draft = { ...draft, horizons: await fillGaps(draft.horizons, " after the review") };
       const result = Brain.critic(draft, idx, d, seen, today(), cal);
       const sources = Object.values(idx).filter((x) => JSON.stringify(result).includes(`${x.id}`) && x.url).slice(0, 200).map(({ id, kind, date, source, title, url }) => ({ id, kind, date, source, title, url }));
       const runAt = new Date().toISOString();
@@ -1534,12 +1625,20 @@ a.btnlink:hover { border-color: var(--accent); }
   }
 
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
-  async function runSector(sector, { fresh = false } = {}) {
+  async function runSector(sector, { fresh = false, redoGaps = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     if (_saveName) await flush();
     if (S.selected) { forget(S.selected); S.selected = null; }
     S.notices = []; S.agentError = null; S.restored = null; S.pickerOpen = false; S.lastStop = null;
     let rec = fresh ? null : await secGet(sector);
+    // "Redo gaps": rewrite only the lead strategist of industries whose 1M-12M calls left something out; everything else stays.
+    if (redoGaps && rec?.v === 1) {
+      const gaps = [];
+      for (const n of rec.done?.H || []) { const r = await idbGet("run:" + slug(n)).catch(() => null); if ((r?.agent?.result?.horizon_checks || []).some((c) => c.covered === false)) gaps.push(n); }
+      if (!gaps.length && !(rec.redoLead || []).length) { S.notices = [{ kind: "info", text: `Every ${sector} industry's calls already cover everything they must; nothing to redo.` }]; S.sectorRun = null; renderAll(); return; }
+      rec = { ...rec, finished_at: null, done: { ...rec.done, H: rec.done.H.filter((n) => !gaps.includes(n)) }, redoLead: [...new Set([...(rec.redoLead || []), ...gaps])] };
+      await idbPut(secKey(sector), jsonSafe(rec)); S.sectorRec[sector] = rec;
+    }
     if (rec?.finished_at || rec?.v !== 1) rec = null;
     const sr = S.sectorRun = { sector, phase: "data", label: "Starting", cancel: false, ctls: new Set(), team: [], calls: rec?.calls || 0, byPhase: { ...(rec?.by_phase || {}) }, errors: [], cur: null, rec: null, store: null, storeSaved: 0, runs: new Map() };
     S.sectorView = sector; S.sectorAuto = null;
@@ -1927,6 +2026,15 @@ a.btnlink:hover { border-color: var(--accent); }
       // ---- H: each industry's own write-ups from the shared facts, then its regulatory verdict and lead strategist
       for (const n of rec.names) if (!rec.skip[n] && !rec.done.H.includes(n) && !indOf(n)) rec.skip[n] = "Its data wasn't in memory for the final write-ups; start the sector over to include it.";
       await each("H", "write", "world, trade and macro write-ups", async (name, run) => {
+        if (rec.redoLead?.includes(name)) {
+          // Its write-ups are kept; only the lead strategist is rewritten.
+          setMacro(name); run.label = "Lead strategist (rewriting the calls that left items out)"; sr.label = `${name}: lead strategist`; renderAll();
+          await runLead(name, { inSector: true, run });
+          if (S.lastStop || run.cancel || sr.cancel) return false;
+          if (!S.agents[slug(name)]) sr.errors.push(`${name}: the lead strategist didn't finish`);
+          rec.rows[name] = overviewFor(name); rec.redoLead = rec.redoLead.filter((x) => x !== name);
+          return true;
+        }
         const ind = indOf(name), d = ind.doc, pack = ind.pack, tx = ind.tx;
         const macro = setMacro(name);
         run.label = "World, trade and macro write-ups"; renderAll();
@@ -2500,6 +2608,7 @@ a.btnlink:hover { border-color: var(--accent); }
         <span class="small muted">${N} industries${skipped.length ? ` (${skipped.length} left out)` : ""} · started ${esc(fmtDate(rec.started_at))} · ${rows.filter((r) => r.done).length} finished</span>
         ${notices}${run}</section>
       <section class="panel" id="sector-overview"><div class="panel-head"><h2>Every industry, side by side</h2><span class="small muted">Scores are 0–100 for each investor type, from the same pillars as each industry's own page. Click a column to sort${sr ? "" : ", an industry to open its full report"}.</span></div>${table}</section>
+      ${sr ? "" : sectorTrackBlock(sec, rec.names.filter((n) => !rec.skip?.[n]))}
       ${issues.length ? `<section class="panel"><h2>What didn't go to plan</h2><ul class="small">${issues.join("")}</ul><div class="small muted">A step that failed is left out of that industry's report; open the industry and use its own Resume or Retry buttons to finish it.</div></section>` : ""}`;
   }
 
@@ -2644,7 +2753,14 @@ a.btnlink:hover { border-color: var(--accent); }
       + `<div><span class="eyebrow">10Y Treasury</span><span class="v">${b && isNum(num(b.y10_latest)) ? pct(b.y10_latest, false, 2) : "—"}</span></div>`;
     const perfK = WINDOWS.map((w) => { const e = num(s[key("excess", w)]); return kpi(`${w} ${S.basis === "cw" ? "cap-weighted" : "median stock"}`, pct(s[key("ret", w)]), `${pct(e)} vs SPY`, cls(e)); }).join("")
       + WINDOWS.map((w) => kpi(`Breadth ${w}`, pct(s["breadth_" + w], false, 0), "stocks beating SPY")).join("");
-    const riskK = [kpi("Beta 1Y", fix(s.beta), `median stock ${fix(s.beta_median)}`), kpi("Volatility 1Y", pct(s.vol_1y, false), `median stock ${pct(s.vol_1y_median, false)}`),
+    // Reports saved before alpha existed: work it out from the saved index and SPY (the same 1-year window as beta).
+    if (!isNum(num(s.alpha_1y)) && d.index?.dates?.length > 60 && S.bench?.spy?.dates?.length) {
+      try { const ix = d.index, from = Horizon.addDays(ix.dates[ix.dates.length - 1], -365), i0 = Math.max(0, ix.dates.findIndex((x) => x >= from));
+        const r = E.pctChange(ix.dates.slice(i0), ix.levels.slice(i0)), sp = S.bench.spy, j0 = Math.max(0, sp.dates.findIndex((x) => x >= from));
+        s.alpha_1y = E.alpha(r, E.pctChange(sp.dates.slice(j0), sp.closes.slice(j0)), E.toDailyRf(S.bench.rf, sp.dates.slice(j0), 0.04), num(s.beta)); } catch {}
+    }
+    const riskK = [kpi("Beta 1Y", fix(s.beta), `median stock ${fix(s.beta_median)}`),
+      kpi("Alpha 1Y", isNum(num(s.alpha_1y)) ? pct(s.alpha_1y) : "—", isNum(num(s.alpha_median)) ? `a year, beyond beta × SPY · median stock ${pct(s.alpha_median)}` : "a year, beyond what beta × SPY explains", cls(num(s.alpha_1y))), kpi("Volatility 1Y", pct(s.vol_1y, false), `median stock ${pct(s.vol_1y_median, false)}`),
       kpi("Downside vol 1Y", pct(s.downside_vol_1y, false), "below-0% days"), kpi("Max drawdown 1Y", pct(s.max_dd_1y, false), `median stock ${pct(s.max_dd_1y_median, false)}`),
       kpi("Sharpe 1Y", fix(s.sharpe_1y), "vs 3M T-bill")].join("");
     let charts = `<div class="muted small">Index data isn't available yet.</div>`;
@@ -2700,7 +2816,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const cols = [["rank", "#", "n"], ["symbol", "Ticker", ""], ["name", "Company", ""], ["market_cap", "Mkt cap", "n"], ["weight", "Weight", "n"],
       ...WINDOWS.map((w) => ["ret_" + w, w, "n"]), ["excess_1Y", "vs SPY 1Y", "n"], ["pe", "P/E", "n"], ["fwd_pe", "Fwd P/E", "n"], ["ntm_growth", "NTM EPS gr.", "n"], ["rev30", "Est. 30d", "n"], ["ps", "P/S", "n"], ["rev_growth", "Rev growth", "n"],
       ["op_margin", "Op margin", "n"], ["div_yield", "Div yield", "n"], ["de", "D/E", "n"], ["beats", "Beats", "n"], ["next", "Next report", ""],
-      ["beta", "Beta", "n"], ["vol_1y", "Vol 1Y", "n"], ["max_dd_1y", "Max DD", "n"], ["short_pct", "Short % float", "n"], ["own_change_pp", "13F own. Δ", "n"], ["insider_buys", "Insider buys", "n"]];
+      ["beta", "Beta", "n"], ["alpha", "Alpha 1Y", "n"], ["vol_1y", "Vol 1Y", "n"], ["max_dd_1y", "Max DD", "n"], ["short_pct", "Short % float", "n"], ["own_change_pp", "13F own. Δ", "n"], ["insider_buys", "Insider buys", "n"]];
     const cons = [...(d.constituents || [])].sort((a, c) => {
       const k = S.sort.key, av = a[k], bv = c[k];
       if (typeof av === "string" || typeof bv === "string") return S.sort.dir * String(av ?? "").localeCompare(String(bv ?? ""));
@@ -2710,7 +2826,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const fmtCell = (k, v) => k === "market_cap" ? cap(v) : k === "weight" ? pct(v, false) : k === "beta" || k === "de" ? fix(v) : k === "rank" ? (v ?? "—")
       : k === "pe" || k === "ps" || k === "fwd_pe" ? (isNum(num(v)) ? fix(v, 1) : "—") : k === "ntm_growth" || k === "rev30" ? pct(v) : k === "short_pct" ? pct(v, false) : k === "own_change_pp" ? (isNum(num(v)) ? `${v >= 0 ? "+" : ""}${fix(v, 1)}pp` : "—") : k === "insider_buys" ? (isNum(num(v)) ? String(v) : "—") : k === "next" ? (v ? esc(fmtShort(v)) : "—") : k === "beats" ? esc(v ?? "—")
       : k === "div_yield" ? pct(v, false, 2) : k === "op_margin" || k === "vol_1y" || k === "max_dd_1y" ? pct(v, false)
-      : k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" ? pct(v) : esc(v);
+      : k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" || k === "alpha" ? pct(v) : esc(v);
     const symCell = (c) => `${esc(c.symbol)}${c.formerly ? `<div class="small muted">formerly ${esc(c.formerly)}</div>` : ""}`;
     const table = `<div class="tbl-wrap" style="max-height:560px"><table><thead><tr>${cols.map(([k, l, c]) => `<th class="sortable ${c}" tabindex="0" data-sort="${k}" aria-sort="${S.sort.key === k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none"}">${l}${S.sort.key === k ? (S.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
       <tbody>${cons.map((c) => `<tr>${cols.map(([k, , cl]) => `<td class="${cl} ${k === "symbol" ? "tick" : ""} ${k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" ? cls(num(c[k])) : ""}">${k === "symbol" ? symCell(c) : fmtCell(k, c[k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
@@ -3304,6 +3420,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const p0 = (x) => (isNum(num(x)) ? Math.round(x * 100) + "%" : "—");
   function historySection(d) {
     const h = d.history, pr = d.peers, etf = d.etf;
+    if (pr?.rows?.length && !busy() && pr.rows.some((r) => !("r6m" in r) || r.r3m === null || r.r1y === null)) setTimeout(() => refreshPeers(d), 0);
     if (!h && !pr) return sec("history", "History, base rates & sector peers", "", `<div class="small muted">Not in this saved run. Run again to add the industry's history since 2008, base rates and its sector peers.</div>`);
     let body = "";
     if (h) {
@@ -3321,8 +3438,8 @@ a.btnlink:hover { border-color: var(--accent); }
       body += `<div class="small muted">FMP's daily average change across every listed company in the industry, including ones that later failed or were bought, so there's no survivorship bias; it's equal-weighted, unlike the top-50 index above. Base-rate odds feed the 1M-12M calls: the strategist starts from them and moves only for specific evidence.</div>`;
     }
     if (pr?.rows?.length) {
-      body += `<h3>Sector peers</h3><div class="tbl-wrap"><table><thead><tr><th>Industry</th><th class="n">Companies</th><th class="n">P/E</th><th class="n">1M</th><th class="n">3M</th><th class="n">1Y</th></tr></thead><tbody>${pr.rows.map((r) => `<tr${r.self ? ' style="font-weight:600;background:color-mix(in srgb, var(--accent) 7%, transparent)"' : ""}><td>${esc(r.industry)}</td><td class="n">${r.companies ?? "—"}</td><td class="n">${fix(r.pe, 1)}</td><td class="n ${cls(num(r.r1m))}">${pp(r.r1m)}</td><td class="n ${cls(num(r.r3m))}">${pp(r.r3m)}</td><td class="n ${cls(num(r.r1y))}">${pp(r.r1y)}</td></tr>`).join("")}</tbody></table></div>
-        <div class="small">${pr.rank_r1y ? `#${pr.rank_r1y.rank} of ${pr.rank_r1y.of} on 1-year return` : ""}${pr.rank_pe_cheapest ? ` · #${pr.rank_pe_cheapest.rank} cheapest of ${pr.rank_pe_cheapest.of} on P/E (sector median ${fix(pr.median_pe, 1)})` : ""}${etf ? ` · vs the sector ETF ${esc(etf.symbol)}: ${pp(etf.vs_r3m)} over 3 months, ${pp(etf.vs_r1y)} over 1 year` : ""}</div>
+      body += `<h3>Sector peers</h3><div class="tbl-wrap"><table><thead><tr><th>Industry</th><th class="n">Companies</th><th class="n">P/E</th><th class="n">1M</th><th class="n">3M</th><th class="n">6M</th><th class="n">1Y</th></tr></thead><tbody>${pr.rows.map((r) => `<tr${r.self ? ' style="font-weight:600;background:color-mix(in srgb, var(--accent) 7%, transparent)"' : ""}><td>${esc(r.industry)}</td><td class="n">${r.companies ?? "—"}</td><td class="n">${fix(r.pe, 1)}</td>${["r1m", "r3m", "r6m", "r1y"].map((k) => `<td class="n ${cls(num(r[k]))}">${pp(r[k])}</td>`).join("")}</tr>`).join("")}${etf && isNum(num(etf.r1m ?? etf.r3m)) ? `<tr class="muted"><td>Sector ETF ${esc(etf.symbol)}</td><td class="n">—</td><td class="n">—</td>${["r1m", "r3m", "r6m", "r1y"].map((k) => `<td class="n ${cls(num(etf[k]))}">${pp(etf[k])}</td>`).join("")}</tr>` : ""}</tbody></table></div>
+        <div class="small">${pr.rank_r1y ? `#${pr.rank_r1y.rank} of ${pr.rank_r1y.of} on 1-year return` : ""}${pr.rank_pe_cheapest ? ` · #${pr.rank_pe_cheapest.rank} cheapest of ${pr.rank_pe_cheapest.of} on P/E (sector median ${fix(pr.median_pe, 1)})` : ""}${etf ? ` · vs the sector ETF ${esc(etf.symbol)}: ${pp(etf.vs_r3m)} over 3 months${isNum(num(etf.vs_r6m)) ? `, ${pp(etf.vs_r6m)} over 6 months` : ""}, ${pp(etf.vs_r1y)} over 1 year` : ""}</div>
         <div class="small muted">Peers' returns are FMP's equal-weighted industry averages; P/E is FMP's industry P/E today, mixed across exchanges by where each industry's market cap is listed.</div>`;
     }
     return sec("history", "History, base rates & sector peers", h ? `${esc(h.from)} to ${esc(h.to)}` : "", body);
@@ -3474,22 +3591,76 @@ a.btnlink:hover { border-color: var(--accent); }
       <details><summary class="small">Quarter by quarter</summary><div class="tbl-wrap"><table><thead><tr><th>Quarter</th><th class="n">Inventory days</th><th class="n">DSO</th><th class="n">Capex / sales</th><th class="n">Revenue y/y</th><th class="n">Net debt / EBITDA</th></tr></thead><tbody>${rows}</tbody></table></div></details>
       <div class="small muted">Summed across the companies that report each item, by calendar quarter. Inventory or receivables days rising faster than sales are classic signs that a cycle is turning.</div>`;
   }
-  function trackSection(d) {
-    const log = S.track[slug(d.name)] || [];
-    const btn = log.length ? `<button class="sm" id="track-check" ${S.trackBusy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy ? "Checking…" : "Check how past calls did"}</button>` : "";
-    if (!log.length) return sec("track", "Track record", "", `<div class="small muted">Every lead verdict is logged in this browser with the prices it was made at. When you run this industry again, or click "Check how past calls did", each 1M, 3M, 6M and 12M call is scored against what the industry actually did, and the strategist sees its own record.</div>`);
+  /**
+   * The track record of a set of calls (one industry, or every industry in a sector with multi): scored calls,
+   * open calls marked to market, alpha, calibration and every call.
+   */
+  function trackView(log, { multi = false } = {}) {
     const sm = Track.summarize(log);
     const pc = (x) => (isNum(num(x)) ? Math.round(x * 100) + "%" : "—");
-    const head = sm.all.n ? `<div class="kpis">${kpi("Direction right", pc(sm.all.hit_rate), `${sm.all.n} matured calls`)}${kpi("Inside the range", pc(sm.all.inside_rate))}${kpi("Brier score", fix(sm.all.brier, 3), "0 is perfect, 0.25 a coin flip")}${kpi("Average miss", isNum(num(sm.all.mean_error)) ? (sm.all.mean_error >= 0 ? "+" : "") + fix(sm.all.mean_error, 1) + "pp" : "—", "vs the range's midpoint")}</div>`
-      : `<div class="small muted">${sm.calls} verdict${sm.calls === 1 ? "" : "s"} logged; no call has reached its end date yet (${sm.pending} open).</div>`;
+    const pp = (x, d = 1) => (isNum(num(x)) ? (x > 0 ? "+" : "") + fix(x, d) + "pp" : "—");
+    const sg = (x) => (isNum(num(x)) ? (x > 0 ? "+" : "") + x + "%" : "—");
+    const A = sm.all, O = sm.open;
+    const scored = A.n ? `<h3>Calls that have reached their end date</h3><div class="kpis">
+        ${kpi("Alpha per call", pp(A.call_alpha), "beta-adjusted, vs SPY, if you followed every call")}
+        ${kpi("Beat the market as called", pc(A.rel_hit_rate), `${A.rel_n} bullish or bearish calls`)}
+        ${kpi("Direction right", pc(A.hit_rate), `${A.n} scored calls`)}
+        ${kpi("Information ratio", fix(A.ir, 2), "alpha per call ÷ its spread")}
+        ${kpi("Inside the range", pc(A.inside_rate))}
+        ${kpi("Brier score", fix(A.brier, 3), "0 is perfect, 0.25 a coin flip")}</div>` : "";
+    const opened = O.n ? `<h3>Open calls, marked to market</h3><div class="kpis">
+        ${kpi("Call alpha so far", pp(O.call_alpha), `average over ${O.n} open calls`)}
+        ${kpi("On the called side", pc(O.tracking_rate), "bullish and up, bearish and down")}
+        ${kpi("Beating the market as called", pc(O.rel_hit_rate), "so far")}
+        ${kpi("Industry vs SPY", pp(O.excess), "average, since each call")}
+        ${kpi("Alpha vs SPY", pp(O.alpha), "beta-adjusted, average")}</div>` : "";
+    const none = !A.n && !O.n ? `<div class="small muted">${sm.calls} verdict${sm.calls === 1 ? "" : "s"} logged; the first prices after ${sm.calls === 1 ? "it" : "them"} aren't in yet.</div>` : "";
+    const hrow = (h) => { const b = sm.by[h], o = sm.open_by[h]; if (!b.n && !o.n) return "";
+      return `<tr><td><b>${h}</b></td><td class="n">${b.n || "—"}</td><td class="n ${cls(num(b.call_alpha))}">${b.n ? pp(b.call_alpha) : "—"}</td><td class="n">${b.n ? pc(b.rel_hit_rate) : "—"}</td><td class="n">${b.n ? pc(b.hit_rate) : "—"}</td><td class="n">${b.n ? fix(b.brier, 3) : "—"}</td><td class="n">${b.n ? pc(b.inside_rate) : "—"}</td><td class="n">${o.n || "—"}</td><td class="n ${cls(num(o.call_alpha))}">${o.n ? pp(o.call_alpha) : "—"}</td></tr>`; };
+    const byH = `<div class="tbl-wrap"><table><thead><tr><th>Horizon</th><th class="n">Scored</th><th class="n">Alpha per call</th><th class="n">Beat mkt as called</th><th class="n">Direction right</th><th class="n">Brier</th><th class="n">In range</th><th class="n">Open</th><th class="n">Alpha so far</th></tr></thead><tbody>${Track.ORDER.map(hrow).join("")}</tbody></table></div>`;
+    const calib = sm.calibration.some((b) => b.n) ? `<div class="small"><b>Calibration.</b> ${sm.calibration.filter((b) => b.n).map((b) => `When it said ${esc(b.label)} chance of a gain (${Math.round(b.said)}% on average), the industry rose ${Math.round(b.happened)}% of the time (${b.n} call${b.n === 1 ? "" : "s"}).`).join(" ")}</div>` : "";
+    // Each call's alpha: solid = scored, faded = open (so far).
+    const pts = [...sm.rows.map((x) => ({ ...x, done: true })), ...sm.open_rows.map((x) => ({ ...x, done: false }))].filter((x) => isNum(x.call_alpha) && x.call !== "neutral").sort((a, b) => (a.as_of < b.as_of ? -1 : a.as_of > b.as_of ? 1 : Track.ORDER.indexOf(a.h) - Track.ORDER.indexOf(b.h)));
+    let chart = "";
+    if (pts.length) {
+      const W = 640, H = 150, mx = Math.max(2, ...pts.map((x) => Math.abs(x.call_alpha))), bw = Math.max(3, Math.min(26, (W - 40) / pts.length - 2)), y0 = H / 2;
+      const bars = pts.map((x, i) => { const hgt = (Math.abs(x.call_alpha) / mx) * (H / 2 - 12), y = x.call_alpha >= 0 ? y0 - hgt : y0;
+        return `<rect x="${(32 + i * (bw + 2)).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(1, hgt).toFixed(1)}" fill="${x.call_alpha >= 0 ? "var(--pos)" : "var(--neg)"}" opacity="${x.done ? 1 : 0.45}"><title>${esc(`${x.industry ? x.industry + " · " : ""}${x.h} ${x.call}, made ${x.as_of}: call alpha ${x.call_alpha > 0 ? "+" : ""}${x.call_alpha}pp${x.done ? "" : " so far"}`)}</title></rect>`; }).join("");
+      chart = `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Alpha captured by each call"><line class="grid" x1="30" x2="${W}" y1="${y0}" y2="${y0}"></line><text x="0" y="14">+${fix(mx, 0)}pp</text><text x="0" y="${H - 4}">−${fix(mx, 0)}pp</text>${bars}</svg>
+        <div class="legend"><span><i style="background:var(--pos)"></i>Alpha earned by following the call</span><span><i style="background:var(--neg)"></i>Alpha lost</span><span><i style="background:var(--muted);opacity:.45"></i>Faded: still open, so far</span></div></div>`;
+    }
     const rows = [...log].sort((a, b) => (a.run_at < b.run_at ? 1 : -1)).flatMap((e) => Track.ORDER.filter((h) => e.horizons[h]).map((h) => { const x = e.horizons[h], v = e.eval?.horizons?.[h];
-      return `<tr><td class="mono">${esc(fmtShort(e.as_of))}</td><td>${h}</td><td><span class="pill ${x.call === "bullish" ? "pos" : x.call === "bearish" ? "neg" : "neu"}">${esc(x.call)}</span></td><td class="n">${(x.expected_move || []).map((y) => (y > 0 ? "+" : "") + y + "%").join(" to ")}</td><td class="n">${isNum(num(x.probability_up)) ? x.probability_up + "%" : "—"}</td>
-        <td class="n ${v && isNum(num(v.realized)) ? cls(v.realized / 100) : ""}">${v && isNum(num(v.realized)) ? (v.realized > 0 ? "+" : "") + v.realized + "%" : "—"}${v && !v.matured && isNum(num(v.realized)) ? `<div class="small muted">so far</div>` : ""}</td>
-        <td class="n">${v && isNum(num(v.spy)) ? (v.spy > 0 ? "+" : "") + v.spy + "%" : "—"}</td><td>${v?.matured ? (v.hit === true ? "✓ right" : v.hit === false ? "✗ wrong" : "—") + (v.inside === true ? " · in range" : v.inside === false ? " · outside range" : "") : `<span class="muted">${v ? "" : "just made · "}ends ${esc(fmtShort(v?.end || Horizon.addDays(e.as_of, Track.DAYS[h])))}</span>`}</td></tr>`; })).join("");
-    return sec("track", "Track record", `${sm.calls} verdict${sm.calls === 1 ? "" : "s"} logged in this browser`,
-      `<div class="actions" style="justify-content:flex-start">${btn}</div>${head}
-      <div class="tbl-wrap" style="max-height:420px"><table><thead><tr><th>Made</th><th>Horizon</th><th>Call</th><th class="n">Range</th><th class="n">Chance up</th><th class="n">Industry did</th><th class="n">SPY</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <div class="small muted">The industry's move is the cap-weighted return of the companies as they were weighted when the call was made. "Right" means bullish and it rose, bearish and it fell, or neutral and it stayed inside its range. The lead strategist reads this record and is told to calibrate its ranges and probabilities to it.</div>`);
+      const res = v?.matured && v.scored ? `${v.hit === true ? "✓ right" : v.hit === false ? "✗ wrong" : "—"}${v.inside === true ? " · in range" : v.inside === false ? " · outside range" : ""}`
+        : `<span class="muted">${isNum(num(v?.realized)) ? `so far · ` : ""}ends ${esc(fmtShort(v?.end || Horizon.addDays(e.as_of, Track.DAYS[h])))}</span>`;
+      return `<tr>${multi ? `<td>${esc(e.industry || "")}</td>` : ""}<td class="mono">${esc(fmtShort(e.as_of))}</td><td>${h}</td><td><span class="pill ${x.call === "bullish" ? "pos" : x.call === "bearish" ? "neg" : "neu"}">${esc(x.call)}</span></td><td class="n">${(x.expected_move || []).map((y) => (y > 0 ? "+" : "") + y + "%").join(" to ")}</td><td class="n">${isNum(num(x.probability_up)) ? x.probability_up + "%" : "—"}</td>
+        <td class="n ${v && isNum(num(v.realized)) ? cls(v.realized / 100) : ""}">${sg(v?.realized)}</td><td class="n">${sg(v?.spy)}</td><td class="n">${sg(v?.etf)}</td><td class="n ${cls(num(v?.alpha))}">${v && isNum(num(v.alpha)) ? pp(v.alpha) : "—"}</td><td class="n ${cls(num(v?.call_alpha))}"><b>${v && isNum(num(v.call_alpha)) && x.call !== "neutral" ? pp(v.call_alpha) : "—"}</b></td><td>${res}</td></tr>`; })).join("");
+    return `${scored}${opened}${none}${A.n || O.n ? byH : ""}${calib}${chart}
+      <div class="tbl-wrap" style="max-height:420px"><table><thead><tr>${multi ? "<th>Industry</th>" : ""}<th>Made</th><th>Horizon</th><th>Call</th><th class="n">Range</th><th class="n">Chance up</th><th class="n">Industry</th><th class="n">SPY</th><th class="n">Sector ETF</th><th class="n">Alpha</th><th class="n">Call alpha</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="small muted">Scored automatically with the latest prices (once a day). The industry's move is the cap-weighted return of its companies as weighted when the call was made. <b>Alpha</b> is beta-adjusted: the industry's return minus what its beta (as of the call) and SPY explain, net of the T-bill rate. <b>Call alpha</b> is what following the call earned: that alpha when the call was bullish, minus it when bearish (neutral calls take no position). "Beat the market as called" means a bullish call's industry beat SPY on that basis, or a bearish one's lagged it. Open calls are marked to market and become final at their end date. The lead strategist reads this record and calibrates to it.</div>`;
+  }
+  function trackSection(d) {
+    const sl = slug(d.name), log = S.track[sl] || [];
+    if (!log.length) return sec("track", "Track record", "", `<div class="small muted">Every lead verdict is logged with the prices it was made at. From the next trading day, each 1M, 3M, 6M and 12M call is scored automatically against what the industry actually did, with its alpha vs SPY and the sector ETF, and the strategist sees its own record.</div>`);
+    autoTrack(d.name, d.sector);
+    const btn = `<button class="sm" id="track-check" ${S.trackBusy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl ? "Updating…" : "Update now"}</button>`;
+    const at = log.map((e) => e.eval?.at).filter(Boolean).sort().pop();
+    return sec("track", "Track record", `${log.length} verdict${log.length === 1 ? "" : "s"} logged${at ? ` · prices to ${esc(fmtShort(at))}` : ""}`,
+      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}${S.trackBusy === sl ? `<span class="small muted">Scoring the calls with the latest prices…</span>` : ""}</div>${trackView(log)}`);
+  }
+  /** The sector's track record: every call on every industry in it, together. */
+  function sectorTrackBlock(sec, names) {
+    const st = S.secTrack[sec];
+    if (!st || (st.at !== today() && !st.busy)) setTimeout(() => loadSectorTrack(sec, names), 0);
+    const entries = st?.entries || [];
+    const head = `<div class="panel-head"><h2>Track record: every call in ${esc(sec)}</h2><span class="small muted">${entries.length} verdict${entries.length === 1 ? "" : "s"} across ${new Set(entries.map((e) => e.industry)).size} industries, scored automatically${st?.busy ? ` · updating with the latest prices (${st.done || 0} of ${st.of} industries)…` : ""}</span></div>`;
+    if (!entries.length) return `<section class="panel" id="sector-track">${head}<div class="small muted">${st?.busy ? "" : "No calls logged for this sector yet."}</div></section>`;
+    // Which industries' calls have earned the most alpha so far
+    const by = {}; for (const e of entries) for (const [h, v] of Object.entries(e.eval?.horizons || {})) if (isNum(num(v.call_alpha)) && e.horizons[h]?.call !== "neutral") (by[e.industry] ||= []).push(v.call_alpha);
+    const rank = Object.entries(by).map(([n, xs]) => [n, xs.reduce((a, x) => a + x, 0) / xs.length, xs.length]).sort((a, b) => b[1] - a[1]);
+    const fmtA = ([n, a, k]) => `${esc(n)} <span class="d ${a >= 0 ? "up" : "down"}">${a > 0 ? "+" : ""}${fix(a, 1)}pp</span> <span class="muted">(${k})</span>`;
+    const lead = rank.length >= 6 ? `<div class="small"><b>Best calls so far:</b> ${rank.slice(0, 3).map(fmtA).join(" · ")}. <b>Worst:</b> ${rank.slice(-3).reverse().map(fmtA).join(" · ")} <span class="muted">(average call alpha per call; number of calls)</span></div>`
+      : rank.length ? `<div class="small"><b>Call alpha by industry:</b> ${rank.map(fmtA).join(" · ")} <span class="muted">(average per call; number of calls)</span></div>` : "";
+    return `<section class="panel" id="sector-track">${head}${lead}${trackView(entries, { multi: true })}</section>`;
   }
 
   function secNav() {

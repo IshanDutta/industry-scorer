@@ -60,7 +60,7 @@
     const top = [...(doc.constituents || [])].sort((a, b) => b.weight - a.weight).slice(0, 15).map((c) => `${c.symbol} ${trim(c.name, 30)} ${(c.weight * 100).toFixed(1)}%${isNum(c.ret_1Y) ? ` 1Y ${pct(c.ret_1Y, 0)}` : ""}${isNum(c.pe) ? ` P/E ${num(c.pe)}` : ""}${isNum(c.fwd_pe) ? ` fwd P/E ${num(c.fwd_pe)}` : ""}${isNum(c.rev_growth) ? ` rev ${pct(c.rev_growth, 0)}` : ""}${isNum(c.ntm_growth) ? ` NTM EPS ${pct(c.ntm_growth, 0)}` : ""}${isNum(c.rev30) ? ` est 30d ${pct(c.rev30)}` : ""}${isNum(c.short_pct) ? ` short ${pct(c.short_pct)}` : ""}`).join("; ");
     out.push(`Companies (${s.n_constituents}, ${isNum(s.total_market_cap) ? "$" + (s.total_market_cap / 1e12).toFixed(2) + "T" : "n/a"}): ${top}. Largest ${pct(s.top1_weight, 0)}, top five ${pct(s.top5_weight, 0)}.`);
     out.push(`Performance vs SPY (cap-weighted): 1M ${pct(s.excess_cw_1M)}, 3M ${pct(s.excess_cw_3M)}, 6M ${pct(s.excess_cw_6M)}, 1Y ${pct(s.excess_cw_1Y)}; median stock 1Y ${pct(s.excess_median_1Y)}; breadth 1M ${pct(s.breadth_1M, 0)}, 3M ${pct(s.breadth_3M, 0)}, 1Y ${pct(s.breadth_1Y, 0)}.`);
-    out.push(`Risk (1Y): beta ${num(s.beta, 2)}, vol ${pct(s.vol_1y)}, downside vol ${pct(s.downside_vol_1y)}, max drawdown ${pct(s.max_dd_1y)}, Sharpe ${num(s.sharpe_1y, 2)}.`);
+    out.push(`Risk (1Y): beta ${num(s.beta, 2)}, alpha ${pct(s.alpha_1y)} a year (Jensen's, vs SPY), vol ${pct(s.vol_1y)}, downside vol ${pct(s.downside_vol_1y)}, max drawdown ${pct(s.max_dd_1y)}, Sharpe ${num(s.sharpe_1y, 2)}.`);
     out.push(`Fundamentals (TTM): revenue growth ${pct(f.rev_growth)}, earnings growth ${pct(f.ni_growth)}, gross margin ${pct(f.gross_margin)}, operating margin ${pct(f.op_margin)}, net margin ${pct(f.net_margin)}, ROE ${pct(f.roe)}, ROIC ${pct(f.roic)}, FCF margin ${pct(f.fcf_margin)}.`);
     out.push(`Valuation: P/E ${f.pe_negative ? "negative" : num(f.pe)} vs 5Y median ${num(f.pe_hist_median)} (${pct(f.pe_vs_hist)}, ${pct(f.pe_hist_pct, 0)} percentile); P/S ${num(f.ps)}; P/B ${num(f.pb)}; EV/EBITDA ${num(f.ev_ebitda)}; dividend yield ${pct(f.div_yield, 2)}; FCF covers dividends ${num(f.fcf_div_cover)}x.`);
     out.push(`Earnings: beat rate ${pct(f.beat_rate, 0)} of ${f.beat_reports ?? 0}, median EPS surprise ${pct(f.eps_surprise_median)}, revenue surprise ${pct(f.rev_surprise_median)}. Next: ${(f.next_reports || []).slice(0, 10).map((r) => `${r.symbol} ${r.date}`).join(", ") || "none"}.`);
@@ -282,6 +282,8 @@ Reply with ONLY this JSON:
   const { HORIZONS, indexVol, horizonFacts, horizonChecks } = Horizon;
   /** Step 3: the 1M, 3M, 6M and 12M calls, from every section, the dated calendar and the standing situations. */
   function horizonPrompt(doc, ctx, draft) { return Horizon.horizonPrompt(doc, ctx, draft, SCN_KEYS, Object.fromEntries(SCN_SECTIONS), RULES); }
+  /** Step 3b: what a call left out (code-checked), written in a focused follow-up. */
+  function horizonFixPrompt(doc, ctx, hz, miss) { return Horizon.fixPrompt(doc, ctx, hz, miss, SCN_KEYS, Object.fromEntries(SCN_SECTIONS), RULES); }
 
   /** The red team: an independent investor whose job is to prove the draft wrong, with a pre-mortem. */
   function draftStance(draft) {
@@ -507,7 +509,7 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
     return out;
   }
 
-  const Brain = { draftStance, redTeamPrompt, cleanRedTeam, basePE, HORIZONS, indexVol, horizonFacts, horizonChecks, horizonPrompt, PROFILES, DIMENSIONS, SECTIONS, SOURCES, OVERLAY_CAP, SCN_SECTIONS, SCN_KEYS, scenarioMath, scenarioPrompt, dossier, synthesisPrompt, verdictsPrompt, reviewPrompt, applyReview, critic };
+  const Brain = { draftStance, redTeamPrompt, cleanRedTeam, basePE, HORIZONS, indexVol, horizonFacts, horizonChecks, horizonPrompt, horizonFixPrompt, PROFILES, DIMENSIONS, SECTIONS, SOURCES, OVERLAY_CAP, SCN_SECTIONS, SCN_KEYS, scenarioMath, scenarioPrompt, dossier, synthesisPrompt, verdictsPrompt, reviewPrompt, applyReview, critic };
   if (typeof module !== "undefined" && module.exports) module.exports = Brain;
   else root.Brain = Brain;
 })(typeof window !== "undefined" ? window : globalThis);
