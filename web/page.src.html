@@ -1643,8 +1643,8 @@ a.btnlink:hover { border-color: var(--accent); }
     // "Redo gaps": rewrite only the lead strategist of industries whose 1M-12M calls left something out; everything else stays.
     if (redoGaps && rec?.v === 1) {
       const gaps = [];
-      for (const n of rec.done?.H || []) { const r = await idbGet("run:" + slug(n)).catch(() => null); if ((r?.agent?.result?.horizon_checks || []).some((c) => c.covered === false)) gaps.push(n); }
-      if (!gaps.length && !(rec.redoLead || []).length) { S.notices = [{ kind: "info", text: `Every ${sector} industry's calls already cover everything they must; nothing to redo.` }]; S.sectorRun = null; renderAll(); return; }
+      for (const n of rec.done?.H || []) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (!r?.agent?.result || (r.agent.result.horizon_checks || []).some((c) => c.covered === false)) gaps.push(n); }
+      if (!gaps.length && !(rec.redoLead || []).length) { S.notices = [{ kind: "info", text: `Every ${sector} industry has its lead strategist and its calls cover everything they must; nothing to redo.` }]; S.sectorRun = null; renderAll(); return; }
       rec = { ...rec, finished_at: null, done: { ...rec.done, H: rec.done.H.filter((n) => !gaps.includes(n)) }, redoLead: [...new Set([...(rec.redoLead || []), ...gaps])] };
       await idbPut(secKey(sector), jsonSafe(rec)); S.sectorRec[sector] = rec;
     }
@@ -2038,9 +2038,11 @@ a.btnlink:hover { border-color: var(--accent); }
         if (rec.redoLead?.includes(name)) {
           // Its write-ups are kept; only the lead strategist is rewritten.
           setMacro(name); run.label = "Lead strategist (rewriting the calls that left items out)"; sr.label = `${name}: lead strategist`; renderAll();
+          const before = S.agents[slug(name)]?.run_at || null;
           await runLead(name, { inSector: true, run });
           if (S.lastStop || run.cancel || sr.cancel) return false;
-          if (!S.agents[slug(name)]) sr.errors.push(`${name}: the lead strategist didn't finish`);
+          // Only a new verdict counts; otherwise the industry stays on the list for the next run.
+          if (!S.agents[slug(name)] || S.agents[slug(name)].run_at === before) { sr.errors.push(`${name}: the lead strategist didn't finish; running the sector again retries it`); return false; }
           rec.rows[name] = overviewFor(name); rec.redoLead = rec.redoLead.filter((x) => x !== name);
           return true;
         }
@@ -2117,11 +2119,18 @@ a.btnlink:hover { border-color: var(--accent); }
         sr.label = `${name}: lead strategist`;
         await runLead(name, { inSector: true, run });
         if (S.lastStop || run.cancel || sr.cancel) return false;
-        if (!S.agents[slug(name)]) sr.errors.push(`${name}: the lead strategist didn't finish`);
+        if (!S.agents[slug(name)]) {
+          // Its write-ups are saved; the next run of the sector writes only the lead strategist.
+          sr.errors.push(`${name}: the lead strategist didn't finish; running the sector again retries it`);
+          rec.redoLead = [...new Set([...(rec.redoLead || []), name])]; await doFlush(name); return false;
+        }
         rec.rows[name] = overviewFor(name);
         return true;
       }, async (name) => { dropFromMemory(name); });
       if (sr.cancel) return;
+      // Finished only when every industry is: one whose lead strategist failed waits for the next run (lead only).
+      const left = rec.names.filter((n) => !rec.skip[n] && !rec.done.H.includes(n));
+      if (left.length) { S.notices.push({ kind: "warn", text: `${left.length} ${sector} industr${left.length === 1 ? "y is" : "ies are"} missing ${left.length === 1 ? "its" : "their"} lead strategist (${left.join(", ")}). Run the sector again to finish ${left.length === 1 ? "it" : "them"}; only the lead strategist is redone.` }); return; }
       rec.finished_at = new Date().toISOString();
       ok = true;
     } catch (e) {

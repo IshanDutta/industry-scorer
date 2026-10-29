@@ -317,9 +317,15 @@ export class Sampler {
         this.pending.delete(key);
         if (r?.type === "succeeded") { this.record(key, r.message); this.settle(key, (w) => w.resolve(r.message)); continue; }
         const err = r?.type === "errored" ? this.apiError(r.error?.error?.type === "invalid_request_error" ? 400 : 500, r.error) : { code: "upstream_error", message: `Request ${r?.type || "missing"}`, retry: true };
-        // Expired, canceled or a transient error: send it again once in the next batch; otherwise fail the call.
-        const ws = this.waiters.get(key);
-        if (err.retry && ws?.length && !ws.retried) { ws.retried = true; const params = this.params.get(key); if (params) { this.queue.push({ key, params }); if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs); continue; } }
+        // Expired, canceled or a transient error: send it again in the next batch (twice), then once at the standard
+        // price, so one bad request doesn't sink a whole step; otherwise fail the call.
+        const ws = this.waiters.get(key), params = this.params.get(key);
+        if (err.retry && ws?.length && params) {
+          ws.retried = (ws.retried || 0) + 1;
+          if (ws.retried <= 2) { this.queue.push({ key, params }); if (!this.timer) this.timer = setTimeout(() => this.flush(), this.flushMs); continue; }
+          if (ws.retried === 3) { this.log(`[claude] a request failed in batches 3 times (${err.message}); sending it once at the standard price`);
+            this.direct(key, params).then((msg) => { this.params.delete(key); this.settle(key, (w) => w.resolve(msg)); }, (e) => { this.params.delete(key); this.settle(key, (w) => w.reject(e)); }); continue; }
+        }
         this.params.delete(key); this.settle(key, (w) => w.reject(err));
       }
       this.batches.delete(id); this.batchAt.delete(id);
