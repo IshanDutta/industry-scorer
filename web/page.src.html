@@ -2109,7 +2109,7 @@ a.btnlink:hover { border-color: var(--accent); }
     return n;
   }
   /** Import one or more results files (one per sector); opens the first sector's overview. */
-  async function importResultsFiles(files) {
+  async function importResultsFiles(files, { open = null } = {}) {
     const done = [], failed = [];
     for (const f of files) {
       try {
@@ -2124,7 +2124,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (done.length) {
       if (_saveName) await flush();
       if (S.selected) forget(S.selected);
-      S.selected = null; S.sectorView = done[0].sector || null; S.pickerOpen = false; S.restored = null;
+      S.selected = null; S.sectorView = (open && done.find((x) => x.sector === open)?.sector) || done[0].sector || null; S.pickerOpen = false; S.restored = null;
     }
     S.notices = [
       ...(done.length ? [{ kind: "info", text: done.length === 1
@@ -2138,14 +2138,16 @@ a.btnlink:hover { border-color: var(--accent); }
    * The runs copied from GitHub travel with this page as files (runs/index.json lists them). Each is read the
    * same way as an imported results file. A host may already have unzipped a .gz file, so the bytes decide.
    */
-  async function pullFromGithub() {
+  async function pullFromGithub(sector = null) {
     if (busy() || S.pulling) return;
-    S.pulling = true; renderPicker();
+    S.pulling = sector || true; renderAll();
     try {
       const r = await fetch("runs/index.json", { cache: "no-store" });
       if (!r.ok) throw new Error("no runs have been copied from GitHub into this page yet");
-      const list = (await r.json())?.files || [];
-      if (!list.length) throw new Error("no runs have been copied from GitHub into this page yet");
+      const all = (await r.json())?.files || [];
+      // One sector's button pulls just that sector; the picker's pulls every sector and opens the one you're on.
+      const list = sector ? all.filter((x) => x.sector === sector) : all;
+      if (!list.length) throw new Error(sector ? `no ${sector} run has been copied from GitHub into this page yet` : "no runs have been copied from GitHub into this page yet");
       const files = [];
       for (const x of list) {
         const b = await fetch("runs/" + x.path, { cache: "no-store" });
@@ -2157,10 +2159,10 @@ a.btnlink:hover { border-color: var(--accent); }
         const gz = bytes[0] === 0x1f && bytes[1] === 0x8b;
         files.push(new File([bytes], (x.sector || "run").replace(/\W+/g, "-") + (gz ? ".json.gz" : ".json")));
       }
-      await importResultsFiles(files);
+      await importResultsFiles(files, { open: sector || S.sector || S.sectorView });
     } catch (e) {
       S.notices = [{ kind: "err", text: `Couldn't pull the runs from GitHub: ${e?.message || e}` }]; renderAll();
-    } finally { S.pulling = false; renderPicker(); }
+    } finally { S.pulling = false; renderAll(); }
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
@@ -2429,13 +2431,13 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="picker-list">${body}</div>
       ${(S.saved || []).length ? `<div class="small muted">${S.saved.length} run${S.saved.length === 1 ? "" : "s"} saved in this browser (the ${KEEP} most recent are kept). <button class="sm" id="clear-saved" ${busy() ? "disabled" : ""}>Delete saved runs</button></div>` : ""}
       <label class="check"><input type="checkbox" id="us-only" ${usOnly() ? "checked" : ""} ${busy() ? "disabled" : ""}> Count US-headquartered companies only (leaves out foreign companies listed in the US, like TSM and ASML)</label>
-      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling ? "Pulling…" : "Pull from GitHub"}</button> brings in every run copied from GitHub, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
+      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling ? "Pulling…" : "Pull every sector from GitHub"}</button> brings in every run copied from GitHub, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
     $("close-picker")?.addEventListener("click", () => { S.pickerOpen = false; S.filter = ""; renderPicker(); });
     $("clear-saved")?.addEventListener("click", async () => { if (!confirm("Delete every run saved in this browser, and the track record of their calls? What's on screen stays until you leave.")) return; for (const x of S.saved || []) { await idbDel("run:" + x.slug); await idbDel("calls:" + x.slug); } await idbDel("index"); await idbDel("last"); S.saved = []; S.savedAt = {}; S.restored = null; renderAll(); });
     const input = $("pick-filter");
     input.addEventListener("input", () => { S.filter = input.value; renderPicker(); });
     $("import-results")?.addEventListener("click", () => $("import-file")?.click());
-    $("pull-github")?.addEventListener("click", pullFromGithub);
+    $("pull-github")?.addEventListener("click", () => pullFromGithub());
     $("import-file")?.addEventListener("change", (ev) => { const fs = [...(ev.target.files || [])]; if (fs.length) importResultsFiles(fs); });
   }
 
@@ -2450,7 +2452,7 @@ a.btnlink:hover { border-color: var(--accent); }
       : rec?.finished_at ? `<button data-sector-view="${esc(sec)}" class="primary">Open the overview (${esc(ago(rec.finished_at))})</button><button data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} again</button>`
       : `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} industries</button>`;
     const gh = `https://github.com/${GH_REPO}`;
-    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched. When it's done: <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
+    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched. When it's done: <button class="sm" data-pull-sector="${esc(sec)}" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling === sec ? "Pulling…" : `Pull ${esc(sec)} from GitHub`}</button> (the copy last brought into this page), or for the very latest, <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
     return `<div class="sector-run"><div><b>Analyze every ${esc(sec)} industry with one click.</b> <span class="small muted">Each industry gets the full report it gets on its own: its data, scores, KPI and earnings-call analysts, customers and suppliers, macro, world events, trade relations, rule books, regulatory verdict and lead strategist. What the industries share is researched once for the whole sector (the macro series and what's driving them, the world situations and their facts, each country's relationship with the US, each regulator's rules and their fact-check), and each industry's analysts then write what it means for that industry. About ${est.sector.toLocaleString()} Claude calls instead of about ${est.single.toLocaleString()} running them one by one, on your own Claude usage. Keep this page open while it runs (it keeps going in a background tab); progress is saved after every step, and reopening the page carries on.</span></div>
       <div class="actions">${btns}</div>${ghRow}</div>`;
   }
@@ -3502,6 +3504,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const t = ev.target.closest("button, th[data-sort], th[data-ssort]");
     if (!t) return;
     if (t.dataset.sectorRun) { if (S.sectorRec[t.dataset.sectorRun]?.finished_at && !confirm(`Analyze every ${t.dataset.sectorRun} industry again from scratch? The saved overview and runs are replaced as it goes.`)) return; runSector(t.dataset.sectorRun); return; }
+    if (t.dataset.pullSector) { pullFromGithub(t.dataset.pullSector); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
     if (t.dataset.sectorView) { if (busy() && S.sectorRun?.sector !== t.dataset.sectorView) return; (async () => { if (_saveName) await flush(); if (S.selected) forget(S.selected); S.selected = null; S.sectorView = t.dataset.sectorView; if (!(S.sectorView in S.sectorRec)) S.sectorRec[S.sectorView] = (await secGet(S.sectorView).catch(() => null)) || null; S.pickerOpen = false; window.scrollTo({ top: 0, behavior: "auto" }); renderAll(); })(); return; }
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
