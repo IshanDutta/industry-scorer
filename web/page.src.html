@@ -287,6 +287,13 @@ table.sec-ov td.ind button { all: unset; cursor: pointer; color: var(--accent); 
 .gate { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--sunk); }
 .gate .small { max-width: 80ch; }
 button.sm { padding: 5px 10px; font-size: 13px; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tab { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 8px 14px; font: 700 15px var(--display); font-stretch: 85%; color: var(--muted); }
+.tab.cur { color: var(--ink); border-bottom-color: var(--accent); }
+.co-form { display: flex; gap: 8px; } .co-form input { flex: 1; }
+.co-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; } .co-chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); }
+.co-chip:hover { border-color: var(--accent); } .co-ind > summary { font-size: 14.5px; }
+button.linkbtn { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; } button.linkbtn:hover { text-decoration: underline; }
 a.btnlink { display: inline-block; font: 600 13px var(--body); border-radius: 8px; padding: 4px 10px; border: 1px solid var(--line); background: var(--surface); color: var(--accent); text-decoration: none; margin: 2px 0; }
 a.btnlink:hover { border-color: var(--accent); }
 .rule { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
@@ -314,8 +321,10 @@ a.btnlink:hover { border-color: var(--accent); }
     <div class="meta" id="meta"></div>
   </header>
 
+  <nav class="tabs" id="tabs" aria-label="View"></nav>
   <section class="picker" id="picker" aria-label="Choose an industry"></section>
   <div id="report" style="display:grid;gap:18px"></div>
+  <div id="company" style="display:grid;gap:18px" hidden></div>
 
   <section class="method">
     <h3 style="color:var(--ink)">How the numbers are built</h3>
@@ -2827,7 +2836,7 @@ a.btnlink:hover { border-color: var(--accent); }
       : k === "pe" || k === "ps" || k === "fwd_pe" ? (isNum(num(v)) ? fix(v, 1) : "—") : k === "ntm_growth" || k === "rev30" ? pct(v) : k === "short_pct" ? pct(v, false) : k === "own_change_pp" ? (isNum(num(v)) ? `${v >= 0 ? "+" : ""}${fix(v, 1)}pp` : "—") : k === "insider_buys" ? (isNum(num(v)) ? String(v) : "—") : k === "next" ? (v ? esc(fmtShort(v)) : "—") : k === "beats" ? esc(v ?? "—")
       : k === "div_yield" ? pct(v, false, 2) : k === "op_margin" || k === "vol_1y" || k === "max_dd_1y" ? pct(v, false)
       : k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" || k === "alpha" ? pct(v) : esc(v);
-    const symCell = (c) => `${esc(c.symbol)}${c.formerly ? `<div class="small muted">formerly ${esc(c.formerly)}</div>` : ""}`;
+    const symCell = (c) => `<button class="linkbtn tick" data-co="${esc(c.symbol)}" title="Open ${esc(c.symbol)}'s company page">${esc(c.symbol)}</button>${c.formerly ? `<div class="small muted">formerly ${esc(c.formerly)}</div>` : ""}`;
     const table = `<div class="tbl-wrap" style="max-height:560px"><table><thead><tr>${cols.map(([k, l, c]) => `<th class="sortable ${c}" tabindex="0" data-sort="${k}" aria-sort="${S.sort.key === k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none"}">${l}${S.sort.key === k ? (S.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
       <tbody>${cons.map((c) => `<tr>${cols.map(([k, , cl]) => `<td class="${cl} ${k === "symbol" ? "tick" : ""} ${k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" ? cls(num(c[k])) : ""}">${k === "symbol" ? symCell(c) : fmtCell(k, c[k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 
@@ -3668,7 +3677,374 @@ a.btnlink:hover { border-color: var(--accent); }
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
-  function renderAll() { renderMeta(); renderPicker(); renderReport(); keepAwake(); }
+  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); keepAwake(); }
+
+  // ============================================================= Companies tab: one company, on top of its industry's analysis
+  /**
+   * Every company in every saved industry run (its row from the industry's top 50), kept as a small index so the
+   * Companies tab can list and find them without opening each run. Rebuilt only for runs saved since.
+   */
+  async function coIndex({ force = false } = {}) {
+    if (S.coIdx && !force) return S.coIdx;
+    const saved = (await idbGet("index")) || [];
+    const prev = (await idbGet("coIndex")) || { runs: {}, cos: {} };
+    const runs = {}, cos = {};
+    for (const x of saved) {
+      if (prev.runs[x.slug] && prev.runs[x.slug].saved_at === x.saved_at) { runs[x.slug] = prev.runs[x.slug]; continue; }
+      const r = await idbGet("run:" + x.slug).catch(() => null); const d = r?.industry; if (!d?.constituents?.length) continue;
+      runs[x.slug] = { name: d.name || x.name, sector: d.sector || null, saved_at: x.saved_at, as_of: d.as_of,
+        cos: d.constituents.map((c) => ({ symbol: c.symbol, name: c.name, rank: c.rank, weight: c.weight, market_cap: c.market_cap })) };
+    }
+    for (const [sl, r] of Object.entries(runs)) for (const c of r.cos) cos[c.symbol] = { ...c, industry: r.name, slug: sl, sector: r.sector };
+    const out = { runs, cos };
+    await idbPut("coIndex", out).catch(() => {});
+    S.coIdx = out; return out;
+  }
+  /** The parts of a saved industry run the company page reads. */
+  function coRun(rec) {
+    const sl = slug(rec.name);
+    const reports = Object.fromEntries(Object.entries(rec.reports || {}).map(([k, v]) => [k.replace(sl + "--", ""), v?.result]).filter(([, v]) => v));
+    const books = Object.values(rec.regbooks || {}).filter((b) => b?.book).map((b) => ({ body: b.body, book: b.book }));
+    return { name: rec.name, saved_at: rec.saved_at, industry: rec.industry, research: rec.research, tx: rec.tx, agent: rec.agent, bench: rec.bench, reports, books, lead: rec.agent?.result || null };
+  }
+  /** Industry digest for the thesis: the lead strategist's view and each section's top findings. */
+  function coDigest(run) {
+    const R = run.reports, L = run.lead || {};
+    return {
+      lead: { headline: L.headline, thesis: L.thesis, drivers: L.drivers, debates: L.debates, priced_in: L.priced_in, opportunity: L.opportunity, risks: L.risks, catalysts: L.catalysts, watch: L.watch,
+        scenarios: L.scenarios && Object.fromEntries(Object.entries(L.scenarios).map(([k, s]) => [k, { probability: s?.probability, narrative: s?.narrative, price_move: s?.price_move, eps_change: s?.eps_change }])),
+        horizons: L.horizons && Object.fromEntries(Object.entries(L.horizons).map(([h, x]) => [h, { call: x?.call, expected_move: x?.expected_move, probability_up: x?.probability_up, drivers: x?.drivers }])) },
+      kpi: R.kpi && { summary: R.kpi.summary, cycle_position: R.kpi.cycle_position, pricing_power: R.kpi.pricing_power, demand_drivers: R.kpi.demand_drivers, hot_segments: R.kpi.hot_segments, cool_segments: R.kpi.cool_segments },
+      macro: R.macro && { regime: R.macro.regime, headline: R.macro.headline, horizons: R.macro.horizons, drivers: R.macro.drivers },
+      world: R.world && { dives: (R.world.dives || []).map((x) => ({ title: x.title, status: x.status, stance: x.stance, summary: x.summary, first_order: x.first_order })) },
+      trade: R.trade && { verdict: R.trade.verdict, countries: (R.trade.countries || []).map((c) => ({ country: c.country, headline: c.headline, risks: (c.risks || []).slice(0, 2) })) },
+      regverdict: R.regverdict || null,
+      books: run.books.slice(0, 8).map((b) => ({ body: b.body, rules: (b.book.rules || []).slice(0, 4).map((r) => ({ name: r.name, severity: r.severity, status: r.status, bottom_line: r.bottom_line })) })),
+    };
+  }
+  /** Returns, beta, alpha, volatility and drawdown from a daily price series, against SPY. */
+  function coRisk(ser, spy, rfRows) {
+    const out = {}; if (!ser?.dates?.length) return out;
+    for (const [k, m] of [["ret_1M", 1], ["ret_3M", 3], ["ret_6M", 6], ["ret_1Y", 12]]) { const v = History.trailingByDate(ser, null, m); if (isNum(v)) out[k] = v; }
+    const from = Horizon.addDays(ser.dates[ser.dates.length - 1], -365), i0 = Math.max(0, ser.dates.findIndex((d) => d >= from));
+    const r = E.pctChange(ser.dates.slice(i0), ser.closes.slice(i0));
+    if (spy?.dates?.length) { const j0 = Math.max(0, spy.dates.findIndex((d) => d >= from)); const b = E.pctChange(spy.dates.slice(j0), spy.closes.slice(j0));
+      out.beta = E.beta(r, b); out.alpha = E.alpha(r, b, E.toDailyRf(rfRows || [], spy.dates.slice(j0), 0.04), out.beta);
+      for (const [k, m] of [["1M", 1], ["3M", 3], ["6M", 6], ["1Y", 12]]) { const s = History.trailingByDate(spy, null, m); if (isNum(s) && isNum(out["ret_" + k])) out["excess_" + k] = out["ret_" + k] - s; } }
+    out.vol_1y = E.annualVol(r.rets); out.max_dd_1y = E.maxDrawdown(ser.closes.slice(i0));
+    return out;
+  }
+  /**
+   * Everything about the company from FMP, fetched in parallel (free calls) and kept for the day.
+   * Returns {profile, scores, ratios, metrics, c (compact statements), ttm, estimates, consensus, segments, insider, peers, news, transcript, ser}.
+   */
+  async function coFetch(sym, run) {
+    const key = "codata:" + sym, hit = await idbGet(key).catch(() => null);
+    if (hit?.day === today()) return hit.data;
+    const one = async (tool, input) => (await optional(() => fmp(tool, input), [])) || [];
+    const from = Horizon.addDays(today(), -400);
+    const [profile, scores, metrics, ratios, c, est, grades, target, prod, geo, ins, peers, news, press, chart, dates] = await Promise.all([
+      one("company", { endpoint: "profile-symbol", symbol: sym }), one("statements", { endpoint: "financial-scores", symbol: sym }),
+      one("statements", { endpoint: "key-metrics-ttm", symbol: sym }), one("statements", { endpoint: "metrics-ratios-ttm", symbol: sym }),
+      companyData(sym).catch(() => null), one("analyst", { endpoint: "financial-estimates", symbol: sym, period: "annual", limit: 8 }),
+      one("analyst", { endpoint: "grades-summary", symbol: sym }), one("analyst", { endpoint: "price-target-consensus", symbol: sym }),
+      one("statements", { endpoint: "revenue-product-segmentation", symbol: sym, period: "quarter", limit: 6 }), one("statements", { endpoint: "revenue-geographic-segments", symbol: sym, period: "annual", limit: 2 }),
+      one("insiderTrades", { endpoint: "insider-trade-statistics", symbol: sym }), one("company", { endpoint: "peers", symbol: sym }),
+      one("news", { endpoint: "search-stock-news", symbols: [sym], from_date: Horizon.addDays(today(), -60), to_date: today(), limit: 20 }),
+      one("news", { endpoint: "search-press-releases", symbols: [sym], from_date: Horizon.addDays(today(), -120), to_date: today(), limit: 10 }),
+      one("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: from, to_date: today() }),
+      run?.tx?.items?.some((t) => t.symbol === sym) ? Promise.resolve([]) : one("earningsTranscript", { endpoint: "transcripts-dates-by-symbol", symbol: sym }),
+    ]);
+    // The latest earnings call: the industry run's copy when it read this company's call, else FMP's.
+    let transcript = null;
+    const own = (run?.tx?.items || []).find((t) => t.symbol === sym);
+    if (own) transcript = { period: own.period, date: own.date, text: own.excerpt };
+    else { const last = (dates || []).filter((d) => d?.date && d.date <= today()).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      if (last) { const tx = await optional(() => fmp("earningsTranscript", { endpoint: "search-transcripts", symbol: sym, year: last.fiscalYear, quarter: last.quarter }), []);
+        const content = tx?.[0]?.content; if (content) transcript = { period: `Q${last.quarter} FY${last.fiscalYear}`, date: String(last.date).slice(0, 10), text: Research.excerpt(content, 7000) }; } }
+    const g = grades?.[0] || {}, t = target?.[0] || {};
+    const cut = Horizon.addDays(today(), -60);
+    const estimates = (est || []).filter((e) => e?.date && String(e.date) >= cut && isNum(Number(e.epsAvg))).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 3)
+      .map((e) => ({ year: Number(String(e.date).slice(0, 4)), rev: Number(e.revenueAvg), eps: Number(e.epsAvg), analysts: Number(e.numAnalystsEps) || null }));
+    const data = jsonSafe({
+      profile: profile?.[0] || null, scores: scores?.[0] || null, metrics: metrics?.[0] || null, ratios: ratios?.[0] || null, c, ttm: c ? Fund.companyTTM(c) : null,
+      estimates, consensus: g.consensus || isNum(Number(t.targetConsensus)) ? { consensus: g.consensus || null, buy: (Number(g.strongBuy) || 0) + (Number(g.buy) || 0), hold: Number(g.hold) || 0, sell: (Number(g.sell) || 0) + (Number(g.strongSell) || 0), target: Number(t.targetConsensus) || null, high: Number(t.targetHigh) || null, low: Number(t.targetLow) || null } : null,
+      segments: { product: Research.segTable(prod, 4), geo: Research.segTable(geo, 1) }, insider: Positioning.insiderSummary(ins), peers: (peers || []).slice(0, 12),
+      news: [...(news || []).map((x) => ({ kind: "N", date: String(x.publishedDate || x.date || "").slice(0, 10), source: x.site || x.publisher || "", title: x.title, summary: x.text, url: x.url })),
+        ...(press || []).map((x) => ({ kind: "P", date: String(x.publishedDate || x.date || "").slice(0, 10), source: "press release", title: x.title, summary: x.text, url: x.url }))].filter((x) => x.title).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 24),
+      transcript, ser: toSeries(chart || []),
+    });
+    await idbPut(key, { day: today(), data }).catch(() => {});
+    return data;
+  }
+  /** A company outside the top 50 gets a row like the industry's own, from FMP. */
+  function coRowFromFmp(sym, f, risk) {
+    const p = f.profile || {}, r = f.ratios || {}, m = f.metrics || {}, t = f.ttm || {}, q = f.c?.q || [];
+    const px = Number(p.price), next = (f.estimates || []).find((e) => isNum(e.eps));
+    const epsTTM = Number(r.netIncomePerShareTTM), sh0 = q[0]?.sh, sh4 = q[4]?.sh;
+    return { symbol: sym, name: p.companyName, exchange: p.exchange, country: p.country, market_cap: Number(p.marketCap) || Number(m.marketCap), px, ...risk,
+      pe: Number(r.priceToEarningsRatioTTM), fwd_pe: next && next.eps > 0 && px > 0 ? px / next.eps : NaN, ps: Number(r.priceToSalesRatioTTM),
+      rev_growth: t.rev > 0 && t.revPrev > 0 ? t.rev / t.revPrev - 1 : NaN, ntm_growth: next && epsTTM > 0 ? next.eps / epsTTM - 1 : NaN,
+      gross_margin: Number(r.grossProfitMarginTTM), op_margin: Number(r.operatingProfitMarginTTM), net_margin: Number(r.netProfitMarginTTM), fcf_margin: t.rev > 0 && isNum(t.fcf) ? t.fcf / t.rev : NaN,
+      div_yield: Number(r.dividendYieldTTM), de: Number(r.debtToEquityRatioTTM), nd_ebitda: Number(m.netDebtToEBITDATTM), int_cover: Number(r.interestCoverageRatioTTM),
+      share_change: sh0 > 0 && sh4 > 0 ? sh0 / sh4 - 1 : NaN, sbc_rev: Number(m.stockBasedCompensationToRevenueTTM) };
+  }
+  /** Open a company: the page shows at once from what's saved, fills in from FMP in a few seconds, then writes the thesis. */
+  async function openCompany(q) {
+    const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
+    S.tab = "companies"; S.coQuery = "";
+    const co = S.co = { sym, stage: "finding", data: null, run: null, thesis: null, partial: null, err: null, idx: {} };
+    renderAll(); window.scrollTo?.(0, 0);
+    try {
+      const ci = await coIndex(); let hit = ci.cos[sym] || null;
+      co.hit = hit; renderCompany();
+      let industry = hit?.industry, prof = null;
+      if (!industry) {
+        if (!S.mcp) throw new Error("open this page in Claude to look up a company that isn't in a saved industry");
+        prof = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0];
+        if (!prof) throw new Error(`FMP doesn't recognize ${sym}`);
+        industry = prof.industry;
+      }
+      co.industry = industry;
+      const rec = industry ? await idbGet("run:" + slug(industry)).catch(() => null) : null;
+      if (S.co !== co) return;
+      if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null; }
+      co.stage = co.run ? "data" : "noindustry"; renderCompany();
+      if (!S.mcp) { co.stage = co.run ? "ready" : "noindustry"; renderCompany(); return; }
+      const f = await coFetch(sym, co.run); if (S.co !== co) return;
+      co.data = f;
+      const spy = co.run?.bench?.spy?.dates?.length ? await trackSeries("SPY", Horizon.addDays(today(), -400)) : null;
+      co.risk = coRisk(f.ser, spy, co.run?.bench?.rf || S.bench?.rf);
+      co.px = Number(f.profile?.price) || (f.ser.closes.length ? f.ser.closes[f.ser.closes.length - 1] : NaN) || Number(co.row?.px) || NaN;
+      if (!co.row) co.row = coRowFromFmp(sym, f, co.risk);
+      if (!co.run) { co.stage = "noindustry"; renderCompany(); return; }
+      coAnalyze(co); co.stage = "ready"; renderCompany();
+      // The thesis: saved, or written now (once), built on this industry run.
+      const saved = await idbGet("co:" + sym).catch(() => null);
+      if (saved?.thesis && saved.industry === co.run.name) { co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); coTrack(co).catch(() => {}); }
+      if ((!saved?.thesis || saved.industry !== co.run.name) && S.sample) writeThesis(co);
+    } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
+  }
+  /** Code: peers, mapping, quality, valuation, and the citable index the thesis uses. */
+  function coAnalyze(co) {
+    const run = co.run, d = run.industry, f = co.data || {}, sym = co.sym;
+    const name = co.row?.name || f.profile?.companyName || sym;
+    co.name = name;
+    co.peers = Company.peerTable(co.row, d.constituents);
+    co.closest = Company.closestPeers(co.row, d.constituents, f.peers || []);
+    co.mentions = Company.mentions(sym, name, run, 70, d.constituents.map((c) => c.name)).map((m, i) => ({ ...m, id: "A" + (i + 1) }));
+    co.geo = Company.geoMap(f.segments?.geo, run.reports.trademap);
+    co.seg = Company.segMap(f.segments?.product, run.reports.kpi);
+    co.quality = Company.quality({ scores: f.scores, ratios: f.ratios, metrics: f.metrics, ttm: f.ttm });
+    co.implied = Company.impliedGrowth({ fcf: f.ttm?.fcf, mcap: Number(f.profile?.marketCap) || co.row?.market_cap, rf: run.bench?.y10_latest ?? S.bench?.y10_latest, beta: co.risk?.beta ?? co.row?.beta, erp: run.bench?.erp ?? S.bench?.erp });
+    let nN = 0, nP = 0;
+    co.news = (f.news || []).map((x) => ({ ...x, id: x.kind === "P" ? "P" + ++nP : "N" + ++nN }));
+    co.transcript = f.transcript ? { id: "T1", ...f.transcript } : null;
+    const idx = {};
+    for (const m of co.mentions) idx[m.id] = { id: m.id, kind: "A", title: m.text.slice(0, 160), source: `industry analysis · ${m.section}${m.where ? " › " + m.where : ""}` };
+    for (const x of co.news) idx[x.id] = { id: x.id, kind: x.kind, title: x.title, source: x.source, date: x.date, url: x.url };
+    if (co.transcript) idx.T1 = { id: "T1", kind: "T", title: `${co.sym} earnings call ${co.transcript.period || ""}`, source: "earnings call", date: co.transcript.date };
+    co.idx = idx;
+  }
+  /** Write the thesis (one Claude call), showing it as it streams in; save it. */
+  async function writeThesis(co) {
+    if (co.writing) return;
+    co.writing = true; co.partial = null; co.thesisErr = null; renderCompany();
+    const ctl = new AbortController(); co.ctl = ctl;
+    const run = co.run, f = co.data || {};
+    const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
+      peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
+      quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.risk?.beta ?? co.row?.beta, alpha: co.risk?.alpha, vol: co.risk?.vol_1y ?? co.row?.vol_1y }, industryDigest: coDigest(run) };
+    let last = 0;
+    try {
+      const prompt = Company.thesisPrompt(ctx);
+      const b = new TextEncoder().encode(prompt), fitP = b.length <= 260000 ? prompt : new TextDecoder().decode(b.slice(0, 258000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)";
+      const raw = await sampleJson(fitP, { modelTier: "complex", signal: ctl.signal, cache: false, onText: ({ text }) => {
+        if (S.co !== co || Date.now() - last < 700) return; last = Date.now();
+        const v = RegBook.repairJson(text); if (v && typeof v === "object") { co.partial = Company.cleanThesis(v, co.idx); renderCompany(); } } });
+      const thesis = Company.cleanThesis(raw, co.idx);
+      if (!thesis?.headline && !thesis?.thesis) throw { code: "empty_completion" };
+      const basisPE = isNum(num(co.row?.fwd_pe)) && co.row.fwd_pe > 0 ? co.row.fwd_pe : num(co.row?.pe);
+      const rec = jsonSafe({ sym: co.sym, name: co.name, industry: run.name, industry_run_at: run.saved_at, at: new Date().toISOString(), px: co.px, pe_basis: basisPE, thesis, checks: Company.checks(thesis, co.px, basisPE), idx: co.idx });
+      await idbPut("co:" + co.sym, rec).catch(() => {});
+      co.thesis = rec; co.partial = null;
+      await coLogCalls(co, rec).catch(() => {});
+    } catch (e) { co.thesisErr = e?.code === "cancelled" ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+    finally { co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
+  }
+  /** The company's own 1M-12M calls go into its track record, scored like the industry's. */
+  async function coLogCalls(co, rec) {
+    const t = rec.thesis, px = rec.px; if (!t?.horizons || !(px > 0)) return;
+    const scn = Object.fromEntries(["bull", "base", "bear"].filter((k) => t.scenarios?.[k]?.price_target?.length).map((k) => [k, { probability: t.scenarios[k].probability, price_move: t.scenarios[k].price_target.map((x) => Math.round((x / px - 1) * 1000) / 10) }]));
+    const snap = Track.snapshot({ horizons: t.horizons, scenarios: Object.fromEntries(Object.entries(scn).map(([k, v]) => [k, v])), math: { expected_return: rec.checks?.expected_return != null ? Math.round(rec.checks.expected_return * 1000) / 10 : null }, headline: t.headline, opportunity: { verdict: t.verdict?.call } },
+      { as_of: today(), constituents: [{ symbol: co.sym, weight: 1, px }], summary: { beta: co.risk?.beta ?? co.row?.beta }, sector: co.hit?.sector || co.run?.industry?.sector || null }, rec.at, { etf: Universe.ETF[co.run?.industry?.sector] || null, rf: S.bench?.rf_latest ?? co.run?.bench?.rf_latest });
+    if (!snap) return;
+    const key = "cocalls:" + co.sym, log = ((await idbGet(key)) || []).filter((x) => x.id !== snap.id);
+    log.push(snap); await idbPut(key, log.slice(-24)).catch(() => {}); co.track = log;
+  }
+  /** Score the company's earlier calls with today's prices (once a day). */
+  async function coTrack(co) {
+    const key = "cocalls:" + co.sym; let log = (await idbGet(key)) || []; co.track = log;
+    if (!log.length || !S.mcp || !log.some((e) => Track.needsPrices(e))) return;
+    const from = log.reduce((a, e) => (e.as_of < a ? e.as_of : a), today());
+    const ser = await trackSeries(co.sym, from), spy = await trackSeries("SPY", from), etfSym = log.find((e) => e.etf)?.etf, etf = etfSym ? await trackSeries(etfSym, from) : null;
+    const lastDate = spy.dates[spy.dates.length - 1]; if (!lastDate) return;
+    for (const e of log) if (Track.needsPrices(e)) e.eval = Track.evaluate(e, () => ser, { spy, etf: etf?.dates?.length ? etf : null, rf: S.bench?.rf_latest, beta: co.risk?.beta }, lastDate);
+    await idbPut(key, log).catch(() => {}); co.track = log; if (S.co === co) renderCompany();
+  }
+
+  // ------------------------------------------------------------- render: Companies tab
+  function renderTabs() {
+    const el = $("tabs"); if (!el) return;
+    el.innerHTML = `<button class="tab ${S.tab !== "companies" ? "cur" : ""}" data-tab="industries" aria-pressed="${S.tab !== "companies"}">Industries</button><button class="tab ${S.tab === "companies" ? "cur" : ""}" data-tab="companies" aria-pressed="${S.tab === "companies"}">Companies</button>`;
+    const on = S.tab === "companies";
+    for (const [id, show] of [["picker", !on], ["report", !on], ["company", on]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
+  }
+  function companySearch() {
+    const ci = S.coIdx;
+    const opts = ci ? Object.values(ci.cos).sort((a, b) => (b.market_cap || 0) - (a.market_cap || 0)).slice(0, 2000).map((c) => `<option value="${esc(c.symbol)}">${esc(c.name)} · ${esc(c.industry)}</option>`).join("") : "";
+    return `<section class="picker"><div class="picker-head"><h2>Companies</h2><span class="small muted">Any ticker: its page builds on its industry's analysis${S.mcp ? "" : " (open in Claude to look companies up)"}</span></div>
+      <form id="co-form" class="co-form"><input type="search" id="co-q" list="co-list" placeholder="Ticker, e.g. KO, PG, WMT, CELH" aria-label="Ticker" autocomplete="off" value="${esc(S.coQuery || "")}"><datalist id="co-list">${opts}</datalist><button class="primary" type="submit">Open</button></form>
+      ${S.co ? `<div class="small"><button class="sm" data-co-list="1">All companies</button></div>` : ""}</section>`;
+  }
+  function companyList() {
+    const ci = S.coIdx;
+    if (!ci) { setTimeout(() => coIndex().then(() => renderCompany()), 0); return `<div class="small muted">Gathering the companies in your saved industries…</div>`; }
+    const bySector = {};
+    for (const r of Object.values(ci.runs)) (bySector[r.sector || "Other"] ||= []).push(r);
+    const secs = Object.keys(bySector).sort((a, b) => (a === "Consumer Defensive" ? -1 : b === "Consumer Defensive" ? 1 : a.localeCompare(b)));
+    if (!secs.length) return `<div class="small muted">No saved industries yet. Analyze an industry (or pull runs from GitHub) and its companies appear here.</div>`;
+    return secs.map((s) => `<section class="panel"><div class="panel-head"><h2>${esc(s)}</h2><span class="small muted">${bySector[s].length} industries · click a company</span></div>
+      ${bySector[s].sort((a, b) => b.cos.reduce((x, c) => x + (c.market_cap || 0), 0) - a.cos.reduce((x, c) => x + (c.market_cap || 0), 0)).map((r) => `<details class="co-ind" ${s === "Consumer Defensive" ? "open" : ""}><summary>${esc(r.name)} <span class="small muted">${r.cos.length} companies · analyzed ${esc(fmtShort(r.as_of || ""))}</span></summary>
+        <div class="co-chips">${r.cos.sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((c) => `<button class="chip co-chip" data-co="${esc(c.symbol)}" title="${esc(c.name)}"><b class="tick">${esc(c.symbol)}</b> <span>${esc(trimC(c.name || "", 26))}</span></button>`).join("")}</div></details>`).join("")}</section>`).join("");
+  }
+  function renderCompany() {
+    const el = $("company"); if (!el) return;
+    if (S.tab !== "companies") return;
+    const top = companySearch();
+    const co = S.co;
+    if (!co) { el.innerHTML = top + companyList(); bindCompany(); return; }
+    IDX = co.idx || {};
+    el.innerHTML = top + companyView(co); bindCompany();
+  }
+  function bindCompany() {
+    $("co-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openCompany($("co-q").value); });
+    $("co-q")?.addEventListener("input", (ev) => { S.coQuery = ev.target.value; });
+  }
+  const trimC = (t, k) => (String(t).length > k ? String(t).slice(0, k - 1) + "…" : String(t));
+  const pcx = (x, d = 1) => (isNum(num(x)) ? pct(x, true, d) : "—");
+  function companyView(co) {
+    const f = co.data || {}, p = f.profile || {}, run = co.run, t = co.thesis?.thesis || co.partial, ck = co.thesis?.checks;
+    const name = co.name || co.row?.name || p.companyName || co.hit?.name || co.sym;
+    const inTop = !!co.run?.industry?.constituents?.find((c) => c.symbol === co.sym);
+    const stale = co.thesis && run && co.thesis.industry_run_at && run.saved_at && co.thesis.industry_run_at < run.saved_at;
+    const chg = Number(p.changePercentage);
+    const head = `<section class="hero"><span class="eyebrow">${esc(co.industry || co.hit?.industry || "")}${run?.industry?.sector ? " · " + esc(run.industry.sector) : ""}</span>
+      <div class="hero-row"><h1>${esc(name)} <span class="mono muted" style="font-size:.6em">${esc(co.sym)}</span></h1>
+        <div class="hz-num">${isNum(co.px) ? `<span class="v">${fix(co.px, 2)}</span>` : ""}${isNum(chg) ? `<span class="d ${chg >= 0 ? "up" : "down"}">${chg >= 0 ? "+" : ""}${fix(chg, 2)}% today</span>` : ""}</div></div>
+      <div class="small muted">${[p.exchange, isNum(Number(p.marketCap || co.row?.market_cap)) ? cap(Number(p.marketCap || co.row?.market_cap)) + " market cap" : "", inTop ? `#${co.row?.rank} of the industry's top 50 (${pct(co.row?.weight, false)} of its index)` : co.run ? "outside the industry's top 50: mapped onto its analysis through its own business" : ""].filter(Boolean).map(esc).join(" · ")}
+        ${run ? ` · <button class="sm" data-open-industry="${esc(run.name)}">Open the ${esc(run.name)} report</button>` : ""}</div>
+      ${co.stage === "finding" || co.stage === "data" ? `<div class="notice info">Pulling ${esc(co.sym)}'s business, statements and estimates from FMP…</div>` : ""}
+      ${co.stage === "error" ? `<div class="notice err">Couldn't open ${esc(co.sym)}: ${esc(co.err)}.</div>` : ""}
+      ${co.stage === "noindustry" ? `<div class="notice warn"><span>${esc(co.industry || "Its industry")} hasn't been analyzed yet, so there's no industry analysis to build on. Analyze the industry first (Industries tab), then open ${esc(co.sym)} again.</span>${co.industry ? `<button class="primary" data-pick-industry="${esc(co.industry)}">Go to ${esc(co.industry)}</button>` : ""}</div>` : ""}
+      ${stale ? `<div class="notice warn"><span>This analysis was written from an older run of the ${esc(run.name)} analysis (${esc(fmtShort(co.thesis.industry_run_at))}).</span><button class="sm" data-co-rewrite="1" ${co.writing || !S.sample ? "disabled" : ""}>Rewrite on the latest run</button></div>` : ""}</section>`;
+    if (!run || co.stage === "error") return head + (f.profile ? coBusiness(co) : "");
+    return head + coThesis(co, t, ck) + coMapping(co) + coPeers(co) + coBusiness(co) + coQualityVal(co) + coRiskSec(co) + coNews(co) + coTrackSec(co);
+  }
+  function coThesis(co, t, ck) {
+    const writing = co.writing;
+    if (!t) return sec("co-thesis", "Analysis", "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> on top of the ${esc(co.run.name)} analysis (about a minute, once; then it's saved)…</span><button class="sm" data-co-stop="1">Stop</button></div>`
+      : co.thesisErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(co.thesisErr)}</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Try again</button></div>`
+      : `<div class="small muted">${S.sample ? `<button class="primary" data-co-rewrite="1">Write ${esc(co.sym)}'s analysis</button>` : "Open this page in Claude to write the company's analysis."}</div>`);
+    const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" }, VC = { yes: "pos", conditional: "neu", no: "neg" };
+    const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
+    const hz = ["1M", "3M", "6M", "12M"].filter((h) => t.horizons?.[h]).map((h) => { const x = t.horizons[h];
+      return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${HZC[x.call] || "neu"}">${esc(x.call)}</span>${x.vs_industry ? `<span class="pill ${VS[x.vs_industry] || "neu"}">${esc(x.vs_industry)} vs industry</span>` : ""}</div>
+        <div class="hz-num"><span class="v">${esc(rng(x.expected_move))}</span>${isNum(x.probability_up) ? `<span class="small muted">${x.probability_up}% chance it's higher</span>` : ""}</div>${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}</div>`; }).join("");
+    const sc = ["bull", "base", "bear"].filter((k) => t.scenarios?.[k]).map((k) => { const s = t.scenarios[k], c = ck?.scenarios?.find((x) => x.k === k);
+      return `<tr><td><b>${k}</b></td><td class="n">${isNum(s.probability) ? s.probability + "%" : "—"}</td><td class="n">${rng(s.eps_change)}</td><td class="n">${s.pe?.length ? s.pe.map((x) => fix(x, 1)).join("–") : "—"}</td><td class="n">${s.price_target?.length ? s.price_target.map((x) => fix(x, 0)).join("–") : "—"}</td><td class="n ${cls(num(c?.move))}">${c && isNum(num(c.move)) ? pcx(c.move, 0) : "—"}</td><td class="wr small">${rich(s.narrative)}</td></tr>`; }).join("");
+    const math = ck && isNum(num(ck.expected_return)) ? `<div class="kpis">${kpi("Expected 12M return", pcx(ck.expected_return, 1), "probability-weighted, from the scenarios", cls(num(ck.expected_return)))}${kpi("Upside (bull)", pcx(ck.upside, 0))}${kpi("Downside (bear)", pcx(ck.downside, 0))}${t.valuation?.fair_value?.length ? kpi("Fair value", t.valuation.fair_value.map((x) => fix(x, 0)).join("–"), isNum(co.px) ? `vs ${fix(co.px, 2)} now` : "") : ""}</div>` : "";
+    const fit = Object.entries(t.fit || {}).map(([k, v]) => `<div class="box"><div class="dim-head"><b>${esc(Score.PROFILES[k]?.label || k)}</b><span class="pill ${v.fit === "strong" || v.fit === "good" ? "pos" : v.fit === "poor" ? "neg" : "neu"}">${esc(v.fit)}</span></div><div class="small">${rich(v.why)}</div></div>`).join("");
+    const drv = (t.drivers || []).length ? `<h3>The industry's drivers, for ${esc(co.sym)}</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry driver</th><th>The industry view</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${t.drivers.map((d) => `<tr><td class="wr"><b>${esc(d.driver)}</b></td><td class="wr small">${rich(d.industry_view)}</td><td><span class="pill ${d.effect === "stronger" ? "warn" : d.effect === "weaker" ? "neu" : d.effect === "opposite" ? "neg" : "neu"}">${esc(d.effect)}</span></td><td class="wr small">${rich(d.why)} ${cites(d.evidence)}</td></tr>`).join("")}</tbody></table></div>` : "";
+    const ex = t.exposures || {};
+    const exList = (title, list, fmt) => (list?.length ? `<div class="box"><h3>${title}</h3><ul class="dlist small">${list.map(fmt).join("")}</ul></div>` : "");
+    const exp = `<div class="two">${exList("World events", ex.world, (x) => `<li><b>${esc(x.situation)}</b> ${toneChip(x.effect)} ${x.magnitude ? `<span class="muted">${esc(x.magnitude)}</span> ` : ""}${rich(x.why)} ${cites(x.evidence)}</li>`)}
+      ${exList("Trade and supply chain", ex.trade, (x) => `<li><b>${esc(x.country)}</b>: ${rich(x.dependence)}${x.risk ? ` <span class="muted">Risk:</span> ${rich(x.risk)}` : ""} ${cites(x.evidence)}</li>`)}
+      ${exList("Regulation", ex.regulation, (x) => `<li><b>${esc(x.rule)}</b> ${toneChip(x.effect)} ${rich(x.why)} ${cites(x.evidence)}</li>`)}
+      ${exList("Macro", ex.macro, (x) => `<li><b>${esc(x.factor)}</b> ${x.sensitivity ? `<span class="pill neu">${esc(x.sensitivity)} sensitivity</span>` : ""} ${rich(x.why)}</li>`)}</div>`;
+    const reads = `<div class="two"><div class="box"><h3>Moat ${t.moat?.rating ? `<span class="pill ${t.moat.rating === "wide" ? "pos" : t.moat.rating === "none" ? "neg" : "neu"}">${esc(t.moat.rating)}</span>` : ""}</h3>${(t.moat?.sources || []).length ? `<div class="small"><b>Sources:</b> ${t.moat.sources.map(rich).join("; ")}</div>` : ""}${(t.moat?.threats || []).length ? `<div class="small"><b>Threats:</b> ${t.moat.threats.map(rich).join("; ")}</div>` : ""}</div>
+      <div class="box"><h3>Management</h3><p class="small" style="margin:0">${rich(t.management)}</p></div><div class="box"><h3>Quality</h3><p class="small" style="margin:0">${rich(t.quality)}</p></div><div class="box"><h3>Valuation</h3><p class="small" style="margin:0">${rich(t.valuation?.read)}</p></div></div>`;
+    const rc = `<div class="two">${(t.risks || []).length ? `<div class="box cool"><h3>Risks</h3><ul class="dlist small">${t.risks.map((r) => `<li>${rich(r.risk)} <span class="muted">${esc([r.likelihood && r.likelihood + " likelihood", r.impact && r.impact + " impact"].filter(Boolean).join(", "))}</span> ${cites(r.evidence)}</li>`).join("")}</ul></div>` : ""}
+      ${(t.catalysts || []).length ? `<div class="box hot"><h3>Catalysts</h3><ul class="dlist small">${t.catalysts.map((c) => `<li>${c.date ? `<b class="mono">${esc(c.date)}</b> ` : ""}${rich(c.event)}${c.why ? ` <span class="muted">${rich(c.why)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}</div>
+      ${(t.watch || []).length ? `<div class="small"><b>Watch:</b> ${t.watch.map(rich).join(" · ")}</div>` : ""}`;
+    return sec("co-thesis", `Analysis${writing ? " · writing…" : ""}`, co.thesis ? `written ${esc(ago(co.thesis.at))} on the ${esc(fmtShort(co.thesis.industry_run_at || ""))} industry run${co.thesis.thesis?.confidence ? ` · ${esc(co.thesis.thesis.confidence)} confidence` : ""}` : "",
+      `${writing ? `<div class="notice info"><span>Still writing; sections fill in as they arrive.</span><button class="sm" data-co-stop="1">Stop</button></div>` : ""}
+      <div class="headline">${rich(t.headline)}</div>
+      <div class="actions" style="justify-content:flex-start;align-items:center">${t.verdict?.call ? `<span class="pill ${VC[t.verdict.call] || "neu"}">Opportunity: ${esc(t.verdict.call)}</span>` : ""}${t.vs_industry?.call ? `<span class="pill ${VS[t.vs_industry.call] || "neu"}">${esc(t.vs_industry.call)} vs ${esc(co.run.name)}</span>` : ""}${co.thesis && !writing ? `<button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite</button>` : ""}</div>
+      ${t.verdict?.summary ? `<p class="prose">${rich(t.verdict.summary)}</p>` : ""}
+      ${hz ? `<div class="hz-grid">${hz}</div>` : ""}
+      ${ck?.issues?.length ? `<div class="notice warn small">Doesn't add up: ${esc(ck.issues.join("; "))}.</div>` : ""}
+      ${t.thesis ? String(t.thesis).split(/\n{2,}/).map((x) => `<p class="prose">${rich(x)}</p>`).join("") : ""}
+      ${t.vs_industry?.why ? para(`Versus ${esc(co.run.name)}:`, t.vs_industry.why) : ""}
+      ${sc ? `<h3>Scenarios (12 months)</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Case</th><th class="n">Probability</th><th class="n">EPS change</th><th class="n">P/E</th><th class="n">Price target</th><th class="n">Move</th><th>What happens</th></tr></thead><tbody>${sc}</tbody></table></div>${math}` : ""}
+      ${drv}${exp}${reads}${rc}${fit ? `<h3>For each kind of investor</h3><div class="two">${fit}</div>` : ""}`);
+  }
+  function coMapping(co) {
+    const ms = co.mentions || [];
+    const by = {}; for (const m of ms) (by[m.section] ||= []).push(m);
+    const ROLEC = { winner: "pos", loser: "neg", pick: "pos", avoid: "neg", exposed: "warn", "hot segment": "pos", "cool segment": "neg", dependency: "warn" };
+    const list = Object.entries(by).map(([s, xs]) => `<details ${xs.some((x) => x.role) ? "open" : ""}><summary>${esc(s)} <span class="small muted">${xs.length}</span></summary><ul class="ev">${xs.map((m) => `<li>${m.role ? `<span class="pill ${ROLEC[m.role] || "neu"}">${esc(m.role)}</span> ` : ""}${m.where ? `<span class="src">${esc(m.where)}</span><br>` : ""}${rich(m.text)} <span class="idtag">${esc(m.id)}</span></li>`).join("")}</ul></details>`).join("");
+    const geo = (co.geo || []).length ? `<h3>Its revenue on the industry's trade map</h3><div class="tbl-wrap"><table><thead><tr><th>Region</th><th class="n">Share</th><th class="n">y/y</th><th>Trade-map countries it covers</th></tr></thead><tbody>${co.geo.map((g) => `<tr><td>${esc(g.region)}</td><td class="n">${pct(g.share, false, 0)}</td><td class="n ${cls(num(g.yoy))}">${pct(g.yoy)}</td><td class="wr small">${g.countries.map((c) => `${esc(c.country)} ${toneChip(c.stance)}${c.threat && c.threat !== "none" ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}`).join(" · ") || `<span class="muted">none named on the trade map</span>`}</td></tr>`).join("")}</tbody></table></div>` : "";
+    const seg = (co.seg || []).length ? `<h3>Its product lines against the industry's hot and cool segments</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Product line</th><th class="n">Share</th><th class="n">y/y</th><th>Industry segment</th></tr></thead><tbody>${co.seg.map((s) => `<tr><td>${esc(s.segment)}</td><td class="n">${pct(s.share, false, 0)}</td><td class="n ${cls(num(s.yoy))}">${pct(s.yoy)}</td><td class="wr small">${s.match ? `<span class="pill ${s.match.temp === "hot" ? "pos" : "neg"}">${esc(s.match.temp)}</span> <b>${esc(s.match.name)}</b> ${rich(s.match.text)}` : `<span class="muted">no matching segment</span>`}</td></tr>`).join("")}</tbody></table></div>` : "";
+    return sec("co-map", `What the ${esc(co.run.name)} analysis says about ${esc(co.sym)}`, ms.length ? `${ms.length} findings that name it, from ${Object.keys(by).length} sections` : "",
+      `${ms.length ? list : `<div class="small muted">The industry analysis doesn't name ${esc(co.sym)}${co.row?.rank ? "" : " (it isn't one of the 50 companies it covered)"}; the analysis above connects it to the industry's findings through its own business, geography and numbers.</div>`}${geo}${seg}`);
+  }
+  function coPeers(co) {
+    const fmtv = (r, v) => (v === null || v === undefined ? "—" : r.kind === "chg" ? pct(v) : r.kind === "pct" ? pct(v, false) : r.kind === "cap" ? cap(v) : fix(v, 2));
+    const bar = (g) => (g === null ? "" : `<div class="pillar-bar" style="min-width:60px"><i style="width:${g}%;background:${g >= 67 ? "var(--gA)" : g >= 34 ? "var(--accent)" : "var(--gF)"}"></i></div>`);
+    const rows = (co.peers || []).map((r) => `<tr><td>${esc(r.label)}</td><td class="n"><b>${fmtv(r, r.value)}</b></td><td class="n muted">${fmtv(r, r.median)}</td><td class="n">${r.pct ?? "—"}</td><td>${bar(r.good)}</td></tr>`).join("");
+    const cl = (co.closest || []).map((c) => `<tr><td><button class="linkbtn tick" data-co="${esc(c.symbol)}">${esc(c.symbol)}</button>${c.fmp_peer ? ` <span class="chip">FMP peer</span>` : ""}</td><td>${esc(trimC(c.name || "", 34))}</td><td class="n">${cap(c.market_cap)}</td><td class="n">${fix(c.pe, 1)}</td><td class="n">${pct(c.rev_growth)}</td><td class="n">${pct(c.op_margin)}</td><td class="n ${cls(num(c.ret_1Y))}">${pct(c.ret_1Y)}</td></tr>`).join("");
+    return sec("co-peers", `Versus the ${esc(co.run.name)} top 50`, co.row?.rank ? "from the industry run's own numbers" : "its numbers from FMP, against the industry's 50",
+      `<div class="tbl-wrap"><table><thead><tr><th>Metric</th><th class="n">${esc(co.sym)}</th><th class="n">Industry median</th><th class="n">Percentile</th><th>Better than</th></tr></thead><tbody>${rows}</tbody></table></div>
+       <div><h3>Closest peers in the industry</h3><div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Company</th><th class="n">Mkt cap</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op margin</th><th class="n">1Y</th></tr></thead><tbody>${cl}</tbody></table></div>
+       <div class="small muted">"Better than" is the share of the industry's companies it beats on that metric (lower is better for valuation, debt, volatility, dilution and short interest).</div></div>`);
+  }
+  function coBusiness(co) {
+    const f = co.data || {}, p = f.profile || {}, s = f.segments || {};
+    const segT = (x, label) => (x?.items?.length ? `<div><h3>${label} <span class="small muted">${esc(x.label || "")}</span></h3><div class="bars">${x.items.map((i) => `<div class="bar-row"><span>${esc(i.name)}</span><div class="bar"><i style="width:${Math.round(i.share * 100)}%"></i></div><span class="mono small">${pct(i.share, false, 0)}</span></div>`).join("")}</div></div>` : "");
+    const q = (f.c?.q || []).slice(0, 8);
+    const qt = q.length ? `<h3>Last ${q.length} quarters</h3><div class="tbl-wrap"><table><thead><tr><th>Quarter</th><th class="n">Revenue</th><th class="n">Gross margin</th><th class="n">Op margin</th><th class="n">Net income</th></tr></thead><tbody>${q.map((x) => `<tr><td class="mono">${esc(x.date)}</td><td class="n">${cap(x.rev)}</td><td class="n">${x.rev ? pct(x.gp / x.rev, false) : "—"}</td><td class="n">${x.rev ? pct(x.oi / x.rev, false) : "—"}</td><td class="n">${cap(x.ni)}</td></tr>`).join("")}</tbody></table></div>` : "";
+    return sec("co-biz", "The business", [p.ceo && `CEO ${p.ceo}`, p.fullTimeEmployees && `${Number(p.fullTimeEmployees).toLocaleString()} employees`, p.country].filter(Boolean).map(esc).join(" · "),
+      `${p.description ? `<p class="prose">${esc(p.description)}</p>` : ""}<div class="two">${segT(s.product, "Revenue by product")}${segT(s.geo, "Revenue by geography")}</div>${qt}${p.website ? `<div class="small"><a href="${esc(p.website)}" target="_blank" rel="noopener">${esc(p.website)}</a></div>` : ""}`);
+  }
+  function coQualityVal(co) {
+    const qy = co.quality || {}, f = co.data || {}, r = f.ratios || {}, m = f.metrics || {}, im = co.implied || {}, cs = f.consensus;
+    const K1 = [kpi("Piotroski F-score", qy.piotroski ?? "—", qy.piotroski_read ? `${qy.piotroski_read} (0-9)` : ""), kpi("Altman Z", fix(qy.altman, 2), qy.altman_zone ? `${qy.altman_zone} zone` : ""),
+      kpi("ROIC", pct(qy.roic)), kpi("Cash conversion", isNum(num(qy.cash_conversion)) ? fix(qy.cash_conversion, 2) + "x" : "—", "operating cash flow ÷ net income"), kpi("Accruals", pct(qy.accruals), "lower is cleaner"),
+      kpi("Payout", pct(qy.payout, false, 0)), kpi("Buyback yield", pct(qy.buyback_yield)), kpi("Net debt / EBITDA", fix(qy.nd_ebitda, 2)), kpi("Interest cover", isNum(num(qy.int_cover)) ? fix(qy.int_cover, 1) + "x" : "—"), kpi("Stock comp / revenue", pct(qy.sbc_rev))].join("");
+    const K2 = [kpi("P/E (TTM)", fix(num(r.priceToEarningsRatioTTM) || co.row?.pe, 1)), kpi("Forward P/E", fix(co.row?.fwd_pe, 1)), kpi("EV / EBITDA", fix(num(m.evToEBITDATTM), 1)), kpi("FCF yield", pct(qy.fcf_yield)),
+      kpi("Price assumes", isNum(num(im.g)) ? pct(im.g) + " a year" : "—", isNum(num(im.r)) ? `steady FCF growth at a ${pct(im.r, false)} cost of equity` : ""),
+      cs ? kpi("Analysts", esc(cs.consensus || "—"), `${cs.buy} buy · ${cs.hold} hold · ${cs.sell} sell`) : "", cs?.target ? kpi("Target", fix(cs.target, 2), isNum(co.px) ? `${pct(cs.target / co.px - 1)} vs price · ${fix(cs.low, 0)}–${fix(cs.high, 0)}` : "") : ""].join("");
+    const est = (f.estimates || []).length ? `<div class="tbl-wrap"><table><thead><tr><th>Fiscal year</th><th class="n">Revenue (consensus)</th><th class="n">EPS (consensus)</th><th class="n">Analysts</th></tr></thead><tbody>${f.estimates.map((e) => `<tr><td>FY${e.year}</td><td class="n">${cap(e.rev)}</td><td class="n">${fix(e.eps, 2)}</td><td class="n">${e.analysts ?? "—"}</td></tr>`).join("")}</tbody></table></div>` : "";
+    return sec("co-qv", "Quality, capital allocation and valuation", "computed from FMP's statements and ratios", `<h3>Quality and capital allocation</h3><div class="kpis">${K1}</div><h3>Valuation and the sell side</h3><div class="kpis">${K2}</div>${est}`);
+  }
+  function coRiskSec(co) {
+    const k = co.risk || {}, row = co.row || {}, ins = co.data?.insider;
+    const K = [kpi("Beta 1Y", fix(k.beta ?? row.beta, 2)), kpi("Alpha 1Y", pct(k.alpha), "a year, beyond beta × SPY", cls(num(k.alpha))), kpi("Volatility 1Y", pct(k.vol_1y ?? row.vol_1y, false)), kpi("Max drawdown 1Y", pct(k.max_dd_1y ?? row.max_dd_1y, false)),
+      ...["1M", "3M", "6M", "1Y"].map((w) => kpi(`Return ${w}`, pct(k["ret_" + w] ?? row["ret_" + w]), isNum(num(k["excess_" + w] ?? row["excess_" + w])) ? `${pct(k["excess_" + w] ?? row["excess_" + w])} vs SPY` : "", cls(num(k["excess_" + w] ?? row["excess_" + w])))),
+      ins ? kpi("Insiders (2 quarters)", `${ins.purchases} buys`, isNum(num(ins.sales_vs_norm)) ? `sales ${fix(ins.sales_vs_norm, 1)}x normal` : "") : "", isNum(num(row.short_pct)) ? kpi("Short interest", pct(row.short_pct, false)) : "", isNum(num(row.own_change_pp)) ? kpi("13F ownership change", `${row.own_change_pp > 0 ? "+" : ""}${fix(row.own_change_pp, 1)}pp`) : ""].join("");
+    const lv = Plan.levels(co.data?.ser);
+    const levels = lv ? `<div class="small">${Object.entries(lv).filter(([k2, v]) => isNum(num(v)) && !["last", "daily_vol"].includes(k2)).map(([k2, v]) => `<span class="numchip">${esc(k2.replace(/_/g, " "))} ${fix(v, 2)}</span>`).join(" ")}</div>` : "";
+    return sec("co-risk", "Risk, returns and positioning", "", `<div class="kpis">${K}</div>${levels}`);
+  }
+  function coNews(co) {
+    const ns = co.news || [];
+    return ns.length ? sec("co-news", "News and releases", `last 60 days · ${ns.length}`, `<ul class="newslist">${ns.map((x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}<span class="src"><span class="idtag">${esc(x.id)}</span>${esc(x.date)} · ${esc(x.source || "")}</span></li>`).join("")}</ul>${co.transcript ? `<details><summary class="small">Latest earnings call read (${esc(co.transcript.period || "")}, ${esc(co.transcript.date || "")}) <span class="idtag">T1</span></summary><div class="pre small">${esc(co.transcript.text)}</div></details>` : ""}`) : "";
+  }
+  function coTrackSec(co) {
+    const log = co.track || [];
+    return log.length ? sec("co-track", "Track record of these calls", `${log.length} analysis${log.length === 1 ? "" : "es"} logged`, trackView(log)) : "";
+  }
 
   // ------------------------------------------------------------- events
   document.addEventListener("click", (ev) => {
@@ -3681,6 +4057,13 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
+    if (t.dataset.tab) { S.tab = t.dataset.tab; renderAll(); if (S.tab === "companies" && !S.coIdx) coIndex().then(() => renderCompany()).catch(() => {}); return; }
+    if (t.dataset.co) { openCompany(t.dataset.co); return; }
+    if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }
+    if (t.dataset.coRewrite) { if (S.co) { S.co.thesis = null; writeThesis(S.co); } return; }
+    if (t.dataset.coStop) { S.co?.ctl?.abort(); return; }
+    if (t.dataset.openIndustry) { S.tab = "industries"; renderAll(); choose(t.dataset.openIndustry); return; }
+    if (t.dataset.pickIndustry) { S.tab = "industries"; S.pickerOpen = true; S.filter = t.dataset.pickIndustry; renderAll(); return; }
     if (t.dataset.pick) { choose(t.dataset.pick); return; }
     if (t.dataset.regBuild && S.selected) { runRegBooks(S.selected, { keys: [t.dataset.regBuild] }); return; }
     if (t.dataset.regAll && S.selected) { const done = new Set(Object.keys(S.regbooks).filter((k) => k.startsWith(slug(S.selected) + "--")).map((k) => k.slice(slug(S.selected).length + 2)));
