@@ -58,4 +58,27 @@ ok(eh.next?.date === "2026-12-01" && eh.beat_rate === 0.5 && near(eh.past[0].eps
 const lv = C.levels(stk);
 ok(lv && lv.in_range >= 0 && lv.in_range <= 1 && Number.isFinite(lv.ma200), "levels");
 
+
+// Stress tests, technicals, patterns, dividends, DCF, DuPont, bands, reactions
+const ep = C.episodes(stk, spy, 1.5);
+ok(ep.length === 6 && ep.find((e) => e.key === "infl").ret !== null && !ep.find((e) => e.key === "infl").estimated, "2022 episode measured from real history");
+const epS = C.episodes({ dates: dates.slice(-200), closes: stk.closes.slice(-200) }, spy, 1.5), e22 = epS.find((e) => e.key === "infl");
+ok(e22.estimated && near(e22.ret, 1.5 * e22.spy, 1e-9), "before the stock traded: beta × SPY, marked estimated");
+ok(ep.find((e) => e.key === "gfc").ret === null, "no SPY data either: left blank");
+ok(near(C.monthlyBeta(stk, spy), 1.5, 0.35), `monthly beta ≈ 1.5 (${C.monthlyBeta(stk, spy).toFixed(2)})`);
+const tD = C.technicals(stk, "D"), tW = C.technicals(stk, "W"), tM = C.technicals(stk, "M");
+ok(tD && tD.close.length === 260 && Number.isFinite(tD.last.sma200) && tD.last.rsi > 0 && tD.last.rsi < 100, "daily technicals");
+ok(tW && tW.close.length <= 156 && tM && tM.close.length <= 120 && tD.signals.length >= 4, "weekly and monthly bars, signals");
+const pm = C.patternMatch([{ name: "X", ser: stk }, { name: "SPY", ser: spy }]);
+ok(pm && pm.n === 25 && pm.win_rate >= 0 && pm.win_rate <= 1 && pm.matches.length === 10 && pm.matches[0].dist <= pm.matches[9].dist, "pattern matches sorted, win rate");
+const dv = C.dividends([{ date: "2026-12-01", dividend: 0.53, frequency: "Quarterly" }, ...[2026, 2025, 2024, 2023, 2022, 2021, 2020].flatMap((y, k) => [3, 6, 9, 12].map((m) => ({ date: `${y}-${String(m).padStart(2, "0")}-15`, dividend: 0.53 - k * 0.02, frequency: "Quarterly" })))], { px: 70, payout: 0.7, fcf_payout: 0.8, today: "2026-10-30" });
+ok(dv.paying && dv.streak === 5 && dv.cagr5 > 0 && dv.safety > 0 && dv.next?.ex === "2026-12-01", `dividends: streak ${dv.streak}, safety ${dv.safety}`);
+const v1 = C.dcf({ rev: 100, margin: 0.2, g: 0, tg: 0, wacc: 0.1, shares: 10, netDebt: 0 });
+ok(near(v1.per_share, 20, 1e-6), `DCF with no growth = FCF / WACC per share (${v1.per_share.toFixed(2)})`);
+const dp = C.dupont([{ date: "2025-12-31", revenue: 100, netIncome: 10 }], [{ date: "2025-12-31", totalAssets: 200, totalStockholdersEquity: 50 }]);
+ok(dp.length === 1 && near(dp[0].roe, 0.2, 1e-9), "DuPont ROE = 10% × 0.5 × 4");
+const vb = C.valuationBand([20, 22, 24, 26, 28, 30, 25, 23].map((pe) => ({ pe })), 29);
+ok(vb && vb.verdict === "rich" && vb.hi > vb.mean, "valuation band: rich above the 80th percentile");
+const er = C.earningsReactions([{ date: dates[dates.length - 20] }], stk, spy);
+ok(Number.isFinite(er[0].move) && Number.isFinite(er[0].vs_spy), "earnings reaction");
 console.log(fails ? `${fails} FAILED` : "all passed"); process.exit(fails ? 1 : 0);

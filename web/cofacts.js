@@ -219,7 +219,145 @@
     return { px, ma50: avg(50), ma200: avg(200), hi52: hi, lo52: lo, in_range: hi > lo ? (px - lo) / (hi - lo) : NaN, off_high: px / hi - 1, vs_ma50: px / avg(50) - 1, vs_ma200: px / avg(200) - 1 };
   }
 
-  const CoFacts = { performance, riskGreeks, rollingBeta, realizedVol, bsm, optionGreeks, scores, fundHistory, peHistory, earningsHistory, levels, retBetween, WINDOWS };
+
+  // ------------------------------------------------------------------ stress and boom tests
+  const EPISODES = [
+    { key: "gfc", label: "2008 Global Financial Crisis", kind: "stress", from: "2008-09-01", to: "2009-03-09" },
+    { key: "trade", label: "2018 Trade War Escalation", kind: "stress", from: "2018-10-03", to: "2018-12-24" },
+    { key: "covid", label: "2020 COVID Crash", kind: "stress", from: "2020-02-19", to: "2020-03-23" },
+    { key: "infl", label: "2022 Tech / Inflation Selloff", kind: "stress", from: "2022-01-03", to: "2022-10-12" },
+    { key: "stim", label: "2020–2021 Stimulus Rally", kind: "boom", from: "2020-03-23", to: "2021-12-31" },
+    { key: "ai", label: "2023–2024 Generative AI Expansion", kind: "boom", from: "2023-01-03", to: "2024-12-31" },
+  ];
+  /** Worst peak-to-trough fall inside [from, to]. */
+  function ddIn(ser, from, to) { const d = ser?.dates || [], v = vals(ser); let pk = -Infinity, m = 0, any = false; for (let i = 0; i < d.length; i++) { if (d[i] < from || d[i] > to || !(v[i] > 0)) continue; any = true; pk = Math.max(pk, v[i]); m = Math.min(m, v[i] / pk - 1); } return any ? m : NaN; }
+  /** How the stock did in each historical crisis and boom; before it traded, beta × SPY's move (marked estimated). */
+  function episodes(ser, spy, beta) {
+    const d0 = ser?.dates?.[0];
+    return EPISODES.map((e) => {
+      const sp = retBetween(spy, e.from, e.to), spDD = ddIn(spy, e.from, e.to);
+      const covered = d0 && (Date.parse(d0) - Date.parse(e.from)) / 864e5 <= 7;
+      const st = covered ? retBetween(ser, e.from, e.to) : NaN, stDD = covered ? ddIn(ser, e.from, e.to) : NaN;
+      const est = !covered && isNum(beta) && isNum(sp) ? beta * sp : NaN;
+      const r = isNum(st) ? st : est;
+      return { ...e, spy: sp, spy_dd: spDD, ret: isNum(r) ? r : null, dd: isNum(stDD) ? stDD : isNum(est) && isNum(spDD) ? beta * spDD : null, estimated: !isNum(st) && isNum(est), vs_spy: isNum(r) && isNum(sp) ? r - sp : null, capture: isNum(r) && isNum(sp) && sp !== 0 ? r / sp : null };
+    });
+  }
+  /** Beta from monthly returns over the last `months` (the usual "5Y monthly" beta). */
+  function monthlyBeta(ser, spy, months = 60) {
+    const me = (s) => { const d = s?.dates || [], v = vals(s), m = new Map(); for (let i = 0; i < d.length; i++) if (v[i] > 0) m.set(d[i].slice(0, 7), v[i]); return m; };
+    const a = me(ser), b = me(spy), keys = [...a.keys()].filter((k) => b.has(k)).sort().slice(-(months + 1));
+    const x = [], y = []; for (let i = 1; i < keys.length; i++) { x.push(a.get(keys[i]) / a.get(keys[i - 1]) - 1); y.push(b.get(keys[i]) / b.get(keys[i - 1]) - 1); }
+    return x.length >= 24 ? regress(x, y).beta : NaN;
+  }
+
+  // ------------------------------------------------------------------ technicals
+  /** Daily closes resampled to weekly (last close of each week) or monthly. */
+  function resample(ser, tf) {
+    if (tf === "D") return { dates: [...(ser?.dates || [])], closes: [...vals(ser)] };
+    const d = ser?.dates || [], v = vals(ser), out = { dates: [], closes: [] };
+    const key = (s) => { if (tf === "M") return s.slice(0, 7); const t = new Date(s + "T00:00:00Z"), wd = (t.getUTCDay() + 6) % 7; t.setUTCDate(t.getUTCDate() - wd); return t.toISOString().slice(0, 10); };
+    for (let i = 0; i < d.length; i++) { const k = key(d[i]); if (out.dates.length && key(out.dates[out.dates.length - 1]) === k) { out.dates[out.dates.length - 1] = d[i]; out.closes[out.closes.length - 1] = v[i]; } else { out.dates.push(d[i]); out.closes.push(v[i]); } }
+    return out;
+  }
+  const sma = (v, n) => v.map((_, i) => (i + 1 >= n ? v.slice(i + 1 - n, i + 1).reduce((a, x) => a + x, 0) / n : NaN));
+  const ema = (v, n) => { const k = 2 / (n + 1), o = []; let e = NaN; v.forEach((x, i) => { e = i === 0 ? x : x * k + e * (1 - k); o.push(i + 1 >= n ? e : NaN); }); return o; };
+  function rsi(v, n = 14) { const o = v.map(() => NaN); let g = 0, l = 0; for (let i = 1; i < v.length; i++) { const ch = v[i] - v[i - 1], up = Math.max(ch, 0), dn = Math.max(-ch, 0);
+      if (i <= n) { g += up / n; l += dn / n; if (i === n) o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } else { g = (g * (n - 1) + up) / n; l = (l * (n - 1) + dn) / n; o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } } return o; }
+  /** SMA 20/50/200, RSI 14, MACD (12, 26, 9) and Bollinger Bands (20, 2σ) on daily, weekly or monthly bars; the last `show` bars, plus the latest readings and what they say. */
+  function technicals(ser, tf = "D", show = null) {
+    const r = resample(ser, tf), c = r.closes; if (c.length < 30) return null;
+    const s20 = sma(c, 20), s50 = sma(c, 50), s200 = sma(c, 200), R = rsi(c, 14), e12 = ema(c, 12), e26 = ema(c, 26);
+    const macd = c.map((_, i) => e12[i] - e26[i]), sigRaw = ema(macd.map((x) => (isNum(x) ? x : 0)), 9), signal = macd.map((x, i) => (isNum(x) && i >= 33 ? sigRaw[i] : NaN)), hist = macd.map((x, i) => x - signal[i]);
+    const sd20 = c.map((_, i) => (i + 1 >= 20 ? std(c.slice(i + 1 - 20, i + 1)) : NaN)), bbU = s20.map((m, i) => m + 2 * sd20[i]), bbL = s20.map((m, i) => m - 2 * sd20[i]);
+    const n = show || { D: 260, W: 156, M: 120 }[tf] || 260, k = Math.max(0, c.length - n), cut = (a) => a.slice(k);
+    const L = c.length - 1, last = { close: c[L], sma20: s20[L], sma50: s50[L], sma200: s200[L], rsi: R[L], macd: macd[L], signal: signal[L], hist: hist[L], bbU: bbU[L], bbL: bbL[L], pctB: bbU[L] > bbL[L] ? (c[L] - bbL[L]) / (bbU[L] - bbL[L]) : NaN };
+    const sig = [];
+    if (isNum(last.sma200)) sig.push(c[L] > last.sma200 ? { t: "above the 200-period average", s: 1 } : { t: "below the 200-period average", s: -1 });
+    if (isNum(last.sma50) && isNum(last.sma200)) { const prev = s50[L - 5] - s200[L - 5], now = last.sma50 - last.sma200; sig.push(now > 0 ? { t: prev <= 0 ? "golden cross (50 crossed above 200)" : "50 above 200 (uptrend)", s: 1 } : { t: prev >= 0 ? "death cross (50 crossed below 200)" : "50 below 200 (downtrend)", s: -1 }); }
+    if (isNum(last.rsi)) sig.push(last.rsi >= 70 ? { t: `RSI ${last.rsi.toFixed(0)}: overbought`, s: -1 } : last.rsi <= 30 ? { t: `RSI ${last.rsi.toFixed(0)}: oversold`, s: 1 } : { t: `RSI ${last.rsi.toFixed(0)}: neutral`, s: 0 });
+    if (isNum(last.hist)) sig.push(last.hist > 0 ? { t: "MACD above its signal (momentum up)", s: 1 } : { t: "MACD below its signal (momentum down)", s: -1 });
+    if (isNum(last.pctB)) sig.push(last.pctB > 1 ? { t: "above the upper Bollinger band (stretched)", s: -1 } : last.pctB < 0 ? { t: "below the lower Bollinger band (washed out)", s: 1 } : { t: `inside the Bollinger bands (${(last.pctB * 100).toFixed(0)}% of the way up)`, s: 0 });
+    return { tf, dates: cut(r.dates), close: cut(c), sma20: cut(s20), sma50: cut(s50), sma200: cut(s200), rsi: cut(R), macd: cut(macd), signal: cut(signal), hist: cut(hist), bbU: cut(bbU), bbL: cut(bbL), last, signals: sig, score: sig.reduce((a, x) => a + x.s, 0) };
+  }
+  /**
+   * Today's 30-day price path against every 30-day path in the reference histories (the stock's own and SPY's):
+   * z-normalized Euclidean distance, the closest K non-overlapping matches, and what happened over the next 30 days.
+   */
+  function patternMatch(refs, { win = 30, fwd = 30, k = 25 } = {}) {
+    const self = refs[0]?.ser; const v0 = vals(self); if (v0.length < win + fwd + 60) return null;
+    const z = (a) => { const m = mean(a), s = std(a) || 1; return a.map((x) => (x - m) / s); };
+    const path = (v, i) => { const b = v[i - win]; return b > 0 ? v.slice(i - win, i + 1).map((x) => x / b - 1) : null; };
+    const q = z(path(v0, v0.length - 1));
+    const cands = [];
+    for (const { name, ser } of refs) { const v = vals(ser), d = ser.dates, lim = name === refs[0].name ? v.length - 1 - win - fwd : v.length - 1 - fwd;
+      for (let i = win; i <= lim; i += 2) { const p = path(v, i); if (!p || p.some((x) => !isNum(x))) continue; const zp = z(p); let dist = 0; for (let j = 0; j < zp.length; j++) dist += (zp[j] - q[j]) ** 2;
+        const f = v[i + fwd] / v[i] - 1; if (isNum(f)) cands.push({ name, i, date: d[i], dist: Math.sqrt(dist / zp.length), fwd: f }); } }
+    cands.sort((a, b) => a.dist - b.dist);
+    const picked = [];
+    for (const c of cands) { if (picked.length >= k) break; if (picked.some((p) => p.name === c.name && Math.abs(p.i - c.i) < win)) continue; picked.push(c); }
+    if (!picked.length) return null;
+    const f = picked.map((p) => p.fwd), base = []; for (let i = 0; i + fwd < v0.length; i += 5) base.push(v0[i + fwd] / v0[i] - 1);
+    return { win, fwd, n: picked.length, win_rate: f.filter((x) => x > 0).length / f.length, median: median(f), mean: mean(f), best: Math.max(...f), worst: Math.min(...f),
+      base_win_rate: base.length ? base.filter((x) => x > 0).length / base.length : NaN, base_median: median(base), matches: picked.slice(0, 10).map(({ name, date, dist, fwd: x }) => ({ name, date, dist, fwd: x })), query: path(v0, v0.length - 1) };
+  }
+
+  // ------------------------------------------------------------------ dividends, DCF, DuPont, valuation bands, earnings reactions
+  /**
+   * divs: FMP dividend rows (date = ex-date, recordDate, paymentDate, declarationDate, dividend/adjDividend, frequency).
+   * x: {px, payout (earnings payout ratio), fcf_payout (dividends ÷ FCF), today}. Returns yield, 5Y CAGR, growth streak, a 0-100 safety score and the calendar.
+   */
+  function dividends(divs, x = {}) {
+    const rows = (divs || []).map((r) => ({ ex: String(r.date || "").slice(0, 10), record: r.recordDate || "", pay: r.paymentDate || "", declared: r.declarationDate || "", amt: n(r.adjDividend ?? r.dividend), freq: r.frequency || "" })).filter((r) => r.ex && isNum(r.amt) && r.amt > 0).sort((a, b) => (a.ex < b.ex ? 1 : -1));
+    if (!rows.length) return { paying: false };
+    const today = x.today || new Date().toISOString().slice(0, 10), past = rows.filter((r) => r.ex <= today);
+    const per = { Quarterly: 4, Monthly: 12, "Semi-Annual": 2, Annual: 1, Semiannual: 2 }[rows[0].freq] || 4;
+    const annual = past.slice(0, per).reduce((a, r) => a + r.amt, 0) || rows.slice(0, per).reduce((a, r) => a + r.amt, 0);
+    const byY = {}; for (const r of past) byY[r.ex.slice(0, 4)] = (byY[r.ex.slice(0, 4)] || 0) + r.amt;
+    const cy = Number(today.slice(0, 4)), full = Object.keys(byY).map(Number).filter((y) => y < cy).sort((a, b) => b - a);
+    let streak = 0; for (let i = 0; i + 1 < full.length; i++) { if (byY[full[i]] > byY[full[i + 1]] * 1.0001) streak++; else break; }
+    const y0 = full[0], cagr5 = y0 && byY[y0 - 5] > 0 ? (byY[y0] / byY[y0 - 5]) ** (1 / 5) - 1 : NaN;
+    const cut5 = full.slice(0, 6).some((y, i, a) => i + 1 < a.length && byY[y] < byY[a[i + 1]] * 0.97);
+    const items = []; let s = 70; const add = (pts, t) => { s += pts; items.push({ pts, t }); };
+    const pr = n(x.payout), fp = n(x.fcf_payout);
+    if (isNum(pr) && pr > 0) { if (pr < 0.5) add(15, `payout ${(pr * 100).toFixed(0)}% of earnings, comfortably covered`); else if (pr <= 0.75) add(5, `payout ${(pr * 100).toFixed(0)}% of earnings`); else if (pr <= 1) add(-15, `payout ${(pr * 100).toFixed(0)}% of earnings, above 75%`); else add(-35, `payout ${(pr * 100).toFixed(0)}% of earnings, more than it earns`); }
+    if (isNum(fp) && fp > 0) { if (fp > 1) add(-20, `dividends are ${(fp * 100).toFixed(0)}% of free cash flow`); else if (fp < 0.7) add(5, `free cash flow covers the dividend ${(1 / fp).toFixed(1)}×`); }
+    if (streak >= 25) add(15, `${streak} straight years of increases`); else if (streak >= 10) add(10, `${streak} straight years of increases`); else if (streak >= 5) add(5, `${streak} straight years of increases`);
+    if (cut5) add(-20, "cut in the last five years");
+    const px = n(x.px);
+    return { paying: true, annual, yield: px > 0 ? annual / px : NaN, freq: rows[0].freq, cagr5, streak, cut5, safety: Math.max(0, Math.min(100, Math.round(s))), safety_items: items,
+      next: rows.filter((r) => r.ex > today).pop() || null, recent: rows.slice(0, 10), by_year: full.slice(0, 10).reverse().map((y) => ({ year: y, total: byY[y] })) };
+  }
+  /** A simple DCF: revenue grows at g for 5 years at a steady FCF margin, then a Gordon terminal value; equity value per share. */
+  function dcf({ rev, margin, g, tg = 0.025, wacc = 0.09, shares, netDebt = 0 }) {
+    if (!(rev > 0) || !isNum(margin) || !(shares > 0) || !(wacc > tg)) return null;
+    let pv = 0, r = rev, f = 0; const years = [];
+    for (let t = 1; t <= 5; t++) { r *= 1 + g; f = r * margin; const d = f / (1 + wacc) ** t; pv += d; years.push({ t, rev: r, fcf: f, pv: d }); }
+    const tv = (f * (1 + tg)) / (wacc - tg), pvTv = tv / (1 + wacc) ** 5, ev = pv + pvTv, eq = ev - (isNum(netDebt) ? netDebt : 0);
+    return { ev, equity: eq, per_share: eq / shares, pv_fcf: pv, pv_tv: pvTv, tv_share: pvTv / ev, years };
+  }
+  /** DuPont: ROE = net margin × asset turnover × leverage, per fiscal year (average assets and equity where two years exist). */
+  function dupont(inc, bs) {
+    const B = new Map((bs || []).map((b) => [String(b.date).slice(0, 4), b]));
+    return (inc || []).map((r) => { const y = String(r.date).slice(0, 4), b = B.get(y), bp = B.get(String(Number(y) - 1));
+      const ta = b ? (bp ? (n(b.totalAssets) + n(bp.totalAssets)) / 2 : n(b.totalAssets)) : NaN, eq = b ? (bp ? (n(b.totalStockholdersEquity) + n(bp.totalStockholdersEquity)) / 2 : n(b.totalStockholdersEquity)) : NaN;
+      const nm = n(r.revenue) > 0 ? n(r.netIncome) / n(r.revenue) : NaN, at = ta > 0 ? n(r.revenue) / ta : NaN, lev = eq > 0 ? ta / eq : NaN;
+      return { year: y, net_margin: nm, asset_turnover: at, leverage: lev, roe: nm * at * lev }; }).filter((x) => isNum(x.roe)).sort((a, b) => (a.year < b.year ? -1 : 1));
+  }
+  /** The P/E history as a band: mean ± 1 standard deviation, where today sits, and rich / fair / cheap (above the 80th percentile / below the 30th). */
+  function valuationBand(pts, now) {
+    const v = (pts || []).map((p) => p.pe).filter(isNum); if (v.length < 6) return null;
+    const m = mean(v), s = std(v), pc = isNum(now) ? v.filter((x) => x < now).length / v.length : NaN;
+    return { mean: m, sd: s, hi: m + s, lo: m - s, percentile: pc, z: isNum(now) && s > 0 ? (now - m) / s : NaN, verdict: !isNum(pc) ? "" : pc > 0.8 ? "rich" : pc < 0.3 ? "cheap" : "fair" };
+  }
+  /** The stock's move around each report: the close before the report date to the close the day after (and SPY over the same days). */
+  function earningsReactions(past, ser, spy) {
+    const d = ser?.dates || [], v = vals(ser);
+    return (past || []).map((r) => { const i = idxOn(d, addDays(r.date, -1)); let j = d.findIndex((x) => x > r.date); if (i < 0 || j < 0) return { ...r, move: null };
+      const mv = v[j] / v[i] - 1, sp = spy ? retBetween(spy, d[i], d[j]) : NaN; return { ...r, move: mv, vs_spy: isNum(sp) ? mv - sp : null }; });
+  }
+
+  const CoFacts = { EPISODES, episodes, monthlyBeta, resample, technicals, patternMatch, dividends, dcf, dupont, valuationBand, earningsReactions, performance, riskGreeks, rollingBeta, realizedVol, bsm, optionGreeks, scores, fundHistory, peHistory, earningsHistory, levels, retBetween, WINDOWS };
   if (typeof module !== "undefined" && module.exports) module.exports = CoFacts;
   else root.CoFacts = CoFacts;
 })(typeof window !== "undefined" ? window : globalThis);
