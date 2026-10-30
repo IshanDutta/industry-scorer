@@ -171,12 +171,41 @@
     return out;
   }
   const HZ = ["1M", "3M", "6M", "12M"];
+  /** The JSON the thesis asks for: the whole of it, or one of its two halves (written in parallel). */
+  const FIELDS = {
+    headline: `"headline": "one sentence"`, verdict: `"verdict": {"call": "yes | conditional | no", "summary": "2-3 sentences: is this a real opportunity now, and in what form"}`,
+    thesis: `"thesis": "3 paragraphs: the case, what makes it different from its peers, what the price already assumes"`,
+    vs_industry: `"vs_industry": {"call": "outperform | in line | underperform", "why": "2-3 sentences"}`,
+    drivers: `"drivers": [{"driver": "the industry driver", "industry_view": "one sentence", "effect": "stronger | weaker | same | opposite", "why": "2 sentences on this company", "evidence": []}]`,
+    exposures: `"exposures": {"world": [{"situation": "...", "effect": "helps | hurts | mixed", "magnitude": "...", "why": "...", "evidence": []}], "trade": [{"country": "...", "dependence": "...", "risk": "...", "evidence": []}], "regulation": [{"rule": "...", "effect": "helps | hurts | mixed", "why": "...", "evidence": []}], "macro": [{"factor": "...", "sensitivity": "high | medium | low", "why": "..."}]}`,
+    moat: `"moat": {"rating": "wide | narrow | none", "sources": ["..."], "threats": ["..."]}`,
+    management: `"management": "2-3 sentences: execution, guidance record, capital allocation (cite)"`,
+    quality: `"quality": "2 sentences on earnings quality and the balance sheet"`,
+    valuation: `"valuation": {"read": "2-3 sentences vs history, peers and what is priced in", "fair_value": [low, high]}`,
+    scenarios: `"scenarios": {"bull": {"probability": 25, "narrative": "...", "eps_change": [8, 14], "pe": [24, 27], "price_target": [100, 110]}, "base": {...}, "bear": {...}}`,
+    horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "2 sentences, cited"}`).join(", ")}}`,
+    risks: `"risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}]`,
+    catalysts: `"catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}]`,
+    watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "why": "..."}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
+    confidence: `"confidence": "high | medium | low"`,
+  };
+  const PART = {
+    core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "scenarios", "horizons", "confidence"],
+    context: ["drivers", "exposures", "moat", "management", "quality", "risks", "catalysts", "watch", "fit"],
+  };
+  function schemaFor(part) {
+    const keys = PART[part] || Object.keys(FIELDS);
+    const intro = part === "core" ? "This is the first half of a two-part write-up; a colleague writes the drivers, exposures, moat, management, risks, catalysts and investor fit at the same time. Write ONLY the fields below.\n"
+      : part === "context" ? "This is the second half of a two-part write-up; a colleague writes the verdict, thesis, valuation, scenarios and 1M-12M calls at the same time. Write ONLY the fields below.\n" : "";
+    const sizes = part === "core" ? "" : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+    return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
+  }
   /**
    * ctx: {today, sym, name, industry, inTop50, rank, px, profile, row, peers (peerTable), closest, quality, implied, estimates, consensus, insider,
    *       geo (geoMap), seg (segMap), segments: {product, geo}, quarters, mentions (with A-IDs), news (with N/P-IDs), transcript ({id, text}),
    *       risk: {beta, alpha, vol}, industryDigest: {lead, kpi, macro, world, trade, regverdict, books}}
    */
-  function thesisPrompt(ctx) {
+  function thesisPrompt(ctx, part = null) {
     const J = (x) => JSON.stringify(x);
     const pc = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a"), fx = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
     const D = ctx.industryDigest || {};
@@ -190,7 +219,7 @@ Revenue by geography (${ctx.segments?.geo?.label || "n/a"}): ${(ctx.segments?.ge
 Last quarters (newest first; revenue $M, gross / operating margin, net income $M): ${(ctx.quarters || []).slice(0, 8).map((q) => `${q.date} ${isNum(q.rev) ? (q.rev / 1e6).toFixed(0) : "n/a"}, ${q.rev ? pc(q.gp / q.rev, 0) : "n/a"}/${q.rev ? pc(q.oi / q.rev, 0) : "n/a"}, ${isNum(q.ni) ? (q.ni / 1e6).toFixed(0) : "n/a"}`).join(" | ") || "n/a"}
 Quality: Piotroski ${ctx.quality?.piotroski ?? "n/a"}/9, Altman Z ${ctx.quality?.altman ?? "n/a"} (${ctx.quality?.altman_zone || "n/a"}), ROIC ${pc(ctx.quality?.roic)}, cash conversion ${fx(ctx.quality?.cash_conversion, 2)}x, accruals ${pc(ctx.quality?.accruals)}, payout ${pc(ctx.quality?.payout, 0)}, buyback yield ${pc(ctx.quality?.buyback_yield)}, FCF yield ${pc(ctx.quality?.fcf_yield)}, net debt/EBITDA ${fx(ctx.quality?.nd_ebitda)}, interest cover ${fx(ctx.quality?.int_cover)}, stock comp/revenue ${pc(ctx.quality?.sbc_rev)}.
 What the price assumes: steady FCF growth of ${pc(ctx.implied?.g)} a year at a ${pc(ctx.implied?.r)} cost of equity.
-Risk (1Y): beta ${fx(ctx.risk?.beta, 2)}, alpha ${pc(ctx.risk?.alpha)} a year vs SPY, volatility ${pc(ctx.risk?.vol, 0)}.
+Risk (1Y): beta ${fx(ctx.risk?.beta, 2)}, alpha ${pc(ctx.risk?.alpha)} a year vs SPY, volatility ${pc(ctx.risk?.vol, 0)}.${ctx.facts ? "\n" + ctx.facts : ""}
 Estimates: ${(ctx.estimates || []).map((e) => `FY${e.year}: revenue ${isNum(e.rev) ? (e.rev / 1e9).toFixed(2) + "B" : "n/a"}, EPS ${fx(e.eps, 2)}`).join("; ") || "n/a"}. Sell side: ${ctx.consensus ? `${ctx.consensus.consensus || "n/a"} (${ctx.consensus.buy} buy / ${ctx.consensus.hold} hold / ${ctx.consensus.sell} sell), target ${fx(ctx.consensus.target, 2)} (${fx(ctx.consensus.low, 0)}-${fx(ctx.consensus.high, 0)})` : "n/a"}. Insiders (last 2 quarters): ${ctx.insider ? `${ctx.insider.purchases} buys, sales ${fx(ctx.insider.sales_vs_norm, 2)}x normal` : "n/a"}.
 
 VERSUS THE INDUSTRY'S TOP 50 (value · industry median · percentile, 100 = highest)
@@ -224,20 +253,7 @@ RULES
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
 
-Reply with ONLY this JSON:
-{"headline": "one sentence", "verdict": {"call": "yes | conditional | no", "summary": "2-3 sentences: is this a real opportunity now, and in what form"},
- "thesis": "3 paragraphs: the case, what makes it different from its peers, what the price already assumes",
- "vs_industry": {"call": "outperform | in line | underperform", "why": "2-3 sentences"},
- "drivers": [{"driver": "the industry driver", "industry_view": "one sentence", "effect": "stronger | weaker | same | opposite", "why": "2 sentences on this company", "evidence": []}],
- "exposures": {"world": [{"situation": "...", "effect": "helps | hurts | mixed", "magnitude": "...", "why": "...", "evidence": []}], "trade": [{"country": "...", "dependence": "...", "risk": "...", "evidence": []}], "regulation": [{"rule": "...", "effect": "helps | hurts | mixed", "why": "...", "evidence": []}], "macro": [{"factor": "...", "sensitivity": "high | medium | low", "why": "..."}]},
- "moat": {"rating": "wide | narrow | none", "sources": ["..."], "threats": ["..."]},
- "management": "2-3 sentences: execution, guidance record, capital allocation (cite)",
- "quality": "2 sentences on earnings quality and the balance sheet", "valuation": {"read": "2-3 sentences vs history, peers and what is priced in", "fair_value": [low, high]},
- "scenarios": {"bull": {"probability": 25, "narrative": "...", "eps_change": [8, 14], "pe": [24, 27], "price_target": [100, 110]}, "base": {...}, "bear": {...}},
- "horizons": {${HZ.map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "2 sentences, cited"}`).join(", ")}},
- "risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}], "catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}],
- "watch": ["..."], "fit": {"income": {"fit": "strong | good | weak | poor", "why": "..."}, "conservative": {...}, "growth": {...}, "aggressive": {...}}, "confidence": "high | medium | low"}
-Sizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.`;
+${schemaFor(part)}`;
   }
 
   /** Keep only citations that exist; cut lengths; normalize enums. */
@@ -295,7 +311,7 @@ Sizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, SECTION };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, SECTION, PART };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
