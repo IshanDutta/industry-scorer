@@ -2139,7 +2139,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const msg = e?.code === "empty" ? e.message : e?.code === "rate_limited" ? (JOB ? `The Anthropic API refused more requests (${String(e.message || "credit balance or spend limit reached").replace(/^Anthropic API:\s*/, "").replace(/\.$/, "")}).` : "Your Claude plan's usage limit was reached (it resets every few hours and weekly).") : FATAL.has(e?.code) || STOP_ALL.has(e?.code) || e?.code === "tool_error" || e?.code === "server_unavailable" || e?.code === "bad_payload" ? errText(e) : sampleErr(e);
       S.notices.push({ kind: "err", text: JOB ? `The ${sector} run stopped: ${msg} Everything finished so far is in the checkpoint.` : `The ${sector} run stopped: ${msg} Everything finished so far is saved in this browser; ${e?.code === "rate_limited" ? "once the limit resets, " : ""}open the ${sector} sector and choose Resume to pick up from there.` });
     } finally {
-      if (sr.rec) { sr.rec.failed_steps = [...new Set([...(sr.rec.failed_steps || []), ...sr.errors])].slice(-80); await saveRec(sr).catch(() => {}); }
+      if (sr.rec) { sr.rec.failed_steps = staleFree(sr.rec, [...new Set([...(sr.rec.failed_steps || []), ...sr.errors])]).slice(-80); await saveRec(sr).catch(() => {}); }
       await libFlush().catch(() => {}); S.lastReuse = sr.reuse || null;
       // A run the viewer stopped (or that hit a limit) waits for Resume; one cut off by closing the page carries on by itself.
       await idbDel("sectorActive");
@@ -2259,6 +2259,11 @@ a.btnlink:hover { border-color: var(--accent); }
       ...failed.map((t) => ({ kind: "err", text: `Couldn't import ${t}` })),
     ];
     renderAll();
+  }
+  /** A "lead strategist didn't finish" note is dropped once a later run has written that industry's lead strategist. */
+  function staleFree(rec, steps) {
+    const ok = (n) => (rec.done?.H || []).includes(n) && !(rec.redoLead || []).includes(n);
+    return steps.filter((x) => { const m = /^(.+?): the lead strategist didn't finish/.exec(String(x)); return !(m && ok(m[1])); });
   }
   /**
    * The runs copied from GitHub travel with this page as files (runs/index.json lists them). Each is read the
@@ -2607,7 +2612,7 @@ a.btnlink:hover { border-color: var(--accent); }
       : !rec.finished_at ? `<div class="notice warn"><span><b>This sector run stopped before it finished</b> (saved ${esc(ago(rec.updated_at || rec.started_at))}). Resume finishes only what's left; everything done is kept.</span><button class="primary" data-sector-run="${esc(sec)}" ${!S.mcp || !S.sample || busy() ? "disabled" : ""}>Resume</button>${phases}</div>`
       : `<div class="small muted">Finished ${esc(ago(rec.finished_at))} · ${live} industries · ${calls.toLocaleString()} Claude calls${rec.job?.cost ? ` by the overnight job (${esc(rec.job.cost.model)}, ${rec.job.cost.mode === "batch" ? "batch prices" : "standard prices"}): about $${Number(rec.job.cost.usd).toFixed(2)} of API usage${rec.job.cost.cached_results ? `, ${rec.job.cost.cached_results} answers reused` : ""}` : ` (one at a time would have been about ${est.single.toLocaleString()})`}. Open an industry for its full report. <button class="sm" data-sector-run="${esc(sec)}" ${!S.mcp || !S.sample || busy() ? "disabled" : ""}>Analyze all again</button></div>`;
     const skipped = Object.entries(rec.skip || {});
-    const issues = [...skipped.map(([n, why]) => `<li><b>${esc(n)}</b>: left out, ${esc(why)}</li>`), ...(rec.failed_steps || []).slice(-12).map((x) => `<li>${esc(x)}</li>`)];
+    const issues = [...skipped.map(([n, why]) => `<li><b>${esc(n)}</b>: left out, ${esc(why)}</li>`), ...staleFree(rec, rec.failed_steps || []).slice(-12).map((x) => `<li>${esc(x)}</li>`)];
     const rows = Object.values(rec.rows || {}).filter(Boolean);
     const sk = S.secSort || { key: "best_score", dir: -1 };
     const val = (r, k) => (k === "best_score" ? (r.best ? r.scores?.[r.best] : null) : k.startsWith("s_") ? r.scores?.[k.slice(2)] : k.startsWith("h_") ? ({ bullish: 1, neutral: 0, bearish: -1 }[r.horizons?.[k.slice(2)]] ?? null) : k === "opportunity" ? ({ yes: 2, conditional: 1, no: 0 }[r.opportunity] ?? null) : r[k]);
