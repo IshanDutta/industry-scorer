@@ -6417,6 +6417,10 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
   const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  /** For the write-up itself: generous room (2.5x), and when something is still too long, end at a sentence, never mid-word. */
+  const keepT = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); const K = Math.round(k * 2.5); if (s.length <= K) return s;
+    const cut = s.slice(0, K), m = [...cut.matchAll(/[.!?](?=\s|$)/g)].pop(); if (m && m.index > K * 0.4) return cut.slice(0, m.index + 1);
+    const w = cut.lastIndexOf(" "); return (w > K * 0.6 ? cut.slice(0, w) : cut).replace(/[,;:\s]+$/, "") + "…"; };
   const median = (a) => { const v = a.filter(isNum).sort((x, y) => x - y); if (!v.length) return NaN; const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
   const lc = (s) => String(s || "").toLowerCase();
 
@@ -6617,7 +6621,7 @@ ${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pr
   function cleanLens(raw, L, idx) {
     if (!raw || typeof raw !== "object" || !L) return null;
     const ok = (id) => !!idx?.[id];
-    const txt = (s, k = 500) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter(ok); return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
+    const txt = (s, k = 500) => keepT(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter(ok); return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
     const ev = (a) => (Array.isArray(a) ? a.map(String).filter(ok).slice(0, 6) : []);
     const en = (v, list, d) => (list.includes(lc(v)) ? lc(v) : d);
     const rows = (arr, ids, f) => { const m = {}; for (const x of Array.isArray(arr) ? arr : []) { const id = String(x?.id || "").toUpperCase(); if (ids.has(id) && !m[id]) m[id] = f(x); } return m; };
@@ -6650,7 +6654,7 @@ ${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pr
   const HZ = ["1M", "3M", "6M", "12M"];
   /** The JSON the thesis asks for: the whole of it, or one of its two halves (written in parallel). */
   const FIELDS = {
-    headline: `"headline": "one sentence"`, verdict: `"verdict": {"call": "yes | conditional | no", "summary": "2-3 sentences: is this a real opportunity now, and in what form"}`,
+    headline: `"headline": "one short sentence, at most 30 words"`, verdict: `"verdict": {"call": "yes | conditional | no", "summary": "2-3 sentences: is this a real opportunity now, and in what form"}`,
     thesis: `"thesis": "3 paragraphs: the case, what makes it different from its peers, what the price already assumes"`,
     vs_industry: `"vs_industry": {"call": "outperform | in line | underperform", "why": "2-3 sentences"}`,
     drivers: `"drivers": [{"driver": "the industry driver", "industry_view": "one sentence", "effect": "stronger | weaker | same | opposite", "why": "2 sentences on this company", "evidence": []}]`,
@@ -6746,8 +6750,8 @@ ${schemaFor(part)}`;
   function cleanThesis(raw, idx) {
     if (!raw || typeof raw !== "object") return null;
     const ok = (id) => !!idx[id];
-    const txtP = (s, k) => String(s ?? "").split(/\n{2,}/).map((x) => txt(x, k)).filter(Boolean).join("\n\n").slice(0, k);
-    const txt = (s, k = 1400) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter(ok); return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
+    const txtP = (s, k) => String(s ?? "").split(/\n{2,}/).map((x) => txt(x, k)).filter(Boolean).join("\n\n").slice(0, k * 3);
+    const txt = (s, k = 1400) => keepT(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter(ok); return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
     const ev = (a) => (Array.isArray(a) ? a.map(String).filter(ok).slice(0, 6) : []);
     const en = (v, list, d) => (list.includes(lc(v)) ? lc(v) : d);
     const rng = (r) => (Array.isArray(r) ? r.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : isNum(Number(r)) ? [Number(r)] : []);
