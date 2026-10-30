@@ -4132,12 +4132,18 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Scores for each investor type, built like the industry's: company metrics against the industry's 50, plus the industry's report sections. */
   function coScores(co, t) {
     const sc = co.scores; if (!sc) return "";
-    const best = PROFILE_KEYS.filter((p) => isNum(num(sc.profiles[p]?.total))).sort((a, b) => sc.profiles[b].total - sc.profiles[a].total)[0];
-    const cards = PROFILE_KEYS.map((p) => { const v = sc.profiles[p] || {}, g = gradeOf(v.total), tt = num(v.total), fit = t?.fit?.[p];
+    // The analysis's judgment on each investor type moves its score a little (at most ±5, as the lead strategist's does on the
+    // industry page), and "best fit" never goes to a type the analysis calls a weak or poor fit when another one fits.
+    const OVL = { strong: 5, good: 2, weak: -2, poor: -5 };
+    const adj = Object.fromEntries(PROFILE_KEYS.map((p) => { const base = num(sc.profiles[p]?.total), o = OVL[t?.fit?.[p]?.fit] ?? 0; return [p, { ...sc.profiles[p], base, overlay: o, total: isNum(base) ? Math.max(0, Math.min(100, base + o)) : NaN }]; }));
+    const ranked = PROFILE_KEYS.filter((p) => isNum(adj[p].total)).sort((a, b) => adj[b].total - adj[a].total);
+    const okFit = ranked.filter((p) => !["weak", "poor"].includes(t?.fit?.[p]?.fit));
+    const best = (okFit.length ? okFit : ranked)[0];
+    const cards = PROFILE_KEYS.map((p) => { const v = adj[p] || {}, g = gradeOf(v.total), tt = num(v.total), fit = t?.fit?.[p];
       return `<div class="prof ${p === best ? "best" : ""}"><span class="eyebrow">${Score.PROFILES[p].label}${p === best ? " · best fit" : ""}</span>
         <div class="big"><b>${isNum(tt) ? Math.round(tt) : "—"}</b><span class="g ${g === "—" ? "none" : g}">${g}</span></div>
         <div class="meter"><i class="m-${g}" style="width:${isNum(tt) ? Math.round(tt) : 0}%"></i></div>
-        <span class="small muted">Company ${isNum(num(v.quant)) ? Math.round(v.quant) : "—"} · industry backdrop ${isNum(num(v.sections)) ? Math.round(v.sections) : "—"}</span>
+        <span class="small muted">Company ${isNum(num(v.quant)) ? Math.round(v.quant) : "—"} · industry backdrop ${isNum(num(v.sections)) ? Math.round(v.sections) : "—"}${v.overlay ? ` · analysis ${v.overlay > 0 ? "+" : ""}${v.overlay}` : t?.fit ? " · analysis 0" : ""}</span>
         ${fit?.fit ? `<span class="small"><b>${esc(fit.fit)} fit</b></span>${fit.why ? `<span class="verdict">${rich(fit.why)}</span>` : ""}` : ""}</div>`; }).join("");
     const wcells = (k) => PROFILE_KEYS.map((pk) => `<td class="n muted">${Score.PROFILES[pk].weights[k] ? Score.PROFILES[pk].weights[k] + "%" : "·"}</td>`).join("");
     const bar = (v) => `<div class="pillar-bar"><i style="width:${isNum(v) ? Math.round(v) : 0}%"></i></div>`;
@@ -4148,7 +4154,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const rows = `<tr class="grp"><td colspan="${3 + PROFILE_KEYS.length}">${esc(co.sym)}'s own numbers (percentile within the industry's top 50 where it can be)</td></tr>` + Score.QUANT.map(row).join("")
       + `<tr class="grp"><td colspan="${3 + PROFILE_KEYS.length}">The industry backdrop (from the industry report's sections)</td></tr>` + Score.SECTION.map(row).join("");
     return sec("co-scores", "Scores", `0–100 for each investor type${best ? `. Best fit: <b style="color:var(--ink)">${Score.PROFILES[best].label}</b>` : ""}`,
-      `<div class="prof-cards">${cards}</div><div class="small muted">Same pillars and weights as the industry scores. ${esc(co.sym)}'s metrics are ranked against the ${esc(co.run?.name || "industry")}'s 50 companies (50 = the median company); the report-section pillars are the industry's. Open a pillar to see every data point.</div>
+      `<div class="prof-cards">${cards}</div><div class="small muted">Same pillars and weights as the industry scores, plus the analysis's judgment of each fit (strong +5, good +2, weak −2, poor −5). ${esc(co.sym)}'s metrics are ranked against the ${esc(co.run?.name || "industry")}'s 50 companies (50 = the median company); the report-section pillars are the industry's. Open a pillar to see every data point.</div>
       <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`);
   }
   // ------------------------------------------------------------- the industry report, row by row, for this company
