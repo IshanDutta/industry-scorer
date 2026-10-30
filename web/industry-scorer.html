@@ -174,6 +174,13 @@ tbody tr:last-child td { border-bottom: 0; }
 .secnav { position: sticky; top: 0; z-index: 5; display: flex; gap: 4px; overflow-x: auto; padding: 8px; margin: 0 -4px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
 .secnav a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 999px; }
 .secnav a:hover { color: var(--ink); background: var(--sunk); }
+.co-ind { display: grid; gap: inherit; min-width: 0; }
+.co-ind > *, #company > *, .co-ind .panel div { min-width: 0; }
+.co-ind .panel, .co-ind .callout, .co-ind .panel [style*="display:grid"] { grid-template-columns: minmax(0, 1fr); }
+.co-ind button:not([data-co]), .co-ind .seg { display: none !important; }
+.co-ind mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.co-indnav { display: flex; flex-wrap: wrap; gap: 6px; }
+.co-indnav a { font-size: 13px; font-weight: 600; text-decoration: none; padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--ink); }
 .gk { text-transform: none; font-size: 1.15em; letter-spacing: 0; }
 .strip.wins { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
 section[id] { scroll-margin-top: 56px; }
@@ -10420,7 +10427,13 @@ ${schemaFor(part)}`;
       co.industry = industry;
       const rec = industry ? await idbGet("run:" + slug(industry)).catch(() => null) : null;
       if (S.co !== co) return;
-      if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null; }
+      if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null;
+        // The whole industry report renders on the company page from this run: put it in memory, with its own macro, world and benchmark context.
+        co.ictx = { macro: rec.macro, macroCat: rec.macroCat, world: rec.world, bench: rec.bench };
+        const isl = slug(rec.industry.name || industry);
+        if (!S.industries[isl]?.summary || S.savedAt[isl] !== rec.saved_at) { S.industries[isl] = rec.industry; S.research[isl] = rec.research || { items: [] }; S.tx[isl] = rec.tx || { items: [] }; if (rec.agent) S.agents[isl] = rec.agent;
+          Object.assign(S.reports, rec.reports || {}); Object.assign(S.regbooks, rec.regbooks || {}); S.teamErrors[isl] = rec.teamErrors || {}; S.regFail[isl] = rec.regFail || {}; if (rec.macro) S.macroBy[isl] = rec.macro; }
+        if (!S.track[isl]) idbGet("calls:" + isl).then((log) => { if (log) { S.track[isl] = log; if (S.co === co) renderCompany(); } }).catch(() => {}); }
       co.stage = co.run ? "data" : "noindustry"; renderCompany();
       if (!S.mcp) { co.stage = co.run ? "ready" : "noindustry"; renderCompany(); return; }
       const from5 = Horizon.addDays(today(), -1900), etfSym = Universe.ETF[co.run?.industry?.sector || co.hit?.sector || prof?.sector] || null;
@@ -10593,6 +10606,10 @@ ${schemaFor(part)}`;
     co.peh = CoFacts.peHistory(f.c, pe);
     // Fresh returns for the company's own row (the industry's top-50 row is as of its run).
     if (co.row && co.perf) for (const w of ["1M", "3M", "6M", "1Y"]) if (isNum(co.perf[w]?.ret) && !isNum(num(co.row["ret_" + w]))) co.row["ret_" + w] = co.perf[w].ret;
+    // How the company itself moves with the market, rates, oil, the dollar and credit (the industry's measurement, on its own prices).
+    const fac = run?.bench?.factors || S.bench?.factors;
+    co.sens = null;
+    if (fac && co.spy && ser.dates.length > 200) try { co.sens = Sensitivity.measure({ dates: ser.dates, levels: ser.closes }, { market: { dates: co.spy.dates, values: co.spy.closes }, ...Object.fromEntries(Object.entries(fac).map(([k, v]) => [k, { dates: v.dates, values: v.values }])) }); } catch {}
     let sections = {};
     if (run) try { sections = Sections.pillars({ doc: run.industry, pack: run.research, kpi: run.reports.kpi, macro: run.reports.macro, world: run.reports.world, trade: run.reports.trade, reg: run.reports.reg, regVerdict: run.reports.regverdict, books: run.books.map((b) => b.book), lead: run.lead, chain: run.reports.chain, calls: run.reports.calls }); } catch {}
     co.scores = CoFacts.scores({ row: co.row, cons: run?.industry?.constituents || [], quality: co.quality, greeks: co.g1, earn: co.earn, pe_vs_hist: co.peh?.vs_median, insider: f.insider, sections, profiles: Score.PROFILES, sectionKeys: Score.SECTION });
@@ -10620,7 +10637,7 @@ ${schemaFor(part)}`;
   function coSecNav(co) {
     const has = (x) => !!x;
     const links = [["co-thesis", "Analysis", !!co.run], ["co-scores", "Scores", !!co.scores], ["co-perf", "Performance", has(co.perf)], ["co-risk", "Risk & Greeks", has(co.g1)], ["co-val", "Valuation", true], ["co-fund", "Fundamentals", co.fh?.length], ["co-earn", "Earnings", co.earn?.past?.length || co.earn?.next], ["co-street", "Sell side", true], ["co-health", "Health & quality", true],
-      ["co-drivers", "Industry drivers", !!co.run], ["co-map", "In the industry analysis", !!co.run], ["co-peers", "Peers", !!co.run], ["co-biz", "Business", true], ["co-news", "News", co.news?.length], ["co-track", "Track record", co.track?.length]];
+      ["co-macro", "Macro", !!(co.sens || co.run?.reports?.macro)], ["co-drivers", "Industry drivers", !!co.run], ["co-map", "In the industry analysis", !!co.run], ["co-peers", "Peers", !!co.run], ["co-biz", "Business", true], ["co-news", "News", co.news?.length], ["co-track", "Track record", co.track?.length], ["co-ind", "Full industry report", !!co.run]];
     return `<nav class="secnav" aria-label="Company sections">${links.filter(([, , ok]) => ok).map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
   function companyView(co) {
@@ -10651,8 +10668,8 @@ ${schemaFor(part)}`;
       ${strip}</section>`;
     if (co.stage === "error" || co.stage === "finding" || co.stage === "data") return head + (f.profile ? coBusiness(co) : "");
     const dataSecs = coPerf(co) + coRiskSec(co) + coValuation(co) + coFund(co) + coEarnings(co) + coStreet(co) + coHealth(co);
-    if (!run) return head + coSecNav(co) + dataSecs + coBusiness(co) + coNews(co);
-    return head + coSecNav(co) + coThesis(co, t, ck) + coScores(co, t) + dataSecs + coDrivers(co, t) + coMapping(co) + coPeers(co) + coBusiness(co) + coNews(co) + coTrackSec(co);
+    if (!run) return head + coSecNav(co) + dataSecs + coMacro(co) + coBusiness(co) + coNews(co);
+    return head + coSecNav(co) + coThesis(co, t, ck) + coScores(co, t) + dataSecs + coMacro(co) + coDrivers(co, t) + coMapping(co) + coPeers(co) + coBusiness(co) + coNews(co) + coTrackSec(co) + coIndustry(co);
   }
   function coThesis(co, t, ck) {
     const writing = co.writing;
@@ -10719,6 +10736,48 @@ ${schemaFor(part)}`;
     return sec("co-scores", "Scores", `0–100 for each investor type${best ? `. Best fit: <b style="color:var(--ink)">${Score.PROFILES[best].label}</b>` : ""}`,
       `<div class="prof-cards">${cards}</div><div class="small muted">Same pillars and weights as the industry scores. ${esc(co.sym)}'s metrics are ranked against the ${esc(co.run?.name || "industry")}'s 50 companies (50 = the median company); the report-section pillars are the industry's. Open a pillar to see every data point.</div>
       <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`);
+  }
+  /** The macro backdrop for this company: its own measured sensitivities next to the industry's, and the industry's macro regime. */
+  function coMacro(co) {
+    const sn = co.sens, ind = co.run?.industry?.sensitivity, m = co.run?.reports?.macro;
+    if (!sn && !m) return "";
+    const st = (t) => Sensitivity.strength(t), byK = Object.fromEntries((ind?.factors || []).map((x) => [x.key, x]));
+    const rows = (sn?.factors || []).map((x) => { const i = byK[x.key], dif = num(x.total?.effect) - num(i?.total?.effect);
+      return `<tr><td><b>${esc(x.label)}</b><div class="small muted">${esc(x.shock_label)}</div></td><td class="n ${cls(num(x.total?.effect))}"><b>${sgnPct(x.total?.effect)}</b></td><td class="small">${esc(st(x.total?.t))}</td>
+        <td class="n ${cls(num(x.partial?.effect))}">${sgnPct(x.partial?.effect)}</td><td class="small">${esc(st(x.partial?.t))}</td><td class="n muted">${i ? sgnPct(i.total?.effect) : "—"}</td><td class="n ${cls(dif)}">${isNum(dif) ? sgnPct(dif) : "—"}</td>
+        <td class="small">${x.stable === false ? `<span class="pill warn">sign flipped</span>` : x.stable ? "held in both halves" : "—"}</td></tr>`; }).join("");
+    const REGC = { supportive: "pos", headwind: "neg", mixed: "neu", neutral: "neu" };
+    const regime = m?.regime ? `<div class="box"><div class="dim-head"><b>The ${esc(co.run.name)} macro regime</b><span class="pill ${REGC[m.regime] || "neu"}">${esc(m.regime)}</span>${m.confidence ? `<span class="small muted">${esc(m.confidence)} confidence</span>` : ""}</div>${m.headline ? `<p class="small" style="margin:0"><b>${esc(String(m.headline).replace(/\s*\[[A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*\]/g, ""))}</b></p>` : ""}
+      ${m.horizons ? `<div class="hcards">${Object.entries(m.horizons).map(([h, x]) => `<div class="hcard"><div class="dim-head"><b>${esc(h)}</b><span class="pill ${REGC[x?.call] || "neu"}">${esc(x?.call || "")}</span></div></div>`).join("")}</div>` : ""}
+      <div class="small muted">The full macro write-up is in the industry report below (Macro).</div></div>` : "";
+    const ex = (co.thesis?.thesis || co.partial)?.exposures?.macro || [];
+    const exl = ex.length ? `<div class="box"><h3>What it means for ${esc(co.sym)}</h3><ul class="dlist small">${ex.map((x) => `<li><b>${esc(x.factor)}</b> ${x.sensitivity ? `<span class="pill neu">${esc(x.sensitivity)} sensitivity</span>` : ""} ${rich(x.why)}</li>`).join("")}</ul></div>` : "";
+    return sec("co-macro", "Macro", sn ? `${esc(co.sym)}'s own daily returns, ${esc(sn.from)} to ${esc(sn.to)} · ${sn.n} days` : "",
+      `${regime || exl ? `<div class="two">${regime}${exl}</div>` : ""}
+      ${rows ? `<h3>How ${esc(co.sym)} moves with the macro, measured</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>If this happens</th><th class="n">${esc(co.sym)}, total</th><th>Strength</th><th class="n">Beyond the other factors</th><th>Strength</th><th class="n">Industry, total</th><th class="n">${esc(co.sym)} vs industry</th><th>Stable?</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="small muted">Regressions of ${esc(co.sym)}'s daily returns on SPY, the change in the 10-year yield, oil (USO), the dollar (UUP) and high-yield bonds (HYG), the same measurement as the industry's. Together they explain ${isNum(num(sn.r2)) ? Math.round(sn.r2 * 100) : "—"}% of its daily moves.</div>` : ""}`);
+  }
+  /** Everything in the industry's own report, rendered from its run exactly as on the Industries tab (read-only here). */
+  const IND_SECS = [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["track", "Track record"], ["estimates", "Estimates"], ["positioning", "Positioning"], ["history", "History & peers"], ["ranking", "Company ranking"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"], ["regulation", "Regulation & legal"], ["news", "Sentiment & news"]];
+  function coIndustry(co) {
+    const name = co.run?.name, sl = slug(name || ""), d = S.industries[sl]; if (!d?.summary) return "";
+    const keep = { macro: S.macro, macroCat: S.macroCat, world: S.world, bench: S.bench, idx: IDX };
+    let html = "";
+    try {
+      const x = co.ictx || {}; S.macro = x.macro || S.macroBy[sl] || S.macro; S.macroCat = x.macroCat || S.macroCat; S.world = x.world || S.world; S.bench = x.bench || S.bench;
+      const ag = S.agents[sl], pack = S.research[sl] || { items: [] }, tx = S.tx[sl] || { items: [] };
+      IDX = Team.index(pack, tx, S.macro, S.world?.items, rep(name, "world")?.result?.sources, rep(name, "macro")?.sources, rep(name, "trade")?.sources); calIndex(IDX, ag?.calendar);
+      const part = (f) => { try { return f(); } catch (e) { console.warn("industry section", e); return ""; } };
+      html = [() => analysisPanel(d, ag, pack), () => planSection(d, ag), () => trackSection(d), () => estimatesSection(d), () => positioningSection(d), () => historySection(d), () => rankingSection(d), () => kpiSection(d, pack, tx), () => chainSection(d), () => callsSection(d),
+        () => macroSection(d, pack), () => sensitivitySection(d), () => worldSection(d, pack), () => tradeSection(d, pack), () => regSection(d, pack), () => newsSection(d, pack)].map(part).join("");
+    } finally { S.macro = keep.macro; S.macroCat = keep.macroCat; S.world = keep.world; S.bench = keep.bench; IDX = keep.idx; }
+    // Its own anchors, so they don't collide with the Industries tab; the company's ticker is marked wherever it appears.
+    html = html.replace(/\sid="([^"]+)"/g, ' id="ci-$1"').replace(/href="#([^"]+)"/g, 'href="#ci-$1"');
+    const symRe = new RegExp(`(<b class="tick[^"]*">)${co.sym.replace(/[.]/g, "\\.")}(</b>)`, "g"); html = html.replace(symRe, `$1<mark>${co.sym}</mark>$2`);
+    const present = IND_SECS.filter(([id]) => html.includes(`id="ci-${id}"`));
+    return `<section class="panel" id="co-ind"><div class="panel-head"><h2>The ${esc(name)} industry analysis</h2><span class="small muted">the full industry report, from its run of ${esc(fmtShort(co.run.saved_at || d.as_of || ""))}</span></div>
+      <div class="small">Everything the industry analysis found: ${esc(co.sym)} lives in this backdrop. How each finding hits ${esc(co.sym)} specifically is in <a href="#co-drivers">Industry drivers</a> and <a href="#co-map">In the industry analysis</a> above.</div>
+      <nav class="co-indnav">${present.map(([id, l]) => `<a href="#ci-${id}">${l}</a>`).join("")}</nav></section><div class="co-ind">${html}</div>`;
   }
   /** Growth of $100, drawdowns and every window against SPY, the sector ETF and the industry. */
   function coPerf(co) {
@@ -10872,6 +10931,7 @@ ${schemaFor(part)}`;
   document.addEventListener("click", (ev) => {
     const t = ev.target.closest("button, th[data-sort], th[data-ssort]");
     if (!t) return;
+    if (t.closest(".co-ind") && !t.dataset.co) return;
     if (t.dataset.sectorRun) { if (S.sectorRec[t.dataset.sectorRun]?.finished_at && !confirm(`Analyze every ${t.dataset.sectorRun} industry again from scratch? The saved overview and runs are replaced as it goes.`)) return; runSector(t.dataset.sectorRun); return; }
     if (t.dataset.pullSector) { pullFromGithub(t.dataset.pullSector); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
