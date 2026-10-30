@@ -4028,8 +4028,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const signed = (v, d = 2) => (isNum(num(v)) ? (v > 0 ? "+" : "") + Number(v).toFixed(d) : "—");
   function coSecNav(co) {
     const has = (x) => !!x;
-    const links = [["co-thesis", "Analysis", !!co.run], ["co-scores", "Scores", !!co.scores], ["co-perf", "Performance", has(co.perf)], ["co-risk", "Risk & Greeks", has(co.g1)], ["co-options", "Option Greeks", co.opt?.length],
-      ["co-val", "Valuation", true], ["co-fund", "Fundamentals", co.fh?.length], ["co-earn", "Earnings", co.earn?.past?.length || co.earn?.next], ["co-street", "Sell side", true], ["co-health", "Health & quality", true],
+    const links = [["co-thesis", "Analysis", !!co.run], ["co-scores", "Scores", !!co.scores], ["co-perf", "Performance", has(co.perf)], ["co-risk", "Risk & Greeks", has(co.g1)], ["co-val", "Valuation", true], ["co-fund", "Fundamentals", co.fh?.length], ["co-earn", "Earnings", co.earn?.past?.length || co.earn?.next], ["co-street", "Sell side", true], ["co-health", "Health & quality", true],
       ["co-drivers", "Industry drivers", !!co.run], ["co-map", "In the industry analysis", !!co.run], ["co-peers", "Peers", !!co.run], ["co-biz", "Business", true], ["co-news", "News", co.news?.length], ["co-track", "Track record", co.track?.length]];
     return `<nav class="secnav" aria-label="Company sections">${links.filter(([, , ok]) => ok).map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
@@ -4042,6 +4041,8 @@ a.btnlink:hover { border-color: var(--accent); }
     const sector = run?.industry?.sector || co.hit?.sector || p.sector || "";
     const strip = co.stage === "ready" || co.stage === "noindustry" ? `<div class="strip" aria-label="Price">
         <div><span class="eyebrow">Price</span><span class="v">${isNum(co.px) ? fix(co.px, 2) : "—"}</span><span class="small ${isNum(chg) ? (chg >= 0 ? "up" : "down") : "muted"}">${isNum(chg) ? `${chg >= 0 ? "+" : ""}${fix(chg, 2)}% today` : ""}</span></div>
+        <div><span class="eyebrow"><span class="gk">α</span> Alpha 1Y</span><span class="v ${cls(num(co.g1?.alpha))}">${pct(co.g1?.alpha)}</span><span class="small muted">${co.g3 ? `3Y ${pct(co.g3.alpha)} a year` : "a year, beyond beta × SPY"}</span></div>
+        <div><span class="eyebrow"><span class="gk">β</span> Beta 1Y</span><span class="v">${fix(co.g1?.beta, 2)}</span><span class="small muted">${co.g3 ? `3Y ${fix(co.g3.beta, 2)} · ` : ""}vs ${esc(co.etfSym || "sector ETF")} ${fix(co.g1?.etf_beta, 2)}</span></div>
         <div><span class="eyebrow">52-week range</span><span class="v">${lv ? `${fix(lv.lo52, 0)}–${fix(lv.hi52, 0)}` : "—"}</span><span class="small muted">${lv ? `${pct(lv.off_high)} from the high · ${pct(lv.in_range, false, 0)} up the range` : ""}</span></div>
         <div><span class="eyebrow">vs 50-day avg</span><span class="v ${cls(num(lv?.vs_ma50))}">${pct(lv?.vs_ma50)}</span><span class="small muted">${lv ? fix(lv.ma50, 2) : ""}</span></div>
         <div><span class="eyebrow">vs 200-day avg</span><span class="v ${cls(num(lv?.vs_ma200))}">${pct(lv?.vs_ma200)}</span><span class="small muted">${lv ? fix(lv.ma200, 2) : ""}</span></div>
@@ -4058,7 +4059,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${stale ? `<div class="notice warn"><span>This analysis was written from an older run of the ${esc(run.name)} analysis (${esc(fmtShort(co.thesis.industry_run_at))}).</span><button class="sm" data-co-rewrite="1" ${co.writing || !S.sample ? "disabled" : ""}>Rewrite on the latest run</button></div>` : ""}
       ${strip}</section>`;
     if (co.stage === "error" || co.stage === "finding" || co.stage === "data") return head + (f.profile ? coBusiness(co) : "");
-    const dataSecs = coPerf(co) + coRiskSec(co) + coOptions(co) + coValuation(co) + coFund(co) + coEarnings(co) + coStreet(co) + coHealth(co);
+    const dataSecs = coPerf(co) + coRiskSec(co) + coValuation(co) + coFund(co) + coEarnings(co) + coStreet(co) + coHealth(co);
     if (!run) return head + coSecNav(co) + dataSecs + coBusiness(co) + coNews(co);
     return head + coSecNav(co) + coThesis(co, t, ck) + coScores(co, t) + dataSecs + coDrivers(co, t) + coMapping(co) + coPeers(co) + coBusiness(co) + coNews(co) + coTrackSec(co);
   }
