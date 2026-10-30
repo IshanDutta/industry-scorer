@@ -211,7 +211,14 @@
     // The company's own product lines and regions (S#, G#), with what code could match to the industry's segments and trade map.
     const segments = (seg || []).map((x, i) => ({ id: "S" + (i + 1), segment: x.segment, share: x.share, yoy: x.yoy, match: x.match ? `${x.match.temp} segment "${x.match.name}"` : null }));
     const regions = (geo || []).map((g, i) => ({ id: "G" + (i + 1), region: g.region, share: g.share, yoy: g.yoy, countries: (g.countries || []).map((c) => c.country) }));
-    return { indicators, situations, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems };
+    const Ld = run?.lead || {};
+    const iscen = Object.fromEntries(["bull", "base", "bear"].filter((k) => Ld.scenarios?.[k]).map((k) => { const x = Ld.scenarios[k]; return [k, { probability: x.probability, narrative: trim(x.narrative, 420), price_move: x.price_move || [], eps_change: x.eps_change || [], triggers: (x.triggers || []).slice(0, 3).map((t) => trim(t, 160)) }]; }));
+    const debates = (Ld.debates || []).slice(0, 6).map((x, i) => ({ id: "D" + (i + 1), question: trim(x.question, 200), bull: trim(x.bull, 360), bear: trim(x.bear, 360), lean: x.lean || "", why: trim(x.why, 260), resolves_with: trim(x.resolves_with, 200) }));
+    const dims = Object.fromEntries(Object.entries(Ld.dimensions || {}).map(([k, v]) => [k, { score: v?.score, summary: trim(v?.summary, 260) }]));
+    const changeMind = (Ld.change_mind || []).slice(0, 5).map((x) => trim(x, 240));
+    const plans = Object.fromEntries(Object.entries(Ld.plans || {}).map(([k, v]) => [k, { size: v?.size, entry: trim(v?.entry, 200), stop_pct: v?.stop_pct, review: trim(v?.review, 120) }]));
+    const redteam = Ld.redteam ? { stance: Ld.redteam.stance, thesis: trim(Ld.redteam.thesis, 500), kill: (Ld.redteam.kill_criteria || []).slice(0, 4).map((x) => trim(typeof x === "string" ? x : x?.text || "", 200)), blind: (Ld.redteam.blind_spots || []).slice(0, 3).map((x) => trim(typeof x === "string" ? x : x?.text || "", 200)) } : null;
+    return { indicators, situations, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems, iscen, debates, dims, changeMind, plans, redteam };
   }
   function lensBlock(L, sym, part = "context") {
     if (part === "core") return `THE INDUSTRY REPORT'S ROWS FOR YOUR HALF (answer each for ${sym} by its ID)
@@ -221,7 +228,11 @@ Customers, channels and suppliers the industry depends on:
 ${(L.chain || []).map((x) => `[${x.id}] ${x.symbol || ""} ${x.name || ""} (${x.role || ""}): ${x.share || ""}. Depends on it: ${(x.depends || []).join(", ") || "n/a"}. ${x.why || ""}`).join("\n") || "(none)"}
 Dated calendar ahead (the industry's, plus macro releases):
 ${(L.calendar || []).map((e) => `[${e.id}] ${e.date} ${e.title}${e.tickers.length ? ` (${e.tickers.join(", ")})` : ""}: ${e.detail || ""}`).join("\n") || "(none)"}
-${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pricing power ${L.kpi.pricing_power || ""}: ${L.kpi.pricing_text || ""} (who has it: ${L.kpi.who_has_it || "n/a"}).` : ""}`;
+${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pricing power ${L.kpi.pricing_power || ""}: ${L.kpi.pricing_text || ""} (who has it: ${L.kpi.who_has_it || "n/a"}).` : ""}
+The industry's dimension scores (-2 to +2): ${Object.entries(L.dims || {}).map(([k, v]) => `${k} ${v.score}: ${v.summary}`).join(" | ") || "n/a"}
+The industry's trade plans (for the industry as a whole): ${Object.entries(L.plans || {}).map(([k, v]) => `${k}: size ${v.size}% of a portfolio, entry ${v.entry}, stop ${isNum(Number(v.stop_pct)) ? (v.stop_pct * 100).toFixed(1) + "%" : "n/a"}, review ${v.review}`).join(" | ") || "n/a"}
+What would change the industry view: ${(L.changeMind || []).join(" | ") || "n/a"}
+${L.redteam ? `The industry's red team (${L.redteam.stance}): ${L.redteam.thesis} Kill criteria: ${L.redteam.kill.join("; ")}` : ""}`;
     const v = (r) => (r.value === null || r.value === undefined ? "n/a" : `${r.value}${r.unit && r.unit !== "index" ? r.unit : ""}`);
     return `THE INDUSTRY REPORT'S ROWS (answer each for ${sym} by its ID)
 Macro indicators (latest; prior; the industry's read):
@@ -238,7 +249,11 @@ ${sym}'s product lines (say which of the industry's segments each belongs to, ho
 ${(L.segments || []).map((x) => `[${x.id}] ${x.segment}: ${isNum(x.share) ? (x.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(x.yoy) ? `, ${x.yoy >= 0 ? "+" : ""}${(x.yoy * 100).toFixed(0)}% y/y` : ""}${x.match ? ` (code matched it to the ${x.match})` : " (no matching industry segment)"}`).join("\n") || "(not reported)"}
 ${sym}'s regions (what the industry's trade map, world events and macro mean for each):
 ${(L.regions || []).map((g) => `[${g.id}] ${g.region}: ${isNum(g.share) ? (g.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(g.yoy) ? `, ${g.yoy >= 0 ? "+" : ""}${(g.yoy * 100).toFixed(0)}% y/y` : ""}${g.countries.length ? ` (trade-map countries: ${g.countries.join(", ")})` : " (no trade-map country)"}`).join("\n") || "(not reported)"}
-${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.join(", ") || "n/a"}.` : ""}`;
+${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.join(", ") || "n/a"}.` : ""}
+The industry's scenarios (12 months; its probability and the industry's price move):
+${Object.entries(L.iscen || {}).map(([k, x]) => `${k} (${x.probability}%, industry ${(x.price_move || []).join(" to ")}%): ${x.narrative}${x.triggers?.length ? ` Triggers: ${x.triggers.join("; ")}` : ""}`).join("\n") || "(none)"}
+The industry's key debates (answer each by its ID: which side this company falls on):
+${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${d.bear} The industry leans ${d.lean || "n/a"}: ${d.why}${d.resolves_with ? ` Resolves with: ${d.resolves_with}` : ""}`).join("\n") || "(none)"}`;
   }
   /** The company's row-by-row answers, kept only for rows that exist. */
   function cleanLens(raw, L, idx) {
@@ -263,6 +278,11 @@ ${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.jo
       calendar: rows(raw.calendar, new Set((L.calendar || []).map((r) => r.id)), (x) => ({ impact: en(x.impact, ["high", "medium", "low", "none"], ""), direction: en(x.direction, ["upside", "downside", "two-way"], ""), why: txt(x.why, 400) })),
       segments: rows(raw.segments, new Set((L.segments || []).map((r) => r.id)), (x) => ({ temp: en(x.temp, ["hot", "cool", "neutral"], "neutral"), industry_segment: txt(x.industry_segment, 120), why: txt(x.why, 500) })),
       regions: rows(raw.regions, new Set((L.regions || []).map((r) => r.id)), (x) => ({ outlook: en(x.outlook, ["tailwind", "headwind", "neutral"], "neutral"), why: txt(x.why, 500) })),
+      ind_scenarios: Object.fromEntries(["bull", "base", "bear"].filter((k) => raw.ind_scenarios?.[k] && L.iscen?.[k]).map((k) => { const x = raw.ind_scenarios[k]; const mv = Array.isArray(x.move) ? x.move.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : []; return [k, { move: mv, why: txt(x.why, 500) }]; })),
+      debates: rows(raw.debates, new Set((L.debates || []).map((r) => r.id)), (x) => ({ side: en(x.side, ["bull", "bear", "split"], "split"), why: txt(x.why, 500), evidence: ev(x.evidence) })),
+      dimensions: Object.fromEntries(Object.keys(L.dims || {}).filter((k) => raw.dimensions?.[k]).map((k) => { const sc = Number(raw.dimensions[k].score); return [k, { score: isNum(sc) ? Math.max(-2, Math.min(2, Math.round(sc))) : null, why: txt(raw.dimensions[k].why, 400) }]; })),
+      plans: Object.fromEntries(["income", "conservative", "growth", "aggressive"].filter((k) => raw.plans?.[k]).map((k) => { const x = raw.plans[k]; return [k, { size_pct: isNum(Number(x.size_pct)) ? Number(x.size_pct) : null, entry: txt(x.entry, 300), stop: isNum(Number(x.stop)) && Number(x.stop) > 0 ? Number(x.stop) : null, hedge: txt(x.hedge, 300), review: txt(x.review, 200) }]; })),
+      change_mind: (Array.isArray(raw.change_mind) ? raw.change_mind : []).slice(0, 6).map((x) => txt(x, 300)).filter(Boolean),
       cycle: raw.cycle ? { position: txt(raw.cycle.position, 200), pricing_power: en(raw.cycle.pricing_power, ["stronger", "weaker", "same"], ""), why: txt(raw.cycle.why, 600) } : null,
     };
   }
@@ -294,7 +314,7 @@ ${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.jo
     horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "2 sentences, cited"}`).join(", ")}}`,
     risks: `"risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}]`,
     catalysts: `"catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}]`,
-    watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2-3 sentences for this investor, cited: what they get and what they give up", "how_to_own": "entry price or condition, position size and holding period for this investor", "watch": "the one or two numbers this investor should track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
+    watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2-3 sentences for this investor, cited: what they get and what they give up", "watch": "the one or two numbers this investor should track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
     street: `"street": {"stance": "agree | more bullish | more bearish", "summary": "2-3 sentences: where you land versus the Wall Street consensus (rating, target, estimates) and why, cited", "our_target": 0, "eps_view": {"fy1": "above | in line | below", "fy2": "above | in line | below", "why": "one or two sentences"}, "differences": [{"topic": "e.g. FY2027 EPS, margins, the multiple, a catalyst, a risk", "street": "what the consensus assumes", "ours": "what you assume", "why": "one or two sentences, cited"}]}`,
     confidence: `"confidence": "high | medium | low"`,
     lens: `"macro": {"regime": "supportive | mixed | headwind (for this company)", "headline": "one sentence on the macro for this company", "horizons": {"1M": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
@@ -304,11 +324,16 @@ ${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.jo
  "regulation": [{"id": "R1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "why": "1-2 sentences", "evidence": []}],
  "segments": [{"id": "S1", "temp": "hot | cool | neutral", "industry_segment": "the industry segment it belongs to, or a short name for its own", "why": "one or two sentences: its trend and what drives it, cited"}],
  "regions": [{"id": "G1", "outlook": "tailwind | headwind | neutral", "why": "one or two sentences: what the industry analysis (trade, world events, macro) means for this region, cited"}],
- "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "why": "one sentence"}]`,
+ "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "why": "one sentence"}],
+ "ind_scenarios": {"bull": {"move": [-5, 5], "why": "one or two sentences: this company's 12-month price move if the industry's bull case plays out, and why it moves more or less than the industry"}, "base": {...}, "bear": {...}},
+ "debates": [{"id": "D1", "side": "bull | bear | split", "why": "one or two sentences: which side of the industry's debate this company falls on, and why, cited"}]`,
     lens_core: `"kpis": [{"id": "K1", "value": "this company's own figure or read for that KPI (say if not disclosed)", "vs": "better | in line | worse", "why": "one sentence, cited"}],
  "chain": [{"id": "P1", "dependence": "high | medium | low | none", "why": "one sentence: how much this company relies on it and what that means"}],
  "calendar": [{"id": "E1", "impact": "high | medium | low | none", "direction": "upside | downside | two-way", "why": "one sentence: what it means for this company"}],
- "cycle": {"position": "where this company is in the industry's cycle", "pricing_power": "stronger | weaker | same (vs the industry)", "why": "2 sentences"}`,
+ "cycle": {"position": "where this company is in the industry's cycle", "pricing_power": "stronger | weaker | same (vs the industry)", "why": "2 sentences"},
+ "dimensions": {"macro": {"score": 0, "why": "one sentence: this company's score from -2 to +2 on the same dimension as the industry's, and why it differs"}, "news": {...}, "world_events": {...}, "regulatory": {...}, "perception": {...}, "mna": {...}, "legal": {...}},
+ "plans": {"income": {"size_pct": 0, "entry": "price or condition to buy", "stop": 0, "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "change_mind": ["what would change this company's call, with a level or a date"]`,
   };
   const PART = {
     core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "scenarios", "horizons", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "lens_core", "confidence"],
@@ -318,7 +343,7 @@ ${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.jo
     const keys = PART[part] || Object.keys(FIELDS).filter((k) => k !== "lens" && k !== "lens_core");
     const intro = part === "core" ? "This is the first half of a two-part write-up; a colleague goes through the rest of the industry report row by row (drivers, macro indicators, world situations, trade countries, rules) at the same time. Write ONLY the fields below, including one entry for each KPI, chain partner and calendar row listed for your half.\n"
       : part === "context" ? "This is the second half of a two-part write-up; a colleague writes the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
-    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price from the scenarios; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each)." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, policy/litigation/deal, product line and region ID listed (keep each why to one or two sentences)." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price from the scenarios; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, policy/litigation/deal, product line and region ID listed (keep each why to one or two sentences)." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
   /**
