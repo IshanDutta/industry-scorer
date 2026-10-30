@@ -330,6 +330,7 @@ RULES
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
+- "expected_move" is the LIKELY range: the middle half of outcomes, centered on your expected return for the window. Its half-width should be about two-thirds of the stock's one-sigma move for that window, never more${ctx.sigmas ? ` (one-sigma moves from ${ctx.sym}'s own volatility: ${Object.entries(ctx.sigmas).map(([h, v]) => `${h} ±${v}%`).join(", ")})` : ""}. A narrow, well-reasoned range is the point; don't widen it to cover every outcome.
 
 ${schemaFor(part)}`;
   }
@@ -368,6 +369,18 @@ ${schemaFor(part)}`;
       confidence: en(raw.confidence, ["high", "medium", "low"], ""),
     };
   }
+  /**
+   * Hold each 1M-12M range to the likely range, the middle half of outcomes: half-width at most 0.7 sigma for that window,
+   * around the call's own midpoint. sig: {"1M": sigma%, ...}. Changes t in place; returns notes on what was tightened.
+   */
+  function fitRanges(t, sig) {
+    const notes = [];
+    for (const h of HZ) { const x = t?.horizons?.[h], sg = Number(sig?.[h]); if (!x?.expected_move?.length || !isNum(sg) || sg <= 0) continue;
+      const r = x.expected_move, lo = r[0], hi = r[r.length - 1], mid = (lo + hi) / 2, half = (hi - lo) / 2, cap = 0.7 * sg;
+      if (half > cap + 0.5) { const nl = Math.round(mid - cap), nh = Math.round(mid + cap); notes.push(`${h} range ${lo}% to ${hi}% tightened to the likely range ${nl}% to ${nh}%`); x.expected_move = [nl, nh]; x.widened_from = [lo, hi]; }
+      x.sigma = Math.round(sg * 10) / 10; }
+    return notes;
+  }
   /** Code checks: scenario probabilities and math, expected return, the 1M-12M calls against their own numbers. */
   function checks(t, px, pe) {
     const issues = [], mid = (r) => (r?.length ? r.reduce((a, x) => a + x, 0) / r.length : NaN);
@@ -389,7 +402,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, SECTION, PART, lensInputs, cleanLens };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);

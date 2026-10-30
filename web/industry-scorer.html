@@ -6737,6 +6737,7 @@ RULES
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
+- "expected_move" is the LIKELY range: the middle half of outcomes, centered on your expected return for the window. Its half-width should be about two-thirds of the stock's one-sigma move for that window, never more${ctx.sigmas ? ` (one-sigma moves from ${ctx.sym}'s own volatility: ${Object.entries(ctx.sigmas).map(([h, v]) => `${h} ±${v}%`).join(", ")})` : ""}. A narrow, well-reasoned range is the point; don't widen it to cover every outcome.
 
 ${schemaFor(part)}`;
   }
@@ -6775,6 +6776,18 @@ ${schemaFor(part)}`;
       confidence: en(raw.confidence, ["high", "medium", "low"], ""),
     };
   }
+  /**
+   * Hold each 1M-12M range to the likely range, the middle half of outcomes: half-width at most 0.7 sigma for that window,
+   * around the call's own midpoint. sig: {"1M": sigma%, ...}. Changes t in place; returns notes on what was tightened.
+   */
+  function fitRanges(t, sig) {
+    const notes = [];
+    for (const h of HZ) { const x = t?.horizons?.[h], sg = Number(sig?.[h]); if (!x?.expected_move?.length || !isNum(sg) || sg <= 0) continue;
+      const r = x.expected_move, lo = r[0], hi = r[r.length - 1], mid = (lo + hi) / 2, half = (hi - lo) / 2, cap = 0.7 * sg;
+      if (half > cap + 0.5) { const nl = Math.round(mid - cap), nh = Math.round(mid + cap); notes.push(`${h} range ${lo}% to ${hi}% tightened to the likely range ${nl}% to ${nh}%`); x.expected_move = [nl, nh]; x.widened_from = [lo, hi]; }
+      x.sigma = Math.round(sg * 10) / 10; }
+    return notes;
+  }
   /** Code checks: scenario probabilities and math, expected return, the 1M-12M calls against their own numbers. */
   function checks(t, px, pe) {
     const issues = [], mid = (r) => (r?.length ? r.reduce((a, x) => a + x, 0) / r.length : NaN);
@@ -6796,7 +6809,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, SECTION, PART, lensInputs, cleanLens };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -10520,7 +10533,7 @@ ${schemaFor(part)}`;
       coAnalyze(co); try { coFacts(co); } catch (e) { console.warn("company facts", e); } co.stage = "ready"; renderCompany();
       // The thesis: saved, or written now (once), built on this industry run.
       const saved = await idbGet("co:" + sym).catch(() => null);
-      if (saved?.thesis && saved.industry === co.run.name) { co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); coTrack(co).catch(() => {}); }
+      if (saved?.thesis && saved.industry === co.run.name) { if (!saved.thesis.range_notes) { saved.thesis.range_notes = Company.fitRanges(saved.thesis, coSigmas(co)); if (saved.thesis.range_notes.length) saved.checks = Company.checks(saved.thesis, saved.px, saved.pe_basis); idbPut("co:" + sym, saved).catch(() => {}); } co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); coTrack(co).catch(() => {}); }
       if ((!saved?.thesis || saved.industry !== co.run.name) && S.sample) writeThesis(co);
     } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
   }
@@ -10559,7 +10572,7 @@ ${schemaFor(part)}`;
     const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
       peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
       quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
-      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn };
+      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co) };
     const raw = { core: null, context: null }; let last = 0;
     const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = Company.cleanThesis({ ...(raw.context || {}), ...(raw.core || {}) }, co.idx); co.partial.lens = Company.cleanLens(raw.context, co.lensIn, co.idx); renderCoWriting(); };
     const half = async (part) => {
@@ -10574,6 +10587,7 @@ ${schemaFor(part)}`;
       const ctxRaw = b.status === "fulfilled" ? b.value : raw.context || {};
       const thesis = Company.cleanThesis({ ...ctxRaw, ...a.value }, co.idx);
       thesis.lens = Company.cleanLens(ctxRaw, co.lensIn, co.idx);
+      thesis.range_notes = Company.fitRanges(thesis, coSigmas(co));
       if (!thesis?.headline && !thesis?.thesis) throw { code: "empty_completion" };
       const basisPE = isNum(num(co.row?.fwd_pe)) && co.row.fwd_pe > 0 ? co.row.fwd_pe : num(co.row?.pe);
       const rec = jsonSafe({ sym: co.sym, name: co.name, industry: run.name, industry_run_at: run.saved_at, at: new Date().toISOString(), px: co.px, pe_basis: basisPE, thesis, checks: Company.checks(thesis, co.px, basisPE), idx: co.idx,
@@ -10690,6 +10704,8 @@ ${schemaFor(part)}`;
     if (run) try { sections = Sections.pillars({ doc: run.industry, pack: run.research, kpi: run.reports.kpi, macro: run.reports.macro, world: run.reports.world, trade: run.reports.trade, reg: run.reports.reg, regVerdict: run.reports.regverdict, books: run.books.map((b) => b.book), lead: run.lead, chain: run.reports.chain, calls: run.reports.calls }); } catch {}
     co.scores = CoFacts.scores({ row: co.row, cons: run?.industry?.constituents || [], quality: co.quality, greeks: co.g1, earn: co.earn, pe_vs_hist: co.peh?.vs_median, insider: f.insider, sections, profiles: Score.PROFILES, sectionKeys: Score.SECTION });
   }
+  /** A one-sigma move per window (%), from the stock's own 1-year volatility. */
+  function coSigmas(co) { const v = num(co.g1?.vol ?? co.vol1y ?? co.row?.vol_1y); return isNum(v) && v > 0 ? Object.fromEntries([["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]].map(([h, m]) => [h, Math.round(v * Math.sqrt(m / 12) * 1000) / 10])) : null; }
   /** The computed facts, as lines for the thesis prompt. */
   function coFactsText(co) {
     const P = co.perf || {}, g = co.g1 || {}, g3 = co.g3 || {}, e = co.earn || {}, lv = co.lv || {}, ph = co.peh || {}, pc = (x, d = 1) => (isNum(num(x)) ? (x * 100).toFixed(d) + "%" : "n/a"), fx = (x, d = 2) => (isNum(num(x)) ? Number(x).toFixed(d) : "n/a");
@@ -10756,8 +10772,10 @@ ${schemaFor(part)}`;
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" }, VC = { yes: "pos", conditional: "neu", no: "neg" };
     const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
     const hz = ["1M", "3M", "6M", "12M"].filter((h) => t.horizons?.[h]).map((h) => { const x = t.horizons[h];
+      const r = x.expected_move || [], mid = r.length ? r.reduce((a2, v) => a2 + v, 0) / r.length : NaN, sg = num(x.sigma ?? coSigmas(co)?.[h]);
       return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${HZC[x.call] || "neu"}">${esc(x.call)}</span>${x.vs_industry ? `<span class="pill ${VS[x.vs_industry] || "neu"}">${esc(x.vs_industry)} vs industry</span>` : ""}</div>
-        <div class="hz-num"><span class="v">${esc(rng(x.expected_move))}</span>${isNum(x.probability_up) ? `<span class="small muted">${x.probability_up}% chance it's higher</span>` : ""}</div>${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}</div>`; }).join("");
+        <div class="hz-num"><span class="v ${cls(mid)}">${isNum(mid) ? `${mid > 0 ? "+" : ""}${fix(mid, 0)}%` : "—"}</span><span class="small muted">expected · likely ${esc(rng(r))}</span></div>
+        <div class="small muted">${isNum(x.probability_up) ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${isNum(sg) ? ` · a normal move is ±${fix(sg, 1)}%` : ""}</div>${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}</div>`; }).join("");
     const sc = ["bull", "base", "bear"].filter((k) => t.scenarios?.[k]).map((k) => { const s = t.scenarios[k], c = ck?.scenarios?.find((x) => x.k === k);
       return `<tr><td><b>${k}</b></td><td class="n">${isNum(s.probability) ? s.probability + "%" : "—"}</td><td class="n">${rng(s.eps_change)}</td><td class="n">${s.pe?.length ? s.pe.map((x) => fix(x, 1)).join("–") : "—"}</td><td class="n">${s.price_target?.length ? s.price_target.map((x) => fix(x, 0)).join("–") : "—"}</td><td class="n ${cls(num(c?.move))}">${c && isNum(num(c.move)) ? pcx(c.move, 0) : "—"}</td><td class="wr small">${rich(s.narrative)}</td></tr>`; }).join("");
     const math = ck && isNum(num(ck.expected_return)) ? `<div class="kpis">${kpi("Expected 12M return", pcx(ck.expected_return, 1), "probability-weighted, from the scenarios", cls(num(ck.expected_return)))}${kpi("Upside (bull)", pcx(ck.upside, 0))}${kpi("Downside (bear)", pcx(ck.downside, 0))}${t.valuation?.fair_value?.length ? kpi("Fair value", t.valuation.fair_value.map((x) => fix(x, 0)).join("–"), isNum(co.px) ? `vs ${fix(co.px, 2)} now` : "") : ""}</div>` : "";
