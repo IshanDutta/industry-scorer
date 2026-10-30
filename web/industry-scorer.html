@@ -10724,7 +10724,7 @@ ${schemaFor(part)}`;
    * Returns {profile, scores, ratios, metrics, c (compact statements), ttm, estimates, consensus, segments, insider, peers, news, transcript, ser}.
    */
   async function coFetch(sym, run) {
-    const key = "codata4:" + sym, hit = await idbGet(key).catch(() => null);
+    const key = "codata5:" + sym, hit = await idbGet(key).catch(() => null);
     if (hit?.day === today()) return hit.data;
     const one = async (tool, input) => (await optional(() => fmp(tool, input), [])) || [];
     const from = "2007-01-02";
@@ -10740,9 +10740,13 @@ ${schemaFor(part)}`;
       one("statements", { endpoint: "income-statement", symbol: sym, period: "quarter", limit: 8 }), one("statements", { endpoint: "balance-sheet-statement", symbol: sym, period: "quarter", limit: 8 }), one("statements", { endpoint: "cashflow-statement", symbol: sym, period: "quarter", limit: 8 }),
       one("calendar", { endpoint: "dividends-company", symbol: sym, limit: 80 }), one("form13F", { endpoint: "positions-summary", symbol: sym, year: q13.year, quarter: q13.quarter }),
       one("form13F", { endpoint: "filings-extract-with-analytics-by-holder", symbol: sym, year: q13.year, quarter: q13.quarter, limit: 10 }), one("insiderTrades", { endpoint: "search-insider-trades", symbol: sym, limit: 100 }),
-      one("ESG", { endpoint: "esg-search", symbol: sym }), one("ESG", { endpoint: "esg-ratings", symbol: sym }), one("company", { endpoint: "company-executives", symbol: sym }),
+      one("ESG", { endpoint: "esg-search", symbol: sym }),
+      one("ESG", { endpoint: "esg-ratings", symbol: sym }).then(async (r) => { const L = [...r].sort((a, b) => (b.fiscalYear || 0) - (a.fiscalYear || 0))[0];
+        const bench = L?.industry && L.fiscalYear ? await one("ESG", { endpoint: "esg-benchmark", year: L.fiscalYear }) : [];
+        return { r, bench: bench.filter((b) => String(b?.sector || "").toUpperCase() === String(L.industry).toUpperCase()) }; }), one("company", { endpoint: "company-executives", symbol: sym }),
       one("analyst", { endpoint: "historical-grades", symbol: sym, limit: 13 }), one("company", { endpoint: "shares-float", symbol: sym }),
       S.eod ? optional(() => eodCall("get_sentiment_data", { symbols: sym.replace(/\./g, "-") + ".US", start_date: Horizon.addDays(today(), -90), end_date: today() }), null) : Promise.resolve(null),
+      S.eod ? optional(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", sections: ["General", "SharesStats", "Holders"], include_financials: false }), null) : Promise.resolve(null),
     ])];
     const [profile, scores, metrics, ratios, c, est, grades, target, prod, geo, ins, peers, news, press, chart, dates, actions, ptSum] = await Promise.all([
       one("company", { endpoint: "profile-symbol", symbol: sym }), one("statements", { endpoint: "financial-scores", symbol: sym }),
@@ -10764,7 +10768,13 @@ ${schemaFor(part)}`;
     else { const last = (dates || []).filter((d) => d?.date && d.date <= today()).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
       if (last) { const tx = await optional(() => fmp("earningsTranscript", { endpoint: "search-transcripts", symbol: sym, year: last.fiscalYear, quarter: last.quarter }), []);
         const content = tx?.[0]?.content; if (content) transcript = { period: `Q${last.quarter} FY${last.fiscalYear}`, date: String(last.date).slice(0, 10), text: Research.excerpt(content, 7000) }; } }
-    const [aI, aB, aC, qI, qB, qC, divs, pos13, holders, insiders, esg, esgR, execs, rhist, flt, sentRaw] = await extra;
+    const [aI, aB, aC, qI, qB, qC, divs, pos13, holders, insiders, esg, esgRB, execs, rhist, flt, sentRaw, eodRaw] = await extra;
+    const esgR = esgRB?.r || [];
+    // EODHD's view covers every market a company trades in (13F covers only US-listed shares).
+    const eodF = (() => { let x = eodRaw; if (typeof x?.result === "string") { try { x = JSON.parse(x.result); } catch { x = null; } } return x && typeof x === "object" ? x : null; })();
+    const eodOwn = eodF ? { inst: num(eodF.SharesStats?.PercentInstitutions), insiders: num(eodF.SharesStats?.PercentInsiders), sharesOut: num(eodF.SharesStats?.SharesOutstanding),
+      primary: eodF.General?.PrimaryTicker || null, adr: /ADR/i.test(String(eodF.General?.HomeCategory || "") + " " + String(eodF.General?.Name || "")), country: eodF.General?.AddressData?.Country || null,
+      funds: Object.values(eodF.Holders?.Funds || {}).filter((h) => num(h?.currentShares) > 0).sort((a, b) => b.currentShares - a.currentShares).slice(0, 8).map((h) => ({ name: h.name, shares: num(h.currentShares), pct: num(h.totalShares), chg: num(h.change_p), date: h.date })) } : null;
     const sentRows = sentRaw && typeof sentRaw === "object" ? (Array.isArray(sentRaw) ? sentRaw : Object.values(sentRaw)[0] || []) : [];
     const g = grades?.[0] || {}, t = target?.[0] || {};
     const cut = Horizon.addDays(today(), -60);
@@ -10778,8 +10788,13 @@ ${schemaFor(part)}`;
       own: { pos: pos13?.[0] || null, float: flt?.[0] || null, q: q13,
         holders: (holders || []).filter((h) => h?.investorName).slice(0, 10).map((h) => ({ name: h.investorName, shares: h.sharesNumber, value: h.marketValue, ownership: h.ownership, chg: h.changeInSharesNumberPercentage, isNew: !!h.isNew })),
         insiders: (insiders || []).filter((x) => x?.transactionDate).sort((a, b) => (a.transactionDate < b.transactionDate ? 1 : -1)).slice(0, 100).map((x) => ({ date: String(x.transactionDate).slice(0, 10), name: x.reportingName, title: x.typeOfOwner, type: x.transactionType, shares: x.securitiesTransacted, price: x.price })),
-        esg: (esg || []).slice(0, 12).map((x) => ({ date: String(x.date).slice(0, 10), e: x.environmentalScore, s: x.socialScore, g: x.governanceScore, total: x.ESGScore })),
-        esgRating: (esgR || []).sort((a, b) => (b.fiscalYear || 0) - (a.fiscalYear || 0)).map((x) => ({ rating: x.ESGRiskRating, rank: x.industryRank, industry: x.industry, year: x.fiscalYear }))[0] || null },
+        // Placeholder rows (no form, every score exactly 50) aren't real scores.
+        esg: (esg || []).filter((x) => x?.date && isNum(num(x.ESGScore)) && !(!x.formType && [x.environmentalScore, x.socialScore, x.governanceScore].every((v) => Number(v) === 50))).slice(0, 48)
+          .map((x) => ({ date: String(x.date).slice(0, 10), form: x.formType || "", annual: /^(10-K|20-F|40-F)/i.test(x.formType || ""), e: x.environmentalScore, s: x.socialScore, g: x.governanceScore, total: x.ESGScore })),
+        esgRating: (esgR || []).sort((a, b) => (b.fiscalYear || 0) - (a.fiscalYear || 0)).map((x) => ({ rating: x.ESGRiskRating, rank: x.industryRank, industry: x.industry, year: x.fiscalYear }))[0] || null,
+        esgHist: (esgR || []).filter((x) => x?.fiscalYear).sort((a, b) => a.fiscalYear - b.fiscalYear).slice(-8).map((x) => ({ year: x.fiscalYear, rating: x.ESGRiskRating, rank: x.industryRank })),
+        esgBench: (esgRB?.bench || []).map((b) => ({ period: b.period, year: b.fiscalYear, e: num(b.environmentalScore), s: num(b.socialScore), g: num(b.governanceScore), total: num(b.ESGScore) })),
+        eod: eodOwn, country: profile?.[0]?.country || null, isAdr: !!profile?.[0]?.isAdr },
       execs: (execs || []).filter((x) => x?.name).slice(0, 12).map((x) => ({ name: x.name, title: x.title, pay: x.pay, born: x.yearBorn })),
       sentiment: (Array.isArray(sentRows) ? sentRows : []).map((r) => ({ date: String(r.date).slice(0, 10), score: Number(r.normalized), count: Number(r.count) || 0 })).filter((r) => isNum(r.score)).sort((a, b) => (a.date < b.date ? -1 : 1)),
       rhist: (rhist || []).map((x) => ({ date: String(x.date).slice(0, 10), sb: x.analystRatingsStrongBuy, b: x.analystRatingsBuy, h: x.analystRatingsHold, s: x.analystRatingsSell, ss: x.analystRatingsStrongSell })),
@@ -11562,28 +11577,64 @@ ${schemaFor(part)}`;
 
   // ------------------------------------------------------------- 11. ownership and ESG
   function coOwnership(co) {
-    const o = co.data?.own || {}, pos = o.pos, fl = o.float, row = co.row || {};
-    const inst = isNum(num(pos?.ownershipPercent)) ? Math.min(100, pos.ownershipPercent) / 100 : NaN, insider = isNum(num(fl?.freeFloat)) ? Math.max(0, 1 - fl.freeFloat / 100) : NaN;
+    const o = co.data?.own || {}, pos = o.pos, fl = o.float, row = co.row || {}, ev = o.eod || null, sym = esc(co.sym);
+    const shr = (x) => { x = num(x); return !isNum(x) ? "—" : x >= 1e9 ? (x / 1e9).toFixed(2) + "B" : x >= 1e6 ? (x / 1e6).toFixed(1) + "M" : x >= 1e3 ? (x / 1e3).toFixed(0) + "K" : Math.round(x).toLocaleString(); };
+    const usd = (x) => { x = num(x); return !isNum(x) ? "—" : Math.abs(x) >= 1e6 ? cap(x) : Math.abs(x) >= 1e3 ? "$" + (x / 1e3).toFixed(0) + "K" : "$" + Math.round(x).toLocaleString(); };
+    const smallPct = (p) => (!isNum(num(p)) ? "—" : p > 0 && p < 0.01 ? "<0.01%" : pct(p / 100, false, 2));
+    // 13F only sees US-listed shares. For a company whose main listing is abroad (or an ADR), it covers a sliver of the register.
+    const pct13 = num(pos?.ownershipPercent), evInst = num(ev?.inst), evIns = num(ev?.insiders);
+    const homeAbroad = !!(ev?.primary && !/\.US$/i.test(ev.primary)), foreign = homeAbroad || o.isAdr || ev?.adr || (o.country && o.country !== "US");
+    const thin = pos && isNum(pct13) && pct13 < 5 && (foreign || (isNum(evInst) && evInst > 10));
+    const useEod = isNum(evInst) && (thin || !pos);
+    const inst = useEod ? Math.min(100, evInst) / 100 : isNum(pct13) ? Math.min(100, pct13) / 100 : NaN;
+    const insider = isNum(evIns) ? evIns / 100 : isNum(num(fl?.freeFloat)) ? Math.max(0, 1 - fl.freeFloat / 100) : NaN;
     const retail = isNum(inst) ? Math.max(0, 1 - inst - (isNum(insider) ? insider : 0)) : NaN;
-    const mix = isNum(inst) ? donut([{ name: "Institutions (13F)", value: inst }, { name: "Insiders", value: isNum(insider) ? insider : 0 }, { name: "Retail & other", value: retail }], { center: pct(inst, false, 0) }) : `<div class="small muted">13F ownership isn't available for ${esc(co.sym)}.</div>`;
-    const K = pos ? [kpi("Institutions", pct(inst, false, 1), `${(pos.investorsHolding || 0).toLocaleString()} holders${isNum(num(pos.investorsHoldingChange)) ? ` · ${pos.investorsHoldingChange >= 0 ? "+" : ""}${pos.investorsHoldingChange} q/q` : ""}`), kpi("Ownership change", `${pos.ownershipPercentChange >= 0 ? "+" : ""}${fix(pos.ownershipPercentChange, 2)}pp`, `quarter to ${esc(pos.date || "")}`, cls(num(pos.ownershipPercentChange))),
-      kpi("New / closed positions", `${pos.newPositions} / ${pos.closedPositions}`, `${pos.increasedPositions} added · ${pos.reducedPositions} cut`), kpi("Put / call (13F)", fix(pos.putCallRatio, 2), `was ${fix(pos.lastPutCallRatio, 2)}`), isNum(num(row.short_pct)) ? kpi("Short interest", pct(row.short_pct, false), "of float") : ""].join("") : "";
-    const holders = (o.holders || []).length ? `<h3>Top institutional holders</h3><div class="tbl-wrap"><table><thead><tr><th>Institution</th><th class="n">Shares</th><th class="n">Value</th><th class="n">% of company</th><th class="n">Change in position</th></tr></thead><tbody>${o.holders.map((h) => `<tr><td>${esc(h.name)}${h.isNew ? ` <span class="pill pos">new</span>` : ""}</td><td class="n">${(num(h.shares) / 1e6).toFixed(1)}M</td><td class="n">${cap(h.value)}</td><td class="n">${pct(num(h.ownership) / 100, false, 2)}</td><td class="n ${cls(num(h.chg))}">${isNum(num(h.chg)) ? pct(h.chg / 100) : "—"}</td></tr>`).join("")}</tbody></table></div>` : "";
-    const cut = Horizon.addDays(today(), -365), tr = (o.insiders || []).filter((x) => x.date >= cut);
-    const TT = (t) => (/^P/.test(t) ? ["Buy", "pos"] : /^S/.test(t) ? ["Sell", "neg"] : /^M/.test(t) ? ["Option exercise", "neu"] : /^A/.test(t) ? ["Award", "neu"] : /^F/.test(t) ? ["Tax withholding", "neu"] : /^G/.test(t) ? ["Gift", "neu"] : [t || "—", "neu"]);
-    const bought = tr.filter((x) => /^P/.test(x.type)).reduce((a, x) => a + (num(x.shares) * num(x.price) || 0), 0), sold = tr.filter((x) => /^S/.test(x.type)).reduce((a, x) => a + (num(x.shares) * num(x.price) || 0), 0);
-    const ins = (o.insiders || []).length ? `<h3>Insider transactions (Form 4)</h3><div class="kpis">${kpi("Bought, 12 months", cap(bought), `${tr.filter((x) => /^P/.test(x.type)).length} purchases`, bought > 0 ? "up" : "")}${kpi("Sold, 12 months", cap(sold), `${tr.filter((x) => /^S/.test(x.type)).length} sales`, sold > 0 ? "down" : "")}${kpi("Net", cap(bought - sold), bought >= sold ? "net buying" : "net selling", bought >= sold ? "up" : "down")}</div>
-      <div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Date</th><th>Insider</th><th>Title</th><th>Type</th><th class="n">Shares</th><th class="n">Price</th><th class="n">Value</th></tr></thead><tbody>${o.insiders.slice(0, 30).map((x) => { const [l, c] = TT(x.type); return `<tr><td class="mono">${esc(x.date)}</td><td>${esc(x.name)}</td><td class="small">${esc(String(x.title || "").replace(/^other:\s*/i, ""))}</td><td><span class="pill ${c}">${esc(l)}</span></td><td class="n">${isNum(num(x.shares)) ? Math.round(x.shares).toLocaleString() : "—"}</td><td class="n">${fix(x.price, 2)}</td><td class="n">${isNum(num(x.shares) * num(x.price)) && x.price > 0 ? cap(x.shares * x.price) : "—"}</td></tr>`; }).join("")}</tbody></table></div>` : "";
-    const e = o.esg?.[0], er = o.esgRating;
-    const esgB = e ? `<h3>ESG</h3><div class="kpis">${kpi("ESG score", fix(e.total, 1), `as of ${esc(e.date)}`)}${kpi("Environmental", fix(e.e, 1))}${kpi("Social", fix(e.s, 1))}${kpi("Governance", fix(e.g, 1))}${er ? kpi("Risk rating", esc(er.rating || "—"), `${esc(er.rank || "")} in ${esc(er.industry || "its industry")} (FY${esc(String(er.year || ""))})`) : ""}</div>
-      ${o.esg.length > 2 ? `<div class="chart"><h3>ESG score over time</h3>${lineChart([{ name: "ESG", color: "var(--pos)", dates: [...o.esg].reverse().map((x) => x.date), values: [...o.esg].reverse().map((x) => x.total) }, { name: "E", color: "var(--c3)", dash: true, dates: [...o.esg].reverse().map((x) => x.date), values: [...o.esg].reverse().map((x) => x.e) }, { name: "S", color: "var(--accent)", dash: true, dates: [...o.esg].reverse().map((x) => x.date), values: [...o.esg].reverse().map((x) => x.s) }, { name: "G", color: "var(--c4)", dash: true, dates: [...o.esg].reverse().map((x) => x.date), values: [...o.esg].reverse().map((x) => x.g) }], { fmtY: (v) => v.toFixed(0), height: 200, width: 1100 })}</div>` : ""}` : "";
+    const src = useEod ? "all markets, from EODHD" : "US 13F filings";
+    const mix = isNum(inst) ? `${donut([{ name: "Institutions", value: inst }, { name: "Insiders", value: isNum(insider) ? insider : 0 }, { name: "Retail & other", value: retail }], { center: pct(inst, false, 0) })}<div class="small muted">Institutions: ${src}.${isNum(evIns) ? " Insiders: EODHD." : isNum(insider) ? " Insiders: shares outside the free float." : ""}</div>`
+      : `<div class="small muted">Institutional ownership isn't available for ${sym}.</div>`;
+    const hasPC = pos && (num(pos.totalCalls) || 0) + (num(pos.totalPuts) || 0) > 0;
+    const K = pos ? [kpi(thin ? "US 13F holders" : "Institutions", thin ? (pos.investorsHolding || 0).toLocaleString() : pct(inst, false, 1), thin ? `holding ${smallPct(pct13)} of the company${isNum(num(pos.investorsHoldingChange)) ? ` · ${pos.investorsHoldingChange >= 0 ? "+" : ""}${pos.investorsHoldingChange} q/q` : ""}` : `${(pos.investorsHolding || 0).toLocaleString()} holders${isNum(num(pos.investorsHoldingChange)) ? ` · ${pos.investorsHoldingChange >= 0 ? "+" : ""}${pos.investorsHoldingChange} q/q` : ""}`),
+      thin ? "" : kpi("Ownership change", `${pos.ownershipPercentChange >= 0 ? "+" : ""}${fix(pos.ownershipPercentChange, 2)}pp`, `quarter to ${esc(pos.date || "")}`, cls(num(pos.ownershipPercentChange))),
+      kpi("New / closed positions", `${pos.newPositions} / ${pos.closedPositions}`, `${pos.increasedPositions} added · ${pos.reducedPositions} cut`),
+      hasPC ? kpi("Put / call (13F)", fix(pos.putCallRatio, 2), `was ${fix(pos.lastPutCallRatio, 2)}`) : "",
+      isNum(num(row.short_pct)) ? kpi("Short interest", pct(row.short_pct, false), "of float") : ""].join("")
+      : isNum(inst) ? kpi("Institutions", pct(inst, false, 1), "all markets") + (isNum(num(row.short_pct)) ? kpi("Short interest", pct(row.short_pct, false), "of float") : "") : "";
+    const thinNote = thin ? `<div class="notice warn small"><div>${sym}${homeAbroad ? `'s main listing is <b>${esc(ev.primary)}</b>` : " is a foreign company"}. US 13F filings only cover the ${(pos.investorsHolding || 0).toLocaleString()} funds holding its US-listed shares, ${smallPct(pct13)} of the company, so the holder list and quarter-on-quarter moves below describe a sliver of the register, not who really owns it.${isNum(evInst) ? ` Across all markets, institutions hold about ${pct(evInst / 100, false, 0)}.` : ""}</div></div>` : "";
+    const holders = (o.holders || []).length ? `<h3>${thin ? "US 13F holders (US-listed shares only)" : "Top institutional holders"}</h3><div class="tbl-wrap"><table><thead><tr><th>Institution</th><th class="n">Shares</th><th class="n">Value</th><th class="n">% of company</th><th class="n">Change in position</th></tr></thead><tbody>${o.holders.map((h) => `<tr><td>${esc(h.name)}${h.isNew ? ` <span class="pill pos">new</span>` : ""}</td><td class="n">${shr(h.shares)}</td><td class="n">${usd(h.value)}</td><td class="n">${smallPct(num(h.ownership))}</td><td class="n ${num(h.chg) ? cls(num(h.chg)) : ""}">${h.isNew ? "new" : isNum(num(h.chg)) ? pct(h.chg / 100) : "—"}</td></tr>`).join("")}</tbody></table></div>` : "";
+    const funds = thin && (ev?.funds || []).length ? `<details class="small"><summary>Largest fund holders EODHD lists (${ev.funds.length})</summary><div class="tbl-wrap"><table><thead><tr><th>Fund</th><th class="n">Shares</th><th class="n">% of company</th><th class="n">Change</th><th>As of</th></tr></thead><tbody>${ev.funds.map((h) => `<tr><td>${esc(h.name)}</td><td class="n">${shr(h.shares)}</td><td class="n">${smallPct(h.pct)}</td><td class="n ${cls(h.chg)}">${isNum(h.chg) ? pct(h.chg / 100) : "—"}</td><td class="mono">${esc(String(h.date || ""))}</td></tr>`).join("")}</tbody></table></div></details>` : "";
+    // Form 4: only open-market buys (P) and sales (S) count as signals; awards, exercises and withholding don't.
+    const cut = Horizon.addDays(today(), -365), cut3 = Horizon.addDays(today(), -365 * 3), tr = (o.insiders || []).filter((x) => x.date >= cut), recent = (o.insiders || []).filter((x) => x.date >= cut3);
+    const TT = (t) => (/^P/.test(t) ? ["Buy", "pos"] : /^S/.test(t) ? ["Sell", "neg"] : /^M/.test(t) ? ["Option exercise", "neu"] : /^A/.test(t) ? ["Award", "neu"] : /^F/.test(t) ? ["Tax withholding", "neu"] : /^G/.test(t) ? ["Gift", "neu"] : /^J/.test(t) ? ["Other", "neu"] : [t || "—", "neu"]);
+    const buys = tr.filter((x) => /^P/.test(x.type)), sells = tr.filter((x) => /^S/.test(x.type));
+    const val = (xs) => xs.reduce((a, x) => a + (num(x.shares) * num(x.price) || 0), 0), bought = val(buys), sold = val(sells);
+    const fpi = foreign ? ` As a foreign company, ${sym}'s directors don't file Form 4; they report dealings under ${homeAbroad ? "their home market's" : "home-country"} rules, which FMP doesn't carry.` : "";
+    const insK = buys.length || sells.length ? `<div class="kpis">${kpi("Bought, 12 months", usd(bought), `${buys.length} purchase${buys.length === 1 ? "" : "s"}`, bought > 0 ? "up" : "")}${kpi("Sold, 12 months", usd(sold), `${sells.length} sale${sells.length === 1 ? "" : "s"}`, sold > 0 ? "down" : "")}${kpi("Net", usd(bought - sold), bought >= sold ? "net buying" : "net selling", bought > sold ? "up" : bought < sold ? "down" : "")}</div>`
+      : `<p class="small muted">No open-market insider buys or sales of ${sym} on Form 4 in the last 12 months.${fpi}</p>`;
+    const insT = recent.length ? `<div class="tbl-wrap" style="max-height:340px"><table><thead><tr><th>Date</th><th>Insider</th><th>Title</th><th>Type</th><th class="n">Shares</th><th class="n">Price</th><th class="n">Value</th></tr></thead><tbody>${recent.slice(0, 30).map((x) => { const [l, c] = TT(x.type); return `<tr><td class="mono">${esc(x.date)}</td><td>${esc(x.name)}</td><td class="small">${esc(String(x.title || "").replace(/^other:\s*/i, ""))}</td><td><span class="pill ${c}">${esc(l)}</span></td><td class="n">${isNum(num(x.shares)) ? Math.round(x.shares).toLocaleString() : "—"}</td><td class="n">${x.price > 0 ? fix(x.price, 2) : "—"}</td><td class="n">${isNum(num(x.shares) * num(x.price)) && x.price > 0 ? usd(x.shares * x.price) : "—"}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+    const ins = `<h3>Insider transactions</h3>${insK}${insT}`;
+    // ESG: FMP scores each SEC filing 0–100. Annual reports (10-K, 20-F) score lower than quarterlies, so trends compare like with like.
+    const E = o.esg || [], e = E[0], er = o.esgRating, ann = E.filter((x) => x.annual), lastA = ann[0];
+    const B = o.esgBench || [], bFY = B.find((b) => b.period === "FY");
+    const vsB = (v, b) => (isNum(num(v)) && isNum(num(b)) ? `${v - b >= 0 ? "+" : ""}${(v - b).toFixed(1)} vs industry` : "");
+    const rankN = (r) => { const m = String(r || "").match(/(\d+)\s*out of\s*(\d+)/i); return m ? { k: +m[1], n: +m[2] } : null; };
+    const rk = rankN(er?.rank), H = o.esgHist || [];
+    const esgK = e ? `<div class="kpis">${kpi("ESG score", fix(e.total, 1), `latest filing (${esc(e.form || "—")}, ${esc(e.date)})`)}
+      ${lastA ? kpi("Annual-report score", fix(lastA.total, 1), bFY ? `${esc(lastA.form)} ${esc(lastA.date.slice(0, 4))} · ${vsB(lastA.total, bFY.total)} (${fix(bFY.total, 1)})` : `${esc(lastA.form)} ${esc(lastA.date.slice(0, 4))}`, bFY ? cls(lastA.total - bFY.total) : "") : ""}
+      ${kpi("Environmental", fix((lastA || e).e, 1), bFY ? vsB((lastA || e).e, bFY.e) : "", bFY ? cls((lastA || e).e - bFY.e) : "")}${kpi("Social", fix((lastA || e).s, 1), bFY ? vsB((lastA || e).s, bFY.s) : "", bFY ? cls((lastA || e).s - bFY.s) : "")}${kpi("Governance", fix((lastA || e).g, 1), bFY ? vsB((lastA || e).g, bFY.g) : "", bFY ? cls((lastA || e).g - bFY.g) : "")}
+      ${er ? kpi("Risk rating", esc(er.rating || "—"), `${rk ? `${rk.k} of ${rk.n}` : esc(er.rank || "")} in ${esc(lc(er.industry || "its industry"))} (FY${esc(String(er.year || ""))})`, rk ? (rk.k <= rk.n / 3 ? "up" : rk.k > (2 * rk.n) / 3 ? "down" : "") : "") : ""}</div>` : "";
+    const hist = H.length > 1 ? `<div class="small"><b>Industry rank by year:</b> ${H.map((h) => { const r = rankN(h.rank); return `<span class="numchip">FY${esc(String(h.year))} ${esc(h.rating || "")} · ${r ? `${r.k}/${r.n}` : esc(h.rank || "")}</span>`; }).join(" ")}</div>` : "";
+    const ser = ann.length >= 3 ? [...ann].reverse() : [...E].slice(0, 12).reverse();
+    const esgC = ser.length > 2 ? `<div class="chart"><h3>ESG score over time${ann.length >= 3 ? ", annual reports" : ""}</h3>${lineChart([{ name: "ESG", color: "var(--pos)", dates: ser.map((x) => x.date), values: ser.map((x) => x.total) }, { name: "E", color: "var(--c3)", dash: true, dates: ser.map((x) => x.date), values: ser.map((x) => x.e) }, { name: "S", color: "var(--accent)", dash: true, dates: ser.map((x) => x.date), values: ser.map((x) => x.s) }, { name: "G", color: "var(--c4)", dash: true, dates: ser.map((x) => x.date), values: ser.map((x) => x.g) }], { fmtY: (v) => v.toFixed(0), height: 200, width: 1100, xLabels: ann.length >= 3 ? (ds) => ds.map((d, i) => [i, "FY" + d.slice(0, 4)]) : yearTicks })}<div class="legend"><span><i style="background:var(--pos)"></i>ESG</span><span><i style="background:var(--c3)"></i>Environmental</span><span><i style="background:var(--accent)"></i>Social</span><span><i style="background:var(--c4)"></i>Governance</span></div></div>` : "";
+    const esgB = e ? `<h3>ESG</h3>${esgK}${hist}${esgC}<div class="small muted">FMP scores each SEC filing from 0 to 100 (higher is better)${bFY ? `; the industry figures are FMP's FY${esc(String(bFY.year))} average for ${esc(lc(er?.industry || ""))}` : ""}. Annual reports score lower than quarterly filings, so the chart and the industry comparison use annual reports.</div>`
+      : `<h3>ESG</h3><p class="small muted">FMP has no ESG scores for ${sym}.</p>`;
     const ip = co.run?.industry?.positioning;
     const ipos = ip ? `<h3>Against the industry</h3><div class="small" style="display:grid;gap:4px">${ip.label ? `<div><b>The industry's positioning:</b> <span class="pill ${ip.label === "crowded" ? "warn" : ip.label === "washed out" ? "pos" : "neu"}">${esc(ip.label)}</span> ${(ip.signals || []).map((x) => esc(x.text)).join(" · ")}</div>` : ""}
-      ${ip.institutions ? `<div><b>Institutions</b> ${ip.institutions.own_change_pp > 0 ? "raised" : "cut"} their share of the industry by ${fix(Math.abs(ip.institutions.own_change_pp), 1)}pp last quarter. ${(ip.institutions.adding || []).includes(co.sym) ? `<span class="pill pos">adding to ${esc(co.sym)}</span>` : (ip.institutions.cutting || []).includes(co.sym) ? `<span class="pill neg">cutting ${esc(co.sym)}</span>` : ""}</div>` : ""}
-      ${ip.short ? `<div><b>Short interest:</b> industry median ${pct(ip.short.median, false)}${isNum(num(row.short_pct)) ? `, ${esc(co.sym)} ${pct(row.short_pct, false)}` : ""}${(ip.short.highest || []).length ? ` · most shorted: ${ip.short.highest.map((x) => `${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)} ${pct(x.pct, false, 0)}`).join(", ")}` : ""}</div>` : ""}</div>` : "";
-    const nothing = !pos && !(o.holders || []).length && !(o.insiders || []).length && !e;
-    return sec("co-own", "Ownership & ESG", pos?.date ? `13F filings for the quarter to ${esc(pos.date)}` : "", nothing ? `<div class="small muted">Ownership, insider and ESG data didn't come back from FMP for ${esc(co.sym)} (your FMP plan may not include them).</div>${ipos}`
-      : `<div class="two"><div><h3>Who owns it</h3>${mix}</div><div class="kpis" style="align-content:start">${K}</div></div>${holders}${ins}${esgB}${ipos}`);
+      ${ip.institutions ? `<div><b>Institutions</b> ${ip.institutions.own_change_pp > 0 ? "raised" : "cut"} their share of the industry by ${fix(Math.abs(ip.institutions.own_change_pp), 1)}pp last quarter. ${(ip.institutions.adding || []).includes(co.sym) ? `<span class="pill pos">adding to ${sym}</span>` : (ip.institutions.cutting || []).includes(co.sym) ? `<span class="pill neg">cutting ${sym}</span>` : ""}</div>` : ""}
+      ${ip.short ? `<div><b>Short interest:</b> industry median ${pct(ip.short.median, false)}${isNum(num(row.short_pct)) ? `, ${sym} ${pct(row.short_pct, false)}` : ""}${(ip.short.highest || []).length ? ` · most shorted: ${ip.short.highest.map((x) => `${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)} ${pct(x.pct, false, 0)}`).join(", ")}` : ""}</div>` : ""}</div>` : "";
+    const nothing = !pos && !isNum(inst) && !(o.holders || []).length && !(o.insiders || []).length && !e;
+    const sub = thin ? `${isNum(evInst) ? "all-market ownership from EODHD · " : ""}US 13F filings for the quarter to ${esc(pos.date)}` : pos?.date ? `13F filings for the quarter to ${esc(pos.date)}` : "";
+    return sec("co-own", "Ownership & ESG", sub, nothing ? `<div class="small muted">Ownership, insider and ESG data didn't come back from FMP for ${sym} (your FMP plan may not include them).</div>${ipos}`
+      : `<div class="two"><div><h3>Who owns it</h3>${mix}</div><div class="kpis" style="align-content:start">${K}</div></div>${thinNote}${holders}${funds}${ins}${esgB}${ipos}`);
   }
   /** Growth of $100, drawdowns and every window against SPY, the sector ETF and the industry. */
   function coPerf(co) {
