@@ -260,7 +260,8 @@ ${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pr
     horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "2 sentences, cited"}`).join(", ")}}`,
     risks: `"risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}]`,
     catalysts: `"catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}]`,
-    watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "why": "..."}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
+    watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2-3 sentences for this investor, cited: what they get and what they give up", "how_to_own": "entry price or condition, position size and holding period for this investor", "watch": "the one or two numbers this investor should track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
+    street: `"street": {"stance": "agree | more bullish | more bearish", "summary": "2-3 sentences: where you land versus the Wall Street consensus (rating, target, estimates) and why, cited", "our_target": 0, "eps_view": {"fy1": "above | in line | below", "fy2": "above | in line | below", "why": "one or two sentences"}, "differences": [{"topic": "e.g. FY2027 EPS, margins, the multiple, a catalyst, a risk", "street": "what the consensus assumes", "ours": "what you assume", "why": "one or two sentences, cited"}]}`,
     confidence: `"confidence": "high | medium | low"`,
     lens: `"macro": {"regime": "supportive | mixed | headwind (for this company)", "headline": "one sentence on the macro for this company", "horizons": {"1M": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
    "indicators": [{"id": "I1", "relevance": "high | medium | low", "effect": "tailwind | headwind | neutral", "vs_industry": "more | less | same | opposite", "why": "one sentence on this company"}]},
@@ -272,14 +273,14 @@ ${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pr
  "cycle": {"position": "where this company is in the industry's cycle", "pricing_power": "stronger | weaker | same (vs the industry)", "why": "2 sentences"}`,
   };
   const PART = {
-    core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "scenarios", "horizons", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "confidence"],
+    core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "scenarios", "horizons", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "confidence"],
     context: ["drivers", "lens"],
   };
   function schemaFor(part) {
     const keys = PART[part] || Object.keys(FIELDS).filter((k) => k !== "lens");
     const intro = part === "core" ? "This is the first half of a two-part write-up; a colleague goes through the industry report row by row (drivers, macro indicators, world situations, trade countries, rules) at the same time. Write ONLY the fields below.\n"
       : part === "context" ? "This is the second half of a two-part write-up; a colleague writes the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
-    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, product line and region ID listed (keep each why to one or two sentences)." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price from the scenarios." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, product line and region ID listed (keep each why to one or two sentences)." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
   /**
@@ -302,7 +303,7 @@ Last quarters (newest first; revenue $M, gross / operating margin, net income $M
 Quality: Piotroski ${ctx.quality?.piotroski ?? "n/a"}/9, Altman Z ${ctx.quality?.altman ?? "n/a"} (${ctx.quality?.altman_zone || "n/a"}), ROIC ${pc(ctx.quality?.roic)}, cash conversion ${fx(ctx.quality?.cash_conversion, 2)}x, accruals ${pc(ctx.quality?.accruals)}, payout ${pc(ctx.quality?.payout, 0)}, buyback yield ${pc(ctx.quality?.buyback_yield)}, FCF yield ${pc(ctx.quality?.fcf_yield)}, net debt/EBITDA ${fx(ctx.quality?.nd_ebitda)}, interest cover ${fx(ctx.quality?.int_cover)}, stock comp/revenue ${pc(ctx.quality?.sbc_rev)}.
 What the price assumes: steady FCF growth of ${pc(ctx.implied?.g)} a year at a ${pc(ctx.implied?.r)} cost of equity.
 Risk (1Y): beta ${fx(ctx.risk?.beta, 2)}, alpha ${pc(ctx.risk?.alpha)} a year vs SPY, volatility ${pc(ctx.risk?.vol, 0)}.${ctx.facts ? "\n" + ctx.facts : ""}
-Estimates: ${(ctx.estimates || []).map((e) => `FY${e.year}: revenue ${isNum(e.rev) ? (e.rev / 1e9).toFixed(2) + "B" : "n/a"}, EPS ${fx(e.eps, 2)}`).join("; ") || "n/a"}. Sell side: ${ctx.consensus ? `${ctx.consensus.consensus || "n/a"} (${ctx.consensus.buy} buy / ${ctx.consensus.hold} hold / ${ctx.consensus.sell} sell), target ${fx(ctx.consensus.target, 2)} (${fx(ctx.consensus.low, 0)}-${fx(ctx.consensus.high, 0)})` : "n/a"}. Insiders (last 2 quarters): ${ctx.insider ? `${ctx.insider.purchases} buys, sales ${fx(ctx.insider.sales_vs_norm, 2)}x normal` : "n/a"}.
+${ctx.ptrend ? `Average analyst target: last month ${fx(ctx.ptrend.m, 2)} (${ctx.ptrend.m_n} targets), last quarter ${fx(ctx.ptrend.q, 2)} (${ctx.ptrend.q_n}), last year ${fx(ctx.ptrend.y, 2)} (${ctx.ptrend.y_n}).\n` : ""}Estimates: ${(ctx.estimates || []).map((e) => `FY${e.year}: revenue ${isNum(e.rev) ? (e.rev / 1e9).toFixed(2) + "B" : "n/a"}, EPS ${fx(e.eps, 2)}`).join("; ") || "n/a"}. Sell side: ${ctx.consensus ? `${ctx.consensus.consensus || "n/a"} (${ctx.consensus.buy} buy / ${ctx.consensus.hold} hold / ${ctx.consensus.sell} sell), target ${fx(ctx.consensus.target, 2)} (${fx(ctx.consensus.low, 0)}-${fx(ctx.consensus.high, 0)})` : "n/a"}. Insiders (last 2 quarters): ${ctx.insider ? `${ctx.insider.purchases} buys, sales ${fx(ctx.insider.sales_vs_norm, 2)}x normal` : "n/a"}.
 
 VERSUS THE INDUSTRY'S TOP 50 (value · industry median · percentile, 100 = highest)
 ${(ctx.peers || []).map((r) => `${r.label}: ${r.kind === "pct" || r.kind === "chg" ? pc(r.value) : r.kind === "cap" ? (r.value / 1e9).toFixed(1) + "B" : fx(r.value, 2)} · ${r.kind === "pct" || r.kind === "chg" ? pc(r.median) : r.kind === "cap" ? (r.median / 1e9).toFixed(1) + "B" : fx(r.median, 2)} · p${r.pct ?? "n/a"}`).join("\n")}
@@ -334,6 +335,7 @@ RULES
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
+- Street: compare your view with the sell-side consensus given above (ratings, average target and range, how targets moved, FY estimates, recent rating changes). Agree only if your scenarios land near the consensus target and your EPS view matches; otherwise say where you differ (estimates, margins, the multiple, catalysts, risks) and why.
 - "expected_move" is the LIKELY range: the middle half of outcomes, centered on your expected return for the window. Its half-width should be about two-thirds of the stock's one-sigma move for that window, never more${ctx.sigmas ? ` (one-sigma moves from ${ctx.sym}'s own volatility: ${Object.entries(ctx.sigmas).map(([h, v]) => `${h} ±${v}%`).join(", ")})` : ""}. A narrow, well-reasoned range is the point; don't widen it to cover every outcome.
 
 ${schemaFor(part)}`;
@@ -350,7 +352,11 @@ ${schemaFor(part)}`;
     const rng = (r) => (Array.isArray(r) ? r.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : isNum(Number(r)) ? [Number(r)] : []);
     const arr = (x, k) => (Array.isArray(x) ? x.slice(0, k) : []);
     const sc = (s) => (s && typeof s === "object" ? { probability: isNum(Number(s.probability)) ? Number(s.probability) : null, narrative: txt(s.narrative, 900), eps_change: rng(s.eps_change), pe: rng(s.pe), price_target: rng(s.price_target) } : null);
-    const fit = (f) => (f && typeof f === "object" ? { fit: en(f.fit, ["strong", "good", "weak", "poor"], ""), why: txt(f.why, 300) } : null);
+    const fit = (f) => (f && typeof f === "object" ? { fit: en(f.fit, ["strong", "good", "weak", "poor"], ""), conviction: en(f.conviction, ["high", "medium", "low"], ""), why: txt(f.why, 500), how_to_own: txt(f.how_to_own, 400), watch: txt(f.watch, 300), what_changes: txt(f.what_changes, 400) } : null);
+    const ST = raw.street && typeof raw.street === "object" ? raw.street : null, IV = ["above", "in line", "below"];
+    const street = ST ? { stance: en(ST.stance, ["agree", "more bullish", "more bearish"], ""), summary: txt(ST.summary, 700), our_target: isNum(Number(ST.our_target)) && Number(ST.our_target) > 0 ? Number(ST.our_target) : null,
+      eps_view: ST.eps_view ? { fy1: en(ST.eps_view.fy1, IV, ""), fy2: en(ST.eps_view.fy2, IV, ""), why: txt(ST.eps_view.why, 400) } : null,
+      differences: arr(ST.differences, 6).map((d) => ({ topic: txt(d?.topic, 120), street: txt(d?.street, 300), ours: txt(d?.ours, 300), why: txt(d?.why, 500) })).filter((d) => d.topic) } : null;
     return {
       headline: txt(raw.headline, 300), verdict: { call: en(raw.verdict?.call, ["yes", "conditional", "no"], ""), summary: txt(raw.verdict?.summary, 600) },
       thesis: txtP(raw.thesis, 4000), vs_industry: { call: en(raw.vs_industry?.call, ["outperform", "in line", "underperform"], ""), why: txt(raw.vs_industry?.why, 600) },
@@ -369,7 +375,7 @@ ${schemaFor(part)}`;
       risks: arr(raw.risks, 8).map((x) => ({ risk: txt(x?.risk, 300), likelihood: en(x?.likelihood, ["high", "medium", "low"], ""), impact: en(x?.impact, ["high", "medium", "low"], ""), evidence: ev(x?.evidence) })).filter((x) => x.risk),
       catalysts: arr(raw.catalysts, 8).map((x) => ({ date: String(x?.date || "").slice(0, 10), event: txt(x?.event, 200), why: txt(x?.why, 300) })).filter((x) => x.event),
       watch: arr(raw.watch, 6).map((x) => txt(x, 200)).filter(Boolean),
-      fit: Object.fromEntries(["income", "conservative", "growth", "aggressive"].map((k) => [k, fit(raw.fit?.[k])]).filter(([, v]) => v?.fit)),
+      fit: Object.fromEntries(["income", "conservative", "growth", "aggressive"].map((k) => [k, fit(raw.fit?.[k])]).filter(([, v]) => v?.fit)), street,
       confidence: en(raw.confidence, ["high", "medium", "low"], ""),
     };
   }

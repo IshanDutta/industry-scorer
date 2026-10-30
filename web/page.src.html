@@ -3890,7 +3890,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
       peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
       quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
-      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co) };
+      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend };
     const raw = { core: null, context: null }; let last = 0;
     const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = Company.cleanThesis({ ...(raw.context || {}), ...(raw.core || {}) }, co.idx); co.partial.lens = Company.cleanLens(raw.context, co.lensIn, co.idx); renderCoWriting(); };
     const half = async (part) => {
@@ -3977,7 +3977,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const co = S.co, el = $("company"); if (!co || !el || S.tab !== "companies" || co.stage !== "ready") return renderCompany();
     IDX = co.idx || {};
     const t = co.thesis?.thesis || co.partial;
-    for (const [id, html] of [["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-biz", coBusiness(co)]]) {
+    for (const [id, html] of [["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-biz", coBusiness(co)], ["co-scores", coScores(co, t)], ["co-street", coStreet(co)]]) {
       const cur = el.querySelector("#" + id); if (!cur) return renderCompany();
       if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = html; const nx = tmp.firstElementChild; if (nx) cur.replaceWith(nx);
     }
@@ -4139,12 +4139,22 @@ a.btnlink:hover { border-color: var(--accent); }
     const ranked = PROFILE_KEYS.filter((p) => isNum(adj[p].total)).sort((a, b) => adj[b].total - adj[a].total);
     const okFit = ranked.filter((p) => !["weak", "poor"].includes(t?.fit?.[p]?.fit));
     const best = (okFit.length ? okFit : ranked)[0];
+    // What moves each investor's score: every pillar's pull (its weight × how far it sits from 50), biggest first.
+    const pulls = (p) => { const W = Score.PROFILES[p].weights, tot = Object.entries(W).filter(([k]) => isNum(num(sc.pillars[k]?.score))).reduce((a, [, w]) => a + w, 0) || 1;
+      return Object.entries(W).filter(([k]) => isNum(num(sc.pillars[k]?.score))).map(([k, w]) => ({ k, w, s: sc.pillars[k].score, pull: (w * (sc.pillars[k].score - 50)) / tot })); };
+    const drivers = (p) => { const xs = pulls(p), up = xs.filter((x) => x.pull > 0.4).sort((a, b) => b.pull - a.pull).slice(0, 3), dn = xs.filter((x) => x.pull < -0.4).sort((a, b) => a.pull - b.pull).slice(0, 3);
+      const chip = (x, c) => `<span class="pill ${c}" title="${esc(Score.PILLAR_LABELS[x.k] || x.k)}: ${Math.round(x.s)}/100 at ${x.w}% weight">${esc(Score.PILLAR_LABELS[x.k] || x.k)} ${x.pull > 0 ? "+" : ""}${fix(x.pull, 1)}</span>`;
+      return up.length || dn.length ? `<div class="small" style="display:grid;gap:4px">${up.length ? `<div><b>Lifts it:</b> ${up.map((x) => chip(x, "pos")).join(" ")}</div>` : ""}${dn.length ? `<div><b>Holds it back:</b> ${dn.map((x) => chip(x, "neg")).join(" ")}</div>` : ""}</div>` : ""; };
     const cards = PROFILE_KEYS.map((p) => { const v = adj[p] || {}, g = gradeOf(v.total), tt = num(v.total), fit = t?.fit?.[p];
       return `<div class="prof ${p === best ? "best" : ""}"><span class="eyebrow">${Score.PROFILES[p].label}${p === best ? " · best fit" : ""}</span>
         <div class="big"><b>${isNum(tt) ? Math.round(tt) : "—"}</b><span class="g ${g === "—" ? "none" : g}">${g}</span></div>
         <div class="meter"><i class="m-${g}" style="width:${isNum(tt) ? Math.round(tt) : 0}%"></i></div>
         <span class="small muted">Company ${isNum(num(v.quant)) ? Math.round(v.quant) : "—"} · industry backdrop ${isNum(num(v.sections)) ? Math.round(v.sections) : "—"}${v.overlay ? ` · analysis ${v.overlay > 0 ? "+" : ""}${v.overlay}` : t?.fit ? " · analysis 0" : ""}</span>
-        ${fit?.fit ? `<span class="small"><b>${esc(fit.fit)} fit</b></span>${fit.why ? `<span class="verdict">${rich(fit.why)}</span>` : ""}` : ""}</div>`; }).join("");
+        ${fit?.fit ? `<span class="small"><b>${esc(fit.fit)} fit</b>${fit.conviction ? ` · ${esc(fit.conviction)} conviction` : ""}</span>${fit.why ? `<span class="verdict">${rich(fit.why)}</span>` : ""}` : co.writing ? `<span class="small muted">The analysis's read is being written…</span>` : ""}
+        ${drivers(p)}
+        ${fit?.how_to_own ? `<span class="small"><b>How to own it:</b> ${rich(fit.how_to_own)}</span>` : ""}
+        ${fit?.watch ? `<span class="small"><b>Watch:</b> ${rich(fit.watch)}</span>` : ""}
+        ${fit?.what_changes ? `<span class="small muted">Would change if: ${rich(fit.what_changes)}</span>` : ""}</div>`; }).join("");
     const wcells = (k) => PROFILE_KEYS.map((pk) => `<td class="n muted">${Score.PROFILES[pk].weights[k] ? Score.PROFILES[pk].weights[k] + "%" : "·"}</td>`).join("");
     const bar = (v) => `<div class="pillar-bar"><i style="width:${isNum(v) ? Math.round(v) : 0}%"></i></div>`;
     const row = (k) => { const x = sc.pillars[k]; const v = num(x?.score);
@@ -4154,7 +4164,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const rows = `<tr class="grp"><td colspan="${3 + PROFILE_KEYS.length}">${esc(co.sym)}'s own numbers (percentile within the industry's top 50 where it can be)</td></tr>` + Score.QUANT.map(row).join("")
       + `<tr class="grp"><td colspan="${3 + PROFILE_KEYS.length}">The industry backdrop (from the industry report's sections)</td></tr>` + Score.SECTION.map(row).join("");
     return sec("co-scores", "Scores", `0–100 for each investor type${best ? `. Best fit: <b style="color:var(--ink)">${Score.PROFILES[best].label}</b>` : ""}`,
-      `<div class="prof-cards">${cards}</div><div class="small muted">Same pillars and weights as the industry scores, plus the analysis's judgment of each fit (strong +5, good +2, weak −2, poor −5). ${esc(co.sym)}'s metrics are ranked against the ${esc(co.run?.name || "industry")}'s 50 companies (50 = the median company); the report-section pillars are the industry's. Open a pillar to see every data point.</div>
+      `<div class="prof-cards">${cards}</div><div class="small muted">Same pillars and weights as the industry scores, plus the analysis's judgment of each fit (strong +5, good +2, weak −2, poor −5). "Lifts it" and "Holds it back" are the pillars that move that investor's score most (points above or below a neutral 50). ${esc(co.sym)}'s metrics are ranked against the ${esc(co.run?.name || "industry")}'s 50 companies (50 = the median company); the report-section pillars are the industry's. Open a pillar to see every data point.</div>
       <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>`);
   }
   // ------------------------------------------------------------- the industry report, row by row, for this company
@@ -4343,7 +4353,17 @@ a.btnlink:hover { border-color: var(--accent); }
     const AC = { upgrade: "pos", downgrade: "neg", init: "neu", initiate: "neu" };
     const list = acts.slice(0, 14);
     const at = list.length ? `<h3>Analyst actions, last year</h3><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Firm</th><th>Action</th><th>Rating</th></tr></thead><tbody>${list.map((a) => `<tr><td class="mono">${esc(a.date)}</td><td>${esc(a.firm || "")}</td><td><span class="pill ${AC[a.action] || "neu"}">${esc(a.action || "")}</span></td><td>${a.from && a.from !== a.to ? `${esc(a.from)} → ` : ""}<b>${esc(a.to || "")}</b></td></tr>`).join("")}</tbody></table></div>` : "";
-    return sec("co-street", "The sell side", "", `<div class="kpis">${K}</div>${est}${at}`);
+    const sv = (co.thesis?.thesis || co.partial)?.street, ck = co.thesis?.checks;
+    const STC = { agree: "neu", "more bullish": "pos", "more bearish": "neg" }, IVC = { above: "pos", "in line": "neu", below: "neg" };
+    const expPx = isNum(num(ck?.expected_return)) && isNum(co.px) ? co.px * (1 + ck.expected_return) : NaN;
+    const vs = sv ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our view versus Wall Street</span>${sv.stance ? `<span class="pill ${STC[sv.stance] || "neu"}">${sv.stance === "agree" ? "agrees with the street" : esc(sv.stance) + " than the street"}</span>` : ""}</div>
+      ${sv.summary ? `<p class="prose" style="margin:0">${rich(sv.summary)}</p>` : ""}
+      <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""], ["Our 12M target", sv.our_target ? fix(sv.our_target, 2) : "—", sv.our_target && isNum(co.px) ? pct(sv.our_target / co.px - 1) : ""],
+        ["Scenarios say", isNum(expPx) ? fix(expPx, 2) : "—", isNum(num(ck?.expected_return)) ? pct(ck.expected_return) + " expected" : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
+      ${sv.eps_view ? `<div class="small"><b>Our EPS versus consensus:</b> ${sv.eps_view.fy1 ? `next fiscal year <span class="pill ${IVC[sv.eps_view.fy1] || "neu"}">${esc(sv.eps_view.fy1)}</span>` : ""} ${sv.eps_view.fy2 ? `the year after <span class="pill ${IVC[sv.eps_view.fy2] || "neu"}">${esc(sv.eps_view.fy2)}</span>` : ""} ${sv.eps_view.why ? rich(sv.eps_view.why) : ""}</div>` : ""}
+      ${(sv.differences || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where we differ</th><th>The street assumes</th><th>We assume</th><th>Why</th></tr></thead><tbody>${sv.differences.map((d) => `<tr><td class="wr"><b>${esc(d.topic)}</b></td><td class="wr small">${rich(d.street)}</td><td class="wr small">${rich(d.ours)}</td><td class="wr small">${rich(d.why)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`
+      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="notice info small"><span>This analysis was written before it compared itself with the street.</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite</button></div>` : "";
+    return sec("co-street", "The sell side", "", `${vs}<h3>The consensus</h3><div class="kpis">${K}</div>${est}${at}`);
   }
   function coHealth(co) {
     const qy = co.quality || {}, f = co.data || {}, r = f.ratios || {}, t = f.ttm || {}, row = co.row || {}, ins = f.insider;
