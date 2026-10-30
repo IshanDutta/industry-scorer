@@ -9231,7 +9231,10 @@ ${schemaFor(part)}`;
       await importResultsFiles(files, { open: sector || S.sector || S.sectorView });
     } catch (e) {
       S.notices = [{ kind: "err", text: `Couldn't pull the runs from GitHub: ${e?.message || e}` }]; renderAll();
-    } finally { S.pulling = false; renderAll(); }
+    } finally {
+      S.pulling = false; renderAll();
+      S.coIdx = null; coIndex({ force: true }).then(() => { if (S.tab === "companies") renderCompany(); }).catch(() => {});
+    }
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
@@ -9439,7 +9442,8 @@ ${schemaFor(part)}`;
     const conn = !S.ready ? "" : S.mcp ? `<span><span class="dot ok"></span>FMP connector</span>` : `<span><span class="dot bad"></span>FMP not available here</span>`;
     const ai = !S.ready ? "" : S.sample ? `<span><span class="dot ok"></span>Analyst agent</span>` : `<span><span class="dot bad"></span>Agent unavailable here</span>`;
     const eod = !S.ready || !S.mcp ? "" : S.eod ? `<span><span class="dot ok"></span>EODHD connector</span>` : `<span title="Add EODHD as a custom connector named EODHD to add measured news sentiment"><span class="dot bad"></span>EODHD not connected</span>`;
-    $("meta").innerHTML = [conn, eod, ai].filter(Boolean).join("");
+    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling ? "disabled" : ""} title="Bring in every sector run copied from GitHub">${S.pulling ? "Pulling from GitHub…" : "⟳ Pull from GitHub"}</button>` : "";
+    $("meta").innerHTML = [conn, eod, ai, pull].filter(Boolean).join("");
   }
 
   function renderPicker() {
@@ -11800,6 +11804,7 @@ ${schemaFor(part)}`;
     if (t.closest(".co-ind") && !t.dataset.co) return;
     if (t.dataset.sectorRun) { if (S.sectorRec[t.dataset.sectorRun]?.finished_at && !confirm(`Analyze every ${t.dataset.sectorRun} industry again from scratch? The saved overview and runs are replaced as it goes.`)) return; runSector(t.dataset.sectorRun); return; }
     if (t.dataset.pullSector) { pullFromGithub(t.dataset.pullSector); return; }
+    if (t.dataset.pullAll) { pullFromGithub(); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
     if (t.dataset.sectorView) { if (busy() && S.sectorRun?.sector !== t.dataset.sectorView) return; (async () => { if (_saveName) await flush(); if (S.selected) forget(S.selected); S.selected = null; S.sectorView = t.dataset.sectorView; if (!(S.sectorView in S.sectorRec)) S.sectorRec[S.sectorView] = (await secGet(S.sectorView).catch(() => null)) || null; S.pickerOpen = false; window.scrollTo({ top: 0, behavior: "auto" }); renderAll(); })(); return; }
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
