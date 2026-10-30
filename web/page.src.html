@@ -3875,7 +3875,7 @@ a.btnlink:hover { border-color: var(--accent); }
     for (const x of co.news) idx[x.id] = { id: x.id, kind: x.kind, title: x.title, source: x.source, date: x.date, url: x.url };
     if (co.transcript) idx.T1 = { id: "T1", kind: "T", title: `${co.sym} earnings call ${co.transcript.period || ""}`, source: "earnings call", date: co.transcript.date };
     co.idx = idx;
-    try { co.lensIn = Company.lensInputs(run, co.geo); } catch (e) { co.lensIn = null; console.warn("lens", e); }
+    try { co.lensIn = Company.lensInputs(run, co.geo, co.seg); } catch (e) { co.lensIn = null; console.warn("lens", e); }
   }
   /**
    * Write the thesis as two halves at once (the verdict, thesis, scenarios and calls; the drivers, exposures, risks and
@@ -3976,7 +3976,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const co = S.co, el = $("company"); if (!co || !el || S.tab !== "companies" || co.stage !== "ready") return renderCompany();
     IDX = co.idx || {};
     const t = co.thesis?.thesis || co.partial;
-    for (const [id, html] of [["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)]]) {
+    for (const [id, html] of [["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-map", coMapping(co)]]) {
       const cur = el.querySelector("#" + id); if (!cur) return renderCompany();
       if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = html; const nx = tmp.firstElementChild; if (nx) cur.replaceWith(nx);
     }
@@ -4346,8 +4346,16 @@ a.btnlink:hover { border-color: var(--accent); }
     const by = {}; for (const m of ms) (by[m.section] ||= []).push(m);
     const ROLEC = { winner: "pos", loser: "neg", pick: "pos", avoid: "neg", exposed: "warn", "hot segment": "pos", "cool segment": "neg", dependency: "warn" };
     const list = Object.entries(by).map(([s, xs]) => `<details ${xs.some((x) => x.role) ? "open" : ""}><summary>${esc(s)} <span class="small muted">${xs.length}</span></summary><ul class="ev">${xs.map((m) => `<li>${m.role ? `<span class="pill ${ROLEC[m.role] || "neu"}">${esc(m.role)}</span> ` : ""}${m.where ? `<span class="src">${esc(m.where)}</span><br>` : ""}${rich(m.text)} <span class="idtag">${esc(m.id)}</span></li>`).join("")}</ul></details>`).join("");
-    const geo = (co.geo || []).length ? `<h3>Its revenue on the industry's trade map</h3><div class="tbl-wrap"><table><thead><tr><th>Region</th><th class="n">Share</th><th class="n">y/y</th><th>Trade-map countries it covers</th></tr></thead><tbody>${co.geo.map((g) => `<tr><td>${esc(g.region)}</td><td class="n">${pct(g.share, false, 0)}</td><td class="n ${cls(num(g.yoy))}">${pct(g.yoy)}</td><td class="wr small">${g.countries.map((c) => `${esc(c.country)} ${toneChip(c.stance)}${c.threat && c.threat !== "none" ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}`).join(" · ") || `<span class="muted">none named on the trade map</span>`}</td></tr>`).join("")}</tbody></table></div>` : "";
-    const seg = (co.seg || []).length ? `<h3>Its product lines against the industry's hot and cool segments</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Product line</th><th class="n">Share</th><th class="n">y/y</th><th>Industry segment</th></tr></thead><tbody>${co.seg.map((s) => `<tr><td>${esc(s.segment)}</td><td class="n">${pct(s.share, false, 0)}</td><td class="n ${cls(num(s.yoy))}">${pct(s.yoy)}</td><td class="wr small">${s.match ? `<span class="pill ${s.match.temp === "hot" ? "pos" : "neg"}">${esc(s.match.temp)}</span> <b>${esc(s.match.name)}</b> ${rich(s.match.text)}` : `<span class="muted">no matching segment</span>`}</td></tr>`).join("")}</tbody></table></div>` : "";
+    const tt = co.thesis?.thesis || co.partial, LS = tt?.lens?.segments || {}, LG = tt?.lens?.regions || {};
+    const waiting = co.writing ? `<span class="muted">being analyzed…</span>` : `<span class="muted">—</span>`;
+    const TEMPC = { hot: "pos", cool: "neg", neutral: "neu" }, OUTC = { tailwind: "pos", headwind: "neg", neutral: "neu" };
+    const geo = (co.geo || []).length ? `<h3>Its revenue on the industry's trade map</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Region</th><th class="n">Share</th><th class="n">y/y</th><th>Trade-map countries it covers</th><th>What the industry analysis means here</th></tr></thead><tbody>${co.geo.map((g, i) => { const y = LG["G" + (i + 1)];
+      return `<tr><td>${esc(g.region)}</td><td class="n">${pct(g.share, false, 0)}</td><td class="n ${cls(num(g.yoy))}">${pct(g.yoy)}</td><td class="wr small">${g.countries.map((c) => `${esc(c.country)} ${toneChip(c.stance)}${c.threat && !["none", "low"].includes(c.threat) ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}`).join(" · ") || `<span class="muted">none on the trade map</span>`}</td>
+        <td class="wr small">${y ? `<span class="pill ${OUTC[y.outlook] || "neu"}">${esc(y.outlook)}</span> ${rich(y.why)}` : waiting}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+    const seg = (co.seg || []).length ? `<h3>Its product lines against the industry's hot and cool segments</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Product line</th><th class="n">Share</th><th class="n">y/y</th><th>Industry segment</th><th>The analysis</th></tr></thead><tbody>${co.seg.map((s, i) => { const y = LS["S" + (i + 1)];
+      const segCell = s.match ? `<span class="pill ${s.match.temp === "hot" ? "pos" : "neg"}">${esc(s.match.temp)}</span> <b>${esc(s.match.name)}</b> <span class="muted">${rich(s.match.text)}</span>`
+        : y ? `<span class="pill ${TEMPC[y.temp] || "neu"}">${esc(y.temp)}</span> <b>${esc(y.industry_segment || "")}</b>` : waiting;
+      return `<tr><td>${esc(s.segment)}</td><td class="n">${pct(s.share, false, 0)}</td><td class="n ${cls(num(s.yoy))}">${pct(s.yoy)}</td><td class="wr small">${segCell}</td><td class="wr small">${y?.why ? rich(y.why) : s.match ? "" : waiting}</td></tr>`; }).join("")}</tbody></table></div>` : "";
     return sec("co-map", `What the ${esc(co.run.name)} analysis says about ${esc(co.sym)}`, ms.length ? `${ms.length} findings that name it, from ${Object.keys(by).length} sections` : "",
       `${ms.length ? list : `<div class="small muted">The industry analysis doesn't name ${esc(co.sym)}${co.row?.rank ? "" : " (it isn't one of the 50 companies it covered)"}; the analysis above connects it to the industry's findings through its own business, geography and numbers.</div>`}${geo}${seg}`);
   }
