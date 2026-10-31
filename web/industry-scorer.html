@@ -7756,7 +7756,7 @@ ${schemaFor(part)}`;
   /** Once a day per industry, score the calls without being asked. */
   function autoTrack(name, sector = null) {
     const sl = slug(name), log = S.track[sl];
-    if (!S.mcp || S.trackBusy || busy() || S.trackAuto[sl] === today() || !log?.some((e) => Track.needsPrices(e))) return;
+    if (!S.mcp || S.trackBusy || S.sweep?.busy || busy() || S.trackAuto[sl] === today() || !log?.some((e) => Track.needsPrices(e))) return;
     S.trackAuto[sl] = today();
     setTimeout(() => { refreshTrack(name, { quiet: true, sector }).catch(() => {}); }, 0);
   }
@@ -7776,6 +7776,62 @@ ${schemaFor(part)}`;
         S.secTrack[sec].done++; S.secTrack[sec].entries = flat(); renderReport();
       }
     } finally { S.secTrack[sec] = { busy: false, entries: flat(), at: today() }; renderReport(); }
+  }
+  /**
+   * Every track record in this browser (each industry's calls and each company's), scored with the latest prices,
+   * without being asked: when the page opens, after a pull from GitHub, and again each new day while it stays open.
+   * Open calls only need today's price, so those come from batch quotes (100 symbols a call); full histories are
+   * fetched only for calls with a horizon that has just come due.
+   */
+  async function sweepTracks({ force = false } = {}) {
+    if (JOB || !S.mcp) return;
+    if (S.sweep?.busy) { if (force) S.sweep.again = true; return; }
+    const day = today();
+    if (!force && (S.sweepDay === day || (await idbGet("trackSweep").catch(() => null)) === day)) { S.sweepDay = day; return; }
+    if (busy()) { setTimeout(() => sweepTracks({ force }), 60e3); return; }
+    S.sweep = { busy: true }; renderMeta();
+    try {
+      const keys = ((await idbKeys()) || []).map(String).filter((k) => /^(calls|cocalls):/.test(k));
+      const logs = {}; for (const k of keys) logs[k] = (await idbGet(k).catch(() => null)) || [];
+      const need = keys.flatMap((k) => logs[k].filter((e) => Track.needsPrices(e) && e.as_of).map((e) => [k, e]));
+      if (!need.length) return;
+      const from = need.reduce((a, [, e]) => (e.as_of < a ? e.as_of : a), day);
+      const spy = await trackSeries("SPY", from), lastDate = spy?.dates?.[spy.dates.length - 1];
+      if (!lastDate) return;
+      const etfSer = {}; for (const x of new Set(need.map(([, e]) => e.etf).filter(Boolean))) etfSer[x] = await trackSeries(x, from).catch(() => null);
+      // A horizon that has come due needs the price on its end date (a history); an open one only needs the latest price.
+      const due = (e) => Track.ORDER.some((h) => e.horizons?.[h] && !(e.eval?.horizons?.[h]?.matured && e.eval.horizons[h].scored) && E.addDays(e.as_of, Track.DAYS[h]) <= lastDate);
+      const hist = {}, quote = new Set();
+      for (const [, e] of need) for (const c of [...e.constituents].sort((a, b) => b.weight - a.weight).slice(0, 40)) {
+        if (due(e)) hist[c.symbol] = hist[c.symbol] && hist[c.symbol] < e.as_of ? hist[c.symbol] : e.as_of; else quote.add(c.symbol);
+      }
+      for (const sym of Object.keys(hist)) quote.delete(sym);
+      const ser = {};
+      await pool(Object.keys(hist), COMPANY_CONCURRENCY, async (sym) => { ser[sym] = await trackSeries(sym, hist[sym]).catch(() => null); }, null);
+      const nyDay = (ts) => new Date(ts * 1000).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+      const qs = [...quote];
+      await pool(Array.from({ length: Math.ceil(qs.length / 100) }, (_, i) => qs.slice(i * 100, i * 100 + 100)), 2, async (batch) => {
+        const rows = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: batch }), [])) || [];
+        for (const q of rows) {
+          // A quote from a session after the last daily bar (the market is open) counts at the prior close, so it lines up with SPY's bar.
+          const p = isNum(num(q?.timestamp)) && nyDay(q.timestamp) > lastDate ? num(q.previousClose) : num(q?.price);
+          if (q?.symbol && p > 0) ser[q.symbol] = { dates: [lastDate], closes: [p] };
+        }
+      }, null);
+      for (const k of keys) {
+        let changed = false;
+        for (const e of logs[k]) if (Track.needsPrices(e) && e.as_of) {
+          const doc = k.startsWith("calls:") ? S.industries[k.slice(6)] : null;
+          e.eval = Track.evaluate(e, (sym) => ser[sym] || null, { spy, etf: etfSer[e.etf]?.dates?.length ? etfSer[e.etf] : null, rf: S.bench?.rf_latest, beta: doc?.summary?.beta }, lastDate); changed = true;
+        }
+        if (!changed) continue;
+        await idbPut(k, logs[k]).catch(() => {});
+        if (k.startsWith("calls:")) { S.track[k.slice(6)] = logs[k]; S.trackAuto[k.slice(6)] = day; }
+        else if (S.co?.sym && k === "cocalls:" + S.co.sym) S.co.track = logs[k];
+      }
+      for (const sec of Object.keys(S.secTrack || {})) if (S.secTrack[sec] && !S.secTrack[sec].busy) S.secTrack[sec] = null;
+      await idbPut("trackSweep", day).catch(() => {}); S.sweepDay = day; S.sweepAt = lastDate;
+    } catch (e) { console.warn("track sweep:", e?.message || e); } finally { const again = S.sweep?.again; S.sweep = null; renderAll(); if (again) sweepTracks({ force: true }); }
   }
 
 
@@ -9152,6 +9208,12 @@ ${schemaFor(part)}`;
     for (const k of keys) { const v = await idbGet(k); if (v !== null && v !== undefined) records[k] = v; }
     return { format: "industry-scorer/results", v: 1, sector, exported_at: new Date().toISOString(), finished: !!rec.finished_at, records };
   }
+  /** One industry's call log from two copies (this browser's and an imported one): every call once, the most recently scored copy of each. */
+  function mergeCalls(a, b) {
+    const m = new Map();
+    for (const e of [...a, ...b]) { if (!e?.id) continue; const x = m.get(e.id); if (!x || String(e.eval?.at || "") > String(x.eval?.at || "")) m.set(e.id, e); }
+    return [...m.values()].sort((x, y) => (x.run_at < y.run_at ? -1 : 1)).slice(-24);
+  }
   /** Write a results file's records into this browser and list its industries as saved runs. */
   async function importRecords(file) {
     if (file?.format !== "industry-scorer/results" || !file.records || typeof file.records !== "object") throw new Error("This isn't an Industry Scorer results file.");
@@ -9160,8 +9222,9 @@ ${schemaFor(part)}`;
     // The job's measured cost travels with the sector record, so the overview can show it.
     const rk = file.sector ? secKey(file.sector) : null;
     if (rk && file.records[rk] && file.job?.cost) file.records[rk] = { ...file.records[rk], job: file.job };
-    for (const [k, v] of Object.entries(file.records)) {
+    for (let [k, v] of Object.entries(file.records)) {
       if (!/^(run|calls|sector):/.test(k)) continue;
+      if (k.startsWith("calls:") && Array.isArray(v)) v = mergeCalls((await idbGet(k).catch(() => null)) || [], v);
       if (!(await idbPut(k, v))) throw new Error("This browser couldn't store the results (it may be out of space).");
       if (k.startsWith("run:") && v?.industry?.summary) { const sl = k.slice(4); const i = idx.findIndex((x) => x.slug === sl); const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: v.missing || [], running: false };
         if (i >= 0) idx[i] = e; else idx.unshift(e); n++; S.savedAt[sl] = v.saved_at; }
@@ -9197,6 +9260,7 @@ ${schemaFor(part)}`;
       ...failed.map((t) => ({ kind: "err", text: `Couldn't import ${t}` })),
     ];
     renderAll();
+    if (done.length) setTimeout(() => sweepTracks({ force: true }), 500);
   }
   /** A "lead strategist didn't finish" note is dropped once a later run has written that industry's lead strategist. */
   function staleFree(rec, steps) {
@@ -9234,6 +9298,7 @@ ${schemaFor(part)}`;
     } finally {
       S.pulling = false; renderAll();
       S.coIdx = null; coIndex({ force: true }).then(() => { if (S.tab === "companies") renderCompany(); }).catch(() => {});
+      sweepTracks({ force: true });
     }
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
@@ -9442,8 +9507,9 @@ ${schemaFor(part)}`;
     const conn = !S.ready ? "" : S.mcp ? `<span><span class="dot ok"></span>FMP connector</span>` : `<span><span class="dot bad"></span>FMP not available here</span>`;
     const ai = !S.ready ? "" : S.sample ? `<span><span class="dot ok"></span>Analyst agent</span>` : `<span><span class="dot bad"></span>Agent unavailable here</span>`;
     const eod = !S.ready || !S.mcp ? "" : S.eod ? `<span><span class="dot ok"></span>EODHD connector</span>` : `<span title="Add EODHD as a custom connector named EODHD to add measured news sentiment"><span class="dot bad"></span>EODHD not connected</span>`;
+    const sw = S.sweep?.busy ? `<span class="small muted">Updating track records…</span>` : "";
     const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling ? "disabled" : ""} title="Bring in every sector run copied from GitHub">${S.pulling ? "Pulling from GitHub…" : "⟳ Pull from GitHub"}</button>` : "";
-    $("meta").innerHTML = [conn, eod, ai, pull].filter(Boolean).join("");
+    $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
   }
 
   function renderPicker() {
@@ -10605,10 +10671,10 @@ ${schemaFor(part)}`;
     const sl = slug(d.name), log = S.track[sl] || [];
     if (!log.length) return sec("track", "Track record", "", `<div class="small muted">Every lead verdict is logged with the prices it was made at. From the next trading day, each 1M, 3M, 6M and 12M call is scored automatically against what the industry actually did, with its alpha vs SPY and the sector ETF, and the strategist sees its own record.</div>`);
     autoTrack(d.name, d.sector);
-    const btn = `<button class="sm" id="track-check" ${S.trackBusy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl ? "Updating…" : "Update now"}</button>`;
+    const btn = `<button class="sm" id="track-check" ${S.trackBusy || S.sweep?.busy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl || S.sweep?.busy ? "Updating…" : "Update now"}</button>`;
     const at = log.map((e) => e.eval?.at).filter(Boolean).sort().pop();
     return sec("track", "Track record", `${log.length} verdict${log.length === 1 ? "" : "s"} logged${at ? ` · prices to ${esc(fmtShort(at))}` : ""}`,
-      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}${S.trackBusy === sl ? `<span class="small muted">Scoring the calls with the latest prices…</span>` : ""}</div>${trackView(log)}`);
+      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}<span class="small muted">${S.trackBusy === sl || S.sweep?.busy ? "Scoring the calls with the latest prices…" : "Updates by itself with the latest prices each day this page is open."}</span></div>${trackView(log)}`);
   }
   /** The sector's track record: every call on every industry in it, together. */
   function sectorTrackBlock(sec, names) {
@@ -11919,6 +11985,7 @@ ${schemaFor(part)}`;
     S.mcp = mcp; S.sample = sample; S.ready = true; renderAll();
     if (mcp) { detectEod().then(renderMeta); loadIndustries(); }
     await restored;
+    if (mcp) { setTimeout(() => sweepTracks(), 4000); setInterval(() => { if (S.sweepDay !== today()) sweepTracks(); }, 30 * 60e3); }
     if (mcp && sample && S.sectorAuto && !busy()) { runSector(S.sectorAuto); return; }
     // A run that was cut off mid-way (the page was closed or the tab navigated away) carries on by itself.
     const r = S.restored;
