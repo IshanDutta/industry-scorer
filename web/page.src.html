@@ -142,6 +142,9 @@ tbody tr:last-child td { border-bottom: 0; }
 .take li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bench); transform: translateY(-1px); }
 .take li.pos::before { background: var(--gA); } .take li.neg::before { background: var(--gF); }
 .summary-text { font-size: 16px; line-height: 1.6; max-width: 80ch; margin: 0; }
+.coread { border-left: 3px solid var(--accent); background: var(--sunk); padding: 10px 14px; margin: 0 0 16px; border-radius: 0 var(--r) var(--r) 0; }
+.coread p { margin: 4px 0 0; font-size: 14.5px; line-height: 1.55; max-width: 100ch; }
+.coread.pending { border-left-color: var(--line); }
 .note { border-left: 3px solid var(--accent); padding: 4px 0 4px 12px; font-size: 14.5px; max-width: 90ch; border-radius: 0; }
 .note b { font-weight: 600; }
 .verdict { font-size: 13.5px; color: var(--ink); }
@@ -4068,7 +4071,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
       peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
       quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
-      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend };
+      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend, indPanels: coIndPanels(co) };
     const raw = { core: null, context: null }; let last = 0;
     const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = Company.cleanThesis({ ...(raw.context || {}), ...(raw.core || {}) }, co.idx); co.partial.lens = Company.cleanLens({ ...(raw.core || {}), ...(raw.context || {}) }, co.lensIn, co.idx); renderCoWriting(); };
     const half = async (part) => {
@@ -4157,8 +4160,15 @@ a.btnlink:hover { border-color: var(--accent); }
     const t = co.thesis?.thesis || co.partial;
     for (const [id, html] of [["co-snap", coSnapshot(co, t)], ["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-plan", coPlan(co, t)], ["co-scen", coScenDeb(co, t)], ["co-kpi", coKpis(co, t)], ["co-chain", coChain(co, t)], ["co-cal", coCalendar(co, t)], ["co-biz", coBusiness(co)], ["co-scores", coScores(co, t)], ["co-street", coStreet(co)]]) {
       const cur = el.querySelector("#" + id); if (!cur) return renderCompany();
-      if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = html; const nx = tmp.firstElementChild; if (nx) cur.replaceWith(nx);
+      if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = withRead(co, t, html); const nx = tmp.firstElementChild; if (nx) cur.replaceWith(nx);
     }
+    // Every other panel: just its read, as it streams in.
+    el.querySelectorAll("section.panel[id^='co-']").forEach((secEl) => {
+      const key = secEl.id.slice(3), html = coRead(co, t, key), cur = secEl.querySelector(":scope > .coread"); if (!html) return;
+      if (cur && cur.outerHTML === html) return;
+      const tmp = document.createElement("div"); tmp.innerHTML = html; const nx = tmp.firstElementChild;
+      if (cur) cur.replaceWith(nx); else secEl.querySelector(":scope > .panel-head")?.after(nx);
+    });
   }
   function bindCompany() {
     $("co-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openCompany($("co-q").value); });
@@ -4228,6 +4238,43 @@ a.btnlink:hover { border-color: var(--accent); }
     co.dcfP = co.dcfP || { ...co.dcfBase };
     co.scores = CoFacts.scores({ row: co.row, cons: run?.industry?.constituents || [], quality: co.quality, greeks: co.g1, earn: co.earn, pe_vs_hist: co.peh?.vs_median, insider: f.insider, sections, profiles: Score.PROFILES, sectionKeys: Score.SECTION });
   }
+  /** The industry report's own read of each panel (its analyst notes and numbers), keyed like the company's panels, for the thesis prompt. */
+  function coIndPanels(co) {
+    const run = co.run; if (!run) return "";
+    const L = run.lead || {}, I = run.industry || {}, Sm = I.summary || {}, sx = L.sections || {}, H = I.history || {}, P = I.positioning || {}, F = I.fund || {}, FW = I.forward || {}, PI = I.priced_in || {}, CR = I.credit || {}, R = run.reports || {};
+    const pc = (x, d = 1) => (isNum(num(x)) ? (x * 100).toFixed(d) + "%" : "n/a"), fx = (x, d = 2) => (isNum(num(x)) ? Number(x).toFixed(d) : "n/a"), cut = (s, k = 600) => stripCites(String(s || "")).slice(0, k);
+    const out = [], by = {}, add = (k, ...xs) => { const s = xs.filter(Boolean).join(" ").trim(); if (s) { out.push(`[${k}] ${s}`); by[k] = s; } };
+    add("perf", cut(sx.performance), `Industry (cap-weighted) returns: ${["1M", "3M", "6M", "1Y"].map((w) => `${w} ${pc(Sm["ret_cw_" + w])} vs SPY ${pc(Sm["spy_" + w])} (median company ${pc(Sm["ret_median_" + w])}, ${pc(Sm["breadth_" + w], 0)} of companies up)`).join("; ")}.`);
+    const sf = (I.sensitivity?.factors || []).map((x) => `${x.shock_label}: industry ${pc(x.total?.effect, 2)} (t ${fx(x.total?.t, 1)}${x.stable ? ", stable" : ""})`).join("; ");
+    add("risk", cut(sx.risk), `Industry beta ${fx(Sm.beta)}, volatility ${pc(Sm.vol_1y, 0)}, downside volatility ${pc(Sm.downside_vol_1y, 0)}, 1Y max drawdown ${pc(Sm.max_dd_1y, 0)}, Sharpe ${fx(Sm.sharpe_1y)}; median company beta ${fx(Sm.beta_median)}, volatility ${pc(Sm.vol_1y_median, 0)}.`, sf ? `Measured factor sensitivities: ${sf}.` : "");
+    const dd = H.drawdowns || {};
+    add("stress", (dd.episodes || []).length ? `Industry drawdowns since ${H.from || "n/a"}: ${dd.episodes.slice(0, 4).map((e) => `${e.peak} to ${e.trough} ${pc(e.depth, 0)}${e.recovered ? `, recovered ${e.recovered}` : ", not recovered"}`).join("; ")}; now ${pc(dd.current, 0)} from its high.` : "",
+      H.base_prob_up ? `Base rate of a gain: ${Object.entries(H.base_prob_up).map(([h, v]) => `${h} ${pc(v, 0)}`).join(", ")}.` : "");
+    const px = P.price || {};
+    add("tech", px.last ? `Industry index ${pc(px.vs50)} vs its 50-day, ${pc(px.vs200)} vs 200-day, RSI ${fx(px.rsi14, 0)}, ${pc(px.from_high)} from its high, 20-day volatility ${pc(px.vol20, 0)}.` : "", P.label ? `Positioning reads "${P.label}".` : "");
+    add("own", P.institutions ? `Institutions own ${fx(P.institutions.own_pct, 0)}% of the industry, ${P.institutions.own_change_pp >= 0 ? "up" : "down"} ${fx(Math.abs(P.institutions.own_change_pp), 1)}pp last quarter; adding ${(P.institutions.adding || []).slice(0, 8).join(", ")}; cutting ${(P.institutions.cutting || []).join(", ") || "none"}; 13F put/call ${fx(P.institutions.pcr)} (was ${fx(P.institutions.pcr_prev)}).` : "",
+      P.insiders ? `Insiders across the industry: ${P.insiders.purchases} buys (at ${(P.insiders.buyers || []).join(", ") || "none"}), sales ${fx(P.insiders.sales_vs_norm, 1)}x normal.` : "", P.short ? `Short interest: median ${pc(P.short.median)}, most shorted ${(P.short.highest || []).map((x) => `${x.symbol} ${pc(x.pct, 0)}`).join(", ")}.` : "");
+    const se = run.research?.sentiment;
+    add("news", se ? `Industry news sentiment (-1 to +1): last 7 days ${fx(se.last_7d)}, prior 30 ${fx(se.prior_30d)}, 90 days ${fx(se.last_90d)}, ${se.articles_30d || "n/a"} articles in 30 days.` : "", L.dimensions?.news ? `The lead strategist scores news flow ${L.dimensions.news.score}: ${cut(L.dimensions.news.summary, 260)}` : "");
+    add("calls", R.calls?.summary ? `The industry's earnings calls (${R.calls.summary.direction || ""}): ${cut(R.calls.summary.text, 700)}` : "");
+    add("fund", cut(sx.fundamentals), `Industry medians: revenue growth ${pc(F.med?.rev_growth)}, gross margin ${pc(F.med?.gross_margin)}, operating margin ${pc(F.med?.op_margin)}, net margin ${pc(F.med?.net_margin)}, ROE ${pc(F.med?.roe)}; cap-weighted ROIC ${pc(F.roic)}, FCF margin ${pc(F.fcf_margin)}.`);
+    add("health", cut(sx.health), `Industry interest cover ${fx(F.int_cover, 1)}x, debt/equity ${fx(F.de)}, current ratio ${fx(F.current_ratio)}, FCF covers dividends ${fx(F.fcf_div_cover, 1)}x.`, (CR.weak || []).length ? `Weak balance sheets: ${CR.weak.slice(0, 6).map((x) => `${x.symbol} (cover ${fx(x.int_cover, 1)}x${isNum(num(x.nd_ebitda)) ? `, net debt/EBITDA ${fx(x.nd_ebitda, 1)}x` : ""})`).join(", ")}.` : "", CR.cmdi ? `Corporate bond market distress index ${fx(CR.cmdi.market)} (percentile ${pc(CR.cmdi.market_pctl, 0)}).` : "");
+    const hv = H.valuation || {};
+    add("val", cut(sx.valuation), `Industry P/E ${fx(F.pe, 1)} (forward ${fx(FW.fwd_pe, 1)}), EV/EBITDA ${fx(F.ev_ebitda, 1)}, FCF yield ${pc(PI.fcf_yield)}; the price implies ${pc(PI.implied_fcf_growth)} a year of FCF growth vs ${pc(PI.consensus_ntm_growth)} consensus EPS growth ("${PI.verdict || "n/a"}").`, hv.pe ? `Long history: P/E ${fx(hv.pe, 1)} sits at the ${pc(hv.percentile, 0)} percentile since ${hv.from || "n/a"} (median ${fx(hv.median, 1)}).` : "", L.priced_in ? `Priced in: ${cut(typeof L.priced_in === "string" ? L.priced_in : L.priced_in.text || L.priced_in.summary || JSON.stringify(L.priced_in), 400)}` : "");
+    add("earn", cut(sx.earnings), FW.has_revisions ? `Industry EPS revisions: ${pc(FW.rev30)} over 30 days, ${pc(FW.rev90)} over 90, breadth ${fx(FW.breadth)} (${FW.up30} up / ${FW.down30} down); NTM EPS growth ${pc(FW.ntm_eps_growth)}.` : "");
+    add("div", `Industry dividend yield ${pc(F.div_yield)}, FCF covers dividends ${fx(F.fcf_div_cover, 1)}x.`, L.profiles?.income?.verdict ? `For income investors: ${cut(L.profiles.income.verdict, 500)}` : "");
+    const an = run.research?.analyst || [], up = an.map((x) => num(x.upside)).filter(isNum).sort((a, b) => a - b);
+    add("street", an.length ? `Across the industry's covered names the median target upside is ${pc(up[Math.floor(up.length / 2)])}; ${an.filter((x) => /buy/i.test(x.consensus || "")).length} of ${an.length} are rated Buy.` : "", FW.has_revisions ? `Estimate breadth ${fx(FW.breadth)}.` : "");
+    const rk = I.ranking?.rows || [], me = rk.find((x) => x.symbol === co.sym), cc = I.concentration || {};
+    add("land", me ? `${co.sym} ranks ${rk.indexOf(me) + 1} of ${rk.length} on the industry's composite (${me.composite}); factor scores ${Object.entries(me.factors || {}).map(([k, v]) => `${k} ${v}`).join(", ")}.` : `${co.sym} isn't in the industry's ranking.`, rk.length ? `Industry leaders: ${rk.slice(0, 5).map((x) => `${x.symbol} ${x.composite}`).join(", ")}.` : "", cc.top3 ? `Concentration: ${cc.top3.join(", ")} are ${pc(cc.top3_weight, 0)} of the industry; equal-weight 1Y ${pc(cc.r1y_equal)} vs cap-weight ${pc(cc.r1y_all)}.` : "");
+    add("peers", L.tensions?.length ? `Tensions in the industry analysis: ${L.tensions.slice(0, 3).map((x) => `${cut(x.text, 200)} (resolved: ${cut(x.resolution, 160)})`).join(" | ")}` : "");
+    add("scores", Object.entries(L.profiles || {}).map(([k, v]) => `${k}: ${cut(v?.verdict, 260)}`).join(" | "));
+    add("plan", Object.entries(L.plans || {}).map(([k, v]) => `${k}: size ${v?.size}%, entry ${cut(v?.entry, 140)}, stop ${pc(v?.stop_pct)}`).join(" | "));
+    const tl = S.track[slug(run.name)] || [];
+    add("track", tl.length ? Track.digest(tl).split("\n").slice(0, 3).join(" ") : "");
+    co.indReads = by;
+    return out.join("\n");
+  }
   /** A one-sigma move per window (%), from the stock's own 1-year volatility. */
   function coSigmas(co) { const v = num(co.g1?.vol ?? co.vol1y ?? co.row?.vol_1y); return isNum(v) && v > 0 ? Object.fromEntries([["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]].map(([h, m]) => [h, Math.round(v * Math.sqrt(m / 12) * 1000) / 10])) : null; }
   /** The computed facts, as lines for the thesis prompt. */
@@ -4244,6 +4291,28 @@ a.btnlink:hover { border-color: var(--accent); }
     if (e.past?.length) lines.push(`Earnings: beat ${pc(e.beat_rate, 0)} of the last 8, median EPS surprise ${pc(e.surprise_median)}; next report ${e.next?.date || "n/a"}${isNum(num(e.next?.ee)) ? ` (EPS estimate ${fx(e.next.ee)})` : ""}.`);
     const acts = (co.data?.actions || []).filter((a) => a.action && a.action !== "maintain").slice(0, 6);
     if (acts.length) lines.push(`Analyst rating changes (last year): ${acts.map((a) => `${a.date} ${a.firm} ${a.action} ${a.from || ""}→${a.to || ""}`).join("; ")}.`);
+    // The rest of the panels' numbers, so every panel's read rests on its own figures.
+    const ep = (co.ep || []).filter((x) => isNum(num(x.ret)));
+    if (ep.length) lines.push(`Stress tests (${co.sym} vs SPY${ep.some((x) => x.estimated) ? "; 'est' = before it traded, beta x SPY" : ""}): ${ep.map((x) => `${x.label} ${pc(x.ret, 0)}${x.estimated ? " est" : ""} vs ${pc(x.spy, 0)}${isNum(num(x.dd)) ? `, worst fall ${pc(x.dd, 0)}` : ""}`).join("; ")}.`);
+    const td = co.tech?.D, tw = co.tech?.W;
+    if (td?.last) lines.push(`Technicals (daily): ${td.signals.map((x) => x.t).join("; ")}; signal score ${td.score}.${tw?.signals?.length ? ` Weekly: ${tw.signals.map((x) => x.t).join("; ")}.` : ""}`);
+    if (co.pm) lines.push(`Pattern match: the ${co.pm.n} closest past ${co.pm.win}-day price patterns (its own history and SPY's) went on to ${pc(co.pm.median)} median over ${co.pm.fwd} days, up ${pc(co.pm.win_rate, 0)} of the time (best ${pc(co.pm.best, 0)}, worst ${pc(co.pm.worst, 0)}).`);
+    const sens = co.sens?.factors || [], iby = Object.fromEntries((co.run?.industry?.sensitivity?.factors || []).map((x) => [x.key, x]));
+    if (sens.length) lines.push(`Factor sensitivities (1Y daily, ${co.sym} vs the industry): ${sens.map((x) => `${x.shock_label}: ${pc(x.total?.effect, 2)} vs ${pc(iby[x.key]?.total?.effect, 2)} (t ${fx(x.total?.t, 1)})`).join("; ")}.`);
+    const dv = co.div;
+    if (dv?.paying) lines.push(`Dividend: yield ${pc(dv.yield)}, 5-year growth ${pc(dv.cagr5)} a year, ${dv.streak} years of increases${dv.cut5 ? ", cut in the last 5 years" : ""}, safety ${dv.safety}/100${dv.next?.ex ? `, next ex-date ${dv.next.ex}` : ""}.`); else if (dv) lines.push("Dividend: none.");
+    const dp = (co.dupont || []).slice(-3);
+    if (dp.length) lines.push(`DuPont ROE: ${dp.map((x) => `${x.year} ${pc(x.roe, 0)} = margin ${pc(x.net_margin, 0)} x turnover ${fx(x.asset_turnover)} x leverage ${fx(x.leverage, 1)}`).join("; ")}.`);
+    if (co.band) lines.push(`P/E band: ${fx(ph.now, 1)} against a mean of ${fx(co.band.mean, 1)} (±1 sd ${fx(co.band.lo, 1)}-${fx(co.band.hi, 1)}), percentile ${pc(co.band.percentile, 0)}: ${co.band.verdict || "n/a"}.`);
+    const rx = (co.reactions || []).filter((x) => isNum(num(x.move))).slice(0, 6);
+    if (rx.length) lines.push(`Price reaction to the last ${rx.length} reports (day after vs day before): ${rx.map((x) => `${x.date} ${pc(x.move)}`).join(", ")}.`);
+    const o = co.data?.own || {}, pos = o.pos, ev = o.eod;
+    if (pos || ev) lines.push(`Ownership: ${ev && isNum(num(ev.inst)) ? `institutions ${fx(ev.inst, 0)}% (all markets), insiders ${fx(ev.insiders, 1)}%` : ""}${pos ? `${ev ? "; " : ""}US 13F: ${pos.investorsHolding} holders, ${fx(pos.ownershipPercent, 1)}% of shares, ${pos.ownershipPercentChange >= 0 ? "+" : ""}${fx(pos.ownershipPercentChange, 2)}pp last quarter, ${pos.newPositions} new / ${pos.closedPositions} closed` : ""}${isNum(num(co.row?.short_pct)) ? `; short interest ${pc(co.row.short_pct)} of float` : ""}.`);
+    const sent = co.data?.sentiment || [];
+    if (sent.length) { const c30 = sent.filter((r) => r.date >= Horizon.addDays(today(), -30)), w = c30.reduce((a, r) => a + r.count, 0); if (w) lines.push(`News sentiment, 30 days: ${fx(c30.reduce((a, r) => a + r.score * r.count, 0) / w)} (-1 to +1) on ${w} articles.`); }
+    const ql = co.quality || {};
+    if (isNum(num(ql.nd_ebitda)) || isNum(num(ql.int_cover))) lines.push(`Balance sheet: net debt/EBITDA ${fx(ql.nd_ebitda, 1)}x, interest cover ${fx(ql.int_cover, 1)}x, Altman Z ${fx(ql.altman, 1)} (${ql.altman_zone || "n/a"}), Piotroski ${ql.piotroski ?? "n/a"}/9.`);
+    if ((co.track || []).length) lines.push(Track.digest(co.track).split("\n").slice(0, 4).join(" ").replace("THIS INDUSTRY", "THIS COMPANY"));
     return lines.join("\n");
   }
 
@@ -4252,6 +4321,25 @@ a.btnlink:hover { border-color: var(--accent); }
   const yearTicks = (dates) => { const out = []; let last = ""; dates.forEach((d, i) => { const y = d.slice(0, 4); if (y !== last) { if (last) out.push([i, y]); last = y; } }); return out; };
   const fmtKind = (k, v) => (!isNum(num(v)) ? "—" : k === "chg" ? pct(v) : k === "pct" ? pct(v, false) : k === "pp" ? `${v > 0 ? "+" : ""}${fix(v, 1)}pp` : k === "n" ? String(Math.round(v)) : fix(v, 2));
   const signed = (v, d = 2) => (isNum(num(v)) ? (v > 0 ? "+" : "") + Number(v).toFixed(d) : "—");
+  /** Our written read of one panel (from the thesis), with what the industry report said about the same thing. */
+  const IND_READ = { stress: "drawdowns", tech: "index trend", news: "news flow", calls: "earnings calls", div: "income", street: "the street", scores: "by investor", peers: "tensions", land: "leaders", track: "its own record" };
+  function coRead(co, t, key) {
+    if (!co.run || key === "snap" || key === "thesis") return "";
+    if (!co.indReads) try { coIndPanels(co); } catch { co.indReads = {}; }
+    const r = t?.reads?.[key], ir = IND_READ[key] && co.indReads?.[key];
+    const indL = ir ? `<div class="small muted" style="margin-top:6px"><b>The industry report (${IND_READ[key]}):</b> ${esc(ir.replace(/\b(income|conservative|growth|aggressive): /g, (m, k) => `${k[0].toUpperCase() + k.slice(1)}: `))}</div>` : "";
+    if (r) return `<div class="coread" data-read="${key}"><span class="eyebrow">Our read</span><p>${rich(r)}</p>${indL}</div>`;
+    if (co.writing) return `<div class="coread pending" data-read="${key}"><span class="eyebrow">Our read</span><p class="muted">Being written…</p>${indL}</div>`;
+    return indL ? `<div class="coread pending" data-read="${key}">${indL}</div>` : "";
+  }
+  const withRead = (co, t, html) => {
+    const m = /^<section class="panel" id="co-([a-z]+)"><div class="panel-head">/.exec(html || ""); if (!m) return html || "";
+    // The heading may hold its own divs (period switches): find the one that closes it.
+    const re = /<div\b|<\/div>/g; re.lastIndex = m[0].length; let depth = 1, x;
+    while (depth && (x = re.exec(html))) depth += x[0] === "</div>" ? -1 : 1;
+    if (depth) return html; const end = re.lastIndex;
+    return html.slice(0, end) + coRead(co, t, m[1]) + html.slice(end);
+  };
   function companyView(co) {
     const f = co.data || {}, run = co.run, t = co.thesis?.thesis || co.partial, ck = co.thesis?.checks;
     const stale = co.thesis && run && co.thesis.industry_run_at && run.saved_at && co.thesis.industry_run_at < run.saved_at;
@@ -4269,7 +4357,7 @@ a.btnlink:hover { border-color: var(--accent); }
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
       coFund(co), coHealth(co), coValuation(co), coDividends(co), coOwnership(co), coEarnings(co), coBusiness(co),
       coReg(co, t), coScenDeb(co, t), coCalendar(co, t), run ? coDrivers(co, t) : "", coTrackSec(co)];
-    return `${notices}<div class="shell">${sideNav(companyGroups(co))}<div class="stream">${secs.join("")}</div></div>`;
+    return `${notices}<div class="shell">${sideNav(companyGroups(co))}<div class="stream">${secs.map((h) => withRead(co, t, h)).join("")}</div></div>`;
   }
   function coThesis(co, t, ck) {
     const writing = co.writing;
