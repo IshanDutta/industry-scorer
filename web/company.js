@@ -279,7 +279,7 @@
     for (const e of evs) { const d = e.date.slice(0, 10), key = d + "|" + lc(e.title).replace(/[^a-z0-9]/g, "").slice(0, 18);
       // The same company's report, listed twice (as an earnings date and as a trigger), counts once.
       if (seenE.has(key) || calendar.some((c) => c.date.slice(0, 10) === d && c.tickers.length && e.tickers.length && c.tickers[0] === e.tickers[0])) continue; seenE.add(key); calendar.push(e); }
-    const cal = calendar.filter((e) => !today || e.date >= today.slice(0, 10)).slice(0, 14).map((e, i) => ({ id: "E" + (i + 1), date: String(e.date).slice(0, 10), title: trim(e.title, 160), detail: trim(e.detail, 240), importance: e.importance || "", kind: e.kind || "", tickers: e.tickers.slice(0, 8) }));
+    const cal = calendar.filter((e) => !today || e.date >= today.slice(0, 10)).slice(0, 60).map((e, i) => ({ id: "E" + (i + 1), date: String(e.date).slice(0, 10), title: trim(e.title, 160), detail: trim(e.detail, 240), importance: e.importance || "", kind: e.kind || "", tickers: e.tickers.slice(0, 8), source: "industry" }));
     const g = R.reg || {};
     const regItems = [...(g.policy || []).map((x) => ({ kind: "policy", title: x.title, status: x.status, date: x.date, direction: x.direction, text: x.impact, names: x.names })),
       ...(g.litigation || []).map((x) => ({ kind: "litigation", title: x.case, status: x.status, date: x.date || x.next_date, text: x.stakes || x.exposure || x.impact || x.summary, parties: x.parties, next: x.next, names: x.names })),
@@ -334,8 +334,8 @@ Industry KPIs (the industry's figures; give ${sym}'s own):
 ${(L.kpis || []).map((x) => `[${x.id}] ${x.name} (${x.kind}; ${x.period || ""}): ${x.value}${x.change ? `; change: ${x.change}` : ""}${x.vs_cycle ? `; vs cycle: ${x.vs_cycle}` : ""}`).join("\n") || "(none)"}
 Customers, channels and suppliers the industry depends on:
 ${(L.chain || []).map((x) => `[${x.id}] ${x.symbol || ""} ${x.name || ""} (${x.role || ""}): ${x.share || ""}. Depends on it: ${(x.depends || []).join(", ") || "n/a"}. ${x.why || ""}`).join("\n") || "(none)"}
-Dated calendar ahead (the industry's, plus macro releases):
-${(L.calendar || []).map((e) => `[${e.id}] ${e.date} ${e.title}${e.tickers.length ? ` (${e.tickers.join(", ")})` : ""}: ${e.detail || ""}`).join("\n") || "(none)"}
+Dated calendar for the next 12 months (the industry's events, ${sym}'s own reports and ex-dividend dates, its biggest peers' reports, macro releases; "est." = a projected date):
+${(L.calendar || []).map((e) => `[${e.id}] ${e.date}${e.estimated ? " (est.)" : ""} [${e.source || "industry"}] ${e.title}${e.tickers.length ? ` (${e.tickers.join(", ")})` : ""}${e.detail ? `: ${e.detail}` : ""}`).join("\n") || "(none)"}
 ${L.kpi ? `KPIs and cycle: ${L.kpi.cycle || ""} — ${L.kpi.cycle_text || ""} Pricing power ${L.kpi.pricing_power || ""}: ${L.kpi.pricing_text || ""} (who has it: ${L.kpi.who_has_it || "n/a"}).` : ""}
 The industry's dimension scores (-2 to +2): ${Object.entries(L.dims || {}).map(([k, v]) => `${k} ${v.score}: ${v.summary}`).join(" | ") || "n/a"}
 The industry's trade plans (for the industry as a whole): ${Object.entries(L.plans || {}).map(([k, v]) => `${k}: size ${v.size}% of a portfolio, entry ${v.entry}, stop ${isNum(Number(v.stop_pct)) ? (v.stop_pct * 100).toFixed(1) + "%" : "n/a"}, review ${v.review}`).join(" | ") || "n/a"}
@@ -378,6 +378,30 @@ ${Object.entries(L.iscen || {}).map(([k, x]) => `${k} (${x.probability}%, indust
 The industry's key debates (answer each by its ID: which side this company falls on):
 ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${d.bear} The industry leans ${d.lean || "n/a"}: ${d.why}${d.resolves_with ? ` Resolves with: ${d.resolves_with}` : ""}`).join("\n") || "(none)"}`;
   }
+  /**
+   * The calendar for the next 12 months: the industry's dated events, plus the company's own (projected earnings and
+   * ex-dividend dates), its biggest peers' reports through the year, and the macro releases ahead. Everything in the
+   * next 45 days stays; after that, the most important few each month. IDs E1... in date order.
+   * extra: [{date, title, detail, importance, kind, tickers, source: company|peer|macro|industry, estimated}].
+   */
+  function calendarYear(industryCal, extra, today, { horizonDays = 366, nearDays = 45, perMonth = 7 } = {}) {
+    const day = String(today).slice(0, 10), end = addD(day, horizonDays), near = addD(day, nearDays), RANK = { high: 0, medium: 1, low: 2 };
+    const SRC = { company: 0, peer: 1, industry: 2, macro: 3 };
+    const all = [...(industryCal || []), ...(extra || [])].filter((e) => e?.date && e.title && e.date.slice(0, 10) >= day && e.date.slice(0, 10) <= end).map((e) => ({ ...e, date: String(e.date).slice(0, 10) }));
+    const seen = new Set(), dedup = [];
+    for (const e of all.sort((a, b) => (SRC[a.source] ?? 2) - (SRC[b.source] ?? 2))) {
+      const k = e.date.slice(0, 7) + "|" + (e.tickers?.[0] && /earnings|reports?|results/i.test(e.title) ? "earn:" + e.tickers[0] : lc(e.title).replace(/[^a-z0-9]/g, "").slice(0, 24));
+      if (seen.has(k)) continue; seen.add(k); dedup.push(e); }
+    const score = (e) => (SRC[e.source] ?? 2) * 10 + (RANK[e.importance] ?? 2) * 3 + (e.estimated ? 1 : 0);
+    const keep = dedup.filter((e) => e.date <= near);
+    const byMonth = {}; for (const e of dedup.filter((e) => e.date > near)) (byMonth[e.date.slice(0, 7)] ||= []).push(e);
+    for (const list of Object.values(byMonth)) keep.push(...list.sort((a, b) => score(a) - score(b)).slice(0, perMonth));
+    return keep.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (SRC[a.source] ?? 2) - (SRC[b.source] ?? 2))).slice(0, 90)
+      .map((e, i) => ({ id: "E" + (i + 1), date: e.date, title: trim(e.title, 160), detail: trim(e.detail, 240), importance: e.importance || "", kind: e.kind || "", tickers: (e.tickers || []).slice(0, 8), source: e.source || "industry", estimated: !!e.estimated }));
+  }
+  function addD(d, k) { const t = new Date(String(d).slice(0, 10) + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
+
+  const LINKS = ["direct", "partner", "customer", "supplier", "competitor", "precedent", "read-across", "macro", "sentiment"];
   /** The company's row-by-row answers, kept only for rows that exist. */
   function cleanLens(raw, L, idx) {
     if (!raw || typeof raw !== "object" || !L) return null;
@@ -395,14 +419,14 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
         indicators: rows(M.indicators, new Set(L.indicators.map((r) => r.id)), (x) => ({ relevance: en(x.relevance, ["high", "medium", "low"], ""), effect: en(x.effect, ["tailwind", "headwind", "neutral"], "neutral"), vs_industry: en(x.vs_industry, VS, ""), why: txt(x.why, 360) })) },
       world: rows(raw.world, new Set(L.situations.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), magnitude: en(x.magnitude, ["high", "medium", "low"], ""), vs_industry: en(x.vs_industry, VS, ""), channel: txt(x.channel, 300), scenario: txt(x.scenario, 400), watch: txt(x.watch, 200), why: txt(x.why, 500), evidence: ev(x.evidence) })),
       trade: rows(raw.trade, new Set(L.countries.map((r) => r.id)), (x) => ({ exposure: en(x.exposure, ["high", "medium", "low", "none"], ""), effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), channel: txt(x.channel, 300), risk: txt(x.risk, 300), freeze: txt(x.freeze, 360), why: txt(x.why, 500), evidence: ev(x.evidence) })),
-      regulation: rows(raw.regulation, new Set(L.rules.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), cost: txt(x.cost, 240), timing: txt(x.timing, 120), why: txt(x.why, 500), evidence: ev(x.evidence) })),
-      reg_items: rows(raw.reg_items, new Set((L.regItems || []).map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), cost: txt(x.cost, 240), next: txt(x.next, 160), why: txt(x.why, 400) })),
+      regulation: rows(raw.regulation, new Set(L.rules.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), link: en(x.link, LINKS, ""), cost: txt(x.cost, 240), timing: txt(x.timing, 120), why: txt(x.why, 500), evidence: ev(x.evidence) })),
+      reg_items: rows(raw.reg_items, new Set((L.regItems || []).map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), link: en(x.link, LINKS, ""), cost: txt(x.cost, 240), next: txt(x.next, 160), why: txt(x.why, 400) })),
       trade_overall: raw.trade_overall && typeof raw.trade_overall === "object" ? { risk: en(raw.trade_overall.risk, ["low", "moderate", "high"], ""), summary: txt(raw.trade_overall.summary, 900), biggest: txt(raw.trade_overall.biggest, 400), watch: (Array.isArray(raw.trade_overall.watch) ? raw.trade_overall.watch : []).slice(0, 5).map((w) => txt(w, 200)).filter(Boolean) } : null,
       reg_overall: raw.reg_overall && typeof raw.reg_overall === "object" ? { stance: en(raw.reg_overall.stance, ["tailwind", "headwind", "mixed"], ""), vs_peers: en(raw.reg_overall.vs_peers, ["winner", "loser", "neutral"], ""), summary: txt(raw.reg_overall.summary, 900), biggest: txt(raw.reg_overall.biggest, 400),
         timeline: (Array.isArray(raw.reg_overall.timeline) ? raw.reg_overall.timeline : []).slice(0, 8).map((x) => ({ date: String(x?.date || "").slice(0, 10), event: txt(x?.event, 240), why: txt(x?.why, 300) })).filter((x) => x.event), watch: (Array.isArray(raw.reg_overall.watch) ? raw.reg_overall.watch : []).slice(0, 5).map((w) => txt(w, 200)).filter(Boolean) } : null,
       kpis: rows(raw.kpis, new Set((L.kpis || []).map((r) => r.id)), (x) => ({ value: txt(x.value, 200), vs: en(x.vs, ["better", "in line", "worse"], ""), why: txt(x.why, 400) })),
       chain: rows(raw.chain, new Set((L.chain || []).map((r) => r.id)), (x) => ({ dependence: en(x.dependence, ["high", "medium", "low", "none"], ""), why: txt(x.why, 400) })),
-      calendar: rows(raw.calendar, new Set((L.calendar || []).map((r) => r.id)), (x) => ({ impact: en(x.impact, ["high", "medium", "low", "none"], ""), direction: en(x.direction, ["upside", "downside", "two-way"], ""), why: txt(x.why, 400) })),
+      calendar: rows(raw.calendar, new Set((L.calendar || []).map((r) => r.id)), (x) => ({ impact: en(x.impact, ["high", "medium", "low", "none"], ""), direction: en(x.direction, ["upside", "downside", "two-way"], ""), link: en(x.link, LINKS, ""), why: txt(x.why, 400) })),
       segments: rows(raw.segments, new Set((L.segments || []).map((r) => r.id)), (x) => ({ temp: en(x.temp, ["hot", "cool", "neutral"], "neutral"), industry_segment: txt(x.industry_segment, 120), why: txt(x.why, 500) })),
       regions: rows(raw.regions, new Set((L.regions || []).map((r) => r.id)), (x) => ({ outlook: en(x.outlook, ["tailwind", "headwind", "neutral"], "neutral"), drivers: txt(x.drivers, 400), risks: txt(x.risks, 300), watch: txt(x.watch, 200), why: txt(x.why, 500) })),
       ind_scenarios: Object.fromEntries(["bull", "base", "bear"].filter((k) => raw.ind_scenarios?.[k] && L.iscen?.[k]).map((k) => { const x = raw.ind_scenarios[k]; const mv = Array.isArray(x.move) ? x.move.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : []; return [k, { move: mv, why: txt(x.why, 500) }]; })),
@@ -471,11 +495,11 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
  "trade": [{"id": "C1", "exposure": "high | medium | low | none", "effect": "helps | hurts | mixed | none", "channel": "how it reaches this company: revenue, supply, costs, FX or financing, with a size", "risk": "the risk there that matters most for this company, with likelihood and timing", "freeze": "what a 90-day freeze in trade with this country would do to this company (estimate)", "why": "1-2 sentences, cited", "evidence": []}],
  "regions": [{"id": "G1", "outlook": "tailwind | headwind | neutral", "drivers": "what moves this region for the company: the trade-map countries, their risks, FX, demand and prices, with numbers", "risks": "the main risk to this region's revenue, with likelihood", "watch": "the one thing to watch", "why": "one or two sentences: the bottom line for this region, cited"}],
  "reg_overall": {"stance": "tailwind | headwind | mixed", "vs_peers": "winner | loser | neutral", "summary": "3-4 sentences: the net regulatory and legal picture for this company against the industry's verdict and its named winners and losers, cited", "biggest": "the single most material rule or case for this company, with a size", "timeline": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "a dated regulatory or legal step that matters for this company", "why": "one sentence"}], "watch": ["2-4 things to watch"]},
- "regulation": [{"id": "R1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "cost": "the size of the effect on this company (estimate: $, % of revenue or EPS, or capital)", "timing": "when it bites", "why": "1-2 sentences, cited", "evidence": []}],
- "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "cost": "the size for this company, if any (estimate)", "next": "the next date or step that matters", "why": "one or two sentences"}]`,
+ "regulation": [{"id": "R1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "link": "direct | partner | customer | supplier | competitor | precedent | read-across | sentiment", "cost": "the size of the effect on this company (estimate: $, % of revenue or EPS, or capital)", "timing": "when it bites", "why": "1-2 sentences, cited", "evidence": []}],
+ "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "link": "direct | partner | customer | supplier | competitor | precedent | read-across | sentiment", "cost": "the size for this company, if any (estimate)", "next": "the next date or step that matters", "why": "one or two sentences"}]`,
     lens_core: `"kpis": [{"id": "K1", "value": "this company's own figure or read for that KPI (say if not disclosed)", "vs": "better | in line | worse", "why": "one sentence, cited"}],
  "chain": [{"id": "P1", "dependence": "high | medium | low | none", "why": "one sentence: how much this company relies on it and what that means"}],
- "calendar": [{"id": "E1", "impact": "high | medium | low | none", "direction": "upside | downside | two-way", "why": "one sentence: what it means for this company"}],
+ "calendar": [{"id": "E1", "impact": "high | medium | low", "direction": "upside | downside | two-way", "link": "direct | partner | competitor | read-across | macro", "why": "one sentence: how it reaches this company and what it means (never 'no read-across': if the link is weak, say what it is and mark it low)"}],
  "cycle": {"position": "where this company is in the industry's cycle", "pricing_power": "stronger | weaker | same (vs the industry)", "why": "2 sentences"},
  "dimensions": {"macro": {"score": 0, "why": "one sentence: this company's score from -2 to +2 on the same dimension as the industry's, and why it differs"}, "news": {...}, "world_events": {...}, "regulatory": {...}, "perception": {...}, "mna": {...}, "legal": {...}},
  "plans": {"income": {"size_pct": 0, "entry": "price or condition to buy", "stop": 0, "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
@@ -546,6 +570,7 @@ Rule books (top rules): ${J(lean(D.books, 220, 6))}
 `}RULES
 - Cite every factual claim with IDs in square brackets: [A#] for the industry analysis, [N#]/[P#] for news and releases, [T#] for the call. Numbers given above (statements, ratios, percentiles) need no citation. Never invent a fact, date, figure or quote; say "(estimate)" for your own estimates.
 - Be specific to this company: name its brands, segments, regions, customers and competitors where the data supports it. Compare with peers by ticker.
+- Connect EVERY row you answer to this company. Never write "no link", "unrelated", "no read-across" or "none": find the channel (direct; through a customer, supplier, bottler or partner; through a competitor it gains or loses against; a precedent that could later apply to it; a read-across for its multiple, demand or costs; or the sector's sentiment), say how big it is, and mark it low if it is small.
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
@@ -630,7 +655,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens, READS, SECS };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);

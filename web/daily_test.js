@@ -1,0 +1,32 @@
+const D = require("./daily.js"); const zlib = require("zlib"), fs = require("fs");
+let fails = 0; const ok = (c, m) => { console.log(c ? "ok  " : "FAIL", m); if (!c) fails++; };
+const file = process.argv[2] || "/tmp/claude-0/-home-claude/e2f2e0a5-0e53-566e-aafe-723d47ac4ff7/scratchpad/latest/consumer-defensive.slim.json.gz";
+const recs = JSON.parse(zlib.gunzipSync(fs.readFileSync(file))).records, rec = Object.entries(recs).find(([k]) => k.startsWith("run:"))[1];
+const prev = D.prevState(rec);
+ok(prev.as_of && Object.keys(prev.cons).length > 5 && prev.items.length > 10, `prev state (as of ${prev.as_of})`);
+// Tomorrow: the index up 3%, the top company up 9%, two new headlines, a macro move.
+const doc = JSON.parse(JSON.stringify(rec.industry)); const last = doc.index.dates[doc.index.dates.length - 1];
+const nd = "2026-10-28"; doc.index.dates.push(nd); doc.index.levels.push(doc.index.levels[doc.index.levels.length - 1] * 1.03);
+doc.constituents[0].px = doc.constituents[0].px * 1.09;
+const pack = { ...rec.research, items: [{ id: "N999", kind: "N", date: nd, source: "wsj.com", title: "Big beverage merger announced", url: "https://x" }, ...rec.research.items] };
+const rows = rec.macro.rows.map((r, i) => (i === 0 ? { ...r, value: r.value + 0.2 } : r));
+const x = D.deltas(prev, { doc, pack, world: rec.world, macroRows: rows, calendar: rec.agent.calendar, relevance: { [rows[0].id]: "high" } }, nd);
+ok(x.since === last && x.days === 1 && Math.abs(x.move - 0.03) < 1e-9, `move since ${x.since}: ${(x.move * 100).toFixed(1)}% over ${x.days} day`);
+ok(x.news.length === 1 && x.news[0].id === "D1", "only the new headline is listed, as D1");
+ok(x.macro.length === 1 && x.macro[0].id === rows[0].id, "the macro move is caught " + JSON.stringify(x.macro.map((m) => [m.id, m.change])));
+ok(x.triggers.some((t) => /times its normal move/.test(t)) && x.triggers.some((t) => /moved \+9/.test(t)), "triggers: big industry move and a top company's jump");
+const txt = D.deltaText(x); ok(/\[D1\]/.test(txt) && /Biggest contributors/.test(txt), "delta text");
+const res = rec.agent.result;
+ok(D.triagePrompt("Beverages", res, x, nd).length < 20000, "triage prompt is short (" + D.triagePrompt("Beverages", res, x, nd).length + " chars)");
+const up = D.updatePrompt("Beverages", res, x, nd, res.horizon_facts); ok(up.includes("WHAT CHANGED") && up.length < 30000, "update prompt (" + up.length + " chars)");
+const upd = { material: true, headline: "A merger lifts the group [D1].", summary: "Bigger than expected [D1][Z9].", changes: [{ text: "Deal premium [D1]", effect: "positive" }],
+  horizons: { "1M": { status: "revised", call: "bullish", conviction: "medium", expected_move: [0, 6], probability_up: 60, why: "Merger [D1]" }, "3M": { status: "unchanged", why: "Holds" } }, scenario_probabilities: { bull: 35, base: 45, bear: 20 }, watch: ["Deal terms"] };
+const a = D.apply(res, upd, x, { today: nd, via: "update", sources: x.news });
+ok(a.changed && a.result.horizons["1M"].call === "bullish" && a.result.horizons["1M"].daily.from.call === res.horizons["1M"].call, "1M revised, with where it came from");
+ok(a.result.horizons["3M"].call === res.horizons["3M"].call && !a.result.horizons["3M"].daily, "3M left exactly as it was");
+ok(a.result.daily.summary.includes("[D1]") && !a.result.daily.summary.includes("Z9"), "unknown citations dropped");
+ok(a.result.scenarios.bull.probability === 35 && a.result.daily.horizons._scenarios, "scenario probabilities updated and recorded");
+ok(a.result.daily.sources.length === 1 && a.result.daily_history.length === 1, "sources and history");
+const b = D.apply(a.result, null, x, { today: "2026-10-29", via: "triage", tri: { why: "Routine day." } });
+ok(!b.changed && b.result.daily.headline === "Routine day." && b.result.daily_history.length === 2 && b.result.horizons["1M"].call === "bullish", "a quiet day stamps the calls and keeps them");
+console.log(fails ? fails + " FAILED" : "daily tests passed"); process.exit(fails ? 1 : 0);

@@ -96,6 +96,19 @@
       }
       out.horizons[h] = e;
     }
+    // The call's path: the industry's move since the call, day by day, with SPY's. From full price histories it is rebuilt
+    // whole; when only today's prices are in hand (quotes), today's point is added to the path kept so far.
+    const pts = [];
+    const spyDates = (spySer?.dates || []).filter((d) => d > entry.as_of && d <= lastDate);
+    const step = Math.max(1, Math.ceil(spyDates.length / 380));
+    for (let i = 0; i < spyDates.length; i += step) { const dt = spyDates[i]; const { r, coverage } = ret(dt); if (isNum(r) && coverage >= 0.6) pts.push({ d: dt, r: r1(r), s: r1(serRet(spySer, dt)) }); }
+    if (spyDates.length && pts[pts.length - 1]?.d !== spyDates[spyDates.length - 1]) { const dt = spyDates[spyDates.length - 1]; const { r, coverage } = ret(dt); if (isNum(r) && coverage >= 0.6) pts.push({ d: dt, r: r1(r), s: r1(serRet(spySer, dt)) }); }
+    const prevPath = entry.eval?.path || [];
+    let path;
+    if (pts.length >= Math.max(2, prevPath.length)) path = pts;
+    else { const m = new Map(prevPath.map((p) => [p.d, p])); for (const p of pts) m.set(p.d, p); path = [...m.values()].sort((a, b) => (a.d < b.d ? -1 : 1)); }
+    if (path.length > 400) { const k = Math.ceil(path.length / 400); path = path.filter((_, i) => i % k === 0 || i === path.length - 1); }
+    out.path = path;
     // Scenarios, once 12 months have passed
     const end12 = addDays(entry.as_of, 365);
     if (!out.scenario && end12 <= lastDate && Object.keys(entry.scenarios || {}).length) {

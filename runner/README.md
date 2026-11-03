@@ -50,6 +50,27 @@ Only the connections change:
 - If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
   by itself; nothing finished is paid for twice.
 
+## Daily update (cheap) and weekly full run
+
+The full analysis is expensive, so it runs weekly (list sectors in `weekly-sectors.txt`; Actions → **Sector run**
+runs them every Saturday). On weekdays, Actions → **Daily update** keeps every analyzed sector current for a small
+fraction of the cost:
+
+1. **Numbers, no Claude:** prices, returns, risk, estimates and revisions, positioning, short interest, macro values,
+   news and sentiment are refreshed by code, and the track records are scored with the latest prices.
+2. **What changed:** code compares today with the last update and flags hard triggers: the industry moving more than
+   1.5x its normal move, a top-10 company reporting, a big constituent move, a large move in a high-relevance macro
+   indicator, a jump in estimate revisions or in news volume.
+3. **Triage (Haiku 4.5):** with no trigger, a short prompt asks whether anything is material.
+4. **Revisions (Sonnet 5.5):** only where something is, the strategist revisits the 1M-12M calls (and, if warranted,
+   the scenario odds) against what changed. Calls it leaves alone stay exactly as they were; revised ones keep where
+   they came from, and the industry report shows a "Daily update" box with what changed.
+
+It runs every weekday after the US close (all analyzed sectors, four at a time), or on demand for chosen sectors.
+Settings (repository variables): `DAILY_BUDGET_USD` (default 5 per sector), `DAILY_INDUSTRIES` (industries refreshed
+at once per sector, default 4), `CLAUDE_MODEL_QUICK` (default Haiku 4.5), `CLAUDE_MODEL_DAILY` (default Sonnet 5.5).
+The updated sector goes back to the `exports` branch.
+
 ## Get the results into Industry Scorer
 
 The latest run of every sector is kept in the `exports` branch (`runs/<sector>.json.gz`). In Industry Scorer, open

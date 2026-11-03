@@ -144,6 +144,18 @@ tbody tr:last-child td { border-bottom: 0; }
 .take li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bench); transform: translateY(-1px); }
 .take li.pos::before { background: var(--gA); } .take li.neg::before { background: var(--gF); }
 .summary-text { font-size: 16px; line-height: 1.6; max-width: 80ch; margin: 0; }
+@media (max-width: 700px) { .opp-strip { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } .callout-head { flex-wrap: wrap; } }
+.trk-prog { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.trk-prog i { display: block; height: 100%; background: var(--accent); }
+.trk-range { position: relative; height: 14px; background: var(--sunk); border-radius: 7px; }
+.trk-range i { position: absolute; top: 0; height: 100%; }
+.trk-range .band { background: color-mix(in srgb, var(--accent) 35%, transparent); border-radius: 7px; }
+.trk-range .zero { width: 1px; background: var(--muted); }
+.trk-range .now { width: 10px; height: 10px; top: 2px; margin-left: -5px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 2px var(--surface); }
+.trk-range .now.out { background: var(--neg); }
+.trk-tbl td, .trk-tbl th { padding: 6px 8px; }
+.daily-card { border-left: 3px solid var(--accent); display: grid; gap: 6px; }
+.daily-rev { border-left: 2px solid var(--line); padding-left: 8px; }
 .retgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
 @media (max-width: 760px) { .retgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .retgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -497,7 +509,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const usOnly = () => !!S.usOnly;
   const gradeOf = (s) => Score.grade(num(s));
   const current = () => (S.selected ? S.industries[slug(S.selected)] : null);
-  const busy = () => !!S.run || !!S.sectorRun;
+  const busy = () => !!S.run || !!S.sectorRun || !!S.dailyRun;
 
   // ------------------------------------------------------------- FMP calls
   let nextSlot = 0;
@@ -1755,6 +1767,74 @@ a.btnlink:hover { border-color: var(--accent); }
     return jsonSafe({ ...Sector.overviewRow(name, d, ag, sc), done: !!ag?.result, missing: missingParts(name) });
   }
 
+  /**
+   * The daily update of a sector (the weekly full run in between): every number refreshed by code, then only what changed
+   * goes to Claude. Per industry: refresh the data, news and macro values; compare with the last update; with no hard
+   * trigger, ask the quick model whether anything is material; if so, one call revisits the 1M-12M calls. Calls left
+   * alone stay exactly as they were; each industry is saved as soon as it's done.
+   */
+  async function runDaily(sector, { names = null, concurrency = 4 } = {}) {
+    if (busy() || !S.mcp || !S.sample) return;
+    const dr = S.dailyRun = { sector, phase: "data", label: "Starting the daily update", done: [], quiet: [], revised: [], failed: [], calls: 0, of: 0, working: new Set() };
+    try {
+      const rec = await secGet(sector);
+      const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
+      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r?.agent?.result) have.push(n); }
+      dr.of = have.length;
+      if (!have.length) { S.notices = [{ kind: "warn", text: `No finished ${sector} analysis to update: run the full sector first.` }]; return; }
+      dr.label = "Market data, the macro catalog and the news wire (no Claude)";
+      const bench = await refreshBenchmark();
+      await detectEod(); await sharedResearch();
+      const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
+      const call = async (prompt, tier, step) => { dr.calls++; const opts = { modelTier: tier, cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt.slice(0, (lim?.maxPromptBytes || 262144) - 4096), opts); };
+      dr.phase = "industries";
+      await pool(have, Math.max(1, concurrency), async (name) => {
+        const sl = slug(name); dr.working.add(name);
+        try {
+          const snap = await idbGet("run:" + sl); const prev = Daily.prevState(snap);
+          if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
+          const fake = { name, cancel: false, ctls: new Set(), label: "", frac: 0 };
+          await refreshIndustry(name, bench, () => {}, fake);
+          await runResearchStep(name, { shared: false, run: null });
+          // Macro: the same indicators as the full run, re-read today, under the same IDs (the reports cite them).
+          const om = snap.macro;
+          if (om?.rows?.length && S.macroCat) {
+            const plan = { series: om.rows.map((r) => ({ key: r.key, group: r.group, label: r.label, reason: r.reason, phrases: r.phrases || [], tags: r.tags || [] })) };
+            const m = await Macro.fetchRows(fmp, S.eod ? eodCall : null, { ...S.macroCtx, onStep: () => {} }, S.macroCat, plan).catch(() => null);
+            const byKey = {}; for (const r of m?.rows || []) (byKey[r.key] ||= []).push(r);
+            const rows = om.rows.map((r) => { const n = (byKey[r.key] || []).shift(); return n ? { ...r, ...n, id: r.id } : r; });
+            S.macroBy[sl] = { ...om, rows, as_of: today() };
+          }
+          const ag = S.agents[sl], res = ag.result, d = S.industries[sl];
+          const relevance = Object.fromEntries(Object.entries(rep(name, "macro")?.result?.indicators || {}).map(([id, v]) => [id, v?.relevance || ""]));
+          const x = Daily.deltas(prev, { doc: d, pack: S.research[sl], world: S.world, macroRows: S.macroBy[sl]?.rows || [], calendar: ag.calendar, spy: { dates: bench.spy.dates, closes: bench.spy.closes }, relevance }, today());
+          // Hard triggers go straight to review; otherwise the quick model decides whether anything is material.
+          let tri = null, via = "code";
+          if (!x.triggers.length) { via = "triage"; tri = await call(Daily.triagePrompt(name, res, x, today()), "quick", `Daily triage: ${name}`).catch(() => ({ material: true, why: "triage failed; reviewed in full" })); }
+          let upd = null;
+          if (x.triggers.length || tri?.material) { via = "update"; upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today())), "default", `Daily update: ${name}`); }
+          const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world] });
+          const r2 = a.result;
+          r2.horizon_facts = Brain.horizonFacts(d, today());
+          if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
+          try { r2.horizon_checks = Brain.horizonChecks(r2.horizons || {}, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS); } catch {}
+          S.agents[sl] = jsonSafe({ ...ag, result: r2, daily_at: new Date().toISOString() });
+          if (a.changed) await logCalls(name, r2, d, new Date().toISOString()).catch(() => {});
+          await doFlush(name);
+          (a.changed ? dr.revised : dr.quiet).push(name);
+        } catch (e) {
+          dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
+          if (FATAL.has(e?.code)) throw e;
+        } finally { dr.done.push(name); dr.working.delete(name); dr.label = `${dr.done.length} of ${dr.of} industries updated`; dropFromMemory(name); }
+      }, null);
+      // The track record, with today's prices.
+      for (const n of have) await refreshTrack(n, { quiet: true, sector }).catch(() => {});
+      const r0 = await secGet(sector); if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, daily_at: new Date().toISOString(), daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed } }));
+      S.notices = [{ kind: "info", text: `Daily update of ${sector}: ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with revised calls, ${dr.quiet.length} unchanged${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+    } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
+    finally { S.dailyRun = null; renderAll(); }
+  }
+
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
   async function runSector(sector, { fresh = false, redoGaps = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
@@ -2433,8 +2513,11 @@ a.btnlink:hover { border-color: var(--accent); }
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
+    daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
     stop: () => { const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
-    status: () => { const r = S.sectorRun; return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [], reuse: r?.reuse || S.lastReuse || null }; },
+    status: () => { const r = S.sectorRun, dr = S.dailyRun;
+      if (dr) return { busy: true, phase: "daily " + dr.phase, label: dr.label, working: [...dr.working], calls: dr.calls, notices: [], errors: dr.failed.slice(-5), reuse: null, daily: { done: dr.done.length, of: dr.of, revised: dr.revised, quiet: dr.quiet, failed: dr.failed } };
+      return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [], reuse: r?.reuse || S.lastReuse || null }; },
     /** The shared library (facts every sector can reuse): read it out, or merge one in before a run. */
     exportLibrary: async () => { await libFlush(); return jsonSafe(await libLoad()); },
     importLibrary: async (lib) => { const L = await libLoad(); libMerge(L, lib); await libFlush();
@@ -3054,6 +3137,28 @@ a.btnlink:hover { border-color: var(--accent); }
 
   const TONE = { 2: ["Strong tailwind", "t2"], 1: ["Tailwind", "t1"], 0: ["Neutral", "t0"], "-1": ["Headwind", "tm1"], "-2": ["Strong headwind", "tm2"] };
   const linkIt = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+  /** Daily-update text: [D#] links to today's headline, [I#] stays a macro-row tag. */
+  function dailyRich(t, sources) {
+    const by = Object.fromEntries((sources || []).map((x) => [x.id, x]));
+    return esc(String(t || "")).replace(/\[((?:[DI]\d{1,4})(?:,\s*[DI]\d{1,4})*)\]/g, (m, g) => g.split(/,\s*/).map((id) => { const x = by[id];
+      return x?.url ? `<a class="cite" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="${esc(`${x.date || ""} ${x.source || ""}: ${x.title || ""}`)}">${esc(id)}</a>` : `<span class="idtag">${esc(id)}</span>`; }).join(""));
+  }
+  /** What the daily update found: today's move, what changed, which calls it revised (or that they stand), and the last few days. */
+  function dailyBlock(r) {
+    const d = r?.daily; if (!d) return "";
+    const EFF = { positive: "pos", negative: "neg", mixed: "neu" }, sg = (v) => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${v}%` : "—");
+    const rev = Object.entries(d.horizons || {}).filter(([h, v]) => h !== "_scenarios" && v.status === "revised");
+    const hist = (r.daily_history || []).slice(1, 6);
+    return `<div class="callout daily-card"><div class="callout-head"><span class="eyebrow">Daily update · ${esc(fmtDate(d.date))}</span><span class="pill ${d.revised ? "warn" : "neu"}">${d.revised ? `${rev.length} call${rev.length === 1 ? "" : "s"} revised` : "calls unchanged"}</span>
+      <span class="small muted">${isNum(num(d.move)) ? `industry ${sg(d.move)} vs SPY ${sg(d.spy)} since ${esc(fmtShort(d.since))}` : ""}${isNum(num(d.z)) ? ` · ${Math.abs(d.z)}× a normal move` : ""}${d.via === "triage" ? " · checked by the quick model" : d.via === "code" ? "" : " · reviewed by the strategist"}</span></div>
+      <b>${dailyRich(d.headline, d.sources)}</b>${d.summary ? `<p class="small" style="margin:0">${dailyRich(d.summary, d.sources)}</p>` : ""}
+      ${(d.changes || []).length ? `<ul class="dlist small" style="margin:0">${d.changes.map((c) => `<li><span class="pill ${EFF[c.effect] || "neu"}">${esc(c.effect)}</span> ${dailyRich(c.text, d.sources)}</li>`).join("")}</ul>` : ""}
+      ${rev.length ? `<div class="small"><b>Revised:</b> ${rev.map(([h, v]) => `${h} ${esc(v.from?.call || "")} ${esc((v.from?.expected_move || []).join(" to "))}% → <b>${esc(v.to?.call || "")} ${esc((v.to?.expected_move || []).join(" to "))}%</b>`).join(" · ")}</div>` : ""}
+      ${d.horizons?._scenarios ? `<div class="small"><b>Scenario odds:</b> ${Object.keys(d.horizons._scenarios.to).map((k) => `${k} ${d.horizons._scenarios.from[k]}% → ${d.horizons._scenarios.to[k]}%`).join(" · ")}</div>` : ""}
+      ${(d.triggers || []).length ? `<div class="small muted"><b>Flagged by the data:</b> ${d.triggers.map(esc).join("; ")}</div>` : ""}
+      ${(d.watch || []).length ? `<div class="small muted"><b>Watch:</b> ${d.watch.map((w) => dailyRich(w, d.sources)).join("; ")}</div>` : ""}
+      ${hist.length ? `<details class="small"><summary>Earlier daily updates (${hist.length})</summary><ul class="dlist">${hist.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.revised ? `<span class="pill warn">revised</span> ` : ""}${dailyRich(h.headline, [])}${isNum(num(h.move)) ? ` <span class="muted">(${sg(h.move)})</span>` : ""}</li>`).join("")}</ul></details>` : ""}</div>`;
+  }
   const polChip = (x) => (x === null || x === undefined || !isNum(num(x)) ? "" : `<span class="pol ${x > 0.15 ? "p" : x < -0.15 ? "n" : "z"}" title="EODHD sentiment polarity">${x > 0 ? "+" : ""}${Number(x).toFixed(2)}</span>`);
   function newsList(items, n = 8, empty = "Nothing found in the last few weeks.") {
     if (!items?.length) return `<div class="small muted">${empty}</div>`;
@@ -3165,7 +3270,8 @@ a.btnlink:hover { border-color: var(--accent); }
     const rangeTxt = (rg) => rg?.length ? (rg.length === 1 || rg[0] === rg[1] ? sgn(rg[0]) : `${sgn(rg[0])} to ${sgn(rg[1])}`) : "—";
     const hzCard = (h) => { const x = r.horizons?.[h]; const f = (r.horizon_facts || []).find((y) => y.h === h); const ck = (r.horizon_checks || []).find((y) => y.h === h);
       if (!x) return `<div class="box hz"><div class="dim-head"><b>${h}</b></div><div class="small muted">No ${h} call came back. Run the lead strategist again.</div></div>`;
-      return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${HZC[x.call] || "neu"}">${esc(x.call)}</span>${x.conviction ? `<span class="small muted">${esc(x.conviction)} conviction</span>` : ""}</div>
+      const dv = x.daily, dvL = dv ? `<div class="small daily-rev"><span class="pill warn">revised ${esc(fmtShort(dv.date))}</span> from ${esc(dv.from?.call || "")} ${esc(rangeTxt(dv.from?.expected_move))}${isNum(num(dv.from?.probability_up)) ? `, ${dv.from.probability_up}% up` : ""}. ${dailyRich(dv.why, r.daily?.sources)}</div>` : "";
+      return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${HZC[x.call] || "neu"}">${esc(x.call)}</span>${x.conviction ? `<span class="small muted">${esc(x.conviction)} conviction</span>` : ""}</div>${dvL}
         <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
         <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>
         ${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}
@@ -3191,7 +3297,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${hasReads ? `<details style="margin-top:6px"><summary class="small">Every section in each window</summary><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Section</th>${Brain.HORIZONS.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${hzRows}</tbody></table></div></details>` : ""}
       ${calBlock}
       <div class="small muted" style="margin-top:4px">Each window starts today. "A normal move" is one standard deviation of the industry index over that window, from its last year of daily prices; the trailing return, the earnings dates and the calendar come from the data, not the strategist.</div></div>` : "";
-    return `<div style="display:grid;gap:10px">${oppBlock}${hzBlock}<b class="headline">${rich(r.headline)}</b>
+    return `<div style="display:grid;gap:10px;grid-template-columns:minmax(0,1fr)">${dailyBlock(r)}${oppBlock}${hzBlock}<b class="headline">${rich(r.headline)}</b>
       ${r.thesis ? `<div class="box thesis"><h3>Thesis</h3><p class="prose" style="margin:0">${rich(r.thesis)}</p></div>` : `<p class="summary-text">${rich(r.summary)}</p>`}
       <span class="small muted">Lead strategist · written ${esc(ago(ag.run_at))} after every report${ag.bodies ? ` and ${ag.books} of ${ag.bodies} rule books` : ""} · confidence ${esc(r.confidence)} · ${r.kept} citations checked${r.dropped ? `, ${r.dropped} that didn't match a source removed` : ""}${rev ? ` · investment-committee review: ${rev.issues?.length || 0} issue${rev.issues?.length === 1 ? "" : "s"}, ${rev.applied?.length || 0} section${rev.applied?.length === 1 ? "" : "s"} revised` : ""}</span>
       ${r.thesis && r.summary ? `<p class="summary-text" style="margin:0">${rich(r.summary)}</p>` : ""}
@@ -3752,7 +3858,69 @@ a.btnlink:hover { border-color: var(--accent); }
    * The track record of a set of calls (one industry, or every industry in a sector with multi): scored calls,
    * open calls marked to market, alpha, calibration and every call.
    */
-  function trackView(log, { multi = false } = {}) {
+  /**
+   * The track record, in depth: the record at a glance; every call's path since it was made against its range (by horizon);
+   * each verdict as a card (its four calls, how far into each window, where the move sits in the range, on track or not,
+   * alpha); the daily journal; the scorecards, calibration and every call underneath.
+   */
+  function trackView(log, { multi = false, journal = null, subject = "the industry" } = {}) {
+    if (!(log || []).length) return trackDetail(log, { multi });
+    const H = S.trkH && Track.ORDER.includes(S.trkH) ? S.trkH : "3M", sm = Track.summarize(log), today0 = today();
+    const ents = [...log].sort((a, b) => (a.run_at < b.run_at ? 1 : -1));
+    const sg = (x, d = 1) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${fix(x, d)}%` : "—"), pp = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${fix(x, 1)}pp` : "—");
+    const firstD = ents[ents.length - 1]?.as_of, days = firstD ? Math.round((Date.parse(today0) - Date.parse(firstD)) / 864e5) : 0;
+    const revs = ents.filter((e) => /daily/i.test(e.source || "") || e.daily).length;
+    const nOpen = sm.open.n, nDone = sm.all.n, onTrack = sm.open_rows.filter((x) => x.tracking === true).length;
+    const glance = `<div class="kpis">${kpi("Verdicts logged", String(ents.length), `${multi ? `${new Set(ents.map((e) => e.industry)).size} industries · ` : ""}first ${esc(fmtShort(firstD))}, ${days} days of record`)}
+      ${kpi("Calls open", String(nOpen), `${onTrack} on the called side so far`)}${kpi("Calls scored", String(nDone), nDone ? `${Math.round((sm.all.hit_rate || 0) * 100)}% direction right` : "the first ends " + esc(fmtShort(Horizon.addDays(firstD || today0, 30))))}
+      ${kpi("Alpha so far", pp(sm.open.call_alpha), "per open call, if followed")}${journal?.length ? kpi("Daily reviews", String(journal.length), `${journal.filter((j) => j.revised).length} revised the calls`) : ""}</div>`;
+    // Every call's path since it was made, against the range it gave (the latest call's cone), by horizon.
+    const tabs = `<div class="seg" role="group" aria-label="Horizon">${Track.ORDER.map((h) => `<button aria-pressed="${h === H}" data-trk-h="${h}">${h}</button>`).join("")}</div>`;
+    const withH = ents.filter((e) => e.horizons?.[H] && (e.eval?.path || []).length);
+    let chart = `<div class="small muted">No ${H} call has a price path yet (the first prices after a call come in the next trading day).</div>`;
+    if (withH.length) {
+      const T = Track.DAYS[H], W = 1100, Hh = 300, P = { l: 48, r: 16, t: 12, b: 26 };
+      const dayOf = (e, d) => Math.round((Date.parse(d) - Date.parse(e.as_of)) / 864e5);
+      const latest = withH[0], rg = latest.horizons[H].expected_move || [];
+      const allY = withH.flatMap((e) => e.eval.path.filter((p) => dayOf(e, p.d) <= T).flatMap((p) => [p.r, p.s])).filter(isNum).concat(rg.length ? rg : [0], [0]);
+      let lo = Math.min(...allY), hi = Math.max(...allY); const pad = Math.max(1, (hi - lo) * 0.1); lo -= pad; hi += pad;
+      const x = (dd) => P.l + (Math.min(dd, T) / T) * (W - P.l - P.r), y = (v) => P.t + ((hi - v) / (hi - lo)) * (Hh - P.t - P.b);
+      const cone = rg.length === 2 ? `<polygon points="${x(0)},${y(0)} ${x(T)},${y(rg[0])} ${x(T)},${y(rg[1])}" fill="var(--accent)" opacity="0.12"/><line x1="${x(T)}" x2="${x(T)}" y1="${y(rg[0])}" y2="${y(rg[1])}" stroke="var(--accent)" stroke-width="3"/>` : "";
+      const line = (e, k, key, col, op, dash) => { const pts = e.eval.path.filter((p) => isNum(p[key]) && dayOf(e, p.d) <= T).map((p) => `${x(dayOf(e, p.d)).toFixed(1)},${y(p[key]).toFixed(1)}`);
+        return pts.length ? `<polyline points="${x(0)},${y(0)} ${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="${k === 0 ? 2.4 : 1.4}" opacity="${op}" ${dash ? 'stroke-dasharray="5 4"' : ""}><title>${esc(`${e.industry ? e.industry + " · " : ""}${H} ${e.horizons[H].call} made ${e.as_of}: ${key === "s" ? "SPY" : subject} ${sg(e.eval.path[e.eval.path.length - 1]?.[key])} so far`)}</title></polyline>` : ""; };
+      const col = (e) => (e.horizons[H].call === "bullish" ? "var(--pos)" : e.horizons[H].call === "bearish" ? "var(--neg)" : "var(--c3)");
+      const lines = withH.slice(0, 12).map((e, k) => line(e, k, "r", col(e), k === 0 ? 1 : 0.35, false)).reverse().join("") + line(latest, 0, "s", "var(--bench)", 0.8, true);
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(T * f)).map((dd) => `<text x="${x(dd)}" y="${Hh - 6}" text-anchor="middle">${dd === 0 ? "made" : `day ${dd}`}</text>`).join("");
+      const yt = [lo, (lo + hi) / 2, hi, 0].map((v) => `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" ${v === 0 ? 'stroke-dasharray="2 3"' : ""}></line><text x="4" y="${y(v) + 4}">${v > 0 ? "+" : ""}${v.toFixed(0)}%</text>`).join("");
+      chart = `<div class="chart"><svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="Each ${H} call's path since it was made">${yt}${cone}${lines}${ticks}</svg>
+        <div class="legend"><span><i style="background:var(--pos)"></i>bullish call</span><span><i style="background:var(--neg)"></i>bearish</span><span><i style="background:var(--c3)"></i>neutral</span><span><i style="background:var(--bench)"></i>SPY, same dates (dashed)</span><span><i style="background:var(--accent);opacity:.4"></i>the latest call's range, widening to its end date</span></div>
+        <div class="small muted">${withH.length} ${H} call${withH.length === 1 ? "" : "s"}, each from the day it was made (the latest bold, earlier ones faded). ${subject[0].toUpperCase() + subject.slice(1)}'s move is ${multi ? "each industry's" : "its"} cap-weighted return since the call.</div></div>`;
+    }
+    // Each verdict as a card: its four calls, how far in, where the move sits in the range, and the result.
+    const STAT = (x, v) => { if (!v) return ["waiting for prices", "neu"]; if (v.matured && v.scored) return v.hit === true ? ["right", "pos"] : v.hit === false ? ["wrong", "neg"] : ["scored", "neu"];
+      return v.tracking === true ? ["on track", "pos"] : v.tracking === false ? ["off track", "neg"] : ["so far", "neu"]; };
+    const rangeMark = (rg, r) => { if (!(rg?.length === 2) || !isNum(num(r))) return ""; const lo = Math.min(rg[0], r, 0) - 1, hi = Math.max(rg[1], r, 0) + 1, f = (v) => ((v - lo) / (hi - lo)) * 100;
+      return `<div class="trk-range" title="range ${rg[0]}% to ${rg[1]}%, now ${sg(r)}"><i class="band" style="left:${f(rg[0])}%;width:${Math.max(1, f(rg[1]) - f(rg[0]))}%"></i><i class="zero" style="left:${f(0)}%"></i><i class="now ${r >= rg[0] && r <= rg[1] ? "in" : "out"}" style="left:${f(r)}%"></i></div>`; };
+    const card = (e) => { const ago0 = Math.round((Date.parse(today0) - Date.parse(e.as_of)) / 864e5);
+      const rows2 = Track.ORDER.filter((h) => e.horizons[h]).map((h) => { const x = e.horizons[h], v = e.eval?.horizons?.[h], T = Track.DAYS[h], el = Math.max(0, Math.min(T, ago0)), [sl2, sc] = STAT(x, v);
+        return `<tr><td><b>${h}</b></td><td><span class="pill ${x.call === "bullish" ? "pos" : x.call === "bearish" ? "neg" : "neu"}">${esc(x.call)}</span>${x.conviction ? `<div class="small muted">${esc(x.conviction)}</div>` : ""}</td><td class="n">${(x.expected_move || []).map((y2) => (y2 > 0 ? "+" : "") + y2 + "%").join(" to ")}<div class="small muted">${isNum(num(x.probability_up)) ? x.probability_up + "% up" : ""}</div></td>
+          <td style="min-width:110px"><div class="trk-prog"><i style="width:${(el / T) * 100}%"></i></div><div class="small muted">day ${el} of ${T}${v?.end ? ` · ends ${esc(fmtShort(v.end))}` : ""}</div></td>
+          <td class="n ${v && isNum(num(v.realized)) ? cls(v.realized / 100) : ""}">${sg(v?.realized)}<div class="small muted">SPY ${sg(v?.spy)}</div></td><td style="min-width:120px">${rangeMark(x.expected_move, num(v?.realized))}</td>
+          <td class="n ${cls(num(v?.call_alpha))}">${v && isNum(num(v.call_alpha)) && x.call !== "neutral" ? pp(v.call_alpha) : "—"}</td><td><span class="pill ${sc}">${esc(sl2)}</span></td></tr>`; }).join("");
+      return `<div class="box trk-card"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b class="mono">${esc(fmtDate(e.as_of))}</b>${multi && e.industry ? `<span class="pill neu">${esc(e.industry)}</span>` : ""}${e.opportunity ? `<span class="small muted">verdict: ${esc(e.opportunity)}</span>` : ""}<span class="small muted">${ago0} days ago${isNum(num(e.expected_return)) ? ` · expected 12M ${sg(e.expected_return)}` : ""}</span></div>
+        ${e.headline ? `<div class="small" style="margin:2px 0 6px">${esc(stripCites(e.headline))}</div>` : ""}
+        <div class="tbl-wrap"><table class="trk-tbl"><thead><tr><th>Window</th><th>Call</th><th class="n">Range</th><th>How far in</th><th class="n">So far</th><th>In the range?</th><th class="n">Call alpha</th><th>Status</th></tr></thead><tbody>${rows2}</tbody></table></div>
+        ${e.eval?.scenario ? `<div class="small"><b>12 months on:</b> ${sg(e.eval.scenario.realized)}, landed in the ${esc(e.eval.scenario.landed || e.eval.scenario.nearest || "—")} case</div>` : ""}</div>`; };
+    const cards = `<h3>Every verdict, call by call</h3><div style="display:grid;gap:8px">${ents.slice(0, 10).map(card).join("")}</div>${ents.length > 10 ? `<div class="small muted">The ${ents.length - 10} older verdicts are in the full table below.</div>` : ""}`;
+    // Best and worst so far.
+    const all = [...sm.rows.map((x) => ({ ...x, done: true })), ...sm.open_rows.map((x) => ({ ...x, done: false }))].filter((x) => isNum(x.call_alpha) && x.call !== "neutral").sort((a, b) => b.call_alpha - a.call_alpha);
+    const bw = all.length >= 2 ? `<div class="two"><div class="box"><b>Best calls so far</b><ul class="dlist small">${all.slice(0, 3).map((x) => `<li>${x.industry ? esc(x.industry) + " · " : ""}${x.h} ${esc(x.call)} from ${esc(fmtShort(x.as_of))}: <b class="pos">${pp(x.call_alpha)}</b>${x.done ? "" : " (open)"}</li>`).join("")}</ul></div>
+      <div class="box"><b>Worst calls so far</b><ul class="dlist small">${all.slice(-3).reverse().map((x) => `<li>${x.industry ? esc(x.industry) + " · " : ""}${x.h} ${esc(x.call)} from ${esc(fmtShort(x.as_of))}: <b class="neg">${pp(x.call_alpha)}</b>${x.done ? "" : " (open)"}</li>`).join("")}</ul></div></div>` : "";
+    const jr = journal?.length ? `<h3>Daily journal</h3><div class="tbl-wrap" style="max-height:320px"><table class="wrap-table"><thead><tr><th>Date</th><th>Review</th><th class="n">Move</th><th>What it found</th></tr></thead><tbody>${journal.map((j) => `<tr><td class="mono">${esc(fmtShort(j.date))}</td><td>${j.revised ? `<span class="pill warn">calls revised</span>` : `<span class="pill neu">calls stand</span>`}<div class="small muted">${esc(j.via === "triage" ? "quick check" : j.via === "code" ? "flagged by the data" : "strategist review")}</div></td><td class="n ${cls(num(j.move) / 100)}">${sg(j.move)}</td><td class="wr small">${dailyRich(j.headline, j.sources || [])}</td></tr>`).join("")}</tbody></table></div>` : "";
+    return `${glance}<div class="dim-head" style="margin-top:8px"><h3 style="margin:0">Each call's path since it was made</h3>${tabs}</div>${chart}${bw}${cards}${jr}
+      <details><summary class="small"><b>Scorecards, calibration and every call</b></summary>${trackDetail(log, { multi })}</details>`;
+  }
+  function trackDetail(log, { multi = false } = {}) {
     const sm = Track.summarize(log);
     const pc = (x) => (isNum(num(x)) ? Math.round(x * 100) + "%" : "—");
     const pp = (x, d = 1) => (isNum(num(x)) ? (x > 0 ? "+" : "") + fix(x, d) + "pp" : "—");
@@ -3802,7 +3970,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const btn = `<button class="sm" id="track-check" ${S.trackBusy || S.sweep?.busy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl || S.sweep?.busy ? "Updating…" : "Update now"}</button>`;
     const at = log.map((e) => e.eval?.at).filter(Boolean).sort().pop();
     return sec("track", "Track record", `${log.length} verdict${log.length === 1 ? "" : "s"} logged${at ? ` · prices to ${esc(fmtShort(at))}` : ""}`,
-      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}<span class="small muted">${S.trackBusy === sl || S.sweep?.busy ? "Scoring the calls with the latest prices…" : "Updates by itself with the latest prices each day this page is open."}</span></div>${trackView(log)}`);
+      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}<span class="small muted">${S.trackBusy === sl || S.sweep?.busy ? "Scoring the calls with the latest prices…" : "Updates by itself with the latest prices each day this page is open."}</span></div>${trackView(log, { journal: (() => { const r = S.agents[sl]?.result; return (r?.daily_history || []).map((h, i) => (i === 0 && r.daily ? { ...h, sources: r.daily.sources } : h)); })() })}`);
   }
   /** The sector's track record: every call on every industry in it, together. */
   function sectorTrackBlock(sec, names) {
@@ -3918,7 +4086,7 @@ a.btnlink:hover { border-color: var(--accent); }
    * Returns {profile, scores, ratios, metrics, c (compact statements), ttm, estimates, consensus, segments, insider, peers, news, transcript, ser}.
    */
   async function coFetch(sym, run) {
-    const key = "codata5:" + sym, hit = await idbGet(key).catch(() => null);
+    const key = "codata6:" + sym, hit = await idbGet(key).catch(() => null);
     if (hit?.day === today()) return hit.data;
     const one = async (tool, input) => (await optional(() => fmp(tool, input), [])) || [];
     const from = "2007-01-02";
@@ -3939,6 +4107,8 @@ a.btnlink:hover { border-color: var(--accent); }
         const bench = L?.industry && L.fiscalYear ? await one("ESG", { endpoint: "esg-benchmark", year: L.fiscalYear }) : [];
         return { r, bench: bench.filter((b) => String(b?.sector || "").toUpperCase() === String(L.industry).toUpperCase()) }; }), one("company", { endpoint: "company-executives", symbol: sym }),
       one("analyst", { endpoint: "historical-grades", symbol: sym, limit: 13 }), one("company", { endpoint: "shares-float", symbol: sym }),
+      // US macro releases for the next 12 months (FMP lists what is scheduled), for the company's calendar.
+      Promise.all([0, 1, 2, 3].map((q) => one("economics", { endpoint: "economics-calendar", from_date: Horizon.addDays(today(), q * 92), to_date: Horizon.addDays(today(), q * 92 + 91), country: "US" }))).then((xs) => xs.flat()),
       S.eod ? optional(() => eodCall("get_sentiment_data", { symbols: sym.replace(/\./g, "-") + ".US", start_date: Horizon.addDays(today(), -90), end_date: today() }), null) : Promise.resolve(null),
       S.eod ? optional(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", sections: ["General", "SharesStats", "Holders"], include_financials: false }), null) : Promise.resolve(null),
     ])];
@@ -3962,7 +4132,7 @@ a.btnlink:hover { border-color: var(--accent); }
     else { const last = (dates || []).filter((d) => d?.date && d.date <= today()).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
       if (last) { const tx = await optional(() => fmp("earningsTranscript", { endpoint: "search-transcripts", symbol: sym, year: last.fiscalYear, quarter: last.quarter }), []);
         const content = tx?.[0]?.content; if (content) transcript = { period: `Q${last.quarter} FY${last.fiscalYear}`, date: String(last.date).slice(0, 10), text: Research.excerpt(content, 7000) }; } }
-    const [aI, aB, aC, qI, qB, qC, divs, pos13, holders, insiders, esg, esgRB, execs, rhist, flt, sentRaw, eodRaw] = await extra;
+    const [aI, aB, aC, qI, qB, qC, divs, pos13, holders, insiders, esg, esgRB, execs, rhist, flt, econRaw, sentRaw, eodRaw] = await extra;
     const esgR = esgRB?.r || [];
     // EODHD's view covers every market a company trades in (13F covers only US-listed shares).
     const eodF = (() => { let x = eodRaw; if (typeof x?.result === "string") { try { x = JSON.parse(x.result); } catch { x = null; } } return x && typeof x === "object" ? x : null; })();
@@ -3978,6 +4148,7 @@ a.btnlink:hover { border-color: var(--accent); }
       profile: profile?.[0] || null, scores: scores?.[0] || null, metrics: metrics?.[0] || null, ratios: ratios?.[0] || null, c, ttm: c ? Fund.companyTTM(c) : null,
       estimates, consensus: g.consensus || isNum(Number(t.targetConsensus)) ? { consensus: g.consensus || null, buy: (Number(g.strongBuy) || 0) + (Number(g.buy) || 0), hold: Number(g.hold) || 0, sell: (Number(g.sell) || 0) + (Number(g.strongSell) || 0), strongBuy: Number(g.strongBuy) || 0, strongSell: Number(g.strongSell) || 0, target: Number(t.targetConsensus) || null, high: Number(t.targetHigh) || null, low: Number(t.targetLow) || null, median: Number(t.targetMedian) || null } : null,
       stmts: { annual: { inc: pick(aI, IK), bs: pick(aB, BK), cf: pick(aC, CK).map((r) => ({ ...r, dividendsPaid: r.commonDividendsPaid ?? r.netDividendsPaid })) }, quarter: { inc: pick(qI, IK), bs: pick(qB, BK), cf: pick(qC, CK).map((r) => ({ ...r, dividendsPaid: r.commonDividendsPaid ?? r.netDividendsPaid })) } },
+      econ: (econRaw || []).filter((r) => r?.date && r.event && /high/i.test(String(r.impact || ""))).map((r) => ({ date: String(r.date).slice(0, 10), event: String(r.event).slice(0, 120), impact: "high", estimate: r.estimate ?? null, previous: r.previous ?? null })).slice(0, 400),
       divs: pick(divs, ["date", "recordDate", "paymentDate", "declarationDate", "adjDividend", "dividend", "frequency"]),
       own: { pos: pos13?.[0] || null, float: flt?.[0] || null, q: q13,
         holders: (holders || []).filter((h) => h?.investorName).slice(0, 10).map((h) => ({ name: h.investorName, shares: h.sharesNumber, value: h.marketValue, ownership: h.ownership, chg: h.changeInSharesNumberPercentage, isNew: !!h.isNew })),
@@ -4054,6 +4225,33 @@ a.btnlink:hover { border-color: var(--accent); }
       if ((!saved?.thesis || saved.industry !== co.run.name) && S.sample) writeThesis(co);
     } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
   }
+  /**
+   * The company's own dates for the next 12 months (projected where the company hasn't announced them), its biggest peers'
+   * reports through the year, and the scheduled US macro releases that matter most.
+   */
+  function coCalendarExtra(co) {
+    const f = co.data || {}, sym = co.sym, out = [], end = Horizon.addDays(today(), 366);
+    const step = (d, k) => Horizon.addDays(d, k);
+    // Earnings: the next announced date, then every ~13 weeks (estimated).
+    const eh = CoFacts.earningsHistory(f.c, today()), past = (eh?.past || []).map((r) => r.date).filter(Boolean).sort();
+    let nx = eh?.next?.date || (past.length ? step(past[past.length - 1], 91) : null), first = !!eh?.next?.date;
+    while (nx && nx < today()) nx = step(nx, 91);
+    for (let i = 0; nx && nx <= end && i < 5; i++, nx = step(nx, 91)) out.push({ date: nx, title: `${sym} earnings${i === 0 && first ? "" : " (projected)"}`, detail: i === 0 && isNum(num(eh?.next?.ee)) ? `EPS estimate ${fix(eh.next.ee, 2)}` : "", importance: "high", kind: "earnings", tickers: [sym], source: "company", estimated: !(i === 0 && first) });
+    // Dividends: the next ex-date, then on its schedule.
+    const dv = CoFacts.dividends(f.divs, { px: co.px, today: today() });
+    if (dv?.paying) { const gap = /month/i.test(dv.freq || "") ? 30 : /semi/i.test(dv.freq || "") ? 182 : /annual/i.test(dv.freq || "") ? 365 : 91;
+      let x = dv.next?.ex || (f.divs?.[0]?.date ? step(String(f.divs[0].date).slice(0, 10), gap) : null); while (x && x < today()) x = step(x, gap);
+      for (let i = 0; x && x <= end && i < 13; i++, x = step(x, gap)) out.push({ date: x, title: `${sym} ex-dividend${i === 0 && dv.next?.ex ? "" : " (projected)"}`, detail: isNum(num(dv.annual)) ? `about ${fix(dv.annual / (365 / gap), 2)} a share` : "", importance: "medium", kind: "dividend", tickers: [sym], source: "company", estimated: !(i === 0 && dv.next?.ex) }); }
+    // Peers: the industry's biggest companies report every quarter; project their known dates through the year.
+    const cons = (co.run?.industry?.constituents || []).filter((c) => c.symbol !== sym).sort((a, b) => num(b.weight) - num(a.weight)).slice(0, 6), top = new Set(cons.map((c) => c.symbol));
+    const known = {}; for (const e of co.run?.agent?.calendar?.events || []) if (e.kind === "earnings") for (const t of e.tickers || []) if (top.has(t) && e.dates?.[0]) known[t] = known[t] && known[t] > e.dates[0] ? known[t] : e.dates[0];
+    for (const c of cons) { let x = known[c.symbol]; if (!x) continue; while (x < today()) x = step(x, 91);
+      for (let i = 0; x <= end && i < 5; i++, x = step(x, 91)) out.push({ date: x, title: `${c.symbol} earnings${i === 0 && known[c.symbol] >= today() ? "" : " (projected)"} (${(num(c.weight) * 100).toFixed(1)}% of the industry)`, importance: num(c.weight) >= 0.1 ? "high" : "medium", kind: "earnings", tickers: [c.symbol], source: "peer", estimated: !(i === 0 && known[c.symbol] >= today()) }); }
+    // Macro: the scheduled releases that move every stock (the Fed, inflation, jobs, growth, spending).
+    const KEY = /fed|fomc|interest rate decision|cpi|inflation|pce|non ?farm|payroll|unemployment|gdp|retail sales|ism|consumer confidence|michigan/i;
+    for (const r of f.econ || []) if (KEY.test(r.event)) out.push({ date: r.date, title: `US ${r.event}`, detail: r.estimate !== null && r.estimate !== undefined ? `estimate ${r.estimate}${r.previous !== null && r.previous !== undefined ? `, previous ${r.previous}` : ""}` : "", importance: /fed|fomc|interest rate decision|cpi|payroll/i.test(r.event) ? "high" : "medium", kind: "macro", tickers: [], source: "macro" });
+    return out;
+  }
   /** Code: peers, mapping, quality, valuation, and the citable index the thesis uses. */
   function coAnalyze(co) {
     const run = co.run, d = run.industry, f = co.data || {}, sym = co.sym;
@@ -4076,6 +4274,7 @@ a.btnlink:hover { border-color: var(--accent); }
     co.idx = idx;
     try { co.lensIn = Company.lensInputs(run, co.geo, co.seg, today()); } catch (e) { co.lensIn = null; console.warn("lens", e); }
     const L = co.lensIn;
+    if (L) try { L.calendar = Company.calendarYear(L.calendar, coCalendarExtra(co), today()); } catch (e) { console.warn("calendar", e); }
     if (L) for (const [list, src, title] of [[L.calendar, "dated calendar", (x) => `${x.date} ${x.title}`], [L.threats, "wars, conflicts and threats", (x) => x.title], [L.situations, "world events", (x) => x.title], [L.indicators, "macro", (x) => x.label],
       [L.countries, "trade map", (x) => x.country], [L.rules, "rule books", (x) => `${x.body}: ${x.name}`], [L.regItems, "policy, litigation and deals", (x) => x.title], [L.kpis, "industry KPIs", (x) => x.name], [L.debates, "debates", (x) => x.question]])
       for (const x of list || []) if (x?.id && !idx[x.id]) idx[x.id] = { id: x.id, kind: x.id[0], title: String(title(x) || "").slice(0, 160), source: `industry report · ${src}`, date: x.date || "" };
@@ -4609,11 +4808,18 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Every dated event ahead in the industry's calendar, with what each means for this company. */
   function coCalendar(co, t) {
     const In = co.lensIn?.calendar || []; if (!In.length) return "";
-    const L = t?.lens?.calendar || {}, DIRC = { upside: "pos", downside: "neg", "two-way": "neu" };
-    const rows = In.map((e) => { const y = L[e.id], mine = e.tickers.includes(co.sym); return `<tr${mine ? ' style="background:color-mix(in srgb, var(--accent) 7%, transparent)"' : ""}><td class="mono">${esc(fmtShort(e.date))}</td><td class="wr"><b>${esc(e.title)}</b>${e.tickers.length ? `<div class="small">${e.tickers.map((x) => `<b class="tick">${x === co.sym ? `<mark>${esc(x)}</mark>` : esc(x)}</b>`).join(" ")}</div>` : ""}</td>
-      <td>${y ? `${lvlP(y.impact, "impact")} ${y.direction ? `<span class="pill ${DIRC[y.direction] || "neu"}">${esc(y.direction)}</span>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(e.detail || ""), 200))}</span>`}</td></tr>`; }).join("");
-    return sec("co-cal", "What's coming", `${In.length} dated events from the ${esc(co.run.name)} calendar, for ${esc(co.sym)}`,
-      `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>${lensNote(co, t)}`);
+    const L = t?.lens?.calendar || {}, DIRC = { upside: "pos", downside: "neg", "two-way": "neu" }, SRCL = { company: "its own", peer: "peer", macro: "macro", industry: "industry" };
+    const row = (e) => { const y = L[e.id], mine = e.tickers.includes(co.sym) || e.source === "company";
+      return `<tr${mine ? ' style="background:color-mix(in srgb, var(--accent) 7%, transparent)"' : ""}><td class="mono">${esc(fmtShort(e.date))}${e.estimated ? `<div class="small muted">est.</div>` : ""}</td><td class="wr"><b>${esc(e.title)}</b> <span class="pill neu">${esc(SRCL[e.source] || "industry")}</span>${e.tickers.length ? `<div class="small">${e.tickers.map((x) => `<b class="tick">${x === co.sym ? `<mark>${esc(x)}</mark>` : esc(x)}</b>`).join(" ")}</div>` : ""}${e.detail && y?.why ? `<div class="small muted">${esc(trimC(stripCites(e.detail), 160))}</div>` : ""}</td>
+      <td>${y ? `${lvlP(y.impact === "none" ? "low" : y.impact, "impact")} ${y.direction ? `<span class="pill ${DIRC[y.direction] || "neu"}">${esc(y.direction)}</span>` : ""}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(e.detail || ""), 200))}</span>`}</td></tr>`; };
+    const months = []; for (const e of In) { const m = e.date.slice(0, 7); if (!months.length || months[months.length - 1].m !== m) months.push({ m, rows: [] }); months[months.length - 1].rows.push(e); }
+    const mName = (m) => new Date(m + "-15T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+    const body = months.map((g) => `<tr><td colspan="4" class="eyebrow" style="padding-top:12px">${esc(mName(g.m))} <span class="muted" style="text-transform:none">· ${g.rows.length} event${g.rows.length === 1 ? "" : "s"}</span></td></tr>${g.rows.map(row).join("")}`).join("");
+    const nOwn = In.filter((e) => e.source === "company").length, nPeer = In.filter((e) => e.source === "peer").length, nMac = In.filter((e) => e.source === "macro").length;
+    const last = In[In.length - 1]?.date;
+    return sec("co-cal", "What's coming", `${In.length} dated events to ${esc(fmtShort(last))}: ${nOwn} of ${esc(co.sym)}'s own, ${nPeer} peer reports, ${nMac} macro releases and the ${esc(co.run.name)} calendar`,
+      `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${body}</tbody></table></div>
+      <div class="small muted">Everything in the next 45 days, then the most important events each month for a year. "est." dates are projected from the company's or peer's reporting and dividend schedule; macro dates are as scheduled with FMP.</div>${lensNote(co, t)}`);
   }
   /** The industry team's own read of a panel (its analyst notes), shown under the company's numbers for comparison. */
   function indNote(co, key, label = "The industry's read") {
@@ -4727,13 +4933,13 @@ a.btnlink:hover { border-color: var(--accent); }
       return parts.length ? `<details class="small"><summary>The rule book</summary><div style="display:grid;gap:4px;margin-top:4px">${parts.join("")}</div></details>` : ""; };
     const rows = In.map((r) => { const y = L[r.id]; return `<tr><td class="wr"><b>${esc(r.name)}</b><div class="small muted">${esc(r.body)}${r.category ? ` · ${esc(r.category)}` : ""}</div>${ruleMore(r)}</td>
       <td><span class="pill ${SEVC[r.severity] || "neu"}">${esc(r.severity || "")}</span><div class="small muted">${esc(String(r.status || "").replace(/_/g, " "))}${r.effective ? " · " + esc(trimC(r.effective, 60)) : ""}</div></td>
-      <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}` : pend(co, t)}</td>
+      <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td>
       <td class="wr small">${y?.why ? `${rich(y.why)} ${cites(y.evidence)}` : `<span class="muted">${esc(trimC(stripCites(r.bottom_line || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.timing ? `<div class="muted"><b>When:</b> ${rich(y.timing)}</div>` : ""}</td></tr>`; }).join("");
     const RI = co.lensIn?.regItems || [], LI = t?.lens?.reg_items || {};
     const items = RI.length ? `<h3>Policy, litigation and deals</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Item</th><th>Status</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${RI.map((x) => { const y = LI[x.id], me = (x.names || []).includes(co.sym);
       return `<tr><td class="wr"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${me ? ` <span class="pill warn">names ${esc(co.sym)}</span>` : ""}${x.value ? ` <span class="muted">${esc(x.value)}</span>` : ""}${x.parties ? `<div class="small muted">${esc(trimC(x.parties, 160))}</div>` : ""}${x.text ? `<details class="small"><summary>The industry's read</summary><div>${esc(x.text)}</div>${x.names?.length ? `<div class="muted">Names: ${x.names.map((n) => (n === co.sym ? `<mark>${esc(n)}</mark>` : esc(n))).join(", ")}</div>` : ""}</details>` : ""}</td>
         <td class="small">${esc(x.status || "")}${x.date ? `<div class="muted">${esc(x.date)}</div>` : ""}${x.direction ? ` ${effP(x.direction === "tailwind" ? "helps" : x.direction === "headwind" ? "hurts" : x.direction)}` : ""}${x.next ? `<div class="muted">Next: ${esc(trimC(x.next, 120))}</div>` : ""}</td>
-        <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(x.text || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.next ? `<div class="muted"><b>Next:</b> ${rich(y.next)}</div>` : ""}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+        <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(x.text || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.next ? `<div class="muted"><b>Next:</b> ${rich(y.next)}</div>` : ""}</td></tr>`; }).join("")}</tbody></table></div>` : "";
     // The industry's verdict, its winners and losers, and the dated steps ahead, next to this company's own read.
     const wl = V && (V.winners.length || V.losers.length) ? `<div class="small"><b>The industry's regulatory winners:</b> ${V.winners.map((x) => `<span title="${esc(x.why)}">${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)}</span>`).join(", ") || "—"} · <b>losers:</b> ${V.losers.map((x) => `<span title="${esc(x.why)}">${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)}</span>`).join(", ") || "—"}${[...V.winners, ...V.losers].find((x) => x.symbol === co.sym) ? `<div class="muted">${esc([...V.winners, ...V.losers].find((x) => x.symbol === co.sym).why)}</div>` : ""}</div>` : "";
     const our = RO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${RO.stance ? `<span class="pill ${STC[RO.stance] || "neu"}">${esc(RO.stance)}</span>` : ""}${RO.vs_peers ? `<span class="pill ${PEER[RO.vs_peers] || "neu"}">${esc(RO.vs_peers)} vs peers</span>` : ""}</div>
@@ -5257,7 +5463,7 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   function coTrackSec(co) {
     const log = co.track || [];
-    return log.length ? sec("co-track", "Track record of these calls", `${log.length} analysis${log.length === 1 ? "" : "es"} logged`, trackView(log)) : "";
+    return log.length ? sec("co-track", "Track record of these calls", `${log.length} analysis${log.length === 1 ? "" : "es"} logged`, trackView(log, { subject: co.sym })) : "";
   }
 
   // ------------------------------------------------------------- events
@@ -5280,6 +5486,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.coStop) { S.co?.ctl?.abort(); return; }
     if (t.dataset.coRange) { S.coRange = t.dataset.coRange; renderCompany(); return; }
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }
+    if (t.dataset.trkH) { S.trkH = t.dataset.trkH; if (S.tab === "companies") renderCompany(); else renderReport(); return; }
     if (t.dataset.coRet && S.co) { S.coRet = t.dataset.coRet; const cur = $("co-returns"), tmp = document.createElement("div"); tmp.innerHTML = coReturns(S.co); const nx = tmp.firstElementChild;
       if (cur && nx) { cur.replaceWith(nx); wireCharts(nx); } return; }
     if (t.dataset.coPer) { S.coPer = t.dataset.coPer; renderCompany(); return; }

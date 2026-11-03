@@ -67,7 +67,7 @@ async function main() {
   const sampler = new Sampler({
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
     // As the page asks in claude.ai: the most capable model for "complex" steps, the balanced model for the rest.
-    models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5" },
+    models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_QUICK || env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5" },
     effort: { ...(env.CLAUDE_EFFORT_COMPLEX ? { complex: env.CLAUDE_EFFORT_COMPLEX } : {}), ...(env.CLAUDE_EFFORT_DEFAULT ? { default: env.CLAUDE_EFFORT_DEFAULT } : {}) },
     budgetUsd: env.CLAUDE_BUDGET_USD || 0, directConcurrency: Number(env.CLAUDE_DIRECT_CONCURRENCY || 12),
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
@@ -78,7 +78,8 @@ async function main() {
   if (args.resume && existsSync(args.resume)) {
     checkpoint = readMaybeGz(args.resume);
     // Keep the settings the run started with, unless this run sets a model or effort explicitly.
-    sampler.load(checkpoint.sampler, { keepSettings: !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
+    // A daily update always uses its own (cheaper) models, not the ones the full run started with.
+    sampler.load(checkpoint.sampler, { keepSettings: args.daily !== "true" && !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_MODEL_QUICK", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
     log(`Continuing from a checkpoint saved ${checkpoint.exported_at} (${Object.keys(checkpoint.records || {}).length} saved records, ${sampler.done.size} Claude answers kept, ${sampler.pending.size} still in batches)`);
   }
 
@@ -114,7 +115,13 @@ async function main() {
   log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.models.complex} for complex steps and ${sampler.models.default} for the rest, ${sampler.mode} mode${sampler.budgetUsd ? `, spending cap $${sampler.budgetUsd}` : ""})`);
   const redoGaps = env.REDO_GAPS === "true";
   if (redoGaps) log("Redo gaps: only the lead strategists whose 1M-12M calls left items out are rewritten");
-  await page.evaluate(([s, f, g]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g }), [sector, fresh, redoGaps]);
+  // --daily: the cheap daily update of a finished sector (data refreshed by code; Claude only where something changed).
+  const daily = args.daily === "true";
+  if (daily) {
+    if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
+    log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
+    await page.evaluate(([s, c]) => window.__industryScorer.daily(s, { concurrency: c }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4)]);
+  } else await page.evaluate(([s, f, g]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g }), [sector, fresh, redoGaps]);
 
   // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
   // limit), so there is always one to continue from.
@@ -168,6 +175,14 @@ async function main() {
 
   const done = rec.done?.H?.length || 0, total = (rec.names || []).filter((n) => !rec.skip?.[n]).length;
   const finished = !!rec.finished_at;
+  if (daily) {
+    const dd = rec.daily || {};
+    log(`Daily update: ${(dd.revised || []).length} industries revised, ${(dd.quiet || []).length} unchanged, ${(dd.failed || []).length} failed · ${cost.requests} Claude requests · $${cost.usd}`);
+    summary([`### ${sector}: daily update ${dd.date || ""}`, "", `- Revised calls: **${(dd.revised || []).join(", ") || "none"}**`, `- Unchanged: ${(dd.quiet || []).join(", ") || "none"}`,
+      ...((dd.failed || []).length ? [`- Failed: ${dd.failed.join("; ")}`] : []), `- Claude: ${cost.requests} requests, **$${cost.session_usd}** (${cost.mode}) · data calls ${cost.mcp_calls}`, ...status.notices.map((n) => `> ${n}`)].join("\n"));
+    await browser.close(); await mcp.close();
+    process.exit(sampler.fatal || (!(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);
+  }
   for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
   if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);
   log(`${finished ? "Finished" : outOfTime ? "Paused (out of time)" : "Stopped"}: ${done} of ${total} industries · ${cost.requests} Claude requests (${cost.cached_results} reused) in ${cost.batches} batches · $${cost.usd} · ${cost.minutes} min`);

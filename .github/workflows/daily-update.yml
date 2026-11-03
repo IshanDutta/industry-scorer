@@ -1,0 +1,133 @@
+# Industry Scorer: the cheap daily update of every analyzed sector.
+#
+# Each weekday after the US close, for every sector whose full analysis is in the "exports" branch:
+#   1. code refreshes every number (prices, returns, estimates, positioning, macro values, news): no Claude;
+#   2. code compares today with the last update and flags hard triggers (a big move, a top company reporting, ...);
+#   3. without a trigger, the quick model (Haiku) checks whether anything is material;
+#   4. only where something is, the strategist (Sonnet) revisits the 1M-12M calls; the rest stand as they were.
+# The updated sector goes back to the exports branch, so "Pull from GitHub" in Industry Scorer gets it.
+# The full analysis is still the weekly "Sector run" (list the sectors in runner/weekly-sectors.txt).
+#
+# Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
+# FMP together); inside each sector, several industries are refreshed at once.
+name: Daily update
+
+on:
+  workflow_dispatch:
+    inputs:
+      sector:
+        description: "Sectors to update, separated by commas (empty = every sector in the exports branch)"
+        required: false
+        default: ""
+      budget:
+        description: "Most to spend on Claude per sector today, in US dollars"
+        required: false
+        default: "5"
+  schedule:
+    - cron: "37 21 * * 1-5" # weekdays at 21:37 UTC (4:37 pm New York in winter, 5:37 pm in summer), after the close
+
+permissions:
+  contents: write # to save the updated sectors in the exports branch
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      sectors: ${{ steps.p.outputs.sectors }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: p
+        env:
+          SECTOR: ${{ inputs.sector }}
+        run: |
+          if [ -n "$SECTOR" ]; then
+            echo "sectors=$(echo "$SECTOR" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Every sector with a finished full analysis in the exports branch.
+          if git fetch -q origin exports 2>/dev/null; then
+            git show FETCH_HEAD --name-only --format= >/dev/null
+            list=$(git ls-tree --name-only FETCH_HEAD runs/ | sed -n 's#^runs/\([a-z-]*\)\.json\.gz$#\1#p')
+            names="[]"
+            for slug in $list; do
+              git show "FETCH_HEAD:runs/$slug.json.gz" > s.json.gz
+              name=$(node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("s.json.gz")));process.stdout.write(j.finished&&j.sector?j.sector:"")')
+              [ -n "$name" ] && names=$(echo "$names" | jq -c --arg n "$name" '. + [$n]')
+            done
+            rm -f s.json.gz
+            echo "sectors=$names" >> "$GITHUB_OUTPUT"
+          else
+            echo "sectors=[]" >> "$GITHUB_OUTPUT"
+          fi
+
+  update:
+    needs: plan
+    if: needs.plan.outputs.sectors != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        sector: ${{ fromJson(needs.plan.outputs.sectors) }}
+    concurrency:
+      group: sector-${{ matrix.sector }}
+      cancel-in-progress: false
+    env:
+      SECTOR: ${{ matrix.sector }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: slug
+        run: echo "slug=$(echo "$SECTOR" | tr '[:upper:]' '[:lower:]' | sed -e 's/&/and/g' -e 's/[^a-z0-9]\+/-/g' -e 's/^-//' -e 's/-$//')" >> "$GITHUB_OUTPUT"
+      - name: Stagger the start
+        if: strategy.job-index > 0
+        env:
+          INDEX: ${{ strategy.job-index }}
+        run: sleep $(( (INDEX % 4) * 60 ))
+      - name: Get the sector's last analysis
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          mkdir -p base
+          git fetch -q origin exports && git show "FETCH_HEAD:runs/$SLUG.json.gz" > base/checkpoint.json.gz
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: runner
+        run: npx playwright install --with-deps chromium
+      - name: Daily update of ${{ matrix.sector }}
+        working-directory: runner
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          EODHD_MCP_URL: ${{ secrets.EODHD_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
+          JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
+          JOB_DAILY_INDUSTRIES: ${{ vars.DAILY_INDUSTRIES || '4' }}
+          CLAUDE_MODEL_QUICK: ${{ vars.CLAUDE_MODEL_QUICK || 'claude-haiku-4-5-20251001' }}
+          CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
+          CLAUDE_MODE: batch
+          CLAUDE_STRAGGLER_MIN: "30"
+          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || '5' }}
+        run: node run.mjs --daily --sector "$SECTOR" --resume ../base/checkpoint.json.gz --out ../out --deadline-min 170
+      - name: Keep the updated sector in the exports branch
+        if: success() && hashFiles('out/checkpoint.json.gz') != ''
+        env:
+          SLUG: ${{ steps.slug.outputs.slug }}
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          for i in 1 2 3 4 5 6; do
+            rm -rf ex-wt; git fetch -q origin exports && git worktree add -q ex-wt FETCH_HEAD
+            mkdir -p ex-wt/runs && cp out/checkpoint.json.gz "ex-wt/runs/$SLUG.json.gz"
+            (cd ex-wt && git add runs && { git diff --cached --quiet || git commit -qm "Daily update: $SECTOR (run ${{ github.run_id }})"; } && git push -q origin HEAD:refs/heads/exports) && break
+            git worktree remove --force ex-wt; sleep $((RANDOM % 20 + 5))
+          done
