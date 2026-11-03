@@ -4063,6 +4063,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (L) for (const [list, src, title] of [[L.calendar, "dated calendar", (x) => `${x.date} ${x.title}`], [L.threats, "wars, conflicts and threats", (x) => x.title], [L.situations, "world events", (x) => x.title], [L.indicators, "macro", (x) => x.label],
       [L.countries, "trade map", (x) => x.country], [L.rules, "rule books", (x) => `${x.body}: ${x.name}`], [L.regItems, "policy, litigation and deals", (x) => x.title], [L.kpis, "industry KPIs", (x) => x.name], [L.debates, "debates", (x) => x.question]])
       for (const x of list || []) if (x?.id && !idx[x.id]) idx[x.id] = { id: x.id, kind: x.id[0], title: String(title(x) || "").slice(0, 160), source: `industry report · ${src}`, date: x.date || "" };
+    for (const h of L?.headlines || []) idx[h.id] = { id: h.id, kind: "H", title: h.title, source: h.source, date: h.date, url: h.url };
   }
   /**
    * Write the thesis as two halves at once (the verdict, thesis, scenarios and calls; the drivers, exposures, risks and
@@ -4622,14 +4623,28 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Every world situation the industry analysis tracks, and what it does to this company. */
   function coWorld(co, t) {
     const In = co.lensIn?.situations || []; if (!In.length) return "";
-    const L = t?.lens?.world || {};
+    const L = t?.lens?.world || {}, HL = co.lensIn?.headlines || [], hById = Object.fromEntries(HL.map((h) => [h.id, h]));
     const named = (x) => (x.winners.includes(co.sym) ? `<span class="pill pos">named a winner</span>` : x.losers.includes(co.sym) ? `<span class="pill neg">named a loser</span>` : "");
-    const rows = In.map((x) => { const y = L[x.id]; return `<tr><td class="wr"><b>${esc(x.title)}</b><div class="small muted">${esc([x.region, x.status].filter(Boolean).join(" · "))}</div>${(x.scenarios || []).length ? `<details class="small"><summary>Scenarios</summary>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name)}${c.outcome ? ` <span class="muted">${esc(stripCites(c.outcome))}</span>` : ""}</div>`).join("")}</details>` : ""}</td>
-      <td>${effP(x.stance === "supportive" ? "helps" : x.stance === "adverse" ? "hurts" : x.stance)}<div class="small muted">${esc(trimC(stripCites(x.first_order || ""), 140))}</div></td>
-      <td>${y ? `${effP(y.effect)} ${lvlP(y.magnitude, "impact")}<div>${vsP(y.vs_industry)}</div>` : pend(co, t)} ${named(x)}</td>
-      <td class="wr small">${y?.why ? `${rich(y.why)} ${cites(y.evidence)}` : ""}</td></tr>`; }).join("");
-    return sec("co-world", "World events", `the ${In.length} situations in the ${esc(co.run.name)} analysis, for ${esc(co.sym)}`,
-      `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Situation</th><th>For the industry</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>${lensNote(co, t)}${mentionsFor(co, "world")}`);
+    const ln = (l, v) => (v ? `<div><b>${l}:</b> ${esc(v)}</div>` : "");
+    const more = (x) => { const parts = [ln("Now", x.now), ln("Why now", x.why_now), ln("Trigger", x.trigger), ln("First-order effect", x.first_order),
+        x.developments?.length ? `<div><b>Latest:</b><ul class="dlist">${x.developments.map((d) => `<li><span class="mono">${esc(fmtShort(d.date))}</span> ${esc(d.text)}</li>`).join("")}</ul></div>` : "",
+        x.channels?.length ? `<div><b>How it reaches the industry:</b> ${x.channels.map(esc).join("; ")}</div>` : "",
+        x.scenarios?.length ? `<div><b>Scenarios:</b>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name)}${c.trigger ? ` <span class="muted">if ${esc(c.trigger)}</span>` : ""}${c.outcome ? ` → ${esc(c.outcome)}` : ""}</div>`).join("")}</div>` : "",
+        ln("Near term", x.near_term), ln("Structural", x.structural), x.offsets?.length ? ln("Offsets", x.offsets.join("; ")) : "",
+        x.watch?.length ? `<div><b>Watch:</b> ${x.watch.map((w) => `${esc(w.indicator)} <span class="muted">(${esc(w.signal)})</span>`).join("; ")}</div>` : "", x.exposure ? ln("Most exposed", x.exposure) : "",
+        x.headlines?.length ? `<div><b>Headlines:</b><ul class="dlist">${x.headlines.slice(0, 5).map((id) => hById[id]).filter(Boolean).map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)} <span class="muted">${esc(h.source)}</span></li>`).join("")}</ul></div>` : ""].filter(Boolean);
+      return parts.length ? `<details class="small"><summary>${x.deep ? "The industry's deep dive" : "What the industry is tracking"}</summary><div style="display:grid;gap:6px;margin-top:6px">${parts.join("")}</div></details>` : ""; };
+    // One card per situation: what it means for the company up top, the industry's full read underneath.
+    const cards = In.map((x) => { const y = L[x.id]; return `<div class="box"><div class="dim-head" style="flex-wrap:wrap;justify-content:flex-start"><b>${esc(x.title)}</b>${x.deep ? "" : `<span class="pill neu">tracked</span>`}</div>
+      <div class="small muted">${esc([x.category, x.region, x.status, x.since ? `since ${fmtShort(x.since)}` : ""].filter(Boolean).join(" · "))}</div>
+      <div class="actions" style="justify-content:flex-start;align-items:center;margin:6px 0"><span class="small muted">Industry</span>${effP(x.stance === "supportive" ? "helps" : x.stance === "adverse" ? "hurts" : x.stance)}<span class="small muted" style="margin-left:8px">${esc(co.sym)}</span>${y ? `${effP(y.effect)} ${lvlP(y.magnitude, "impact")} ${vsP(y.vs_industry)}` : pend(co, t)} ${named(x)}</div>
+      ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : x.summary ? `<p class="small muted" style="margin:0">${esc(trimC(x.summary, 260))}</p>` : ""}
+      ${y?.channel || y?.scenario || y?.watch ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${rich(y.channel)}</div>` : ""}${y.scenario ? `<div><b>Scenario that matters:</b> ${rich(y.scenario)}</div>` : ""}${y.watch ? `<div class="muted"><b>Watch:</b> ${rich(y.watch)}</div>` : ""}</div>` : ""}
+      ${more(x)}</div>`; }).join("");
+    const nDeep = In.filter((x) => x.deep).length;
+    const heads = HL.length ? `<details><summary class="small"><b>World headlines</b> behind these situations (${HL.length})</summary><ul class="dlist small">${HL.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)} <span class="muted">${esc(h.source)}${h.situations.length ? ` · ${h.situations.map((id) => esc(trimC(In.find((s) => s.id === id)?.title || id, 40))).join("; ")}` : ""}</span></li>`).join("")}</ul></details>` : "";
+    return sec("co-world", "World events", `${nDeep} deep dive${nDeep === 1 ? "" : "s"} and ${In.length - nDeep} tracked situation${In.length - nDeep === 1 ? "" : "s"} from the ${esc(co.run.name)} analysis, for ${esc(co.sym)}`,
+      `<div class="two">${cards}</div>${heads}${lensNote(co, t)}${mentionsFor(co, "world")}`);
   }
   /** Every country on the industry's trade map, with this company's revenue there and its exposure. */
   function coTrade(co, t) {
