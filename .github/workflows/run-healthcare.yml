@@ -21,6 +21,10 @@ on:
         description: "Only rewrite the lead strategists whose 1M-12M calls left items out (for a finished sector)"
         type: boolean
         default: false
+      add_new:
+        description: "Only analyze the industries this sector doesn't have yet (the small ones it used to leave out); everything else is kept"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,4 +39,5 @@ jobs:
       budget: ${{ inputs.budget }}
       fresh: ${{ inputs.fresh }}
       redo_gaps: ${{ inputs.redo_gaps }}
+      add_new: ${{ inputs.add_new }}
     secrets: inherit

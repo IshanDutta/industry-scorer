@@ -434,7 +434,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const E = window.Engine, Sector = window.Sector, Universe = window.Universe, Horizon = window.Horizon, History = window.History, Plan = window.Plan, Chain = window.Chain, Forward = window.Forward, Sensitivity = window.Sensitivity, Positioning = window.Positioning, Track = window.Track, Sections = window.Sections, Brain = window.Brain, Coverage = window.Coverage, RegBook = window.RegBook, World = window.World, Trade = window.Trade, Fund = window.Fund, Score = window.Score, Agent = window.Agent, Research = window.Research, Insights = window.Insights, Macro = window.Macro, Team = window.Team;
   const SERVER = "FMP";
   const WINDOWS = ["1M", "3M", "6M", "1Y"];
-  const CFG = { windows: { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 }, minCoverage: 0.9, riskMonths: 12, topN: 50 };
+  const CFG = { windows: { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 }, minCoverage: 0.9, riskMonths: 12, topN: 50, minCompanies: 1 };
   const CALL_GAP_MS = 230;
   const COMPANY_CONCURRENCY = 5;
   const EOD_SERVER = "EODHD";
@@ -446,6 +446,7 @@ a.btnlink:hover { border-color: var(--accent); }
    * work and every prompt stay the same, only the order of independent steps changes.
    */
   const JOB = (typeof window !== "undefined" && window.__INDUSTRY_SCORER_JOB__) || null;
+  if (JOB?.minCompanies > 0) CFG.minCompanies = JOB.minCompanies | 0;
   const CONC = { ind: Math.max(1, JOB?.industries | 0 || 1), pool: Math.max(2, JOB?.pool | 0 || 2), bodies: Math.max(1, JOB?.bodies | 0 || 1) };
   // Industries come from FMP at runtime (directory: available-industries); nothing is hardcoded.
   let INDUSTRIES = [];
@@ -657,7 +658,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const PULL_TTL_MS = 15 * 60 * 1000;
   function organizePull(sector) {
     const p = S.sectorPull[sector]; if (!p?.rows) return null;
-    p.org = Universe.organize(p.rows, { topN: CFG.topN, usOnly: usOnly(), sector }); p.org.usOnly = usOnly();
+    p.org = Universe.organize(p.rows, { topN: CFG.topN, minCompanies: CFG.minCompanies, usOnly: usOnly(), sector }); p.org.usOnly = usOnly();
     for (const x of [...p.org.industries, ...p.org.pruned]) S.sectorOf[x.industry] = sector;
     return p.org;
   }
@@ -988,12 +989,12 @@ a.btnlink:hover { border-color: var(--accent); }
       // The sector pull failed (e.g. too large a response): same rules, applied to this industry's own pull.
       fallback = true;
       const rows = await fmp("search", { ...Universe.sectorQuery(sector), industry: name });
-      org = Universe.organize(rows, { topN: CFG.topN, usOnly: usOnly(), sector });
+      org = Universe.organize(rows, { topN: CFG.topN, minCompanies: CFG.minCompanies, usOnly: usOnly(), sector });
     }
     const bucket = org.industries.find((x) => x.industry === name);
     if (!bucket) {
       const small = org.pruned.find((x) => x.industry === name);
-      throw { code: "empty", message: small ? `${name} has only ${small.count} compan${small.count === 1 ? "y" : "ies"} in ${sector} after cleaning. Industries with fewer than 15 companies are left out.` : `No companies in ${name} passed the filters (actively traded US listings, not funds, trusts, notes or preferreds).` };
+      throw { code: "empty", message: small ? `${name} has only ${small.count} compan${small.count === 1 ? "y" : "ies"} in ${sector} after cleaning. Industries with fewer than ${CFG.minCompanies} companies are left out.` : `No companies in ${name} passed the filters (actively traded US listings, not funds, trusts, notes or preferreds).` };
     }
     onStep("Checking for companies that relisted under a new ticker", 0.06);
     const successors = await findSuccessors(name, bucket.all);
@@ -1836,7 +1837,7 @@ a.btnlink:hover { border-color: var(--accent); }
   }
 
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
-  async function runSector(sector, { fresh = false, redoGaps = false } = {}) {
+  async function runSector(sector, { fresh = false, redoGaps = false, addNew = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     if (_saveName) await flush();
     if (S.selected) { forget(S.selected); S.selected = null; }
@@ -1850,6 +1851,8 @@ a.btnlink:hover { border-color: var(--accent); }
       rec = { ...rec, finished_at: null, done: { ...rec.done, H: rec.done.H.filter((n) => !gaps.includes(n)) }, redoLead: [...new Set([...(rec.redoLead || []), ...gaps])] };
       await idbPut(secKey(sector), jsonSafe(rec)); S.sectorRec[sector] = rec;
     }
+    // "Add the new industries": a finished sector keeps everything and runs only the industries it doesn't have yet.
+    const prevRec = addNew && rec?.finished_at && rec?.v === 1 ? rec : null;
     if (rec?.finished_at || rec?.v !== 1) rec = null;
     const sr = S.sectorRun = { sector, phase: "data", label: "Starting", cancel: false, ctls: new Set(), team: [], calls: rec?.calls || 0, byPhase: { ...(rec?.by_phase || {}) }, errors: [], cur: null, rec: null, store: null, storeSaved: 0, runs: new Map() };
     S.sectorView = sector; S.sectorAuto = null;
@@ -1922,7 +1925,7 @@ a.btnlink:hover { border-color: var(--accent); }
       sr.cur = null;
       if (fatal) throw fatal;
     };
-    const names = () => rec.names.filter((n) => !rec.skip[n] && S.industries[slug(n)]?.summary);
+    const names = () => (rec.round?.names || rec.names).filter((n) => !rec.skip[n] && S.industries[slug(n)]?.summary);
     const inds = () => names().map(indOf).filter(Boolean);
     const setMacro = (name) => { const m = jsonSafe(Sector.macroFor(lib.macro, lib.plan, name)); S.macroBy[slug(name)] = m; return m; };
     const ids = (o) => { const out = new Set(); const walk = (x) => { if (typeof x === "string") { for (const m of x.matchAll(/\[([^\]]+)\]/g)) for (const id of m[1].split(/,\s*/)) out.add(id); if (/^[A-Z]{1,2}\d+$/.test(x)) out.add(x); } else if (Array.isArray(x)) x.forEach(walk); else if (x && typeof x === "object") Object.values(x).forEach(walk); }; walk(o); return [...out].filter((x) => !/^I\d+$/.test(x)); };
@@ -1941,9 +1944,19 @@ a.btnlink:hover { border-color: var(--accent); }
       await detectEod();
       const bench = await refreshBenchmark();
       const org = await sectorUniverse(sector);
+      if (!rec && prevRec) {
+        const have = new Set(prevRec.names), added = org.industries.map((x) => x.industry).filter((n) => !have.has(n));
+        if (!added.length) { S.notices.push({ kind: "info", text: `Every ${sector} industry is already analyzed; there's nothing new to add.` }); ok = true; return; }
+        // A new round: the sector-wide research (macro plan, world scout, situation dives, indicator reads, rule books) is
+        // done again for the added industries only, under its own keys; countries already written up are reused.
+        const n = (prevRec.rounds || []).length + 1, r0 = { n, names: added, at: new Date().toISOString() };
+        rec = { ...prevRec, names: [...prevRec.names, ...added], finished_at: null, round: r0, rounds: [...(prevRec.rounds || []), r0],
+          done: { ...prevRec.done, C: false, E: false, dives: [], ind: [], books: [] } };
+      }
       if (!rec) rec = { v: 1, sector, started_at: new Date().toISOString(), names: org.industries.map((x) => x.industry), skip: {}, failed_steps: [], rows: {}, calls: 0, store_n: 0,
         done: { B: [], C: false, D: [], E: false, F: [], dives: [], countries: [], ind: [], books: [], H: [] }, finished_at: null };
       sr.rec = rec;
+      const pk = (part) => (rec.round ? `r${rec.round.n}:` : "") + part;
       sr.store = World.makeStore(rec.store_n ? await loadStore(sector, rec.store_n) : []); sr.storeSaved = sr.store.items.length;
       // What earlier sectors researched (the shared library): reused below wherever the facts are the same.
       const L = await libLoad();
@@ -1952,19 +1965,19 @@ a.btnlink:hover { border-color: var(--accent); }
       const lean = (it) => { const { id, kind, text, ...rest } = it; return rest; };
       /** A source cited by reused facts: the same article in this sector's wire, else added to the sector's store. */
       const resolveX = (it) => S.world.items.find((x) => x.url && x.url === it.url)?.id || sr.store.add(lean(it)).id;
-      const wire = await secGet(sector, "wire");
+      const wire = await secGet(sector, pk("wire"));
       if (wire?.world) { S.world = wire.world; S.macroCat = wire.macroCat; S.macroCtx = { today: today(), isFatal, onStep: () => {}, eodTools: wire.eodTools || [] }; }
       else if (libFresh(L.wire, "wire") && L.wire.world) {
         S.world = L.wire.world; S.macroCat = L.wire.macroCat; S.macroCtx = { today: today(), isFatal, onStep: () => {}, eodTools: L.wire.eodTools || [] };
-        await secPut(sector, "wire", { world: S.world, macroCat: S.macroCat, eodTools: L.wire.eodTools || [] }); sr.reuse.wire = true;
+        await secPut(sector, pk("wire"), { world: S.world, macroCat: S.macroCat, eodTools: L.wire.eodTools || [] }); sr.reuse.wire = true;
       }
       else {
-        await sharedResearch(); await secPut(sector, "wire", { world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] });
+        await sharedResearch(); await secPut(sector, pk("wire"), { world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] });
         L.wire = { at: now(), sector, world: S.world, macroCat: S.macroCat, eodTools: S.macroCtx?.eodTools || [] }; libSave();
       }
-      for (const [k, part] of [["macro", "macro"], ["scout", "scout"], ["reads", "reads"], ["cov", "cov"]]) { const v = await secGet(sector, part); if (v) lib[k] = v; }
+      for (const [k, part] of [["macro", "macro"], ["scout", "scout"], ["reads", "reads"], ["cov", "cov"]]) { const v = await secGet(sector, pk(part)); if (v) lib[k] = v; }
       if (lib.macro?.plan) { lib.plan = lib.macro.plan; lib.macro = lib.macro.macro; }
-      for (const si of rec.done.dives) lib.dives[si] = await secGet(sector, "dive:" + si);
+      for (const si of rec.done.dives) lib.dives[si] = await secGet(sector, pk("dive:" + si));
       for (const c of rec.done.countries) lib.countries[c] = await secGet(sector, "country:" + c);
       lib.reads ||= {};
       // Industries already pulled come back from this browser; finished ones aren't needed in memory.
@@ -2003,7 +2016,7 @@ a.btnlink:hover { border-color: var(--accent); }
           lib.plan = plan; lib.macro = jsonSafe({ ...m, run_at: new Date().toISOString(), eod: S.eod });
           en.note = `${m.rows.length} indicators, ${Math.round(names().reduce((a, n) => a + Sector.macroFor(lib.macro, plan, n).rows.length, 0) / names().length)} per industry on average${plan.fallback ? " (planner unavailable; chosen from the data)" : ""}`;
         }, { hard: true });
-        await secPut(sector, "macro", { plan: lib.plan, macro: lib.macro });
+        await secPut(sector, pk("macro"), { plan: lib.plan, macro: lib.macro });
         rec.done.C = true; await saveRec(sr);
       }
 
@@ -2027,7 +2040,7 @@ a.btnlink:hover { border-color: var(--accent); }
           if (!lib.scout.situations.length) throw { code: "empty_completion" };
           en.note = `${lib.scout.situations.length} situations`;
         }, { hard: true });
-        await secPut(sector, "scout", lib.scout);
+        await secPut(sector, pk("scout"), lib.scout);
         rec.done.E = true; await saveRec(sr);
       }
 
@@ -2069,7 +2082,7 @@ a.btnlink:hover { border-color: var(--accent); }
           if (out.reused) sr.reuse.situations++;
           else { L.situations[libKey(sit.title)] = { at: now(), sector, title: sit.title, facts: out.facts, items: libItems(out.facts, [S.world.items, sr.store.items, coverage], lib.macro?.rows || []) }; sr.reuse.added.situations++; libSave(); }
           lib.dives[si] = out;
-          await secPut(sector, "dive:" + si, out);
+          await secPut(sector, pk("dive:" + si), out);
           rec.done.dives.push(si); await saveRec(sr);
           en.note = `${coverage.length} articles · ${Object.keys(out.impacts).length} industries written${out.failed.length ? `, ${out.failed.length} missing` : ""}`;
         });
@@ -2128,7 +2141,7 @@ a.btnlink:hover { border-color: var(--accent); }
           cov.links = links;
           const byRow = remap(cov.byRow); cov.byRow = byRow;
           for (const ls of Object.values(byRow)) for (const c of ls) { const it = sr.store.items.find((x) => x.id === c.id); if (it && !cov.items.has(it.id)) cov.items.set(it.id, it); }
-          lib.cov = { byRow }; await secPut(sector, "cov", lib.cov); await saveRec(sr);
+          lib.cov = { byRow }; await secPut(sector, pk("cov"), lib.cov); await saveRec(sr);
           en.note = `${Object.values(cov.byRow).filter((c) => c.length).length} of ${rows.length} indicators already have matching coverage; the analysts search for the rest`;
         }, { hard: true });
         const tagOf = Object.fromEntries((lib.plan.series || []).map((s) => [s.key, s.industries.filter((n) => live.has(n))]));
@@ -2150,7 +2163,7 @@ a.btnlink:hover { border-color: var(--accent); }
               Object.assign(r.indicators, out.indicators); r.dropped += out.dropped;
               covered += Object.values(out.indicators).filter((x) => x.covered).length; total += mine.length;
             }
-            await secPut(sector, "reads", lib.reads);
+            await secPut(sector, pk("reads"), lib.reads);
             rec.done.ind.push(gi); await saveRec(sr);
             en.note = `${b.length} series · ${covered} of ${total} industry reads tied to news`;
           });
@@ -2333,7 +2346,7 @@ a.btnlink:hover { border-color: var(--accent); }
       // Finished only when every industry is: one whose lead strategist failed waits for the next run (lead only).
       const left = rec.names.filter((n) => !rec.skip[n] && !rec.done.H.includes(n));
       if (left.length) { S.notices.push({ kind: "warn", text: `${left.length} ${sector} industr${left.length === 1 ? "y is" : "ies are"} missing ${left.length === 1 ? "its" : "their"} lead strategist (${left.join(", ")}). Run the sector again to finish ${left.length === 1 ? "it" : "them"}; only the lead strategist is redone.` }); return; }
-      rec.finished_at = new Date().toISOString();
+      rec.finished_at = new Date().toISOString(); rec.round = null;
       ok = true;
     } catch (e) {
       sr.cancel = true;
@@ -2768,7 +2781,7 @@ a.btnlink:hover { border-color: var(--accent); }
         body += sectorRunBlock(sec, org);
         body += rows.map((x) => `<button class="pick ind ${x.industry === S.selected ? "cur" : ""}" data-pick="${esc(x.industry)}" ${busy() ? "disabled" : ""}><span><span class="mono muted">#${x.rank}</span> ${esc(x.industry)}</span><span class="when">${when(x.industry) || `${x.count} cos · ${cap(x.total_market_cap)}`}</span></button>`).join("");
         if (!rows.length) body += full(`No ${esc(sec)} industry matches "${esc(S.filter)}".`);
-        if (org.pruned.length) body += full(`Left out because they have fewer than 15 companies: ${org.pruned.map((x) => `${esc(x.industry)} (${x.count})`).join(", ")}.`);
+        if (org.pruned.length) body += full(`Left out because they have fewer than ${CFG.minCompanies} companies: ${org.pruned.map((x) => `${esc(x.industry)} (${x.count})`).join(", ")}.`);
       }
     } else if (f) {
       const list = INDUSTRIES.filter((n) => n.toLowerCase().includes(f) && !savedNames.includes(n));
@@ -2798,13 +2811,15 @@ a.btnlink:hover { border-color: var(--accent); }
   function sectorRunBlock(sec, org) {
     const rec = S.sectorRec[sec], running = S.sectorRun?.sector === sec, n = org.industries.length, est = sectorEstimate(n);
     const left = rec && !rec.finished_at ? rec.names.filter((x) => !rec.skip?.[x] && !rec.done?.H?.includes(x)).length : 0;
+    // Industries the finished run doesn't have (small ones from before every industry was included, or new ones).
+    const added = rec?.finished_at ? org.industries.map((x) => x.industry).filter((x) => !rec.names.includes(x)) : [];
     const dis = !S.mcp || !S.sample || busy() ? "disabled" : "";
     const btns = running ? `<button class="primary" data-sector-view="${esc(sec)}">Show progress</button>`
       : rec && !rec.finished_at ? `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Resume: ${left} of ${rec.names.length} industries left</button><button data-sector-view="${esc(sec)}">Progress so far</button><button data-sector-fresh="${esc(sec)}" ${dis}>Start over</button>`
-      : rec?.finished_at ? `<button data-sector-view="${esc(sec)}" class="primary">Open the overview (${esc(ago(rec.finished_at))})</button><button data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} again</button>`
+      : rec?.finished_at ? `<button data-sector-view="${esc(sec)}" class="primary">Open the overview (${esc(ago(rec.finished_at))})</button>${added.length ? `<button class="primary" data-sector-add="${esc(sec)}" ${dis} title="${esc(added.join(", "))}">Add the ${added.length} industr${added.length === 1 ? "y" : "ies"} not analyzed yet</button>` : ""}<button data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} again</button>`
       : `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} industries</button>`;
     const gh = `https://github.com/${GH_REPO}`;
-    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched. When it's done: <button class="sm" data-pull-sector="${esc(sec)}" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling === sec ? "Pulling…" : `Pull ${esc(sec)} from GitHub`}</button> (the copy last brought into this page), or for the very latest, <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
+    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched; tick "add_new" there to analyze only the industries a finished sector doesn't have yet. When it's done: <button class="sm" data-pull-sector="${esc(sec)}" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling === sec ? "Pulling…" : `Pull ${esc(sec)} from GitHub`}</button> (the copy last brought into this page), or for the very latest, <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
     return `<div class="sector-run"><div><b>Analyze every ${esc(sec)} industry with one click.</b> <span class="small muted">Each industry gets the full report it gets on its own: its data, scores, KPI and earnings-call analysts, customers and suppliers, macro, world events, trade relations, rule books, regulatory verdict and lead strategist. What the industries share is researched once for the whole sector (the macro series and what's driving them, the world situations and their facts, each country's relationship with the US, each regulator's rules and their fact-check), and each industry's analysts then write what it means for that industry. About ${est.sector.toLocaleString()} Claude calls instead of about ${est.single.toLocaleString()} running them one by one, on your own Claude usage. Keep this page open while it runs (it keeps going in a background tab); progress is saved after every step, and reopening the page carries on.</span></div>
       <div class="actions">${btns}</div>${ghRow}</div>`;
   }
@@ -3082,7 +3097,7 @@ a.btnlink:hover { border-color: var(--accent); }
     el.innerHTML = `
       <section class="hero">
         <div class="hero-row"><div style="display:grid;gap:4px"><span class="eyebrow">Industry analysis</span><h1>${esc(d.name)}</h1>
-          <span class="small muted">${d.universe ? `${esc(d.sector)} sector${d.universe.rank ? ` · #${d.universe.rank} of ${d.universe.of} industries by total market cap` : ""} · top ${s.n_constituents} of ${d.universe.companies} companies (industry total ${cap(d.universe.total_market_cap)}) · ` : ""}${s.n_constituents} companies · ${cap(s.total_market_cap)} total market cap · largest is ${esc(s.largest_company)} at ${pct(s.top1_weight, false, 0)} · prices as of ${esc(fmtDate(d.as_of))} · generated ${esc(ago(d.updated_at))}${S.storeError ? ` · couldn't save in this browser${S.storeErrorMsg ? ` (${esc(S.storeErrorMsg.slice(0, 80))})` : ""}` : S.savedAt[slug(d.name)] ? " · saved in this browser" : ""}${d.us_only ? " · US-headquartered only" : ""}</span></div>
+          <span class="small muted">${d.universe ? `${esc(d.sector)} sector${d.universe.rank ? ` · #${d.universe.rank} of ${d.universe.of} industries by total market cap` : ""} · ${d.universe.companies === 1 ? "its only company" : `top ${s.n_constituents} of ${d.universe.companies} companies`} (industry total ${cap(d.universe.total_market_cap)}) · ` : ""}${s.n_constituents === 1 ? "1 company" : `${s.n_constituents} companies`} · ${cap(s.total_market_cap)} total market cap · largest is ${esc(s.largest_company)} at ${pct(s.top1_weight, false, 0)} · prices as of ${esc(fmtDate(d.as_of))} · generated ${esc(ago(d.updated_at))}${S.storeError ? ` · couldn't save in this browser${S.storeErrorMsg ? ` (${esc(S.storeErrorMsg.slice(0, 80))})` : ""}` : S.savedAt[slug(d.name)] ? " · saved in this browser" : ""}${d.us_only ? " · US-headquartered only" : ""}</span></div>
           <div class="actions">${S.sectorRec[d.sector]?.rows?.[d.name] ? `<button data-sector-view="${esc(d.sector)}" ${busy() ? "disabled" : ""}>← ${esc(d.sector)} overview</button>` : ""}<button id="run-full" title="Fetches and writes everything again from scratch, replacing the saved copy" ${canRun ? "" : "disabled"}>Run again</button></div></div>
         ${notices}${restoredBlock(d)}${progressBlock()}
         ${s.notes ? `<div class="notice info">${esc(s.notes)}</div>` : ""}
@@ -5476,6 +5491,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.sectorRun) { if (S.sectorRec[t.dataset.sectorRun]?.finished_at && !confirm(`Analyze every ${t.dataset.sectorRun} industry again from scratch? The saved overview and runs are replaced as it goes.`)) return; runSector(t.dataset.sectorRun); return; }
     if (t.dataset.pullSector) { pullFromGithub(t.dataset.pullSector); return; }
     if (t.dataset.pullAll) { pullFromGithub(); return; }
+    if (t.dataset.sectorAdd) { runSector(t.dataset.sectorAdd, { addNew: true }); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
     if (t.dataset.sectorView) { if (busy() && S.sectorRun?.sector !== t.dataset.sectorView) return; (async () => { if (_saveName) await flush(); if (S.selected) forget(S.selected); S.selected = null; S.sectorView = t.dataset.sectorView; if (!(S.sectorView in S.sectorRec)) S.sectorRec[S.sectorView] = (await secGet(S.sectorView).catch(() => null)) || null; S.pickerOpen = false; window.scrollTo({ top: 0, behavior: "auto" }); renderAll(); })(); return; }
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }

@@ -34,6 +34,10 @@ Only the connections change:
 - **One sector:** Actions → **Run <Sector>** (e.g. "Run Technology") → **Run workflow**. Choose the speed and the
   spending cap, then Run. Each sector page in Industry Scorer also has a **Run <Sector> on GitHub** link to it.
   If that sector has an unfinished run, it continues it (only what's left is done); tick "fresh" to start over.
+- **Every industry, however small:** each sector run analyzes every industry it finds, down to one company.
+  (Runs before Nov 2026 left out industries with fewer than 15 companies.) To add the industries a finished
+  sector doesn't have yet without redoing the rest, tick **add_new**: the industries already analyzed are kept
+  as they are, and only the missing ones get the full analysis. Set `JOB_MIN_COMPANIES` to bring back a cutoff.
 - **Shared library (reuse between sectors):** every run starts from what earlier sectors researched, kept in the
   `library` branch: the news wire (3 days), each world situation's facts (7 days), each country's facts (30 days)
   and each regulator instrument's facts (30 days). A later sector reuses whatever applies and writes only what is
@@ -98,6 +102,7 @@ workflow again for the same sector with `continue_from` set to that run's ID (fr
 | `STRAGGLER_MIN` (repository variable) | 0 (never) | Minutes before a slow batch is re-sent at the standard price (0 = never) |
 | `STAGGER_MIN` (repository variable) | 6 | Minutes between sector starts when several run at once |
 | `FMP_GAP_MS` (repository variable) | 230 | Pause between FMP calls; raise it if your FMP plan's rate limit is low |
+| `JOB_MIN_COMPANIES` (env) | 1 | Leave out industries with fewer companies than this (1 = analyze every industry) |
 
 ## Test it offline
 

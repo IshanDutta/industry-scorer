@@ -230,7 +230,7 @@
    */
   function analyzeIndustry(industry, universe, pricesBySym, bench, rfDaily, asOf, cfg) {
     const warnings = [];
-    if (universe.length < cfg.topN) warnings.push(`Only ${universe.length} companies qualify (target ${cfg.topN}).`);
+    if (universe.length < cfg.topN) warnings.push(universe.length === 1 ? `Only 1 company in this industry (target ${cfg.topN}), so the industry's figures are that company's figures.` : `Only ${universe.length} companies qualify (target ${cfg.topN}).`);
     const missing = universe.filter((u) => !pricesBySym[u.symbol]).map((u) => u.symbol);
     if (missing.length) warnings.push(`No price data for: ${missing.join(", ")}.`);
     const uni = universe.filter((u) => pricesBySym[u.symbol]).map((u) => ({ ...u }));

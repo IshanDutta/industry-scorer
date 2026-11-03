@@ -26,6 +26,8 @@
 //   CLAUDE_DIRECT_AFTER_MIN     after this many minutes, send everything left at the standard price (default never)
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
+//   JOB_MIN_COMPANIES           leave out industries with fewer companies than this (default 1: every industry is analyzed)
+//   ADD_NEW=true (or --add-new)  with --resume of a finished sector: analyze only the industries it doesn't have yet
 //   ANTHROPIC_BASE_URL          for testing only
 //
 // Exit codes: 0 finished (results written) · 75 out of time, checkpoint written (continue in a new session)
@@ -93,7 +95,7 @@ async function main() {
   await page.exposeFunction("__job_cancel", (id) => sampler.cancel(id));
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230) };
+  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230), ...(Number(env.JOB_MIN_COMPANIES) > 0 ? { minCompanies: Number(env.JOB_MIN_COMPANIES) } : {}) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   // The page is served from a file so its saved runs (IndexedDB) persist for the whole session.
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8");
@@ -115,13 +117,16 @@ async function main() {
   log(`Starting the ${sector} sector run (${job.industries} industries, ${job.pool} agents and ${job.bodies} regulators at once; Claude ${sampler.models.complex} for complex steps and ${sampler.models.default} for the rest, ${sampler.mode} mode${sampler.budgetUsd ? `, spending cap $${sampler.budgetUsd}` : ""})`);
   const redoGaps = env.REDO_GAPS === "true";
   if (redoGaps) log("Redo gaps: only the lead strategists whose 1M-12M calls left items out are rewritten");
+  // --add-new (or ADD_NEW=true): a finished sector keeps everything and analyzes only the industries it doesn't have yet.
+  const addNew = args["add-new"] === "true" || env.ADD_NEW === "true";
+  if (addNew) { if (!checkpoint) { console.error(`Adding industries needs the sector's last run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); } log("Add new industries: only the industries the last run doesn't have are analyzed; the rest are kept"); }
   // --daily: the cheap daily update of a finished sector (data refreshed by code; Claude only where something changed).
   const daily = args.daily === "true";
   if (daily) {
     if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
     await page.evaluate(([s, c]) => window.__industryScorer.daily(s, { concurrency: c }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4)]);
-  } else await page.evaluate(([s, f, g]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g }), [sector, fresh, redoGaps]);
+  } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);
 
   // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
   // limit), so there is always one to continue from.
