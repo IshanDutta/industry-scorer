@@ -50,6 +50,8 @@ Only the connections change:
   (about 1–2 hours, roughly twice the cost per call).
 - **Models:** like the page in claude.ai, "complex" steps run on Claude Opus 5.5 and "default" steps on Claude
   Sonnet 5.5, each at its own default thinking effort. A continued run keeps the settings it started with.
+  Choose **model: sonnet** to run every step on Sonnet 5.5, about half the cost (roughly $2.75 per industry
+  instead of $5.50 at batch prices, from earlier runs).
 - **Several sectors at once:** Actions → **Sector run** → type sectors separated by commas, or `all`.
 - If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
   by itself; nothing finished is paid for twice.

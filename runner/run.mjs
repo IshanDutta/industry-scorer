@@ -119,7 +119,7 @@ async function main() {
   if (redoGaps) log("Redo gaps: only the lead strategists whose 1M-12M calls left items out are rewritten");
   // --add-new (or ADD_NEW=true): a finished sector keeps everything and analyzes only the industries it doesn't have yet.
   const addNew = args["add-new"] === "true" || env.ADD_NEW === "true";
-  if (addNew) { if (!checkpoint) { console.error(`Adding industries needs the sector's last run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); } log("Add new industries: only the industries the last run doesn't have are analyzed; the rest are kept"); }
+  if (addNew) log(checkpoint ? "Add new industries: only the industries the last run doesn't have are analyzed; the rest are kept" : `Add new industries: ${sector} has no earlier run, so every industry is analyzed`);
   // --daily: the cheap daily update of a finished sector (data refreshed by code; Claude only where something changed).
   const daily = args.daily === "true";
   if (daily) {

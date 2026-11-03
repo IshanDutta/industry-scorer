@@ -25,6 +25,11 @@ on:
         description: "Only analyze the industries this sector doesn't have yet (the small ones it used to leave out); everything else is kept"
         type: boolean
         default: false
+      model:
+        description: "opus = Opus 5.5 for the complex steps (best); sonnet = Sonnet 5.5 for every step (about half the cost)"
+        type: choice
+        options: [opus, sonnet]
+        default: opus
 
 permissions:
   contents: write
@@ -40,4 +45,5 @@ jobs:
       fresh: ${{ inputs.fresh }}
       redo_gaps: ${{ inputs.redo_gaps }}
       add_new: ${{ inputs.add_new }}
+      model: ${{ inputs.model }}
     secrets: inherit
