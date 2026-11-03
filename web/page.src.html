@@ -144,6 +144,22 @@ tbody tr:last-child td { border-bottom: 0; }
 .take li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bench); transform: translateY(-1px); }
 .take li.pos::before { background: var(--gA); } .take li.neg::before { background: var(--gF); }
 .summary-text { font-size: 16px; line-height: 1.6; max-width: 80ch; margin: 0; }
+.retgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+@media (max-width: 760px) { .retgrid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .retgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.retcard { display: grid; gap: 2px; justify-items: center; padding: 10px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; transition: box-shadow .15s, border-color .15s; }
+.retcard:hover:not(:disabled) { box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.retcard .eyebrow small { font-size: 9px; opacity: .7; text-transform: none; }
+.retcard .rv { font-family: var(--mono); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.retcard.up { border-color: color-mix(in srgb, var(--pos) 25%, var(--line)); background: color-mix(in srgb, var(--pos) 6%, var(--surface)); }
+.retcard.up .rv { color: var(--pos); }
+.retcard.down { border-color: color-mix(in srgb, var(--neg) 25%, var(--line)); background: color-mix(in srgb, var(--neg) 6%, var(--surface)); }
+.retcard.down .rv { color: var(--neg); }
+.retcard.flat .rv { color: var(--muted); }
+.retcard.on { box-shadow: 0 0 0 2px var(--accent); }
+.retcard.on.up { background: color-mix(in srgb, var(--pos) 14%, var(--surface)); border-color: color-mix(in srgb, var(--pos) 55%, var(--line)); }
+.retcard.on.down { background: color-mix(in srgb, var(--neg) 14%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 55%, var(--line)); }
+.retcard:disabled { opacity: .4; cursor: not-allowed; }
 .coread { border-left: 3px solid var(--accent); background: var(--sunk); padding: 10px 14px; margin: 0 0 16px; border-radius: 0 var(--r) var(--r) 0; }
 .coread p { margin: 4px 0 0; font-size: 14.5px; line-height: 1.55; max-width: 100ch; }
 .coread.pending { border-left-color: var(--line); }
@@ -4373,10 +4389,11 @@ a.btnlink:hover { border-color: var(--accent); }
       ${stale ? `<div class="notice warn"><span>This analysis was written from an older run of the ${esc(run.name)} analysis (${esc(fmtShort(co.thesis.industry_run_at))}).</span><button class="sm" data-co-rewrite="1" ${co.writing || !S.sample ? "disabled" : ""}>Rewrite on the latest run</button></div>` : ""}`;
     if (co.stage === "finding" || co.stage === "data") {
       const sk = (h) => `<section class="panel"><div class="skel" style="width:30%;height:18px"></div>${Array.from({ length: h }, (_, i) => `<div class="skel" style="width:${90 - i * 12}%"></div>`).join("")}</section>`;
-      return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
+      const skRet = `<section class="panel" id="co-returns"><div class="skel" style="width:20%;height:18px"></div><div class="retgrid">${RET_P.map(() => `<div class="skel" style="height:56px;margin:0;border-radius:10px"></div>`).join("")}</div><div class="skel" style="height:230px;border-radius:10px"></div></section>`;
+      return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
+    const secs = [coReturns(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
       coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
@@ -4788,8 +4805,9 @@ a.btnlink:hover { border-color: var(--accent); }
     const run = !!co.run, I = co.lensIn || {};
     const it = (ok, id, l) => (ok ? [id, l] : null);
     return [
+      { label: "Performance", items: [["co-returns", "Performance"]] },
       { label: "Snapshot", items: [["co-snap", "Snapshot"], it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
-      { label: "Performance", items: [it(co.perf, "co-perf", "Returns"), it(co.g1, "co-risk", "Risk & Greeks")] },
+      { label: "Returns & Risk", items: [it(co.perf, "co-perf", "Returns vs SPY"), it(co.g1, "co-risk", "Risk & Greeks")] },
       { label: "Analyst Consensus", items: [["co-street", "Wall Street"]] },
       { label: "Stress Test", items: [it(co.ep?.length, "co-stress", "Crises & booms")] },
       { label: "Industry Landscape", items: [it(run, "co-land", "Market position"), it(run, "co-peers", "Closest peers"), it(I.kpis?.length, "co-kpi", "KPIs & cycle"), it(I.chain?.length, "co-chain", "Customers & suppliers"), it(co.run?.reports?.calls?.companies?.length, "co-calls", "Earnings calls")] },
@@ -4809,6 +4827,28 @@ a.btnlink:hover { border-color: var(--accent); }
   }
 
   // ------------------------------------------------------------- 1. snapshot
+  /** Returns over 1M-5Y (3Y and 5Y annualized), each a button that redraws the price chart for that window. */
+  const RET_P = [["1M", 21, false], ["3M", 63, false], ["6M", 126, false], ["YTD", -1, false], ["1Y", 252, false], ["3Y", 756, true], ["5Y", 1260, true]];
+  function coReturnsCalc(ser) {
+    const d = ser?.dates || [], p = ser?.closes || [], L = p.length - 1; if (L < 10) return null;
+    const y0 = d[L].slice(0, 4); let ytdI = -1; for (let i = L; i >= 0; i--) if (d[i].slice(0, 4) < y0) { ytdI = i; break; }
+    return RET_P.map(([label, n, ann]) => { const i = label === "YTD" ? ytdI : L - n; if (i < 0 || !(p[i] > 0)) return { label, ann, value: null, from: null };
+      const tot = p[L] / p[i] - 1, v = ann ? Math.pow(1 + tot, 252 / n) - 1 : tot; return { label, ann, value: v * 100, total: tot * 100, from: i }; });
+  }
+  function coReturns(co) {
+    const ser = co.data?.ser, R = coReturnsCalc(ser); if (!R) return "";
+    let sel = S.coRet || "1Y"; if (!R.find((r) => r.label === sel && r.value !== null)) sel = [...R].reverse().find((r) => r.value !== null)?.label || "1M";
+    const cards = R.map((r) => { const on = r.label === sel, dis = r.value === null, flat = !dis && Math.abs(r.value) < 0.05, up = !dis && !flat && r.value > 0;
+      return `<button class="retcard ${dis ? "" : flat ? "flat" : up ? "up" : "down"} ${on ? "on" : ""}" data-co-ret="${r.label}" ${dis ? "disabled" : ""} aria-pressed="${on}">
+        <span class="eyebrow">${r.label}${r.ann ? ` <small>ann.</small>` : ""}</span>${dis ? `<span class="muted">—</span>` : `<span class="rv">${flat ? "–" : up ? "▲" : "▼"} ${r.value > 0 ? "+" : ""}${r.value.toFixed(1)}%</span>`}</button>`; }).join("");
+    const cur = R.find((r) => r.label === sel), d = ser.dates, c = ser.closes, i0 = cur?.from ?? 0;
+    const dates = d.slice(i0), vals = c.slice(i0), chg = vals.length > 1 ? (vals[vals.length - 1] / vals[0] - 1) * 100 : 0, col = chg >= 0 ? "var(--pos)" : "var(--neg)";
+    const yearsSpan = dates.length > 300;
+    const chart = dates.length > 1 ? `<div class="chart retplot"><div class="dim-head" style="justify-content:flex-start"><span class="small muted">${sel} price</span><b class="mono" style="color:${col}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</b><span class="small muted mono" style="margin-left:auto">$${fix(vals[vals.length - 1], 2)}</span></div>
+      ${lineChart([{ name: "Price", color: col, dates, values: vals }], { height: (typeof innerWidth === "number" && innerWidth < 700) ? 260 : 230, width: Math.round(Math.max(420, Math.min(1100, (typeof innerWidth === "number" ? innerWidth : 1100) - 60))), area: col, fmtY: (v) => "$" + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : v.toFixed(v >= 100 ? 0 : 2)), xLabels: yearsSpan ? yearTicks : null })}</div>` : "";
+    return `<section class="panel" id="co-returns"><div class="panel-head"><h2>Performance</h2><span class="small muted">dividend-adjusted closes${cur?.ann ? ` · ${sel} is annualized (${cur.total > 0 ? "+" : ""}${cur.total.toFixed(0)}% in total)` : ""}</span></div>
+      <div class="retgrid" role="group" aria-label="Return period">${cards}</div>${chart}</section>`;
+  }
   function coSnapshot(co, t) {
     const f = co.data || {}, p = f.profile || {}, r = f.ratios || {}, lv = co.lv, g = co.g1 || {}, run = co.run;
     const name = co.name || co.row?.name || p.companyName || co.sym, sector = run?.industry?.sector || co.hit?.sector || p.sector || "";
@@ -5188,8 +5228,11 @@ a.btnlink:hover { border-color: var(--accent); }
     const TEMPC = { hot: "pos", cool: "neg", neutral: "neu" }, OUTC = { tailwind: "pos", headwind: "neg", neutral: "neu" };
     geo = (co.geo || []).length ? `<h3>Its revenue on the industry's trade map</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Region</th><th class="n">Share</th><th class="n">y/y</th><th>Trade-map countries it covers</th><th>What the industry analysis means here</th></tr></thead><tbody>${co.geo.map((g, i) => { const y = LG["G" + (i + 1)];
       const dos = (name) => (co.lensIn?.countries || []).find((x) => lc(x.country) === lc(name));
-      return `<tr><td>${esc(g.region)}</td><td class="n">${pct(g.share, false, 0)}</td><td class="n ${cls(num(g.yoy))}">${pct(g.yoy)}</td><td class="wr small">${g.countries.map((c) => { const d = dos(c.country), r0 = d?.risks?.[0];
-          return `<div>${esc(c.country)} ${toneChip(c.stance)}${c.threat && !["none", "low"].includes(c.threat) ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}${r0 ? `<div class="muted">Risk: ${esc(r0.risk)}${r0.likelihood ? ` (${esc(r0.likelihood)} likelihood${r0.timing ? `, ${esc(r0.timing)}` : ""})` : ""}</div>` : ""}</div>`; }).join("") || `<span class="muted">none on the trade map</span>`}</td>
+      return `<tr><td>${esc(g.region)}</td><td class="n">${pct(g.share, false, 0)}</td><td class="n ${cls(num(g.yoy))}">${pct(g.yoy)}</td><td class="wr small">${(() => { const KL = { region: "Trade-map countries in this region", offmap: `Not on the trade map; the closest countries on it`, world: "Spread across other countries; the map's biggest non-US exposures", home: "Home market", business: "A business line FMP files as a region; it sells where the company sells", country: "" };
+          const head = KL[g.kind] ? `<div class="muted" style="margin-bottom:2px">${esc(KL[g.kind])}</div>` : "";
+          const list = g.countries.map((c) => { const d = dos(c.country), r0 = d?.risks?.[0];
+            return `<div>${esc(c.country)} ${toneChip(c.stance)}${c.threat && !["none", "low"].includes(c.threat) ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}${r0 ? `<div class="muted">Risk: ${esc(r0.risk)}${r0.likelihood ? ` (${esc(r0.likelihood)} likelihood${r0.timing ? `, ${esc(r0.timing)}` : ""})` : ""}</div>` : ""}</div>`; }).join("");
+          return head + (list || `<div class="muted">${esc(g.note || "Read through world events, macro and FX")}</div>`); })()}</td>
         <td class="wr small">${y ? `<span class="pill ${OUTC[y.outlook] || "neu"}">${esc(y.outlook)}</span> ${rich(y.why)}${y.drivers ? `<div><b>Drivers:</b> ${rich(y.drivers)}</div>` : ""}${y.risks ? `<div><b>Risk:</b> ${rich(y.risks)}</div>` : ""}${y.watch ? `<div class="muted"><b>Watch:</b> ${rich(y.watch)}</div>` : ""}` : waiting}</td></tr>`; }).join("")}</tbody></table></div>` : "";
     seg = (co.seg || []).length ? `<h3>Its product lines against the industry's hot and cool segments</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Product line</th><th class="n">Share</th><th class="n">y/y</th><th>Industry segment</th><th>The analysis</th></tr></thead><tbody>${co.seg.map((s, i) => { const y = LS["S" + (i + 1)];
       const segCell = s.match ? `<span class="pill ${s.match.temp === "hot" ? "pos" : "neg"}">${esc(s.match.temp)}</span> <b>${esc(s.match.name)}</b> <span class="muted">${rich(s.match.text)}</span>`
@@ -5237,6 +5280,8 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.coStop) { S.co?.ctl?.abort(); return; }
     if (t.dataset.coRange) { S.coRange = t.dataset.coRange; renderCompany(); return; }
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }
+    if (t.dataset.coRet && S.co) { S.coRet = t.dataset.coRet; const cur = $("co-returns"), tmp = document.createElement("div"); tmp.innerHTML = coReturns(S.co); const nx = tmp.firstElementChild;
+      if (cur && nx) { cur.replaceWith(nx); wireCharts(nx); } return; }
     if (t.dataset.coPer) { S.coPer = t.dataset.coPer; renderCompany(); return; }
     if (t.dataset.dcfReset) { if (S.co?.dcfBase) { S.co.dcfP = { ...S.co.dcfBase }; renderCompany(); } return; }
     if (t.dataset.openIndustry) { S.tab = "industries"; renderAll(); choose(t.dataset.openIndustry); return; }

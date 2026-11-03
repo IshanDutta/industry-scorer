@@ -112,18 +112,65 @@
   }
 
   // ------------------------------------------------------------------ its business onto the industry's trade map and segments
-  const REGION = { "united states": ["us", "u.s.", "usa", "united states", "north america", "americas"], china: ["china", "greater china", "prc", "asia pacific", "apac", "asia"], mexico: ["mexico", "latin america", "latam", "americas"],
-    canada: ["canada", "north america"], japan: ["japan", "asia"], "united kingdom": ["united kingdom", "uk", "u.k.", "great britain", "europe", "emea"], germany: ["germany", "europe", "emea"], france: ["france", "europe", "emea"],
-    india: ["india", "asia"], brazil: ["brazil", "latin america", "latam", "south america"], taiwan: ["taiwan", "asia"], "south korea": ["korea", "south korea", "asia"], vietnam: ["vietnam", "asia"] };
-  /** Each revenue region, with the trade-map countries it covers (exact or regional). */
+  // Countries by region, so a reported region ("Asia Pacific", "EMEA", "Other countries") or a country the trade map
+  // leaves out can still be tied to the trade-map countries that drive it.
+  const TAGS = {};
+  const tag = (list, tags) => list.forEach((c) => (TAGS[c] = tags));
+  tag(["united states"], ["americas", "na"]); tag(["canada"], ["americas", "na"]); tag(["mexico"], ["americas", "na", "latam"]);
+  tag(["brazil", "argentina", "chile", "colombia", "peru", "panama", "ecuador", "venezuela", "dominican republic", "guatemala", "costa rica", "uruguay", "bolivia", "suriname", "guyana"], ["americas", "latam"]);
+  tag(["united kingdom", "ireland", "germany", "france", "italy", "spain", "netherlands", "belgium", "switzerland", "sweden", "norway", "denmark", "finland", "poland", "austria", "portugal", "greece", "czech republic", "hungary", "romania", "russia", "ukraine", "luxembourg", "serbia", "bulgaria", "slovakia"], ["europe", "emea"]);
+  tag(["turkey"], ["europe", "emea", "me"]);
+  tag(["saudi arabia", "united arab emirates", "israel", "qatar", "iran", "iraq", "kuwait", "oman", "bahrain", "jordan", "lebanon", "yemen"], ["me", "emea"]);
+  tag(["egypt"], ["me", "africa", "emea"]);
+  tag(["south africa", "nigeria", "ghana", "mali", "kenya", "morocco", "democratic republic of the congo", "dr congo", "zambia", "burkina faso", "tanzania", "ethiopia", "cote d'ivoire", "guinea", "senegal", "algeria", "angola", "botswana", "namibia"], ["africa", "emea"]);
+  tag(["china", "hong kong", "taiwan", "japan", "south korea", "north korea", "india", "singapore", "vietnam", "thailand", "malaysia", "indonesia", "philippines", "bangladesh", "pakistan", "sri lanka", "kazakhstan", "mongolia"], ["asia", "apac"]);
+  tag(["australia", "new zealand", "papua new guinea", "fiji"], ["oceania", "apac"]);
+  const ALIAS = { usa: "united states", "u.s.": "united states", "u.s.a.": "united states", us: "united states", "united states of america": "united states", uk: "united kingdom", "u.k.": "united kingdom", "great britain": "united kingdom", britain: "united kingdom",
+    korea: "south korea", "republic of korea": "south korea", "korea, republic of": "south korea", uae: "united arab emirates", prc: "china", "mainland china": "china", "russian federation": "russia", "viet nam": "vietnam", "taiwan, province of china": "taiwan", "hong kong sar": "hong kong", holland: "netherlands" };
+  const REGION_RE = [[/north america|u\.?s\.? (and|&) canada/, ["na"]], [/latin america|latam|south america|central america|caribbean/, ["latam"]], [/americas/, ["americas"]], [/emea|europe,? (the )?middle east|middle east (and|&) africa/, ["emea"]],
+    [/europe|eurozone|\beu\b|nordic|scandinavia|benelux|dach/, ["europe"]], [/middle east|gulf|mena/, ["me"]], [/africa|sub-saharan/, ["africa"]], [/asia|apac|pacific|far east|greater china|asean|oceania|australasia/, ["apac"]]];
+  const WORLD_RE = /international|rest of (the )?world|other (countries|regions|international|foreign|geograph)|foreign|outside (the )?u\.?s|non-u\.?s|global|worldwide|\brow\b|overseas|export/;
+  const HOME_RE = /^(the )?(united states|u\.?s\.?a?\.?|us|domestic|usa)( segment)?$|united states|domestic/;
+  const BIZ_RE = /segment|upstream|downstream|midstream|division|business|products?\b|services?\b|retail|wholesale|consumer|commercial|industrial|corporate|unallocated|elimination|other operations|refining|chemicals|mining|licens|royalt|software|hardware|devices|platform|subscription|advertising|financ|insurance|banking|manufactur/;
+  /** The country a label names (after aliases), if any. */
+  const countryIn = (name) => { const n = lc(name).replace(/[.,]/g, (m) => (m === "." ? "." : "")).trim();
+    for (const [a, c] of Object.entries(ALIAS)) if (n === a || new RegExp(`(^|[^a-z])${a.replace(/[.]/g, "\\.")}([^a-z]|$)`).test(n)) return c;
+    return Object.keys(TAGS).sort((x, y) => y.length - x.length).find((c) => n.includes(c)) || null; };
+  /**
+   * Each revenue region, with the trade-map countries that drive it and how they were matched:
+   * kind = country (named on the map) | region (a continent or bloc) | offmap (a country the map leaves out: its neighbours on the map) |
+   * world (international, other countries: the biggest non-US exposures) | home (the US) | business (a business line FMP files as a region).
+   */
   function geoMap(geo, tradeMap) {
-    const countries = tradeMap?.countries || [];
-    return (geo?.items || []).map((g) => {
-      const name = lc(g.name);
-      const hits = countries.filter((c) => { const k = lc(c.country); const al = REGION[k] || [k]; return name.includes(k) || al.some((a) => name === a || name.includes(a)); })
-        .map((c) => ({ country: c.country, stance: c.stance, trajectory: c.trajectory, threat: c.threat, importance: c.importance, exact: name.includes(lc(c.country)) }));
-      return { region: g.name, share: g.share, yoy: g.yoy, countries: hits.sort((a, b) => (b.exact ? 1 : 0) - (a.exact ? 1 : 0)).slice(0, 4) };
+    const countries = tradeMap?.countries || [], IMP = { existential: 0, critical: 0, high: 1, medium: 2, low: 3 };
+    const row = (c, via) => ({ country: c.country, stance: c.stance, trajectory: c.trajectory, threat: c.threat, importance: c.importance, via, exact: via === "exact" });
+    const byImp = (list) => list.slice().sort((a, b) => (IMP[a.importance] ?? 4) - (IMP[b.importance] ?? 4));
+    const mapKey = (c) => ALIAS[lc(c.country)] || lc(c.country);
+    const out = (geo?.items || []).map((g) => {
+      const name = lc(g.name), named = countryIn(g.name);
+      let kind = "", hits = [], note = "";
+      const exact = countries.filter((c) => named && mapKey(c) === named);
+      if (exact.length) { kind = named === "united states" ? "home" : "country"; hits = exact.map((c) => row(c, "exact")); }
+      else if (named && named !== "united states") {
+        // A country the industry's trade map doesn't cover: tie it to the map's countries in the same part of the world.
+        const tg = TAGS[named] || [];
+        const shared = (c) => (TAGS[mapKey(c)] || []).filter((t) => tg.includes(t)).length;
+        hits = byImp(countries.filter((c) => shared(c) > 0)).sort((a, b) => shared(b) - shared(a)).slice(0, 3).map((c) => row(c, "nearby"));
+        kind = "offmap"; note = hits.length ? `${g.name} isn't on the industry's trade map; the closest countries on it` : `${g.name} isn't on the industry's trade map, and nothing near it is`;
+      } else if (named === "united states" || HOME_RE.test(name)) { kind = "home"; hits = countries.filter((c) => mapKey(c) === "united states").map((c) => row(c, "exact")); note = hits.length ? "" : "Home market (US): the trade map covers the US's partners, not the US itself"; }
+      else {
+        const tg = REGION_RE.filter(([re]) => re.test(name)).flatMap(([, t]) => t);
+        if (tg.length) { kind = "region"; hits = byImp(countries.filter((c) => (TAGS[mapKey(c)] || []).some((t) => tg.includes(t)))).slice(0, 4).map((c) => row(c, "region"));
+          if (!hits.length) note = "None of the trade map's countries are in this region"; }
+        else if (WORLD_RE.test(name) || !BIZ_RE.test(name)) { kind = "world"; hits = byImp(countries.filter((c) => mapKey(c) !== "united states")).slice(0, 4).map((c) => row(c, "world")); note = "Spread across other countries: the trade map's biggest exposures outside the US"; }
+        else { kind = "business"; note = "A business line FMP files under geography; its sales follow the company's own footprint"; }
+      }
+      return { region: g.name, share: g.share, yoy: g.yoy, kind, note, countries: hits };
     });
+    // A business line filed as a region sells where the company sells: the countries its real regions map to, else the map's biggest exposures.
+    const foot = [...new Map(out.filter((r) => r.kind !== "business" && r.kind !== "world").flatMap((r) => r.countries).map((c) => [c.country, c])).values()];
+    for (const r of out) if (r.kind === "business") r.countries = (foot.length ? byImp(foot) : byImp(countries.filter((c) => mapKey(c) !== "united states"))).slice(0, 4).map((c) => ({ ...c, via: "footprint", exact: false }));
+    return out;
   }
   /** Each product line, with the industry's hot or cool segment it matches (word overlap). */
   function segMap(prod, kpi) {
@@ -209,7 +256,7 @@
         developments: (d?.developments || []).slice(0, 3).map((x) => ({ date: x.date || "", text: nc0(x.text, 180) })), watch: (d?.watch || []).slice(0, 4).map((w) => nc0(w, 140)),
         exposed: (d?.exposed || []).slice(0, 8).map((x) => ({ symbol: x.symbol, channel: x.channel || "", severity: x.severity || "", mechanism: nc0(x.mechanism, 200) })),
         ind_share: isNum(Number(e?.revenue_share)) ? Number(e.revenue_share) : null, hq: (e?.hq || []).slice(0, 8) }; };
-    const shareOf = (country) => { const g = (geo || []).find((r) => (r.countries || []).some((c) => lc(c.country) === lc(country))); return g ? { region: g.region, share: g.share } : null; };
+    const shareOf = (country) => { const g = (geo || []).find((r) => (r.countries || []).some((c) => lc(c.country) === lc(country) && (c.via === "exact" || c.via === "region" || c.via === undefined))); return g ? { region: g.region, share: g.share } : null; };
     const countries = (R.trademap?.countries || []).slice(0, 12).map((c, i) => ({ id: "C" + (i + 1), country: c.country, importance: c.importance, stance: c.stance, trajectory: c.trajectory, threat: c.threat, roles: (c.roles || []).join(", "),
       why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country) }));
     const rules = (run?.books || []).flatMap((b) => (b.book?.rules || []).map((r) => ({ body: b.body, ...r })))
@@ -250,7 +297,7 @@
     const tradev = TV.rating || TV.headline ? { rating: TV.rating || "", health: TV.health?.score ?? null, band: TV.health?.band || "", headline: nc0(TV.headline, 320), map: nc0(R.trademap?.summary || R.trade?.map?.summary, 400) } : null;
     // The company's own product lines and regions (S#, G#), with what code could match to the industry's segments and trade map.
     const segments = (seg || []).map((x, i) => ({ id: "S" + (i + 1), segment: x.segment, share: x.share, yoy: x.yoy, match: x.match ? `${x.match.temp} segment "${x.match.name}"` : null }));
-    const regions = (geo || []).map((g, i) => ({ id: "G" + (i + 1), region: g.region, share: g.share, yoy: g.yoy, countries: (g.countries || []).map((c) => c.country) }));
+    const regions = (geo || []).map((g, i) => ({ id: "G" + (i + 1), region: g.region, share: g.share, yoy: g.yoy, kind: g.kind || "", note: g.note || "", countries: (g.countries || []).map((c) => c.country) }));
     const Ld = run?.lead || {};
     const iscen = Object.fromEntries(["bull", "base", "bear"].filter((k) => Ld.scenarios?.[k]).map((k) => { const x = Ld.scenarios[k]; return [k, { probability: x.probability, narrative: trim(x.narrative, 420), price_move: x.price_move || [], eps_change: x.eps_change || [], triggers: (x.triggers || []).slice(0, 3).map((t) => trim(t, 160)) }]; }));
     const debates = (Ld.debates || []).slice(0, 6).map((x, i) => ({ id: "D" + (i + 1), question: trim(x.question, 200), bull: trim(x.bull, 360), bear: trim(x.bear, 360), lean: x.lean || "", why: trim(x.why, 260), resolves_with: trim(x.resolves_with, 200) }));
@@ -299,7 +346,7 @@ ${L.tradev ? `Trade verdict for the industry: ${L.tradev.rating} (health ${L.tra
 Trade countries (the industry's trade map and its country dossiers):
 ${L.countries.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}${c.alliance ? ` (${c.alliance})` : ""}, ${c.trajectory}${c.threat && c.threat !== "none" ? `, ${c.threat} threat` : ""}; roles ${c.roles}.${isNum(c.ind_share) ? ` ${(c.ind_share * 100).toFixed(0)}% of industry revenue.` : ""} ${c.headline || c.why}${c.revenue ? ` ${sym}'s revenue in ${c.revenue.region}: ${(c.revenue.share * 100).toFixed(0)}%.` : ""}${c.relationship ? ` Relationship: ${c.relationship}` : ""}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${r.risk} (${r.type}; ${r.likelihood} likelihood, ${r.impact} impact, ${r.timing}): ${r.mechanism}`).join(" | ")}.` : ""}${c.security?.threat ? ` Security (${c.security.level}): ${c.security.threat}` : ""}${c.deps?.length ? ` Dependencies: ${c.deps.map((d) => `${d.input} (${d.criticality}; ${d.share}; replace in ${d.substitutability})`).join("; ")}.` : ""}${c.developments?.length ? ` Latest: ${c.developments.map((d) => `${d.date} ${d.text}`).join(" | ")}.` : ""}${c.freeze ? ` If trade froze: ${c.freeze}` : ""}${c.outlook ? ` Outlook: ${c.outlook}` : ""}${c.exposed?.length ? ` Most exposed: ${c.exposed.map((x) => `${x.symbol} (${x.channel}, ${x.severity}${x.symbol === sym ? `: ${x.mechanism}` : ""})`).join(", ")}.` : ""}${c.watch?.length ? ` Watch: ${c.watch.join("; ")}.` : ""}`).join("\n") || "(none)"}
 ${sym}'s regions (what the trade map, its risks and its countries mean for each):
-${(L.regions || []).map((g) => `[${g.id}] ${g.region}: ${isNum(g.share) ? (g.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(g.yoy) ? `, ${g.yoy >= 0 ? "+" : ""}${(g.yoy * 100).toFixed(0)}% y/y` : ""}${g.countries.length ? ` (trade-map countries: ${g.countries.join(", ")})` : " (no trade-map country)"}`).join("\n") || "(not reported)"}
+${(L.regions || []).map((g) => `[${g.id}] ${g.region}: ${isNum(g.share) ? (g.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(g.yoy) ? `, ${g.yoy >= 0 ? "+" : ""}${(g.yoy * 100).toFixed(0)}% y/y` : ""}${g.kind === "business" ? " (a business line FMP files as a region: say which segment it is and read it with the product lines)" : g.countries.length ? ` (${g.kind === "offmap" ? "not on the trade map; nearest countries on it" : g.kind === "world" ? "spread across other countries; the map's biggest non-US exposures" : g.kind === "region" ? "trade-map countries in this region" : "trade-map country"}: ${g.countries.join(", ")})` : ` (${g.note || "no trade-map country"}: use world events, macro and FX for it)`}`).join("\n") || "(not reported)"}
 ${L.regv ? `Regulatory verdict for the industry: ${L.regv.stance} (${L.regv.intensity} intensity). ${L.regv.headline} ${L.regv.summary}
 Most material for the industry: ${L.regv.most_material.map((x) => `${x.body} ${x.rule}: ${x.why}`).join(" | ") || "n/a"}
 Regulatory winners: ${L.regv.winners.map((x) => `${x.symbol} (${x.why})`).join("; ") || "n/a"}. Losers: ${L.regv.losers.map((x) => `${x.symbol} (${x.why})`).join("; ") || "n/a"}.
