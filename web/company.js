@@ -218,9 +218,25 @@
     const changeMind = (Ld.change_mind || []).slice(0, 5).map((x) => trim(x, 240));
     const plans = Object.fromEntries(Object.entries(Ld.plans || {}).map(([k, v]) => [k, { size: v?.size, entry: trim(v?.entry, 200), stop_pct: v?.stop_pct, review: trim(v?.review, 120) }]));
     const redteam = Ld.redteam ? { stance: Ld.redteam.stance, thesis: trim(Ld.redteam.thesis, 500), kill: (Ld.redteam.kill_criteria || []).slice(0, 4).map((x) => trim(typeof x === "string" ? x : x?.text || "", 200)), blind: (Ld.redteam.blind_spots || []).slice(0, 3).map((x) => trim(typeof x === "string" ? x : x?.text || "", 200)) } : null;
-    return { indicators, situations, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems, iscen, debates, dims, changeMind, plans, redteam };
+    const noIds = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
+    const threats = ((run?.agent?.calendar?.standing) || []).slice(0, 14).map((x, i) => ({ id: "Q" + (i + 1), section: x.section || "", kind: x.kind || "", title: trim(x.title, 180), status: noIds(x.status, 160), detail: noIds(x.detail, 360), importance: x.importance || "" }));
+    const ihz = Object.fromEntries(["1M", "3M", "6M", "12M"].filter((h) => Ld.horizons?.[h]).map((h) => { const x = Ld.horizons[h], f = (Ld.horizon_facts || []).find((y) => y.h === h) || {};
+      return [h, { call: x.call, conviction: x.conviction || "", expected_move: x.expected_move || [], probability_up: x.probability_up, drivers: noIds(x.drivers, 900), positioning: noIds(x.positioning, 300), risk: noIds(x.risk, 300), end: f.end || "", sigma: f.sigma ?? null, base_up: f.base_up ?? null,
+        reporting: (f.reporting || []).slice(0, 8).map((r) => `${r.symbol} ${r.date}`), decisions: (x.decisions || []).slice(0, 8).map((d) => ({ date: d.date || "", event: noIds(d.event, 160), lean: d.lean || "", outcomes: noIds(d.outcomes, 320) })),
+        conflicts: (x.conflicts || []).slice(0, 8).map((c) => ({ situation: noIds(c.situation, 160), in_window: noIds(c.in_window, 240), impact: noIds(c.impact, 280) })) }]; }));
+    return { indicators, situations, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems, iscen, debates, dims, changeMind, plans, redteam, threats, ihz };
   }
   function lensBlock(L, sym, part = "context") {
+    if (part === "calls") return `${lensBlock(L, sym, "core")}
+Standing situations: wars, conflicts and threats (from every section of the industry analysis; cite by Q-ID):
+${(L.threats || []).map((x) => `[${x.id}] ${x.title} (${x.section}${x.kind ? ", " + x.kind : ""}${x.importance ? ", " + x.importance + " importance" : ""}): ${x.status ? x.status + ". " : ""}${x.detail}`).join("\n") || "(none)"}
+World situations (cite by W-ID): ${(L.situations || []).map((x) => `[${x.id}] ${x.title} (${x.stance}, ${x.status || ""})`).join("; ") || "(none)"}
+
+THE INDUSTRY'S OWN 1M-12M CALLS (the lead strategist's cards; make each of ${sym}'s calls just as complete, about ${sym})
+${Object.entries(L.ihz || {}).map(([h, x]) => `${h} (to ${x.end || "n/a"}; one sigma ±${x.sigma ?? "n/a"}%; base rate of a gain ${x.base_up ?? "n/a"}%): ${x.call}, ${x.conviction} conviction, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "n/a"}% chance higher. ${x.drivers}
+  Decisions and events: ${x.decisions.map((d) => `${d.date} ${d.event} (${d.lean}): ${d.outcomes}`).join(" | ") || "none"}
+  Wars, conflicts and threats: ${x.conflicts.map((c) => `${c.situation}: ${c.in_window} -> ${c.impact}`).join(" | ") || "none"}
+  What to do: ${x.positioning || "n/a"} Wrong if: ${x.risk || "n/a"}${x.reporting.length ? `\n  Reporting in the window: ${x.reporting.join(", ")}` : ""}`).join("\n") || "(none)"}`;
     if (part === "core") return `THE INDUSTRY REPORT'S ROWS FOR YOUR HALF (answer each for ${sym} by its ID)
 Industry KPIs (the industry's figures; give ${sym}'s own):
 ${(L.kpis || []).map((x) => `[${x.id}] ${x.name} (${x.kind}; ${x.period || ""}): ${x.value}${x.change ? `; change: ${x.change}` : ""}${x.vs_cycle ? `; vs cycle: ${x.vs_cycle}` : ""}`).join("\n") || "(none)"}
@@ -299,15 +315,21 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     return out;
   }
   const HZ = ["1M", "3M", "6M", "12M"];
+  /** What a company call can be driven by (labels for the "Driven by" line). */
+  const SECS = [["kpi", "KPIs & cycle"], ["macro", "Macro backdrop"], ["world", "World events"], ["trade", "Trade & supply chain"], ["regulation", "Regulation & legal"], ["fundamentals", "Earnings, margins & balance sheet"],
+    ["valuation", "Valuation & multiple"], ["performance", "Price action, momentum & risk"], ["sentiment", "Sentiment & news"], ["consensus", "Sell-side consensus"], ["company", "Company-specific events"], ["industry", "The industry's own call"]];
+  const SEC_KEYS = SECS.map(([k]) => k);
   /**
    * Every panel on the company page gets a written read: what its numbers say about the company, set against the
    * industry report's own read of the same thing. The two halves of the write-up each take a share.
    */
   const READS = {
-    core: { scores: "the scorecard and pillar scores, against the industry's ranking", plan: "the trade plans, against the industry's plans", street: "Wall Street's view (ratings, targets, revisions) against the industry's", kpi: "the company's KPIs against the industry's", chain: "its customers and suppliers against the industry's chain", cal: "the dated events ahead", scen: "the industry's scenarios and debates as they apply here", val: "valuation (P/E band, DCF, what's priced in) against the industry's valuation read", fund: "growth, margins and returns (statements, DuPont) against the industry's fundamentals read", health: "balance sheet and cash (debt, cover, Altman, Piotroski) against the industry's health read and its weak balance sheets", earn: "earnings record, surprises, revisions and price reactions against the industry's earnings read", div: "the dividend (yield, growth, streak, safety) against what the industry's income investors get" },
+    calls: { plan: "the trade plans, against the industry's plans", kpi: "the company's KPIs against the industry's", chain: "its customers and suppliers against the industry's chain", cal: "the dated events ahead", scen: "the industry's scenarios and debates as they apply here" },
+    core: { scores: "the scorecard and pillar scores, against the industry's ranking", street: "Wall Street's view (ratings, targets, revisions) against the industry's", val: "valuation (P/E band, DCF, what's priced in) against the industry's valuation read", fund: "growth, margins and returns (statements, DuPont) against the industry's fundamentals read", health: "balance sheet and cash (debt, cover, Altman, Piotroski) against the industry's health read and its weak balance sheets", earn: "earnings record, surprises, revisions and price reactions against the industry's earnings read", div: "the dividend (yield, growth, streak, safety) against what the industry's income investors get" },
     context: { perf: "returns vs SPY, the sector ETF and the industry against the industry's performance read", risk: "beta, alpha, volatility, drawdowns, capture and factor sensitivities against the industry's risk read", stress: "how it held up in past crises against the industry's drawdown history", tech: "trend, momentum and levels (moving averages, RSI, MACD, pattern match) against the industry index", own: "who owns it, institutions, insiders and short interest against the industry's positioning", news: "news flow and sentiment against the industry's", track: "the record of earlier calls on this company", calls: "the latest earnings call against the industry's calls report", land: "where it sits in the industry (ranking, concentration, closest rivals)", peers: "its numbers against the industry's top 50", macro: "the macro backdrop for this company", world: "world events for this company", trade: "trade relations for this company", reg: "rules, policy, litigation and deals for this company", biz: "the business: segments, regions, moat and management", drivers: "the industry's drivers and the company's risks and catalysts" },
   };
-  const readsField = (part) => `"${part === "core" ? "reads" : "reads_more"}": {${Object.entries(READS[part]).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this company, more or less than the industry and why, and what it means for the call (cite; use the figures)"`).join(", ")}}`;
+  const READ_KEY = { core: "reads", context: "reads_more", calls: "reads_calls" };
+  const readsField = (part) => `"${READ_KEY[part]}": {${Object.entries(READS[part]).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this company, more or less than the industry and why, and what it means for the call (cite; use the figures)"`).join(", ")}}`;
   /** The JSON the thesis asks for: the whole of it, or one of its two halves (written in parallel). */
   const FIELDS = {
     headline: `"headline": "one short sentence, at most 30 words"`, verdict: `"verdict": {"call": "yes | conditional | no", "summary": "2-3 sentences: is this a real opportunity now, and in what form"}`,
@@ -320,13 +342,13 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     quality: `"quality": "2 sentences on earnings quality and the balance sheet"`,
     valuation: `"valuation": {"read": "2-3 sentences vs history, peers and what is priced in", "fair_value": [low, high]}`,
     scenarios: `"scenarios": {"bull": {"probability": 25, "narrative": "...", "eps_change": [8, 14], "pe": [24, 27], "price_target": [100, 110]}, "base": {...}, "bear": {...}}`,
-    horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "2 sentences, cited"}`).join(", ")}}`,
+    horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "conviction": "high | medium | low", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "5-8 sentences, cited, with numbers: what drives the stock in this window, which dated prints and decisions land in it and what each is worth to the stock, the macro channel that measurably moves it (its own factor sensitivities), positioning and technicals, and how the pieces net out against its one-sigma move", "decisions": [{"refs": ["E1"], "date": "YYYY-MM-DD", "event": "the decision or event", "lean": "positive | negative | binary | neutral", "outcomes": "if X, the stock moves about +a% (why); if Y, about -b%"}], "conflicts": [{"refs": ["Q1"], "situation": "the war, conflict or threat", "in_window": "what is likely inside this window, with probabilities", "impact": "what it does to this company: revenue, costs, the multiple, with sizes"}], "positioning": "what to do with the stock in this window: buy, add, hold, trim or avoid, with price levels and sizing", "risk": "wrong if: the combination of outcomes that breaks this call and where the stock would go", "sections": ["the 2-5 drivers of this call, from: ${SEC_KEYS.join(", ")}"]}`).join(", ")}}`,
     risks: `"risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}]`,
     catalysts: `"catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}]`,
     watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2-3 sentences for this investor, cited: what they get and what they give up", "watch": "the one or two numbers this investor should track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
     street: `"street": {"stance": "agree | more bullish | more bearish", "summary": "2-3 sentences: where you land versus the Wall Street consensus (rating, target, estimates) and why, cited", "our_target": 0, "eps_view": {"fy1": "above | in line | below", "fy2": "above | in line | below", "why": "one or two sentences"}, "differences": [{"topic": "e.g. FY2027 EPS, margins, the multiple, a catalyst, a risk", "street": "what the consensus assumes", "ours": "what you assume", "why": "one or two sentences, cited"}]}`,
     confidence: `"confidence": "high | medium | low"`,
-    reads: readsField("core"), reads_more: readsField("context"),
+    reads: readsField("core"), reads_more: readsField("context"), reads_calls: readsField("calls"),
     lens: `"macro": {"regime": "supportive | mixed | headwind (for this company)", "headline": "one sentence on the macro for this company", "horizons": {"1M": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
    "indicators": [{"id": "I1", "relevance": "high | medium | low", "effect": "tailwind | headwind | neutral", "vs_industry": "more | less | same | opposite", "why": "one sentence on this company"}]},
  "world": [{"id": "W1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "vs_industry": "more | less | same | opposite", "why": "1-2 sentences on this company", "evidence": []}],
@@ -346,14 +368,17 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
  "change_mind": ["what would change this company's call, with a level or a date"]`,
   };
   const PART = {
-    core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "scenarios", "horizons", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "lens_core", "reads", "confidence"],
+    core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "reads", "confidence"],
+    calls: ["scenarios", "horizons", "lens_core", "reads_calls"],
     context: ["drivers", "lens", "reads_more"],
   };
   function schemaFor(part) {
-    const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "reads", "reads_more"].includes(k));
-    const intro = part === "core" ? "This is the first half of a two-part write-up; a colleague goes through the rest of the industry report row by row (drivers, macro indicators, world situations, trade countries, rules) at the same time. Write ONLY the fields below, including one entry for each KPI, chain partner and calendar row listed for your half.\n"
-      : part === "context" ? "This is the second half of a two-part write-up; a colleague writes the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
-    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price from the scenarios; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, policy/litigation/deal, product line and region ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+    const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "reads", "reads_more", "reads_calls"].includes(k));
+    const intro = part === "core" ? "This is part one of a three-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
+      : part === "calls" ? "This is part two of a three-part write-up: the 12-month scenarios and the full 1M, 3M, 6M and 12M calls, each as complete as the industry's own cards (THE INDUSTRY'S OWN 1M-12M CALLS) but about this company, plus the KPI, chain, calendar, plan and dimension rows for your part. Colleagues write the verdict and thesis, and the rest of the rows, at the same time. Write ONLY the fields below.\n"
+      : part === "context" ? "This is part three of a three-part write-up; colleagues write the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
+    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL."
+      : part === "calls" ? "\nSizes: for EACH horizon, 3-7 decisions (every dated E-row inside that window that can move this stock, the company's own report first if it falls in the window) and 2-6 conflicts (the Q- and W-rows that matter for this company in that window), with refs; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls. The 12M call must agree with the scenarios' probability-weighted return." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation, trade country, rule, policy/litigation/deal, product line and region ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
   /**
@@ -393,7 +418,7 @@ ${(ctx.mentions || []).map((m) => `[${m.id}] ${m.section}${m.where ? ` › ${m.w
 COMPANY NEWS AND PRESS RELEASES (last 60 days; cite by ID)
 ${(ctx.news || []).map((x) => `[${x.id}] ${x.date} · ${x.source || ""} — ${x.title}${x.summary ? `. ${trim(x.summary, 240)}` : ""}`).join("\n") || "(none)"}
 ${ctx.transcript ? `\nLATEST EARNINGS CALL [${ctx.transcript.id}] (${ctx.transcript.period || ""}, ${ctx.transcript.date || ""}; cite by ID)\n${trim(ctx.transcript.text, 7000)}\n` : ""}
-${ctx.lens && (part === "context" || part === "core") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${ctx.indPanels ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}THE INDUSTRY ANALYSIS (your team's; the industry-level view)
+${ctx.lens && (part === "context" || part === "calls") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${ctx.indPanels ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}THE INDUSTRY ANALYSIS (your team's; the industry-level view)
 Lead strategist: ${J(lean(D.lead, 600, 8))}
 KPIs and cycle: ${J(lean(D.kpi, 300, 6))}
 Macro: ${J(lean(D.macro, 300, 6))}
@@ -444,13 +469,16 @@ ${schemaFor(part)}`;
       management: txt(raw.management, 800), quality: txt(raw.quality, 600), valuation: { read: txt(raw.valuation?.read, 900), fair_value: rng(raw.valuation?.fair_value) },
       scenarios: { bull: sc(raw.scenarios?.bull), base: sc(raw.scenarios?.base), bear: sc(raw.scenarios?.bear) },
       horizons: Object.fromEntries(HZ.filter((h) => raw.horizons?.[h]).map((h) => { const x = raw.horizons[h]; const pu = Number(x.probability_up);
-        return [h, { call: en(x.call, ["bullish", "neutral", "bearish"], "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_industry: en(x.vs_industry, ["outperform", "in line", "underperform"], ""), drivers: txt(x.drivers, 700) }]; })),
+        return [h, { call: en(x.call, ["bullish", "neutral", "bearish"], "neutral"), conviction: en(x.conviction, ["high", "medium", "low"], ""), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_industry: en(x.vs_industry, ["outperform", "in line", "underperform"], ""), drivers: txt(x.drivers, 2400),
+          decisions: arr(x.decisions, 8).map((d) => ({ refs: ev(d?.refs), date: String(d?.date || "").slice(0, 10), event: txt(d?.event, 240), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral"), outcomes: txt(d?.outcomes, 700) })).filter((d) => d.event),
+          conflicts: arr(x.conflicts, 8).map((c) => ({ refs: ev(c?.refs), situation: txt(c?.situation, 240), in_window: txt(c?.in_window, 500), impact: txt(c?.impact, 500) })).filter((c) => c.situation),
+          positioning: txt(x.positioning, 700), risk: txt(x.risk, 600), sections: arr(x.sections, 6).map((k) => lc(k)).filter((k) => SEC_KEYS.includes(k)) }]; })),
       risks: arr(raw.risks, 8).map((x) => ({ risk: txt(x?.risk, 300), likelihood: en(x?.likelihood, ["high", "medium", "low"], ""), impact: en(x?.impact, ["high", "medium", "low"], ""), evidence: ev(x?.evidence) })).filter((x) => x.risk),
       catalysts: arr(raw.catalysts, 8).map((x) => ({ date: String(x?.date || "").slice(0, 10), event: txt(x?.event, 200), why: txt(x?.why, 300) })).filter((x) => x.event),
       watch: arr(raw.watch, 6).map((x) => txt(x, 200)).filter(Boolean),
       fit: Object.fromEntries(["income", "conservative", "growth", "aggressive"].map((k) => [k, fit(raw.fit?.[k])]).filter(([, v]) => v?.fit)), street,
       confidence: en(raw.confidence, ["high", "medium", "low"], ""),
-      reads: Object.fromEntries([...Object.keys(READS.core), ...Object.keys(READS.context)].map((k) => [k, txt((raw.reads || {})[k] ?? (raw.reads_more || {})[k], 900)]).filter(([, v]) => v)),
+      reads: Object.fromEntries([...Object.keys(READS.core), ...Object.keys(READS.calls), ...Object.keys(READS.context)].map((k) => [k, txt((raw.reads || {})[k] ?? (raw.reads_calls || {})[k] ?? (raw.reads_more || {})[k], 900)]).filter(([, v]) => v)),
     };
   }
   /**
@@ -486,7 +514,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens, READS };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens, READS, SECS };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
