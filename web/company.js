@@ -172,7 +172,7 @@
    */
   function lensInputs(run, geo = [], seg = [], now = null) {
     const R = run?.reports || {}, mi = R.macro?.indicators || {};
-    const indicators = (run?.macro?.rows || []).filter((r) => r?.id && (!mi[r.id] || mi[r.id].relevance !== "low")).slice(0, 22).map((r) => { const x = mi[r.id] || {};
+    const indicators = (run?.macro?.rows || []).filter((r) => r?.id && (!mi[r.id] || mi[r.id].relevance !== "low")).slice(0, 30).map((r) => { const x = mi[r.id] || {};
       return { id: r.id, label: r.label, group: r.group, value: r.value, unit: r.unit, prior: r.prior, prior_label: r.prior_label, date: r.date,
         ind: x.relevance ? { relevance: x.relevance, effect: x.effect, why: trim(x.why_it_matters || x.why || x.relevance_why, 260) } : null }; });
     // World events: every deep dive in full, then the scout's other situations (lighter), then the world headlines behind them (H#).
@@ -198,12 +198,24 @@
         situations: situations.filter((s) => s.refs.includes(x.id)).map((s) => s.id) }));
     for (const s of situations) { s.headlines = headlines.filter((h) => h.situations.includes(s.id)).map((h) => h.id); delete s.refs; }
     const tradeBy = Object.fromEntries((R.trade?.countries || []).map((c) => [lc(c.country), c]));
+    const nc0 = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
+    const expBy = Object.fromEntries((R.trade?.exposure || []).map((e) => [lc(e.country), e]));
+    // Everything the trade report says about one country, kept short enough for the prompt.
+    const tradeDossier = (d, country) => { const e = expBy[lc(country)]; if (!d && !e) return {};
+      return { alliance: d?.relationship?.alliance || "", relationship: nc0(d?.relationship?.summary, 220), outlook: nc0(d?.outlook, 240), freeze: nc0(d?.freeze, 320),
+        risks: (d?.risks || []).slice(0, 3).map((r) => ({ risk: nc0(r.risk, 140), type: r.type || "", likelihood: r.likelihood || "", impact: r.impact || "", timing: r.timing || "", mechanism: nc0(r.mechanism, 200) })),
+        security: d?.security ? { level: d.security.threat_level || "", threat: nc0(d.security.threat, 160), status: nc0(d.security.status, 160) } : null,
+        deps: (d?.dependencies || []).slice(0, 3).map((x) => ({ input: nc0(x.input, 100), criticality: x.criticality || "", share: nc0(x.share, 120), substitutability: nc0(x.substitutability, 60) })),
+        developments: (d?.developments || []).slice(0, 3).map((x) => ({ date: x.date || "", text: nc0(x.text, 180) })), watch: (d?.watch || []).slice(0, 4).map((w) => nc0(w, 140)),
+        exposed: (d?.exposed || []).slice(0, 8).map((x) => ({ symbol: x.symbol, channel: x.channel || "", severity: x.severity || "", mechanism: nc0(x.mechanism, 200) })),
+        ind_share: isNum(Number(e?.revenue_share)) ? Number(e.revenue_share) : null, hq: (e?.hq || []).slice(0, 8) }; };
     const shareOf = (country) => { const g = (geo || []).find((r) => (r.countries || []).some((c) => lc(c.country) === lc(country))); return g ? { region: g.region, share: g.share } : null; };
     const countries = (R.trademap?.countries || []).slice(0, 12).map((c, i) => ({ id: "C" + (i + 1), country: c.country, importance: c.importance, stance: c.stance, trajectory: c.trajectory, threat: c.threat, roles: (c.roles || []).join(", "),
-      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country) }));
+      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country) }));
     const rules = (run?.books || []).flatMap((b) => (b.book?.rules || []).map((r) => ({ body: b.body, ...r })))
       .sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (a.status === "in_force" ? -1 : 1)).slice(0, 10)
-      .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 90), name: trim(r.name, 160), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300) }));
+      .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 90), name: trim(r.name, 160), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300),
+        category: r.category || "", citation: trim(r.citation, 140), numeric: trim(r.numeric_value, 180), what: nc0(r.what_this_is, 300), impact: nc0(r.industry_impact, 340), last12: nc0(r.last_12_months, 200), today: nc0(r.today, 220), next12: nc0(r.next_12_months, 240) }));
     const k = R.kpi || {};
     const kpi = k.summary || k.cycle_position ? { cycle: k.cycle_position, cycle_text: trim(k.cycle_text, 300), pricing_power: k.pricing_power?.level, pricing_text: trim(k.pricing_power?.text, 300), who_has_it: trim(k.pricing_power?.who_has_it, 200),
       hot: (k.hot_segments || []).map((x) => x.name).slice(0, 6), cool: (k.cool_segments || []).map((x) => x.name).slice(0, 6) } : null;
@@ -222,10 +234,20 @@
       if (seenE.has(key) || calendar.some((c) => c.date.slice(0, 10) === d && c.tickers.length && e.tickers.length && c.tickers[0] === e.tickers[0])) continue; seenE.add(key); calendar.push(e); }
     const cal = calendar.filter((e) => !today || e.date >= today.slice(0, 10)).slice(0, 14).map((e, i) => ({ id: "E" + (i + 1), date: String(e.date).slice(0, 10), title: trim(e.title, 160), detail: trim(e.detail, 240), importance: e.importance || "", kind: e.kind || "", tickers: e.tickers.slice(0, 8) }));
     const g = R.reg || {};
-    const regItems = [...(g.policy || []).map((x) => ({ kind: "policy", title: x.title, status: x.status, date: x.date, direction: x.direction, text: x.impact })),
-      ...(g.litigation || []).map((x) => ({ kind: "litigation", title: x.case, status: x.status, date: x.date || x.next_date, text: x.exposure || x.impact || x.summary || x.parties })),
-      ...(g.deals || []).map((x) => ({ kind: "deal", title: x.title, status: x.status, date: x.date, text: x.rationale || x.impact }))].filter((x) => x.title).slice(0, 10)
-      .map((x, i) => ({ id: "L" + (i + 1), kind: x.kind, title: trim(x.title, 180), status: trim(x.status, 60), date: x.date ? String(x.date).slice(0, 10) : "", direction: x.direction || "", text: trim(x.text, 300) }));
+    const regItems = [...(g.policy || []).map((x) => ({ kind: "policy", title: x.title, status: x.status, date: x.date, direction: x.direction, text: x.impact, names: x.names })),
+      ...(g.litigation || []).map((x) => ({ kind: "litigation", title: x.case, status: x.status, date: x.date || x.next_date, text: x.stakes || x.exposure || x.impact || x.summary, parties: x.parties, next: x.next, names: x.names })),
+      ...(g.deals || []).map((x) => ({ kind: "deal", title: x.title, status: x.status, date: x.date, text: x.rationale || x.impact, value: x.value, names: x.names }))].filter((x) => x.title).slice(0, 16)
+      .map((x, i) => ({ id: "L" + (i + 1), kind: x.kind, title: trim(x.title, 180), status: trim(x.status, 80), date: x.date ? String(x.date).slice(0, 10) : "", direction: x.direction || "", text: nc0(x.text, 360),
+        parties: nc0(x.parties, 160), next: nc0(x.next, 160), value: trim(x.value, 40), names: (x.names || []).slice(0, 8) }));
+    const RV = R.regverdict || {};
+    const regv = RV.stance || RV.headline ? { stance: RV.stance || "", intensity: RV.intensity || "", headline: nc0(RV.headline, 300), summary: nc0(RV.summary, 500),
+      most_material: (RV.most_material || []).slice(0, 5).map((x) => ({ body: x.body || "", rule: trim(x.rule, 140), why: nc0(x.why, 220) })),
+      timeline: (RV.timeline || []).slice(0, 10).map((x) => ({ date: String(x.date || "").slice(0, 10), event: nc0(x.event, 180), body: x.body || "" })),
+      winners: (RV.winners || []).slice(0, 6).map((x) => ({ symbol: x.symbol, why: nc0(x.why, 200) })), losers: (RV.losers || []).slice(0, 6).map((x) => ({ symbol: x.symbol, why: nc0(x.why, 200) })),
+      watch: (RV.watch || []).slice(0, 5).map((w) => nc0(w, 200)), regulators: (g.regulators || []).slice(0, 8).map((x) => ({ name: trim(x.name, 90), jurisdiction: x.jurisdiction || "", why: nc0(x.why, 220) })),
+      legal_summary: nc0(g.summary, 400), consolidation: nc0(g.consolidation, 260), perception: nc0(g.perception?.summary || g.perception, 260) } : null;
+    const TV = R.trade?.verdict || {};
+    const tradev = TV.rating || TV.headline ? { rating: TV.rating || "", health: TV.health?.score ?? null, band: TV.health?.band || "", headline: nc0(TV.headline, 320), map: nc0(R.trademap?.summary || R.trade?.map?.summary, 400) } : null;
     // The company's own product lines and regions (S#, G#), with what code could match to the industry's segments and trade map.
     const segments = (seg || []).map((x, i) => ({ id: "S" + (i + 1), segment: x.segment, share: x.share, yoy: x.yoy, match: x.match ? `${x.match.temp} segment "${x.match.name}"` : null }));
     const regions = (geo || []).map((g, i) => ({ id: "G" + (i + 1), region: g.region, share: g.share, yoy: g.yoy, countries: (g.countries || []).map((c) => c.country) }));
@@ -242,7 +264,12 @@
       return [h, { call: x.call, conviction: x.conviction || "", expected_move: x.expected_move || [], probability_up: x.probability_up, drivers: noIds(x.drivers, 900), positioning: noIds(x.positioning, 300), risk: noIds(x.risk, 300), end: f.end || "", sigma: f.sigma ?? null, base_up: f.base_up ?? null,
         reporting: (f.reporting || []).slice(0, 8).map((r) => `${r.symbol} ${r.date}`), decisions: (x.decisions || []).slice(0, 8).map((d) => ({ date: d.date || "", event: noIds(d.event, 160), lean: d.lean || "", outcomes: noIds(d.outcomes, 320) })),
         conflicts: (x.conflicts || []).slice(0, 8).map((c) => ({ situation: noIds(c.situation, 160), in_window: noIds(c.in_window, 240), impact: noIds(c.impact, 280) })) }]; }));
-    return { indicators, situations, headlines, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems, iscen, debates, dims, changeMind, plans, redteam, threats, ihz };
+    const M0 = R.macro || {}, ncm = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
+    const macroInd = M0.regime ? { regime: M0.regime, headline: ncm(M0.headline, 300), summary: ncm(M0.summary, 500),
+      channels: Object.fromEntries(["demand", "cost", "capital", "regulatory"].filter((k) => M0.channels?.[k]?.text).map((k) => [k, ncm(M0.channels[k].text, 360)])),
+      moves: (M0.moves || []).slice(0, 6).map((x) => ({ id: x.id, move: ncm(x.move, 200), driver: ncm(x.driver, 200), so_what: ncm(x.so_what, 200) })),
+      flip: (M0.flip || []).slice(0, 4).map((f) => ({ trigger: ncm(f.trigger, 160), mechanism: ncm(f.mechanism, 200) })) } : null;
+    return { macroInd, regv, tradev, indicators, situations, headlines, countries, rules, kpi, segments, regions, kpis, chain, calendar: cal, regItems, iscen, debates, dims, changeMind, plans, redteam, threats, ihz };
   }
   function lensBlock(L, sym, part = "context") {
     if (part === "calls") return `${lensBlock(L, sym, "core")}
@@ -267,24 +294,37 @@ The industry's dimension scores (-2 to +2): ${Object.entries(L.dims || {}).map((
 The industry's trade plans (for the industry as a whole): ${Object.entries(L.plans || {}).map(([k, v]) => `${k}: size ${v.size}% of a portfolio, entry ${v.entry}, stop ${isNum(Number(v.stop_pct)) ? (v.stop_pct * 100).toFixed(1) + "%" : "n/a"}, review ${v.review}`).join(" | ") || "n/a"}
 What would change the industry view: ${(L.changeMind || []).join(" | ") || "n/a"}
 ${L.redteam ? `The industry's red team (${L.redteam.stance}): ${L.redteam.thesis} Kill criteria: ${L.redteam.kill.join("; ")}` : ""}`;
+    if (part === "exposures") return `THE INDUSTRY'S TRADE AND REGULATION REPORTS, ROW BY ROW (answer each for ${sym} by its ID)
+${L.tradev ? `Trade verdict for the industry: ${L.tradev.rating} (health ${L.tradev.health ?? "n/a"}, ${L.tradev.band}). ${L.tradev.headline} Map: ${L.tradev.map}` : ""}
+Trade countries (the industry's trade map and its country dossiers):
+${L.countries.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}${c.alliance ? ` (${c.alliance})` : ""}, ${c.trajectory}${c.threat && c.threat !== "none" ? `, ${c.threat} threat` : ""}; roles ${c.roles}.${isNum(c.ind_share) ? ` ${(c.ind_share * 100).toFixed(0)}% of industry revenue.` : ""} ${c.headline || c.why}${c.revenue ? ` ${sym}'s revenue in ${c.revenue.region}: ${(c.revenue.share * 100).toFixed(0)}%.` : ""}${c.relationship ? ` Relationship: ${c.relationship}` : ""}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${r.risk} (${r.type}; ${r.likelihood} likelihood, ${r.impact} impact, ${r.timing}): ${r.mechanism}`).join(" | ")}.` : ""}${c.security?.threat ? ` Security (${c.security.level}): ${c.security.threat}` : ""}${c.deps?.length ? ` Dependencies: ${c.deps.map((d) => `${d.input} (${d.criticality}; ${d.share}; replace in ${d.substitutability})`).join("; ")}.` : ""}${c.developments?.length ? ` Latest: ${c.developments.map((d) => `${d.date} ${d.text}`).join(" | ")}.` : ""}${c.freeze ? ` If trade froze: ${c.freeze}` : ""}${c.outlook ? ` Outlook: ${c.outlook}` : ""}${c.exposed?.length ? ` Most exposed: ${c.exposed.map((x) => `${x.symbol} (${x.channel}, ${x.severity}${x.symbol === sym ? `: ${x.mechanism}` : ""})`).join(", ")}.` : ""}${c.watch?.length ? ` Watch: ${c.watch.join("; ")}.` : ""}`).join("\n") || "(none)"}
+${sym}'s regions (what the trade map, its risks and its countries mean for each):
+${(L.regions || []).map((g) => `[${g.id}] ${g.region}: ${isNum(g.share) ? (g.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(g.yoy) ? `, ${g.yoy >= 0 ? "+" : ""}${(g.yoy * 100).toFixed(0)}% y/y` : ""}${g.countries.length ? ` (trade-map countries: ${g.countries.join(", ")})` : " (no trade-map country)"}`).join("\n") || "(not reported)"}
+${L.regv ? `Regulatory verdict for the industry: ${L.regv.stance} (${L.regv.intensity} intensity). ${L.regv.headline} ${L.regv.summary}
+Most material for the industry: ${L.regv.most_material.map((x) => `${x.body} ${x.rule}: ${x.why}`).join(" | ") || "n/a"}
+Regulatory winners: ${L.regv.winners.map((x) => `${x.symbol} (${x.why})`).join("; ") || "n/a"}. Losers: ${L.regv.losers.map((x) => `${x.symbol} (${x.why})`).join("; ") || "n/a"}.
+Regulatory timeline: ${L.regv.timeline.map((x) => `${x.date} ${x.body}: ${x.event}`).join(" | ") || "n/a"}
+Regulators: ${L.regv.regulators.map((x) => `${x.name} (${x.jurisdiction}): ${x.why}`).join(" | ") || "n/a"}
+Legal climate: ${L.regv.legal_summary} Consolidation: ${L.regv.consolidation} Perception: ${L.regv.perception}
+Regulatory watch list: ${L.regv.watch.join("; ") || "n/a"}` : ""}
+Rules (the regulatory rule books, in full):
+${L.rules.map((r) => `[${r.id}] ${r.body} — ${r.name} (${r.category ? r.category + ", " : ""}${r.status}${r.effective ? ", " + r.effective : ""}; ${r.severity} severity${r.citation ? `; ${r.citation}` : ""}): ${r.what || ""}${r.numeric ? ` Numbers: ${r.numeric}.` : ""} For the industry: ${r.impact || r.bottom_line}${r.last12 ? ` Last 12 months: ${r.last12}` : ""}${r.today ? ` Today: ${r.today}` : ""}${r.next12 ? ` Next 12 months: ${r.next12}` : ""} Bottom line: ${r.bottom_line}`).join("\n") || "(none)"}
+Policy, litigation and deals (the industry's regulation and legal report):
+${(L.regItems || []).map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status || ""}${x.date ? ", " + x.date : ""}${x.direction ? ", " + x.direction : ""}${x.value ? ", " + x.value : ""})${x.parties ? ` Parties: ${x.parties}.` : ""} ${x.text || ""}${x.next ? ` Next: ${x.next}` : ""}${x.names?.length ? ` Names: ${x.names.join(", ")}.` : ""}`).join("\n") || "(none)"}`;
     const v = (r) => (r.value === null || r.value === undefined ? "n/a" : `${r.value}${r.unit && r.unit !== "index" ? r.unit : ""}`);
     return `THE INDUSTRY REPORT'S ROWS (answer each for ${sym} by its ID)
-Macro indicators (latest; prior; the industry's read):
+${L.macroInd ? `The industry's macro call: ${L.macroInd.regime}. ${L.macroInd.headline} ${L.macroInd.summary}
+How macro reaches the industry: ${Object.entries(L.macroInd.channels).map(([k, v]) => `${k}: ${v}`).join(" | ") || "n/a"}
+What's moving and why: ${L.macroInd.moves.map((m) => `[${m.id}] ${m.move} Driver: ${m.driver} So what: ${m.so_what}`).join(" | ") || "n/a"}
+What would flip the industry's call: ${L.macroInd.flip.map((f) => `${f.trigger} (${f.mechanism})`).join(" | ") || "n/a"}
+` : ""}Macro indicators (latest; prior; the industry's read):
 ${L.indicators.map((r) => `[${r.id}] ${r.label} (${r.group || ""}): ${v(r)}${r.prior !== undefined && r.prior !== null ? `, ${r.prior_label || "prior"} ${r.prior}` : ""} · industry: ${r.ind ? `${r.ind.relevance} relevance, ${r.ind.effect} — ${r.ind.why}` : "no read"}`).join("\n") || "(none)"}
 World situations (the industry's world-events report: deep dives in full, then the other situations it is tracking):
 ${L.situations.map((x) => `[${x.id}] ${x.title} (${x.deep ? "deep dive" : "tracked"}; ${x.category}; ${x.stance} for the industry; ${x.status || ""}; ${x.region || ""}${x.since ? `; since ${x.since}` : ""}${x.actors?.length ? `; actors ${x.actors.join(", ")}` : ""}): ${x.summary}${x.now ? ` Now: ${x.now}` : ""}${x.why_now ? ` Why now: ${x.why_now}` : ""}${x.trigger ? ` Trigger: ${x.trigger}` : ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.developments?.length ? ` Latest: ${x.developments.map((d) => `${d.date} ${d.text}`).join(" | ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.name} ${c.probability}% (${c.trigger}) -> ${c.outcome}`).join(" | ")}.` : ""}${x.near_term ? ` Near term: ${x.near_term}` : ""}${x.offsets?.length ? ` Offsets: ${x.offsets.join("; ")}.` : ""}${x.watch?.length ? ` Watch: ${x.watch.map((w) => `${w.indicator} (${w.signal})`).join("; ")}.` : ""}${x.exposure ? ` Exposure: ${x.exposure}.` : ""}${x.winners.length ? ` Winners: ${x.winners.join(", ")}.` : ""}${x.losers.length ? ` Losers: ${x.losers.join(", ")}.` : ""}${x.headlines?.length ? ` Headlines: ${x.headlines.join(", ")}.` : ""}`).join("\n") || "(none)"}
 World headlines behind them (cite by H-ID):
 ${(L.headlines || []).map((h) => `[${h.id}] ${h.date} ${h.source}: ${h.title}${h.summary ? `. ${h.summary}` : ""}`).join("\n") || "(none)"}
-Trade countries (the industry's trade map):
-${L.countries.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}, ${c.trajectory}${c.threat && c.threat !== "none" ? `, ${c.threat} threat` : ""}; roles ${c.roles}. ${c.headline || c.why}${c.revenue ? ` ${sym}'s revenue in ${c.revenue.region}: ${(c.revenue.share * 100).toFixed(0)}%.` : ""}`).join("\n") || "(none)"}
-Rules (from the regulatory rule books):
-${L.rules.map((r) => `[${r.id}] ${r.body} — ${r.name} (${r.status}${r.effective ? ", " + r.effective : ""}; ${r.severity} severity): ${r.bottom_line}`).join("\n") || "(none)"}
-Policy, litigation and deals (the industry's regulation and legal report):
-${(L.regItems || []).map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status || ""}${x.date ? ", " + x.date : ""}${x.direction ? ", " + x.direction : ""}): ${x.text || ""}`).join("\n") || "(none)"}
 ${sym}'s product lines (say which of the industry's segments each belongs to, hot or cool, or what its own trend is if none fits):
 ${(L.segments || []).map((x) => `[${x.id}] ${x.segment}: ${isNum(x.share) ? (x.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(x.yoy) ? `, ${x.yoy >= 0 ? "+" : ""}${(x.yoy * 100).toFixed(0)}% y/y` : ""}${x.match ? ` (code matched it to the ${x.match})` : " (no matching industry segment)"}`).join("\n") || "(not reported)"}
-${sym}'s regions (what the industry's trade map, world events and macro mean for each):
-${(L.regions || []).map((g) => `[${g.id}] ${g.region}: ${isNum(g.share) ? (g.share * 100).toFixed(0) + "% of revenue" : "share n/a"}${isNum(g.yoy) ? `, ${g.yoy >= 0 ? "+" : ""}${(g.yoy * 100).toFixed(0)}% y/y` : ""}${g.countries.length ? ` (trade-map countries: ${g.countries.join(", ")})` : " (no trade-map country)"}`).join("\n") || "(not reported)"}
 ${L.kpi ? `Hot segments: ${L.kpi.hot.join(", ") || "n/a"}. Cool: ${L.kpi.cool.join(", ") || "n/a"}.` : ""}
 The industry's scenarios (12 months; its probability and the industry's price move):
 ${Object.entries(L.iscen || {}).map(([k, x]) => `${k} (${x.probability}%, industry ${(x.price_move || []).join(" to ")}%): ${x.narrative}${x.triggers?.length ? ` Triggers: ${x.triggers.join("; ")}` : ""}`).join("\n") || "(none)"}
@@ -302,18 +342,22 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     const VS = ["more", "less", "same", "opposite"];
     const M = raw.macro || {};
     return {
-      macro: { regime: en(M.regime, ["supportive", "mixed", "headwind"], ""), headline: txt(M.headline, 400),
+      macro: { regime: en(M.regime, ["supportive", "mixed", "headwind"], ""), headline: txt(M.headline, 400), flip: txt(M.flip, 400),
+        channels: Object.fromEntries(["demand", "cost", "capital", "regulatory"].filter((k) => M.channels?.[k]).map((k) => [k, txt(M.channels[k], 500)])),
         horizons: Object.fromEntries(HZ.filter((h) => M.horizons?.[h]).map((h) => [h, { call: en(M.horizons[h].call, ["supportive", "mixed", "headwind"], "mixed"), why: txt(M.horizons[h].why, 400) }])),
         indicators: rows(M.indicators, new Set(L.indicators.map((r) => r.id)), (x) => ({ relevance: en(x.relevance, ["high", "medium", "low"], ""), effect: en(x.effect, ["tailwind", "headwind", "neutral"], "neutral"), vs_industry: en(x.vs_industry, VS, ""), why: txt(x.why, 360) })) },
       world: rows(raw.world, new Set(L.situations.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), magnitude: en(x.magnitude, ["high", "medium", "low"], ""), vs_industry: en(x.vs_industry, VS, ""), channel: txt(x.channel, 300), scenario: txt(x.scenario, 400), watch: txt(x.watch, 200), why: txt(x.why, 500), evidence: ev(x.evidence) })),
-      trade: rows(raw.trade, new Set(L.countries.map((r) => r.id)), (x) => ({ exposure: en(x.exposure, ["high", "medium", "low", "none"], ""), effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), why: txt(x.why, 500), evidence: ev(x.evidence) })),
-      regulation: rows(raw.regulation, new Set(L.rules.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), why: txt(x.why, 500), evidence: ev(x.evidence) })),
-      reg_items: rows(raw.reg_items, new Set((L.regItems || []).map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), why: txt(x.why, 400) })),
+      trade: rows(raw.trade, new Set(L.countries.map((r) => r.id)), (x) => ({ exposure: en(x.exposure, ["high", "medium", "low", "none"], ""), effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), channel: txt(x.channel, 300), risk: txt(x.risk, 300), freeze: txt(x.freeze, 360), why: txt(x.why, 500), evidence: ev(x.evidence) })),
+      regulation: rows(raw.regulation, new Set(L.rules.map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), cost: txt(x.cost, 240), timing: txt(x.timing, 120), why: txt(x.why, 500), evidence: ev(x.evidence) })),
+      reg_items: rows(raw.reg_items, new Set((L.regItems || []).map((r) => r.id)), (x) => ({ effect: en(x.effect, ["helps", "hurts", "mixed", "none"], "mixed"), materiality: en(x.materiality, ["high", "medium", "low"], ""), cost: txt(x.cost, 240), next: txt(x.next, 160), why: txt(x.why, 400) })),
+      trade_overall: raw.trade_overall && typeof raw.trade_overall === "object" ? { risk: en(raw.trade_overall.risk, ["low", "moderate", "high"], ""), summary: txt(raw.trade_overall.summary, 900), biggest: txt(raw.trade_overall.biggest, 400), watch: (Array.isArray(raw.trade_overall.watch) ? raw.trade_overall.watch : []).slice(0, 5).map((w) => txt(w, 200)).filter(Boolean) } : null,
+      reg_overall: raw.reg_overall && typeof raw.reg_overall === "object" ? { stance: en(raw.reg_overall.stance, ["tailwind", "headwind", "mixed"], ""), vs_peers: en(raw.reg_overall.vs_peers, ["winner", "loser", "neutral"], ""), summary: txt(raw.reg_overall.summary, 900), biggest: txt(raw.reg_overall.biggest, 400),
+        timeline: (Array.isArray(raw.reg_overall.timeline) ? raw.reg_overall.timeline : []).slice(0, 8).map((x) => ({ date: String(x?.date || "").slice(0, 10), event: txt(x?.event, 240), why: txt(x?.why, 300) })).filter((x) => x.event), watch: (Array.isArray(raw.reg_overall.watch) ? raw.reg_overall.watch : []).slice(0, 5).map((w) => txt(w, 200)).filter(Boolean) } : null,
       kpis: rows(raw.kpis, new Set((L.kpis || []).map((r) => r.id)), (x) => ({ value: txt(x.value, 200), vs: en(x.vs, ["better", "in line", "worse"], ""), why: txt(x.why, 400) })),
       chain: rows(raw.chain, new Set((L.chain || []).map((r) => r.id)), (x) => ({ dependence: en(x.dependence, ["high", "medium", "low", "none"], ""), why: txt(x.why, 400) })),
       calendar: rows(raw.calendar, new Set((L.calendar || []).map((r) => r.id)), (x) => ({ impact: en(x.impact, ["high", "medium", "low", "none"], ""), direction: en(x.direction, ["upside", "downside", "two-way"], ""), why: txt(x.why, 400) })),
       segments: rows(raw.segments, new Set((L.segments || []).map((r) => r.id)), (x) => ({ temp: en(x.temp, ["hot", "cool", "neutral"], "neutral"), industry_segment: txt(x.industry_segment, 120), why: txt(x.why, 500) })),
-      regions: rows(raw.regions, new Set((L.regions || []).map((r) => r.id)), (x) => ({ outlook: en(x.outlook, ["tailwind", "headwind", "neutral"], "neutral"), why: txt(x.why, 500) })),
+      regions: rows(raw.regions, new Set((L.regions || []).map((r) => r.id)), (x) => ({ outlook: en(x.outlook, ["tailwind", "headwind", "neutral"], "neutral"), drivers: txt(x.drivers, 400), risks: txt(x.risks, 300), watch: txt(x.watch, 200), why: txt(x.why, 500) })),
       ind_scenarios: Object.fromEntries(["bull", "base", "bear"].filter((k) => raw.ind_scenarios?.[k] && L.iscen?.[k]).map((k) => { const x = raw.ind_scenarios[k]; const mv = Array.isArray(x.move) ? x.move.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : []; return [k, { move: mv, why: txt(x.why, 500) }]; })),
       debates: rows(raw.debates, new Set((L.debates || []).map((r) => r.id)), (x) => ({ side: en(x.side, ["bull", "bear", "split"], "split"), why: txt(x.why, 500), evidence: ev(x.evidence) })),
       dimensions: Object.fromEntries(Object.keys(L.dims || {}).filter((k) => raw.dimensions?.[k]).map((k) => { const sc = Number(raw.dimensions[k].score); return [k, { score: isNum(sc) ? Math.max(-2, Math.min(2, Math.round(sc))) : null, why: txt(raw.dimensions[k].why, 400) }]; })),
@@ -370,15 +414,18 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     confidence: `"confidence": "high | medium | low"`,
     reads: readsField("core"), reads_more: readsField("context"), reads_calls: readsField("calls"),
     lens: `"macro": {"regime": "supportive | mixed | headwind (for this company)", "headline": "one sentence on the macro for this company", "horizons": {"1M": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
+   "channels": {"demand": "1-2 sentences: how the macro reaches this company's demand, against the industry's channel", "cost": "...", "capital": "financing, rates and the multiple", "regulatory": "..."}, "flip": "what would flip the macro call for this company, with levels",
    "indicators": [{"id": "I1", "relevance": "high | medium | low", "effect": "tailwind | headwind | neutral", "vs_industry": "more | less | same | opposite", "why": "one sentence on this company"}]},
  "world": [{"id": "W1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "vs_industry": "more | less | same | opposite", "channel": "how it reaches this company: demand, costs, supply, FX, financing or the multiple, with a size", "scenario": "which of the situation's scenarios matters most for this company and what it would do to it (estimate)", "watch": "the one indicator or date to watch for this company", "why": "1-2 sentences on this company, citing W- and H-IDs", "evidence": []}],
- "trade": [{"id": "C1", "exposure": "high | medium | low | none", "effect": "helps | hurts | mixed | none", "why": "1-2 sentences", "evidence": []}],
- "regulation": [{"id": "R1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "why": "1-2 sentences", "evidence": []}],
  "segments": [{"id": "S1", "temp": "hot | cool | neutral", "industry_segment": "the industry segment it belongs to, or a short name for its own", "why": "one or two sentences: its trend and what drives it, cited"}],
- "regions": [{"id": "G1", "outlook": "tailwind | headwind | neutral", "why": "one or two sentences: what the industry analysis (trade, world events, macro) means for this region, cited"}],
- "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "why": "one sentence"}],
  "ind_scenarios": {"bull": {"move": [-5, 5], "why": "one or two sentences: this company's 12-month price move if the industry's bull case plays out, and why it moves more or less than the industry"}, "base": {...}, "bear": {...}},
  "debates": [{"id": "D1", "side": "bull | bear | split", "why": "one or two sentences: which side of the industry's debate this company falls on, and why, cited"}]`,
+    lens_exp: `"trade_overall": {"risk": "low | moderate | high", "summary": "3-4 sentences: what the industry's trade map means for this company overall, where its revenue, supply and costs sit on it, more or less than the industry and why, cited", "biggest": "the single country or risk that matters most for this company and why", "watch": ["2-4 things to watch, with levels or dates"]},
+ "trade": [{"id": "C1", "exposure": "high | medium | low | none", "effect": "helps | hurts | mixed | none", "channel": "how it reaches this company: revenue, supply, costs, FX or financing, with a size", "risk": "the risk there that matters most for this company, with likelihood and timing", "freeze": "what a 90-day freeze in trade with this country would do to this company (estimate)", "why": "1-2 sentences, cited", "evidence": []}],
+ "regions": [{"id": "G1", "outlook": "tailwind | headwind | neutral", "drivers": "what moves this region for the company: the trade-map countries, their risks, FX, demand and prices, with numbers", "risks": "the main risk to this region's revenue, with likelihood", "watch": "the one thing to watch", "why": "one or two sentences: the bottom line for this region, cited"}],
+ "reg_overall": {"stance": "tailwind | headwind | mixed", "vs_peers": "winner | loser | neutral", "summary": "3-4 sentences: the net regulatory and legal picture for this company against the industry's verdict and its named winners and losers, cited", "biggest": "the single most material rule or case for this company, with a size", "timeline": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "a dated regulatory or legal step that matters for this company", "why": "one sentence"}], "watch": ["2-4 things to watch"]},
+ "regulation": [{"id": "R1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "cost": "the size of the effect on this company (estimate: $, % of revenue or EPS, or capital)", "timing": "when it bites", "why": "1-2 sentences, cited", "evidence": []}],
+ "reg_items": [{"id": "L1", "effect": "helps | hurts | mixed | none", "materiality": "high | medium | low", "cost": "the size for this company, if any (estimate)", "next": "the next date or step that matters", "why": "one or two sentences"}]`,
     lens_core: `"kpis": [{"id": "K1", "value": "this company's own figure or read for that KPI (say if not disclosed)", "vs": "better | in line | worse", "why": "one sentence, cited"}],
  "chain": [{"id": "P1", "dependence": "high | medium | low | none", "why": "one sentence: how much this company relies on it and what that means"}],
  "calendar": [{"id": "E1", "impact": "high | medium | low | none", "direction": "upside | downside | two-way", "why": "one sentence: what it means for this company"}],
@@ -391,14 +438,16 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "reads", "confidence"],
     calls: ["scenarios", "horizons", "lens_core", "reads_calls"],
     context: ["drivers", "lens", "reads_more"],
+    exposures: ["lens_exp"],
   };
   function schemaFor(part) {
-    const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "reads", "reads_more", "reads_calls"].includes(k));
-    const intro = part === "core" ? "This is part one of a three-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
-      : part === "calls" ? "This is part two of a three-part write-up: the 12-month scenarios and the full 1M, 3M, 6M and 12M calls, each as complete as the industry's own cards (THE INDUSTRY'S OWN 1M-12M CALLS) but about this company, plus the KPI, chain, calendar, plan and dimension rows for your part. Colleagues write the verdict and thesis, and the rest of the rows, at the same time. Write ONLY the fields below.\n"
-      : part === "context" ? "This is part three of a three-part write-up; colleagues write the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
-    const sizes = part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL."
-      : part === "calls" ? "\nSizes: for EACH horizon, 3-7 decisions (every dated E-row inside that window that can move this stock, the company's own report first if it falls in the window) and 2-6 conflicts (the Q- and W-rows that matter for this company in that window), with refs; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls. The 12M call must agree with the scenarios' probability-weighted return." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones), trade country, rule, policy/litigation/deal, product line and region ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+    const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "lens_exp", "reads", "reads_more", "reads_calls"].includes(k));
+    const intro = part === "core" ? "This is part one of a four-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
+      : part === "calls" ? "This is part two of a four-part write-up: the 12-month scenarios and the full 1M, 3M, 6M and 12M calls, each as complete as the industry's own cards (THE INDUSTRY'S OWN 1M-12M CALLS) but about this company, plus the KPI, chain, calendar, plan and dimension rows for your part. Colleagues write the verdict and thesis, and the rest of the rows, at the same time. Write ONLY the fields below.\n"
+      : part === "exposures" ? "This is part four of a four-part write-up: trade and regulation. Colleagues write the verdict, thesis, calls and the rest of the rows at the same time. Write ONLY the fields below: take the industry's trade and regulation reports row by row (THE INDUSTRY'S TRADE AND REGULATION REPORTS) and say what each means for this company specifically, with sizes, more or less than for the industry and why, using its regions, segments, plants, customers, filings and numbers.\n"
+      : part === "context" ? "This is part three of a four-part write-up; colleagues write the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
+    const sizes = part === "exposures" ? "\nSizes: one entry for EVERY trade country, region, rule and policy/litigation/deal ID listed; 2-6 timeline steps; keep each why to one or two sentences and give sizes where the data allows (say estimate)." : part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL."
+      : part === "calls" ? "\nSizes: for EACH horizon, 3-7 decisions (every dated E-row inside that window that can move this stock, the company's own report first if it falls in the window) and 2-6 conflicts (the Q- and W-rows that matter for this company in that window), with refs; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls. The 12M call must agree with the scenarios' probability-weighted return." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones) and product line ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
   /**
@@ -438,7 +487,7 @@ ${(ctx.mentions || []).map((m) => `[${m.id}] ${m.section}${m.where ? ` › ${m.w
 COMPANY NEWS AND PRESS RELEASES (last 60 days; cite by ID)
 ${(ctx.news || []).map((x) => `[${x.id}] ${x.date} · ${x.source || ""} — ${x.title}${x.summary ? `. ${trim(x.summary, 240)}` : ""}`).join("\n") || "(none)"}
 ${ctx.transcript ? `\nLATEST EARNINGS CALL [${ctx.transcript.id}] (${ctx.transcript.period || ""}, ${ctx.transcript.date || ""}; cite by ID)\n${trim(ctx.transcript.text, 7000)}\n` : ""}
-${ctx.lens && (part === "context" || part === "calls") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${ctx.indPanels ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}THE INDUSTRY ANALYSIS (your team's; the industry-level view)
+${ctx.lens && (part === "context" || part === "calls" || part === "exposures") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${ctx.indPanels && part !== "exposures" ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}${part === "exposures" ? "" : `THE INDUSTRY ANALYSIS (your team's; the industry-level view)
 Lead strategist: ${J(lean(D.lead, 600, 8))}
 KPIs and cycle: ${J(lean(D.kpi, 300, 6))}
 Macro: ${J(lean(D.macro, 300, 6))}
@@ -447,7 +496,7 @@ Trade and supply chain: ${J(lean(D.trade, 260, 8))}
 Regulation: ${J(lean(D.regverdict, 300, 6))}
 Rule books (top rules): ${J(lean(D.books, 220, 6))}
 
-RULES
+`}RULES
 - Cite every factual claim with IDs in square brackets: [A#] for the industry analysis, [N#]/[P#] for news and releases, [T#] for the call. Numbers given above (statements, ratios, percentiles) need no citation. Never invent a fact, date, figure or quote; say "(estimate)" for your own estimates.
 - Be specific to this company: name its brands, segments, regions, customers and competitors where the data supports it. Compare with peers by ticker.
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
