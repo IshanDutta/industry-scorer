@@ -2434,7 +2434,9 @@ a.btnlink:hover { border-color: var(--accent); }
       if (!/^(run|calls|sector):/.test(k)) continue;
       if (k.startsWith("calls:") && Array.isArray(v)) v = mergeCalls((await idbGet(k).catch(() => null)) || [], v);
       if (!(await idbPut(k, v))) throw new Error("This browser couldn't store the results (it may be out of space).");
-      if (k.startsWith("run:") && v?.industry?.summary) { const sl = k.slice(4); const i = idx.findIndex((x) => x.slug === sl); const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: v.missing || [], running: false };
+      if (k.startsWith("run:") && v?.industry?.summary) { const sl = k.slice(4); const i = idx.findIndex((x) => x.slug === sl); // Sector runs before Nov 2026 saved "macro" as missing even when the macro report was there (it checked the page's macro, not the industry's own).
+        const macroOk = !!v.reports?.[`${sl}--macro`]?.result && !v.reports[`${sl}--macro`].result.partial && v.macro?.rows?.length;
+        const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: (v.missing || []).filter((m) => !(m === "macro" && macroOk)), running: false };
         if (i >= 0) idx[i] = e; else idx.unshift(e); n++; S.savedAt[sl] = v.saved_at; }
     }
     await idbPut("index", idx); S.saved = idx;
@@ -2536,7 +2538,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const failed = (k) => !!(err[k] || (k === "world" && (err.scout || err.dive)) || (k === "macro" && (err.plan || err.indicators)));
     for (const k of ["kpi", "world", "trade", "reg", "chain"]) if (!rep(name, k) && !failed(k)) out.push(k);
     if (!rep(name, "calls") && !failed("calls") && (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt)) out.push("calls");
-    const m = rep(name, "macro"); if ((!m || m.result?.partial || !S.macro?.rows?.length) && !failed("macro")) out.push("macro");
+    const m = rep(name, "macro"); if ((!m || m.result?.partial || !macroOf(name)?.rows?.length) && !failed("macro")) out.push("macro");
     const bodies = regBodies(name);
     if (bodies.some((b) => { const k = RegBook.bodyKey(b.name); return !bookDoc(name, k) && !S.regFail[sl]?.[k]; })) out.push("rulebooks");
     if (bodies.length && !rep(name, "regverdict")) out.push("regverdict");
@@ -5550,6 +5552,13 @@ a.btnlink:hover { border-color: var(--accent); }
   const restored = (async () => {
     S.saved = (await idbGet("index")) || [];
     for (const x of S.saved) S.savedAt[x.slug] = x.saved_at;
+    // Clear the false "macro" gap older sector runs saved (their macro report is there), so they don't read as unfinished.
+    let fixed = 0;
+    for (const x of S.saved) if ((x.missing || []).includes("macro")) {
+      const v = await idbGet("run:" + x.slug).catch(() => null), m = v?.reports?.[`${x.slug}--macro`]?.result;
+      if (m && !m.partial && v.macro?.rows?.length) { x.missing = x.missing.filter((k) => k !== "macro"); fixed++; }
+    }
+    if (fixed) await idbPut("index", S.saved).catch(() => {});
     const act = await idbGet("sectorActive");
     const srec = act ? await secGet(act).catch(() => null) : null;
     if (srec && !srec.finished_at) { S.sectorRec[act] = srec; S.sectorView = act; S.sectorAuto = act; S.sector = act; }
