@@ -219,7 +219,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .co-ind > *, #company > *, .co-ind .panel div { min-width: 0; }
 .co-ind .panel, .co-ind .callout, .co-ind .panel [style*="display:grid"] { grid-template-columns: minmax(0, 1fr); }
 .co-ind button:not([data-co]), .co-ind .seg { display: none !important; }
-.co-ind mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+.co-ind mark, #company mark { background: color-mix(in srgb, var(--accent) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
 .co-indnav { display: flex; flex-wrap: wrap; gap: 6px; }
 .co-indnav a { font-size: 13px; font-weight: 600; text-decoration: none; padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--ink); }
 .gk { text-transform: none; font-size: 1.15em; letter-spacing: 0; }
@@ -11474,8 +11474,11 @@ ${schemaFor(part)}`;
   function coChain(co, t) {
     const In = co.lensIn?.chain || []; if (!In.length) return "";
     const L = t?.lens?.chain || {};
-    const rows = In.map((x) => { const y = L[x.id], named = (x.depends || []).includes(co.sym); return `<tr><td><b class="tick">${esc(x.symbol || "")}</b> ${esc(trimC(x.name || "", 30))}<div class="small muted">${esc(x.role || "")}</div></td><td class="wr small">${esc(stripCites(x.share || ""))}${named ? ` <span class="pill warn">names ${esc(co.sym)}</span>` : ""}</td>
-      <td>${y ? lvlP(y.dependence, "dependence") : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(x.why || ""), 200))}</span>`}</td></tr>`; }).join("");
+    // The industry's own words on the partner (its share of the industry, else why it matters), and which industry companies rely on it.
+    const rows = In.map((x) => { const y = L[x.id], share = stripCites(x.share || ""), iwhy = stripCites(x.why || ""), role = share || iwhy, dep = x.depends || [];
+      const relied = dep.length ? `<div class="small muted" style="margin-top:4px">Relied on by: ${dep.slice(0, 10).map((d) => (d === co.sym ? `<mark>${esc(d)}</mark>` : esc(d))).join(", ")}${dep.length > 10 ? ` +${dep.length - 10} more` : ""}</div>` : "";
+      return `<tr><td><b class="tick">${esc(x.symbol || "")}</b> ${esc(trimC(x.name || "", 30))}<div class="small muted">${esc(x.role || "")}</div></td><td class="wr small">${role ? esc(trimC(role, 260)) : `<span class="muted">—</span>`}${relied}</td>
+      <td>${y ? lvlP(y.dependence, "dependence") : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : share && iwhy ? `<span class="muted">${esc(trimC(iwhy, 200))}</span>` : ""}</td></tr>`; }).join("");
     return sec("co-chain", "Customers, channels & suppliers", `from the ${esc(co.run.name)} supply-chain analysis`,
       `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Partner</th><th>Its role in the industry</th><th>${esc(co.sym)}'s dependence</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>${lensNote(co, t)}`);
   }
