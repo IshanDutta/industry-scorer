@@ -215,6 +215,25 @@ status.totals = { sectors: SECTORS.length, industries: allInd.length, done: allI
   waiting: allInd.filter((i) => i.status === "waiting").length, left_out: allInd.filter((i) => i.status === "left out").length,
   with_times: allInd.filter((i) => i.times).length, with_historian: allInd.filter((i) => i.historian).length };
 writeFileSync(join(statusDir, "status.json"), JSON.stringify(status, null, 1));
+
+// ------------------------------------------------------------------ the status page's tables (rows, one file each)
+const dashDir = join(statusDir, "dash"); mkdirSync(dashDir, { recursive: true });
+const W = (name, rows) => writeFileSync(join(dashDir, name + ".json"), JSON.stringify(rows));
+const ORDER = { working: 0, waiting: 1, done: 2, "left out": 3 };
+W("industries", status.sectors.flatMap((x) => x.industries.map((i) => ({ sector: x.sector, industry: i.name, status: i.status, order: ORDER[i.status] ?? 9, companies: i.companies,
+  analyzed: i.analyzed_at ? i.analyzed_at.slice(0, 10) : null, daily: i.daily, times_like_this: i.times ? "yes" : "no", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
+W("sectors", status.sectors.map((x) => ({ sector: x.sector, total: x.industries.length, done: x.counts.done || 0, working: x.counts.working || 0, waiting: x.counts.waiting || 0, left_out: x.counts["left out"] || 0,
+  spend_usd: x.usd || 0, state: x.running ? "running" : x.never_run ? "never run" : x.finished ? "finished" : x.round ? "adding industries" : (x.counts.waiting ? "unfinished" : "finished"),
+  queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null })));
+W("queue", (queue?.items || []).map((i, k) => ({ order: k + 1, sector: i.sector, budget_usd: i.budget, state: i.state, started: i.dispatched_at || null, finished: i.finished_at || null, reason: i.last_reason || null })));
+W("runs", status.recent_runs.map((r) => ({ when: r.started, what: r.title, sector: r.sector, result: r.conclusion, ended: r.ended, url: r.url })));
+W("spend", sl.slice(-400).map((x) => ({ at: x.at, total_usd: x.total })));
+W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === false ? "Out of credit" : "Unknown", credit_message: cred.message,
+  tracked_total_usd: tot, last_24h_usd: status.spend.last_24h, last_7d_usd: status.spend.last_7d, cache_saved_usd: status.spend.cache_saved,
+  queue_cap_usd: queue?.cap ?? null, queue_spent_usd: queue ? queue.spent : null, queue_left_usd: queue ? r2(queue.cap - queue.spent) : null, queue_note: queue?.note || "No queue",
+  balance_estimate_usd: balance?.estimate ?? null, balance_note: balance ? `$${balance.start} on ${balance.at.slice(0, 10)} minus $${balance.spent_since} spent since (${balance.source})` : "Set CREDIT_BALANCE_USD and CREDIT_BALANCE_AT to estimate your balance",
+  anthropic_month_usd: cost?.month_to_date ?? null, anthropic_30d_usd: cost?.last_30_days ?? null,
+  industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
 console.log(`Status: ${status.totals.done} of ${status.totals.industries} industries done, ${status.totals.working} working, ${status.totals.waiting} waiting · tracked spend $${tot} · credit: ${cred.message}`);
 for (const l of log) console.log(l);
 if (queue) console.log(`Queue: ${queue.note}`);
