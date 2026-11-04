@@ -230,7 +230,8 @@ W("runs", status.recent_runs.map((r) => ({ when: r.started, what: r.title, secto
 W("spend", sl.slice(-400).map((x) => ({ at: x.at, total_usd: x.total })));
 W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === false ? "Out of credit" : "Unknown", credit_message: cred.message,
   tracked_total_usd: tot, last_24h_usd: status.spend.last_24h, last_7d_usd: status.spend.last_7d, cache_saved_usd: status.spend.cache_saved,
-  queue_cap_usd: queue?.cap ?? null, queue_spent_usd: queue ? queue.spent : null, queue_left_usd: queue ? r2(queue.cap - queue.spent) : null, queue_note: queue?.note || "No queue",
+  queue_state: !queue ? "none" : queue.stopped ? "stopped" : queue.finished_at ? "finished" : "running",
+  queue_cap_usd: queue?.cap ?? null, queue_model: queue?.model ?? null, queue_spent_usd: queue ? queue.spent : null, queue_left_usd: queue ? r2(queue.cap - queue.spent) : null, queue_note: queue?.note || "No queue",
   balance_estimate_usd: balance?.estimate ?? null, balance_note: balance ? `$${balance.start} on ${balance.at.slice(0, 10)} minus $${balance.spent_since} spent since (${balance.source})` : "Set CREDIT_BALANCE_USD and CREDIT_BALANCE_AT to estimate your balance",
   anthropic_month_usd: cost?.month_to_date ?? null, anthropic_30d_usd: cost?.last_30_days ?? null,
   industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
