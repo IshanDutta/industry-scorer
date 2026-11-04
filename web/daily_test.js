@@ -46,4 +46,12 @@ ok(D.pickSections(null, { ...xn, z: 3, move: 0.08 }, {}, nd).some((p) => p.key =
 const c = D.apply(res, upd, x, { today: nd, via: "update", sources: x.news, sections: [{ ...picks.find((p) => p.key === "reg"), ok: true }, { ...picks.find((p) => p.key === "rulebook"), ok: false, error: "no rules came back" }] });
 ok(c.result.daily.sections.length === 2 && c.result.sections_rewritten.reg === nd && !c.result.sections_rewritten.rulebook, "sections recorded; only the ones that worked start a cool-down");
 ok(D.updatePrompt("Beverages", res, x, nd, res.horizon_facts, "Regulation: the FTC sued [R3].").includes("SECTIONS YOUR TEAM REWROTE TODAY"), "update prompt carries what the rewritten sections say");
+// The budget plan: today's share of what's left, the most valuable work first, what doesn't fit waits (and ages).
+ok(D.dayBudget(470, 100, "2026-11-04") === Math.round((370 / 27) * 100) / 100 && D.dayBudget(470, 470, "2026-11-30") === 0, "today's share of the month: what's left over the days left");
+const cands = [{ industry: "A", key: "thesis", importance: "low", by: "rotation" }, { industry: "B", key: "kpi", importance: "high", by: "code" }, { industry: "C", key: "world", importance: "medium" }, { industry: "D", key: "chain", importance: "low" }, { industry: "E", key: "rulebook", importance: "high", regulators: ["FDA", "FTC", "EPA"] }];
+const pl = D.plan(cands, 1.2);
+ok(pl.run[0].industry === "B" && pl.run.some((c) => c.industry === "C") && pl.held.some((c) => c.industry === "A") && pl.planned <= 1.2, "earnings first, then what matters most; what doesn't fit waits: ran " + pl.run.map((c) => c.industry + ":" + c.key).join(",") + "; held " + pl.held.map((c) => c.industry + ":" + c.key).join(","));
+ok(D.plan(cands, 100).held.length === 0, "a big enough budget runs everything");
+const aged = D.pickSections(null, { ...xn, macro: [] }, { pending: [{ key: "chain", why: "a supplier's contract", importance: "low", waited: 2 }] }, nd).find((c) => c.key === "chain");
+ok(aged && aged.waited === 3 && D.scoreOf(aged) > D.scoreOf({ ...aged, waited: 0 }), "held work comes back the next day, more urgent each day it waits");
 console.log(fails ? fails + " FAILED" : "daily tests passed"); process.exit(fails ? 1 : 0);

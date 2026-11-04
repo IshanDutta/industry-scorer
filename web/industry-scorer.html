@@ -7823,7 +7823,7 @@ ${deltaText(x)}
 2. Which parts of the team's work should be rewritten today so everything stays current? Name EVERY section that anything since the last update changes or adds to: a fact, a headline, commentary or an analyst's view, a preview, a price, estimate or macro move, an event that passed. Rewriting is cheap compared with a stale report, so when in doubt, name it; leave a section out only when nothing since the last update touches it. Cite what prompts each one ([D#] headlines, [I#] macro rows, or the event or move in words):
 ${Object.entries(SECTIONS).map(([k, v]) => `   - "${k}": ${v.when}`).join("\n")}
 Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizons worth revisiting, e.g. 1M"], "why": "one sentence",
- "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "why": "one sentence: what changed for it, cited", "regulators": ["for rulebook: the regulators' names as listed above, or [] for all of them"]}]}`;
+ "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "importance": "high (it changes what the section concludes or an investor would act on) | medium (new facts that update it) | low (nuance or commentary)", "why": "one sentence: what changed for it, cited", "regulators": ["for rulebook: the regulators' names as listed above, or [] for all of them"]}]}`;
   }
 
   /**
@@ -7859,11 +7859,13 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    */
   function pickSections(tri, x, last = {}, today) {
     const out = [];
-    const add = (key, why, { code = false, regulators = [] } = {}) => {
+    const IMP = { high: 3, medium: 2, low: 1 };
+    const add = (key, why, { code = false, regulators = [], importance = "medium" } = {}) => {
       if (!SECTIONS[key] || !String(why || "").trim()) return;
+      const imp = code ? "high" : IMP[lc(importance)] ? lc(importance) : "medium";
       const have = out.find((o) => o.key === key);
-      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; return; }
-      out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", ...(regulators.length ? { regulators } : {}) });
+      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; if (IMP[imp] > IMP[have.importance]) have.importance = imp; return; }
+      out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", importance: imp, ...(regulators.length ? { regulators } : {}) });
     };
     for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
     const bigMacro = (x.macro || []).filter((m) => m.relevance === "high");
@@ -7872,10 +7874,40 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     for (const s of Array.isArray(tri?.sections) ? tri.sections : []) {
       const key = lc(s?.key);
       const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 8) : [];
-      add(key, String(s?.why || ""), { regulators });
+      add(key, String(s?.why || ""), { regulators, importance: s?.importance });
     }
-    void last; void today;
+    // What a budget held back yesterday comes back today, a little more urgent each day it waits.
+    for (const p of Array.isArray(last?.pending) ? last.pending : []) if (!out.some((o) => o.key === p.key)) { add(p.key, p.why, { regulators: p.regulators || [], importance: p.importance }); const o = out.find((y) => y.key === p.key); if (o) { o.waited = (p.waited || 0) + 1; o.by = p.by || "news"; } }
+    void today;
     return out;
+  }
+
+  /**
+   * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
+   * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
+   */
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.05, triage: 0.002 };
+  const IMPV = { high: 3, medium: 2, low: 1 };
+  const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
+  /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
+  const scoreOf = (c) => (IMPV[c.importance] || 2) * 10 * (WEIGHT[c.key] || 1) + (c.by === "code" ? 8 : 0) + Math.min(15, 3 * (c.waited || 0));
+  /**
+   * Plan a day within a budget. cands: [{industry, key, importance, by, waited, regulators?, bodies?}]; budget in $.
+   * Returns {run: [...], held: [...], planned} in order of worth; the cheapest worthwhile work is never starved by an
+   * expensive item that doesn't fit (it is skipped and the next one tried).
+   */
+  function plan(cands, budget) {
+    const est = (c) => (c.key === "rulebook" ? COST.rulebook * Math.max(1, (c.regulators?.length || c.bodies || 2)) : COST[c.key] || 0.5);
+    const ranked = cands.map((c) => ({ ...c, score: scoreOf(c), est: est(c) })).sort((a, b) => b.score - a.score || a.est - b.est);
+    const run = [], held = []; let left = Math.max(0, budget);
+    for (const c of ranked) { if (c.est <= left) { run.push(c); left -= c.est; } else held.push(c); }
+    return { run, held, planned: Math.round((budget - left) * 100) / 100 };
+  }
+  /** Today's share of a monthly budget: what is left this month, spread over the days left (today included). */
+  function dayBudget(monthBudget, spentThisMonth, today) {
+    const d = new Date(String(today).slice(0, 10) + "T00:00:00Z"), last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    const daysLeft = last - d.getUTCDate() + 1;
+    return Math.max(0, Math.round(((monthBudget - (spentThisMonth || 0)) / daysLeft) * 100) / 100);
   }
 
   /** Step 4: revisit the calls against what changed. */
@@ -7948,7 +7980,7 @@ Reply with ONLY this JSON:
     return { result: out, changed };
   }
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, COST, scoreOf };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -8968,7 +9000,8 @@ Reply with ONLY this JSON:
     };
     const call = async (prompt, en, tools = null) => {
       const ctl = new AbortController(); ctls.add(ctl);
-      const opts = { signal: ctl.signal, modelTier: "complex", onText: () => { if (en.status !== "writing") { en.status = "writing"; renderReport(); } } };
+      // In the daily update the whole-analysis rewrite runs on the lead model (the job maps "lead" to it).
+      const opts = { signal: ctl.signal, modelTier: JOB && S.dailyRun ? "lead" : "complex", onText: () => { if (en.status !== "writing") { en.status = "writing"; renderReport(); } } };
       if (tools?.length) opts.tools = tools.slice(0, lim?.tools?.maxCount || tools.length); else opts.cache = false;
       try { return await sampleJson(fit(cacheFirst(prompt)), opts); } finally { ctls.delete(ctl); }
     };
@@ -9406,9 +9439,17 @@ Reply with ONLY this JSON:
     return sections;
   }
 
+  /**
+   * The daily update of a sector, in two passes. First every industry's data is refreshed (no Claude) and the quick
+   * model reads its day and names what should be rewritten. Then, with a monthly budget (the GitHub job's
+   * JOB.monthBudget), the day's share of what's left this month buys the rewrites worth the most across the whole
+   * sector (a top company's earnings and anything the day changes most first; anything held back comes back tomorrow,
+   * more urgent), plus one rolling rewrite of the whole analysis for the industry analyzed longest ago; every
+   * industry whose day mattered gets its calls revised by the lead model. Without a budget, everything named runs.
+   */
   async function runDaily(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
-    const dr = S.dailyRun = { sector, phase: "data", label: "Starting the daily update", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], calls: 0, of: 0, working: new Set() };
+    const dr = S.dailyRun = { sector, phase: "data", label: "Starting the daily update", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set() };
     try {
       const rec = await secGet(sector);
       const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
@@ -9420,6 +9461,10 @@ Reply with ONLY this JSON:
       await detectEod(); await sharedResearch();
       const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
       const call = async (prompt, tier, step) => { dr.calls++; const opts = { modelTier: tier, cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt.slice(0, (lim?.maxPromptBytes || 262144) - 4096), opts); };
+      const leadTier = JOB ? "lead" : "complex";
+      const day = {}; // per industry: {x, tri, cands, runAt, bodies}
+
+      // ---- Pass 1: data, the historian, and the quick model's read of the day, for every industry
       dr.phase = "industries";
       await pool(have, Math.max(1, concurrency), async (name) => {
         const sl = slug(name); dr.working.add(name);
@@ -9443,40 +9488,73 @@ Reply with ONLY this JSON:
           if (d.history?.times?.episodes?.length) { const before = rep(name, "history")?.run_at; await runHistorian(name); if (rep(name, "history")?.run_at !== before) dr.calls++; }
           const relevance = Object.fromEntries(Object.entries(rep(name, "macro")?.result?.indicators || {}).map(([id, v]) => [id, v?.relevance || ""]));
           const x = Daily.deltas(prev, { doc: d, pack: S.research[sl], world: S.world, macroRows: S.macroBy[sl]?.rows || [], calendar: ag.calendar, spy: { dates: bench.spy.dates, closes: bench.spy.closes }, relevance }, today());
-          // The quick model reads every industry's day: is it material, and does any headline make a deeper section stale?
-          // Hard triggers send the calls to review whatever it says.
           const bodies = regBodies(name);
           const brief = Daily.sectionBrief({ kpi: rep(name, "kpi")?.result, world: rep(name, "world")?.result, trade: rep(name, "trade")?.result, reg: rep(name, "reg")?.result, chain: rep(name, "chain")?.result, bodies: bodies.map((b) => b.name) });
-          let via = x.triggers.length ? "code" : "triage";
           const tri = await call(Daily.triagePrompt(name, res, x, today(), brief), "quick", `Daily triage: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return { material: true, why: "triage failed; reviewed in full" }; });
-          // Sections the news made stale: the same analysts as the full run, for this industry only.
-          const sections = Daily.pickSections(tri, x, res.sections_rewritten || {}, today());
+          const cands = Daily.pickSections(tri, x, { pending: res.daily_pending || [] }, today());
+          day[name] = { x, tri, cands, runAt: ag.run_at || "", bodies: bodies.length };
+          await doFlush(name);
+        } catch (e) {
+          dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
+          if (FATAL.has(e?.code)) throw e;
+        } finally { dr.working.delete(name); dr.label = `Read the day for ${Object.keys(day).length} of ${dr.of} industries`; dropFromMemory(name); }
+      }, null);
+
+      // ---- The plan: what today's budget buys, across the whole sector
+      const month = today().slice(0, 7), ds = rec?.daily_spend?.month === month ? rec.daily_spend : { month, usd: 0 };
+      const spentAtStart = JOB && window.__job_spent ? Number(await window.__job_spent().catch(() => 0)) || 0 : 0;
+      const all = Object.entries(day).flatMap(([n, v]) => v.cands.map((c) => ({ ...c, industry: n, bodies: v.bodies })));
+      // The rolling rewrite: the industry whose whole analysis is oldest (30+ days) gets one, as low-priority work that waits longest.
+      const oldest = Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
+      if (oldest && !all.some((c) => c.industry === oldest[0] && c.key === "thesis")) all.push({ industry: oldest[0], key: "thesis", label: Daily.SECTIONS.thesis.label, why: `rolling refresh: the whole analysis is from ${oldest[1].runAt.slice(0, 10)}`, by: "rotation", importance: "low", waited: Math.min(5, Math.floor((Date.now() - Date.parse(oldest[1].runAt)) / (15 * 864e5))) });
+      let budget = Infinity;
+      if (JOB?.monthBudget > 0) {
+        const callsReserve = Object.values(day).filter((v) => v.x.triggers.length || v.tri?.material || v.cands.length).length * Daily.COST.calls;
+        budget = Math.max(0, Daily.dayBudget(JOB.monthBudget, ds.usd, today()) - spentAtStart - callsReserve);
+      }
+      const pl = budget === Infinity ? { run: all, held: [] } : Daily.plan(all, budget);
+      const chosen = {}; for (const c of pl.run) (chosen[c.industry] ||= []).push(c);
+      const heldBy = {}; for (const c of pl.held) (heldBy[c.industry] ||= []).push(c);
+      dr.held = pl.held.map((c) => `${c.industry}: ${c.label}`);
+      dr.budget = budget === Infinity ? null : Math.round(budget * 100) / 100;
+
+      // ---- Pass 2: the rewrites, then the calls, industry by industry
+      dr.phase = "rewrites";
+      await pool(Object.keys(day), Math.max(1, concurrency), async (name) => {
+        const sl = slug(name), v = day[name]; dr.working.add(name);
+        try {
+          if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
+          const ag = S.agents[sl], res = ag.result, d = S.industries[sl], x = v.x, tri = v.tri;
+          const sections = (chosen[name] || []).map(({ industry, score, est, bodies, ...c }) => c);
+          const held = (heldBy[name] || []).map(({ industry, score, est, bodies, ...c }) => ({ ...c, waited: (c.waited || 0) }));
           if (sections.length) await dailySections(name, sections, dr);
+          let via = x.triggers.length ? "code" : "triage";
           const whole = sections.find((sct) => sct.key === "thesis" && sct.ok);
+          let r2, changed;
           if (whole) {
             // The lead strategist rewrote the whole analysis (and logged its new calls): keep the daily history and stamp it.
             const ag2 = S.agents[sl], r = { ...ag2.result, daily_history: res.daily_history || [] };
             const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world], sections });
-            a2.result.daily.revised = true;
-            S.agents[sl] = jsonSafe({ ...ag2, result: a2.result, daily_at: new Date().toISOString() });
-            await doFlush(name); dr.revised.push(name);
-            for (const sct of sections) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}`);
-            return;
+            r2 = a2.result; r2.daily.revised = true; changed = true;
+            r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
+            S.agents[sl] = jsonSafe({ ...ag2, result: r2, daily_at: new Date().toISOString() });
+          } else {
+            const rewritten = sections.filter((sct) => sct.ok && sct.key !== "thesis").map((sct) => { const k = sct.key === "rulebook" ? "regverdict" : sct.key; const r = rep(name, k)?.result;
+              const txt = k === "regverdict" ? `${r?.summary || r?.verdict || ""}` : k === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : k === "trade" ? `${r?.verdict?.summary || r?.verdict?.headline || ""}` : Team.digest(k, r);
+              return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
+            let upd = null;
+            if (x.triggers.length || tri?.material || rewritten || v.cands.length) { via = "update"; upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten), leadTier, `Daily update: ${name}`); }
+            const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world], sections });
+            r2 = a.result; changed = a.changed;
+            r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
+            r2.horizon_facts = Brain.horizonFacts(d, today());
+            if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
+            try { r2.horizon_checks = Brain.horizonChecks(r2.horizons || {}, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS); } catch {}
+            S.agents[sl] = jsonSafe({ ...ag, result: r2, daily_at: new Date().toISOString() });
+            if (a.changed) await logCalls(name, r2, d, new Date().toISOString()).catch(() => {});
           }
-          const rewritten = sections.filter((sct) => sct.ok && sct.key !== "thesis").map((sct) => { const k = sct.key === "rulebook" ? "regverdict" : sct.key; const r = rep(name, k)?.result;
-            const txt = k === "regverdict" ? `${r?.summary || r?.verdict || ""}` : k === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : k === "trade" ? `${r?.verdict?.summary || r?.verdict?.headline || ""}` : Team.digest(k, r);
-            return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
-          let upd = null;
-          if (x.triggers.length || tri?.material || rewritten) { via = "update"; upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten), "default", `Daily update: ${name}`); }
-          const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world], sections });
-          const r2 = a.result;
-          r2.horizon_facts = Brain.horizonFacts(d, today());
-          if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
-          try { r2.horizon_checks = Brain.horizonChecks(r2.horizons || {}, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS); } catch {}
-          S.agents[sl] = jsonSafe({ ...ag, result: r2, daily_at: new Date().toISOString() });
-          if (a.changed) await logCalls(name, r2, d, new Date().toISOString()).catch(() => {});
           await doFlush(name);
-          (a.changed ? dr.revised : dr.quiet).push(name);
+          (changed ? dr.revised : dr.quiet).push(name);
           for (const sct of sections) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}`);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
@@ -9485,8 +9563,11 @@ Reply with ONLY this JSON:
       }, null);
       // The track record, with today's prices.
       for (const n of have) await refreshTrack(n, { quiet: true, sector }).catch(() => {});
-      const r0 = await secGet(sector); if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, daily_at: new Date().toISOString(), daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed } }));
-      S.notices = [{ kind: "info", text: `Daily update of ${sector}: ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with revised calls, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten for the news (${dr.sections.join("; ")})` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+      const spent = JOB && window.__job_spent ? Number(await window.__job_spent().catch(() => 0)) || 0 : 0;
+      const r0 = await secGet(sector);
+      if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
+        daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100 } }));
+      S.notices = [{ kind: "info", text: `Daily update of ${sector}: ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with revised calls, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
@@ -10830,6 +10911,7 @@ Reply with ONLY this JSON:
       ${rev.length ? `<div class="small"><b>Revised:</b> ${rev.map(([h, v]) => `${h} ${esc(v.from?.call || "")} ${esc((v.from?.expected_move || []).join(" to "))}% → <b>${esc(v.to?.call || "")} ${esc((v.to?.expected_move || []).join(" to "))}%</b>`).join(" · ")}</div>` : ""}
       ${d.horizons?._scenarios ? `<div class="small"><b>Scenario odds:</b> ${Object.keys(d.horizons._scenarios.to).map((k) => `${k} ${d.horizons._scenarios.from[k]}% → ${d.horizons._scenarios.to[k]}%`).join(" · ")}</div>` : ""}
       ${(d.sections || []).length ? `<div class="small"><b>Rewritten today:</b><ul class="dlist" style="margin:2px 0 0">${d.sections.map((sct) => `<li><span class="pill ${sct.ok ? "pos" : "neu"}">${sct.ok ? "rewritten" : "couldn't rewrite"}</span> <b>${esc(sct.label)}</b>${sct.regulators?.length ? ` (${esc(sct.regulators.join(", "))})` : ""}: ${dailyRich(sct.why, d.sources)}${sct.ok ? "" : ` <span class="muted">${esc(sct.error || "")}</span>`}</li>`).join("")}</ul></div>` : ""}
+      ${(d.held || []).length ? `<div class="small muted"><b>Waiting for budget (first in line tomorrow):</b> ${d.held.map((h) => esc(h.label)).join("; ")}</div>` : ""}
       ${(d.triggers || []).length ? `<div class="small muted"><b>Flagged by the data:</b> ${d.triggers.map(esc).join("; ")}</div>` : ""}
       ${(d.watch || []).length ? `<div class="small muted"><b>Watch:</b> ${d.watch.map((w) => dailyRich(w, d.sources)).join("; ")}</div>` : ""}
       ${hist.length ? `<details class="small"><summary>Earlier daily updates (${hist.length})</summary><ul class="dlist">${hist.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.revised ? `<span class="pill warn">revised</span> ` : ""}${dailyRich(h.headline, [])}${isNum(num(h.move)) ? ` <span class="muted">(${sg(h.move)})</span>` : ""}${(h.sections || []).filter((x) => x.ok).length ? ` <span class="muted">· rewrote ${esc(h.sections.filter((x) => x.ok).map((x) => x.label).join(", "))}</span>` : ""}</li>`).join("")}</ul></details>` : ""}</div>`;

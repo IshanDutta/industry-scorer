@@ -42,30 +42,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - id: p
         env:
-          SECTOR: ${{ inputs.sector }}
+          ONLY: ${{ inputs.sector }}
+          # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
+          # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
+          MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '470' }}
         run: |
-          if [ -n "$SECTOR" ]; then
-            echo "sectors=$(echo "$SECTOR" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
           # Every sector in the exports branch with at least one finished industry (a sector still adding industries,
           # or stopped part-way, updates the industries it has finished).
-          if git fetch -q origin exports 2>/dev/null; then
-            git show FETCH_HEAD --name-only --format= >/dev/null
-            list=$(git ls-tree --name-only FETCH_HEAD runs/ | sed -n 's#^runs/\([a-z-]*\)\.json\.gz$#\1#p')
-            names="[]"
-            for slug in $list; do
-              git show "FETCH_HEAD:runs/$slug.json.gz" > s.json.gz
-              name=$(node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("s.json.gz")));const k=Object.keys(j.records||{}).find((x)=>/^sector:[^:]+$/.test(x));let r=k?j.records[k]:null;if(typeof r==="string")r=JSON.parse(r);process.stdout.write(j.sector&&(j.finished||(r&&r.done&&(r.done.H||[]).length))?j.sector:"")')
-              [ -n "$name" ] && names=$(echo "$names" | jq -c --arg n "$name" '. + [$n]')
-            done
-            rm -f s.json.gz
-            echo "sectors=$names" >> "$GITHUB_OUTPUT"
-          else
-            echo "sectors=[]" >> "$GITHUB_OUTPUT"
-          fi
+          mkdir -p exp/runs
+          if git fetch -q origin exports 2>/dev/null; then for f in $(git ls-tree --name-only FETCH_HEAD runs/); do git show "FETCH_HEAD:$f" > "exp/$f"; done; fi
+          echo "sectors=$(node runner/daily-plan.mjs exp)" >> "$GITHUB_OUTPUT"
 
   update:
     needs: plan
@@ -76,7 +67,7 @@ jobs:
       fail-fast: false
       max-parallel: 6
       matrix:
-        sector: ${{ fromJson(needs.plan.outputs.sectors) }}
+        include: ${{ fromJson(needs.plan.outputs.sectors) }}
     concurrency:
       group: sector-${{ matrix.sector }}
       cancel-in-progress: false
@@ -120,11 +111,14 @@ jobs:
           JOB_DAILY_INDUSTRIES: ${{ vars.DAILY_INDUSTRIES || '8' }}
           CLAUDE_MODEL_QUICK: ${{ vars.CLAUDE_MODEL_QUICK || 'claude-haiku-4-5-20251001' }}
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
+          # Revising the calls and rewriting a whole analysis: the best model, where it matters most.
+          CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
+          JOB_MONTH_BUDGET: ${{ matrix.budget }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch
           CLAUDE_STRAGGLER_MIN: "30"
-          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || '' }}
+          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || matrix.safety }}
         run: |
           set +e
           node run.mjs --daily --sector "$SECTOR" --resume ../base/checkpoint.json.gz --out ../out --deadline-min 340

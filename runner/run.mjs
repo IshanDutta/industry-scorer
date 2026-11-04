@@ -26,6 +26,8 @@
 //   CLAUDE_DIRECT_AFTER_MIN     after this many minutes, send everything left at the standard price (default never)
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
+//   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
+//   CLAUDE_MODEL_LEAD           daily update: model for revising the calls and rewriting the whole analysis (default: the complex model)
 //   JOB_MIN_COMPANIES           leave out industries with fewer companies than this (default 1: every industry is analyzed)
 //   ADD_NEW=true (or --add-new)  with --resume of a finished sector: analyze only the industries it doesn't have yet
 //   ANTHROPIC_BASE_URL          for testing only
@@ -70,7 +72,7 @@ async function main() {
   const sampler = new Sampler({
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
     // As the page asks in claude.ai: the most capable model for "complex" steps, the balanced model for the rest.
-    models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_QUICK || env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5" },
+    models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_QUICK || env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", lead: env.CLAUDE_MODEL_LEAD || env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5" },
     effort: { ...(env.CLAUDE_EFFORT_COMPLEX ? { complex: env.CLAUDE_EFFORT_COMPLEX } : {}), ...(env.CLAUDE_EFFORT_DEFAULT ? { default: env.CLAUDE_EFFORT_DEFAULT } : {}) },
     budgetUsd: env.CLAUDE_BUDGET_USD || 0, directConcurrency: Number(env.CLAUDE_DIRECT_CONCURRENCY || 12),
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
@@ -82,7 +84,7 @@ async function main() {
     checkpoint = readMaybeGz(args.resume);
     // Keep the settings the run started with, unless this run sets a model or effort explicitly.
     // A daily update always uses its own (cheaper) models, not the ones the full run started with.
-    sampler.load(checkpoint.sampler, { keepSettings: args.daily !== "true" && !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_MODEL_QUICK", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
+    sampler.load(checkpoint.sampler, { keepSettings: args.daily !== "true" && !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_MODEL_QUICK", "CLAUDE_MODEL_LEAD", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
     log(`Continuing from a checkpoint saved ${checkpoint.exported_at} (${Object.keys(checkpoint.records || {}).length} saved records, ${sampler.done.size} Claude answers kept, ${sampler.pending.size} still in batches)`);
   }
 
@@ -94,9 +96,11 @@ async function main() {
   page.on("dialog", (d) => d.accept());
   await page.exposeFunction("__job_sample", (id, payload) => sampler.ask(id, payload));
   await page.exposeFunction("__job_cancel", (id) => sampler.cancel(id));
+  // What this session has spent so far, for the daily update's budget plan.
+  await page.exposeFunction("__job_spent", () => Math.round((sampler.usage.usd - sampler.usdAtStart) * 10000) / 10000);
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230), ...(Number(env.JOB_MIN_COMPANIES) > 0 ? { minCompanies: Number(env.JOB_MIN_COMPANIES) } : {}) };
+  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230), ...(Number(env.JOB_MIN_COMPANIES) > 0 ? { minCompanies: Number(env.JOB_MIN_COMPANIES) } : {}), ...(Number(env.JOB_MONTH_BUDGET) > 0 ? { monthBudget: Number(env.JOB_MONTH_BUDGET) } : {}) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   // The page is served from a file so its saved runs (IndexedDB) persist for the whole session.
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8");

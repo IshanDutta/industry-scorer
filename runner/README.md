@@ -56,6 +56,17 @@ Only the connections change:
 - If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
   by itself; nothing finished is paid for twice.
 
+## A monthly budget for the daily updates (default about $500 a month)
+
+The daily update runs every day and can rewrite anything the day touches, so it runs on a budget: the repository
+variable `DAILY_MONTHLY_BUDGET_USD` (default 470, about $500 a month with GitHub's minutes) is split across sectors by
+their number of industries, and each day spends its share of what's left this month (a quiet day leaves more for a busy
+one). Within the day, the work worth the most goes first across the whole sector: a top company's earnings, then
+whatever changes a section's conclusions, then new facts, then nuance; what doesn't fit waits and comes back the next
+day, more urgent. One industry a day (the one analyzed longest ago) also gets its whole analysis rewritten. The cheap
+model (Haiku) reads every industry's day; Sonnet rewrites sections; Opus 5.5 (`CLAUDE_MODEL_DAILY_LEAD`) revises the
+calls and rewrites whole analyses. A day can't spend more than three times its share (a safety stop).
+
 ## Run everything in order (the queue) and the status page
 
 Actions → **Queue and status** → Run workflow → action `start`, the sectors in the order to run them with each one's

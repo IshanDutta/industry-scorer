@@ -115,7 +115,7 @@ ${deltaText(x)}
 2. Which parts of the team's work should be rewritten today so everything stays current? Name EVERY section that anything since the last update changes or adds to: a fact, a headline, commentary or an analyst's view, a preview, a price, estimate or macro move, an event that passed. Rewriting is cheap compared with a stale report, so when in doubt, name it; leave a section out only when nothing since the last update touches it. Cite what prompts each one ([D#] headlines, [I#] macro rows, or the event or move in words):
 ${Object.entries(SECTIONS).map(([k, v]) => `   - "${k}": ${v.when}`).join("\n")}
 Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizons worth revisiting, e.g. 1M"], "why": "one sentence",
- "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "why": "one sentence: what changed for it, cited", "regulators": ["for rulebook: the regulators' names as listed above, or [] for all of them"]}]}`;
+ "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "importance": "high (it changes what the section concludes or an investor would act on) | medium (new facts that update it) | low (nuance or commentary)", "why": "one sentence: what changed for it, cited", "regulators": ["for rulebook: the regulators' names as listed above, or [] for all of them"]}]}`;
   }
 
   /**
@@ -151,11 +151,13 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    */
   function pickSections(tri, x, last = {}, today) {
     const out = [];
-    const add = (key, why, { code = false, regulators = [] } = {}) => {
+    const IMP = { high: 3, medium: 2, low: 1 };
+    const add = (key, why, { code = false, regulators = [], importance = "medium" } = {}) => {
       if (!SECTIONS[key] || !String(why || "").trim()) return;
+      const imp = code ? "high" : IMP[lc(importance)] ? lc(importance) : "medium";
       const have = out.find((o) => o.key === key);
-      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; return; }
-      out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", ...(regulators.length ? { regulators } : {}) });
+      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; if (IMP[imp] > IMP[have.importance]) have.importance = imp; return; }
+      out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", importance: imp, ...(regulators.length ? { regulators } : {}) });
     };
     for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
     const bigMacro = (x.macro || []).filter((m) => m.relevance === "high");
@@ -164,10 +166,40 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     for (const s of Array.isArray(tri?.sections) ? tri.sections : []) {
       const key = lc(s?.key);
       const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 8) : [];
-      add(key, String(s?.why || ""), { regulators });
+      add(key, String(s?.why || ""), { regulators, importance: s?.importance });
     }
-    void last; void today;
+    // What a budget held back yesterday comes back today, a little more urgent each day it waits.
+    for (const p of Array.isArray(last?.pending) ? last.pending : []) if (!out.some((o) => o.key === p.key)) { add(p.key, p.why, { regulators: p.regulators || [], importance: p.importance }); const o = out.find((y) => y.key === p.key); if (o) { o.waited = (p.waited || 0) + 1; o.by = p.by || "news"; } }
+    void today;
     return out;
+  }
+
+  /**
+   * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
+   * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
+   */
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.05, triage: 0.002 };
+  const IMPV = { high: 3, medium: 2, low: 1 };
+  const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
+  /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
+  const scoreOf = (c) => (IMPV[c.importance] || 2) * 10 * (WEIGHT[c.key] || 1) + (c.by === "code" ? 8 : 0) + Math.min(15, 3 * (c.waited || 0));
+  /**
+   * Plan a day within a budget. cands: [{industry, key, importance, by, waited, regulators?, bodies?}]; budget in $.
+   * Returns {run: [...], held: [...], planned} in order of worth; the cheapest worthwhile work is never starved by an
+   * expensive item that doesn't fit (it is skipped and the next one tried).
+   */
+  function plan(cands, budget) {
+    const est = (c) => (c.key === "rulebook" ? COST.rulebook * Math.max(1, (c.regulators?.length || c.bodies || 2)) : COST[c.key] || 0.5);
+    const ranked = cands.map((c) => ({ ...c, score: scoreOf(c), est: est(c) })).sort((a, b) => b.score - a.score || a.est - b.est);
+    const run = [], held = []; let left = Math.max(0, budget);
+    for (const c of ranked) { if (c.est <= left) { run.push(c); left -= c.est; } else held.push(c); }
+    return { run, held, planned: Math.round((budget - left) * 100) / 100 };
+  }
+  /** Today's share of a monthly budget: what is left this month, spread over the days left (today included). */
+  function dayBudget(monthBudget, spentThisMonth, today) {
+    const d = new Date(String(today).slice(0, 10) + "T00:00:00Z"), last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    const daysLeft = last - d.getUTCDate() + 1;
+    return Math.max(0, Math.round(((monthBudget - (spentThisMonth || 0)) / daysLeft) * 100) / 100);
   }
 
   /** Step 4: revisit the calls against what changed. */
@@ -240,7 +272,7 @@ Reply with ONLY this JSON:
     return { result: out, changed };
   }
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, COST, scoreOf };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);
