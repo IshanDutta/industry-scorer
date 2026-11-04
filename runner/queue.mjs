@@ -14,7 +14,7 @@
 //
 // Usage: node queue.mjs --exports <dir with runs/*.json.gz> --status <dir of the status branch>
 // Env: QUEUE_ACTION status | start | stop | resume; QUEUE_ITEMS "Utilities:9, Energy:20" (start); QUEUE_CAP total $;
-//      QUEUE_MODEL opus | sonnet; QUEUE_SPEED cheap | quick; QUEUE_THEN_DAILY true | false; GH_TOKEN, GITHUB_REPOSITORY,
+//      QUEUE_MODEL auto (Opus strategist, Sonnet analysts) | opus | sonnet; QUEUE_SPEED cheap | quick; QUEUE_THEN_DAILY true | false; GH_TOKEN, GITHUB_REPOSITORY,
 //      QUEUE_REF (branch to dispatch on); ANTHROPIC_API_KEY (credit check); ANTHROPIC_ADMIN_KEY (optional cost report);
 //      CREDIT_BALANCE_USD + CREDIT_BALANCE_AT (optional: your balance on a date, to estimate what's left).
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
@@ -124,7 +124,7 @@ if (action === "start") {
   const items = String(env.QUEUE_ITEMS || "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => { const [s, b] = x.split(":").map((y) => y.trim()); return { sector: s, budget: Number(b) || 25, state: "waiting", attempts: 0 }; })
     .filter((x) => SECTORS.includes(x.sector));
   if (!items.length) { console.error("QUEUE_ITEMS lists no known sector."); process.exit(2); }
-  queue = { id: now, created_at: now, cap: Number(env.QUEUE_CAP) || 200, model: env.QUEUE_MODEL || "sonnet", speed: env.QUEUE_SPEED || "cheap", then_daily: env.QUEUE_THEN_DAILY !== "false",
+  queue = { id: now, created_at: now, cap: Number(env.QUEUE_CAP) || 200, model: env.QUEUE_MODEL || "auto", speed: env.QUEUE_SPEED || "cheap", then_daily: env.QUEUE_THEN_DAILY !== "false",
     start_usd: Object.fromEntries(SECTORS.map((s) => [s, sectors[s]?.usd || 0])), items, daily_dispatched: false, stopped: false, note: "Starting." };
   log.push(`Queue started: ${items.map((i) => `${i.sector} ($${i.budget})`).join(", ")}; cap $${queue.cap}.`);
 }

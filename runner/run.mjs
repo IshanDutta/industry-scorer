@@ -28,7 +28,8 @@
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
 //   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
 //   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
-//   CLAUDE_MODEL_LEAD           daily update: model for revising the calls and rewriting the whole analysis (default: the complex model)
+//   CLAUDE_MODEL_LEAD           the lead strategist (synthesis, scenarios, calls, red team, investor verdicts) in every run,
+//                               and the daily update's whole-analysis update (default: the complex model)
 //   JOB_MIN_COMPANIES           leave out industries with fewer companies than this (default 1: every industry is analyzed)
 //   ADD_NEW=true (or --add-new)  with --resume of a finished sector: analyze only the industries it doesn't have yet
 //   ANTHROPIC_BASE_URL          for testing only

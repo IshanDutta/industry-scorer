@@ -1455,8 +1455,9 @@ a.btnlink:hover { border-color: var(--accent); }
     };
     const call = async (prompt, en, tools = null) => {
       const ctl = new AbortController(); ctls.add(ctl);
-      // In the daily update the whole-analysis rewrite runs on the lead model (the job maps "lead" to it).
-      const opts = { signal: ctl.signal, modelTier: JOB && S.dailyRun ? "lead" : "complex", onText: () => { if (en.status !== "writing") { en.status = "writing"; renderReport(); } } };
+      // The lead strategist (synthesis, scenarios, the 1M-12M calls, the red team, the investor verdicts) is the most
+      // important work, so in the GitHub job it always runs on the lead model (Opus 5.5); the analysts use the others.
+      const opts = { signal: ctl.signal, modelTier: JOB ? "lead" : "complex", onText: () => { if (en.status !== "writing") { en.status = "writing"; renderReport(); } } };
       if (tools?.length) opts.tools = tools.slice(0, lim?.tools?.maxCount || tools.length); else opts.cache = false;
       try { return await sampleJson(fit(cacheFirst(prompt)), opts); } finally { ctls.delete(ctl); }
     };

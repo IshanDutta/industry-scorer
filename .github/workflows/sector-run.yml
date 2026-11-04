@@ -46,10 +46,10 @@ on:
         type: boolean
         default: false
       model:
-        description: "opus = Opus 5.5 for the complex steps (best); sonnet = Sonnet 5.5 for every step (about half the cost)"
+        description: "auto = Opus 5.5 for the lead strategist (the most important step), Sonnet 5.5 for the analysts; opus = Opus everywhere; sonnet = Sonnet everywhere"
         type: choice
-        options: [opus, sonnet]
-        default: opus
+        options: [auto, opus, sonnet]
+        default: auto
       continue_from:
         description: "(set automatically) the run whose checkpoint to continue from"
         required: false
@@ -63,7 +63,7 @@ on:
       continue_from: { type: string, default: "" }
       redo_gaps: { type: boolean, default: false }
       add_new: { type: boolean, default: false }
-      model: { type: string, default: opus }
+      model: { type: string, default: auto }
   schedule:
     - cron: "17 9 * * 6" # every Saturday at 09:17 UTC: the full analysis (the "Daily update" workflow keeps it current on weekdays)
 
@@ -168,8 +168,10 @@ jobs:
           FRESH: ${{ inputs.fresh }}
           REDO_GAPS: ${{ inputs.redo_gaps }}
           ADD_NEW: ${{ inputs.add_new }}
-          # Empty = the models the run started with (Opus 5.5 for complex steps on a new run).
-          CLAUDE_MODEL_COMPLEX: ${{ inputs.model == 'sonnet' && 'claude-sonnet-5-5' || '' }}
+          # auto (the default, and the weekly run): the lead strategist (synthesis, scenarios, the 1M-12M calls, the red
+          # team, the investor verdicts) on Opus 5.5, the most important work; every analyst on Sonnet 5.5.
+          CLAUDE_MODEL_COMPLEX: ${{ inputs.model == 'opus' && 'claude-opus-5-5' || 'claude-sonnet-5-5' }}
+          CLAUDE_MODEL_LEAD: ${{ inputs.model == 'sonnet' && 'claude-sonnet-5-5' || 'claude-opus-5-5' }}
           JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
           CLAUDE_MODE: ${{ inputs.speed == 'quick' && 'direct' || 'batch' }}
           CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '0' }}
@@ -232,4 +234,4 @@ jobs:
         if: steps.run.outputs.code == '75'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f speed="${{ inputs.speed || 'cheap' }}" -f budget="${{ steps.run.outputs.budget_left || inputs.budget || '150' }}"
+        run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f speed="${{ inputs.speed || 'cheap' }}" -f model="${{ inputs.model || 'auto' }}" -f budget="${{ steps.run.outputs.budget_left || inputs.budget || '150' }}"

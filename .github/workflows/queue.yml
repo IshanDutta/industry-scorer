@@ -1,7 +1,7 @@
 # Industry Scorer: the run queue and the status page's data.
 #
 # Start a queue: Actions → "Queue and status" → Run workflow → action "start", the sectors in order with each one's
-# spending limit ("Utilities:9, Healthcare:9, Energy:20"), the total cap, the model and speed. Sectors then run strictly
+# spending limit ("Utilities:9, Healthcare:9, Energy:20"), the total cap and speed (the model is chosen by step: Opus for the strategist, Sonnet for the rest). Sectors then run strictly
 # one after another (each reuses what the ones before it researched), each adding only the industries it doesn't have
 # yet. A sector that runs out of credit waits and resumes by itself once you add credit; one that reaches its limit is
 # skipped; when the queue is done, a daily update of every sector adds "Times like this" where it's missing.
@@ -30,10 +30,10 @@ on:
         required: false
         default: "200"
       model:
-        description: "start: sonnet (about half the cost) or opus (best)"
+        description: "start: auto = Opus 5.5 for the lead strategist, Sonnet 5.5 for everything else (recommended); opus or sonnet = that model everywhere"
         type: choice
-        options: [sonnet, opus]
-        default: sonnet
+        options: [auto, sonnet, opus]
+        default: auto
       speed:
         description: "start: cheap = half-price batches; quick = standard price"
         type: choice

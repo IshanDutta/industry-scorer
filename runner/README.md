@@ -48,10 +48,11 @@ Only the connections change:
   saves before going over; run the same sector again to continue.
 - **Speed:** `cheap` uses half-price batches only (slower: often several hours); `quick` uses the standard price
   (about 1–2 hours, roughly twice the cost per call).
-- **Models:** like the page in claude.ai, "complex" steps run on Claude Opus 5.5 and "default" steps on Claude
-  Sonnet 5.5, each at its own default thinking effort. A continued run keeps the settings it started with.
-  Choose **model: sonnet** to run every step on Sonnet 5.5, about half the cost (roughly $2.75 per industry
-  instead of $5.50 at batch prices, from earlier runs).
+- **Models (chosen for you, `model: auto`, the default):** the lead strategist, the most important work (the
+  synthesis and thesis, the bull/base/bear scenarios, the 1M-12M calls, the red team and the investor verdicts), runs
+  on Claude Opus 5.5 (`CLAUDE_MODEL_LEAD`); every analyst and data step runs on Sonnet 5.5. About $2.50-2.85 per
+  industry at batch prices. `model: opus` puts Opus on the analysts' complex steps too (about $5.50 per industry);
+  `model: sonnet` runs everything on Sonnet (about $2.75 per industry).
 - **Several sectors at once:** Actions → **Sector run** → type sectors separated by commas, or `all`.
 - If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
   by itself; nothing finished is paid for twice.
@@ -93,7 +94,7 @@ update right away as a big day, at most once a day. Run it by hand with "force" 
 ## Run everything in order (the queue) and the status page
 
 Actions → **Queue and status** → Run workflow → action `start`, the sectors in the order to run them with each one's
-spending limit (`Real Estate:6, Healthcare:8, Energy:22`), the total cap, the model and speed. The sectors then run
+spending limit (`Real Estate:6, Healthcare:8, Energy:22`), the total cap and speed (models: Opus for the strategist, Sonnet for the rest). The sectors then run
 **one after another**, never two at once, so each one reuses everything the ones before it researched (the shared
 library: world situations, countries, regulator instruments, the news wire) and its prompts hit the cache. Each sector
 adds only the industries it doesn't have yet. If the API runs out of credit, the queue waits and resumes by itself

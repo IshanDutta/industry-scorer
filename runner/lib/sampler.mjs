@@ -138,7 +138,8 @@ export class Sampler {
     if (keepSettings) {
       // Runs saved before settings were recorded used Opus 5.5 everywhere, effort high/medium/low by tier.
       const prev = st.settings || { models: { complex: "claude-opus-5-5", default: "claude-opus-5-5", quick: "claude-opus-5-5" }, effort: { complex: "high", default: "medium", quick: "low" } };
-      this.models = { ...prev.models }; this.model = this.models.complex; this.effort = { ...(prev.effort || {}) };
+      // Runs saved before the lead tier existed: the strategist used the complex model.
+      this.models = { lead: prev.models.lead || prev.models.complex, ...prev.models }; this.model = this.models.complex; this.effort = { ...(prev.effort || {}) };
     }
     for (const [k, v] of Object.entries(st.done || {})) this.done.set(k, v);
     for (const [k, v] of Object.entries(st.pending || {})) { this.pending.set(k, v); if (!this.batches.has(v.batch)) { this.batches.set(v.batch, new Set()); this.batchAt.set(v.batch, Date.now()); } this.batches.get(v.batch).add(v.custom_id); }
