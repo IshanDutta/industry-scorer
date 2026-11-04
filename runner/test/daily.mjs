@@ -22,6 +22,8 @@ const fa = await fakeAnthropic(brain, { port: 7812 });
 const full = await run(7812, join(tmp, "full"));
 ok(full.code === 0, `full sector run finished (exit ${full.code})`);
 const fullReq = fa.stats.requests;
+ok(fa.stats.marked > 0 && fa.stats.cacheHits > 0, `the lead's dossier went first, marked for caching: ${fa.stats.marked} marked requests, ${fa.stats.cacheHits} cache reads`);
+{ const ck = read(join(tmp, "full", "checkpoint.json.gz")); ok(ck.sampler?.usage?.cacheRead > 0 && ck.sampler.usage.saved > 0, `the sampler counted cache reads (${ck.sampler?.usage?.cacheRead} tokens, $${(ck.sampler?.usage?.saved || 0).toFixed(4)} saved)`); }
 const r = await run(7812, join(tmp, "daily"), ["--daily", "--resume", join(tmp, "full", "checkpoint.json.gz")], { CLAUDE_MODEL_QUICK: "claude-haiku-4-5-20251001" });
 ok(r.code === 0, `daily update finished (exit ${r.code})`);
 const f = readdirSync(join(tmp, "daily")).find((x) => x.startsWith("results-"));

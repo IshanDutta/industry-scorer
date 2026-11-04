@@ -1,0 +1,94 @@
+# Industry Scorer: the run queue and the status page's data.
+#
+# Start a queue: Actions → "Queue and status" → Run workflow → action "start", the sectors in order with each one's
+# spending limit ("Utilities:9, Healthcare:9, Energy:20"), the total cap, the model and speed. Sectors then run strictly
+# one after another (each reuses what the ones before it researched), each adding only the industries it doesn't have
+# yet. A sector that runs out of credit waits and resumes by itself once you add credit; one that reaches its limit is
+# skipped; when the queue is done, a daily update of every sector adds "Times like this" where it's missing.
+#
+# Every hour and whenever a sector run or daily update ends, this also writes status.json to the "status" branch:
+# every industry's status, the queue, the runs, and spending (tracked by the runs; with the optional ANTHROPIC_ADMIN_KEY
+# secret, Anthropic's own cost report; with the CREDIT_BALANCE_USD and CREDIT_BALANCE_AT repository variables, an
+# estimate of what's left of your credit).
+name: Queue and status
+run-name: Queue and status · ${{ inputs.action || github.event_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "status = just refresh the status; start = start a new queue; stop; resume (after a failure)"
+        type: choice
+        options: [status, start, stop, resume]
+        default: status
+      sectors:
+        description: "start: the sectors in order, each with its spending limit in dollars, e.g. Utilities:9, Energy:20"
+        required: false
+        default: ""
+      cap:
+        description: "start: the most the whole queue may spend, in dollars"
+        required: false
+        default: "200"
+      model:
+        description: "start: sonnet (about half the cost) or opus (best)"
+        type: choice
+        options: [sonnet, opus]
+        default: sonnet
+      speed:
+        description: "start: cheap = half-price batches; quick = standard price"
+        type: choice
+        options: [cheap, quick]
+        default: cheap
+      then_daily:
+        description: "start: when the queue is done, run a daily update of every sector"
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: ["Sector run", "Daily update", "Run Basic Materials", "Run Communication Services", "Run Consumer Cyclical", "Run Consumer Defensive", "Run Energy", "Run Financial Services", "Run Healthcare", "Run Industrials", "Run Real Estate", "Run Technology", "Run Utilities"]
+    types: [completed]
+  schedule:
+    - cron: "43 * * * *" # every hour
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: queue
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Get the latest results and the status branch
+        run: |
+          mkdir -p exp/runs
+          if git fetch -q origin exports 2>/dev/null; then for f in $(git ls-tree --name-only FETCH_HEAD runs/); do git show "FETCH_HEAD:$f" > "exp/$f"; done; fi
+          rm -rf st; if git fetch -q origin status 2>/dev/null; then git worktree add -q st FETCH_HEAD; else git worktree add -q --detach st HEAD && (cd st && git checkout -q --orphan status-tmp && git rm -rqf .); fi
+      - name: Move the queue along and write the status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QUEUE_REF: ${{ github.event.repository.default_branch }}
+          QUEUE_ACTION: ${{ inputs.action || 'status' }}
+          QUEUE_ITEMS: ${{ inputs.sectors }}
+          QUEUE_CAP: ${{ inputs.cap }}
+          QUEUE_MODEL: ${{ inputs.model }}
+          QUEUE_SPEED: ${{ inputs.speed }}
+          QUEUE_THEN_DAILY: ${{ inputs.then_daily }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_ADMIN_KEY: ${{ secrets.ANTHROPIC_ADMIN_KEY }}
+          CREDIT_BALANCE_USD: ${{ vars.CREDIT_BALANCE_USD }}
+          CREDIT_BALANCE_AT: ${{ vars.CREDIT_BALANCE_AT }}
+        run: node runner/queue.mjs --exports exp --status st
+      - name: Save the status
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          cd st && git add -A && { git diff --cached --quiet || git commit -qm "Status $(date -u +%FT%TZ)"; } && git push -q origin HEAD:refs/heads/status

@@ -35,11 +35,14 @@ export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs 
     ev("message_delta", { delta: { stop_reason: m.stop_reason }, usage: { output_tokens: m.usage.output_tokens } });
     ev("message_stop", {}); res.end();
   };
-  const batches = new Map();
+  const batches = new Map(), cached = new Set();
   async function answer(params) {
     stats.requests++;
     const msgs = params.messages;
-    const prompt = textOf(msgs[0].content);
+    // Cached prefix blocks (a dossier sent first): the mock answers by the instructions, so read them first.
+    const c0 = msgs[0].content, marked = Array.isArray(c0) && c0.some((b) => b.cache_control) && c0.length > 1;
+    const prompt = marked ? textOf(c0.filter((b) => !b.cache_control)) + "\n\n" + textOf(c0.filter((b) => b.cache_control)) : textOf(c0);
+    if (marked) stats.marked = (stats.marked || 0) + 1;
     stats.prompts.push(prompt.slice(0, 70));
     const hadTools = msgs.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result"));
     const usage = { input_tokens: Math.round(JSON.stringify(msgs).length / 4), output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
@@ -51,6 +54,7 @@ export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs 
         content: [{ type: "thinking", thinking: "", signature: "x" }, { type: "tool_use", id: "tu_" + stats.requests, name: t.name, input: { topic: "tariffs", query: "tariffs", keyword: "tariffs", symbols: [], id: "G1", tag: "tariffs" } }] };
     }
     if (hadTools) { usage.cache_read_input_tokens = Math.round(usage.input_tokens * 0.9); usage.input_tokens -= usage.cache_read_input_tokens; }
+    else if (marked) for (const b of c0.filter((x) => x.cache_control)) { const n = Math.round(b.text.length / 4); if (cached.has(b.text)) { usage.cache_read_input_tokens += n; stats.cacheHits = (stats.cacheHits || 0) + 1; } else { usage.cache_creation_input_tokens += n; cached.add(b.text); } usage.input_tokens = Math.max(0, usage.input_tokens - n); }
     const sample = await brain.sample();
     let text, stop = "end_turn";
     try { text = JSON.stringify(await sample.json(prompt, { modelTier: "default", tools: [] })); }

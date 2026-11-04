@@ -56,6 +56,27 @@ Only the connections change:
 - If a run needs more than one GitHub session (about 5.5 hours), it saves a checkpoint and continues in a new run
   by itself; nothing finished is paid for twice.
 
+## Run everything in order (the queue) and the status page
+
+Actions → **Queue and status** → Run workflow → action `start`, the sectors in the order to run them with each one's
+spending limit (`Real Estate:6, Healthcare:8, Energy:22`), the total cap, the model and speed. The sectors then run
+**one after another**, never two at once, so each one reuses everything the ones before it researched (the shared
+library: world situations, countries, regulator instruments, the news wire) and its prompts hit the cache. Each sector
+adds only the industries it doesn't have yet. If the API runs out of credit, the queue waits and resumes by itself
+within the hour of you adding credit; a sector that reaches its limit is skipped; one that fails otherwise is retried
+twice. When the queue is done, a daily update of every sector runs (it also adds "Times like this" to industries that
+don't have it). `stop` and `resume` do what they say.
+
+The same workflow runs every hour and whenever a run ends, and writes `status.json` to the `status` branch: every
+industry's status, the queue, recent runs and spending. Spending is tracked by the runs themselves; add an Admin API key
+as the `ANTHROPIC_ADMIN_KEY` secret for Anthropic's own cost report, and set the repository variables
+`CREDIT_BALANCE_USD` (your balance on a day) and `CREDIT_BALANCE_AT` (that day, e.g. 2026-11-04) for an estimate of what's
+left. (Anthropic's API doesn't report the credit balance itself.)
+
+**Prompt caching:** the lead strategist's four to seven steps per industry all start from the same dossier, so the job
+sends it first and marks it for caching (1-hour cache by default, `CLAUDE_CACHE_TTL=5m` for 5 minutes): after the first
+step it costs a tenth of the input price. The run's summary says how much caching saved.
+
 ## Daily update (cheap) and weekly full run
 
 The full analysis is expensive, so it runs weekly (list sectors in `weekly-sectors.txt`; Actions → **Sector run**

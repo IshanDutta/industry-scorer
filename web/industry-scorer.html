@@ -7970,6 +7970,8 @@ Reply with ONLY this JSON:
    * work and every prompt stay the same, only the order of independent steps changes.
    */
   const JOB = (typeof window !== "undefined" && window.__INDUSTRY_SCORER_JOB__) || null;
+  // Where a prompt's shared prefix ends, for the job's prompt caching (the runner's sampler splits on it). Must match runner/lib/sampler.mjs.
+  const CACHE_MARK = "\n\n<<cache-break>>\n\n";
   if (JOB?.minCompanies > 0) CFG.minCompanies = JOB.minCompanies | 0;
   const CONC = { ind: Math.max(1, JOB?.industries | 0 || 1), pool: Math.max(2, JOB?.pool | 0 || 2), bodies: Math.max(1, JOB?.bodies | 0 || 1) };
   // Industries come from FMP at runtime (directory: available-industries); nothing is hardcoded.
@@ -8953,11 +8955,20 @@ Reply with ONLY this JSON:
     const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
     const maxBytes = lim?.maxPromptBytes || 262144;
     const fit = (p) => { const b = new TextEncoder().encode(p); return b.length <= maxBytes - 2048 ? p : new TextDecoder().decode(b.slice(0, maxBytes - 4096)).replace(/\n[^\n]*$/, "") + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
+    // On the API (the GitHub job), the dossier goes first and is marked for prompt caching: the lead's four to seven
+    // steps all start from it, so after the first one it costs a tenth of the input price.
+    let dossierText = null;
+    const cacheFirst = (p) => {
+      if (!JOB || !dossierText || dossierText.length < 4000 || !p.includes(dossierText)) return p;
+      const q = `THE INDUSTRY DOSSIER: every specialist report, rule book and data section your team produced for this industry. Your instructions follow after it.\n\n${dossierText}${CACHE_MARK}${p.replace(dossierText, "(The industry dossier is above.)")}`;
+      // Too long to send whole: keep the original order, so cutting to fit trims the dossier's tail, never the instructions.
+      return new TextEncoder().encode(q).length <= maxBytes - 4096 ? q : p;
+    };
     const call = async (prompt, en, tools = null) => {
       const ctl = new AbortController(); ctls.add(ctl);
       const opts = { signal: ctl.signal, modelTier: "complex", onText: () => { if (en.status !== "writing") { en.status = "writing"; renderReport(); } } };
       if (tools?.length) opts.tools = tools.slice(0, lim?.tools?.maxCount || tools.length); else opts.cache = false;
-      try { return await sampleJson(fit(prompt), opts); } finally { ctls.delete(ctl); }
+      try { return await sampleJson(fit(cacheFirst(prompt)), opts); } finally { ctls.delete(ctl); }
     };
     const step = async (label, fn) => {
       const entry = { label, status: "thinking", t0: Date.now() }; st.push(entry); renderReport();
@@ -8981,7 +8992,7 @@ Reply with ONLY this JSON:
         try { ctx.historian = await runHistorian(name, { signal: ctl.signal }); } finally { ctls.delete(ctl); }
         en.note = ctx.historian ? `${d.history.times.episodes.map((e) => e.month).join(", ")}` : "the historian didn't answer; the calls use the measured base rates only";
       }).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; });
-      ctx.dossier = Brain.dossier(d, ctx);
+      ctx.dossier = Brain.dossier(d, ctx); dossierText = ctx.dossier;
       const { tools, seen, log } = Agent.buildTools(fmp, { today: today(), onStep: () => {} });
       let syn, ver, review = null;
       await step("Lead strategist: thesis, drivers, debates and scenarios from every report", async (en) => {

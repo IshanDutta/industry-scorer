@@ -51,9 +51,39 @@ function toMessages(input) {
   return out;
 }
 
+/**
+ * Prompt caching. A page prompt can mark where a shared prefix ends with CACHE_MARK (e.g. an industry's dossier,
+ * which the lead strategist's four to seven steps all start from). The first user message is split there into text
+ * blocks, each block before a mark carrying a cache breakpoint, so every later request with the same prefix reads it
+ * at a tenth of the input price instead of paying for it again. At most two marks are honored (the API allows four
+ * breakpoints; one more goes on the last block in tool rounds). TTL: 1 hour by default, so batches minutes apart still
+ * hit (CLAUDE_CACHE_TTL=5m for the default 5 minutes).
+ */
+export const CACHE_MARK = "\n\n<<cache-break>>\n\n";
+let CACHE_TTL = "1h";
+export function setCacheTtl(t) { CACHE_TTL = t === "5m" ? "5m" : "1h"; }
+const cc = () => (CACHE_TTL === "1h" ? { type: "ephemeral", ttl: "1h" } : { type: "ephemeral" });
+function withCacheMarks(messages) {
+  let done = false;
+  return messages.map((m) => {
+    if (done || m.role !== "user") return m;
+    const text = typeof m.content === "string" ? m.content : null;
+    if (text === null || !text.includes(CACHE_MARK)) { if (text !== null) done = true; return m; }
+    done = true;
+    const parts = text.split(CACHE_MARK), blocks = [];
+    parts.forEach((t, i) => { if (!t) return; const keep = i < parts.length - 1 && i >= parts.length - 3; blocks.push({ type: "text", text: t, ...(keep ? { cache_control: cc() } : {}) }); });
+    return { ...m, content: blocks };
+  });
+}
+/** Strip any marks (for paths that send the prompt elsewhere, e.g. the fallback text). */
+export const unmark = (t) => String(t).split(CACHE_MARK).join("\n\n");
+
 /** Put one cache breakpoint on the last block of the last user message (for multi-round tool calls). */
 function withCacheBreakpoint(messages) {
-  const msgs = messages.map((m) => ({ ...m, content: typeof m.content === "string" ? [{ type: "text", text: m.content }] : m.content.map((b) => { const { cache_control, ...x } = b; return x; }) }));
+  // Breakpoints from cache marks (on the first user message) stay; any others are dropped before the new one.
+  let first = true;
+  const msgs = messages.map((m) => { const keepMarks = first && m.role === "user"; if (m.role === "user") first = false;
+    return { ...m, content: typeof m.content === "string" ? [{ type: "text", text: m.content }] : m.content.map((b) => { if (keepMarks) return b; const { cache_control, ...x } = b; return x; }) }; });
   for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].role === "user") { const c = msgs[i].content; c[c.length - 1] = { ...c[c.length - 1], cache_control: { type: "ephemeral" } }; break; }
   return msgs;
 }
@@ -123,7 +153,7 @@ export class Sampler {
   async ask(id, { verb, input, modelTier = "default", tools = [], step = null }) {
     if (this.fatal) return { error: this.fatal };
     const system = verb === "json" ? FRAMING_JSON + (tools.length ? FRAMING_TOOLS : "") : (tools.length ? FRAMING_TOOLS.trim() : undefined);
-    let messages = toMessages(input);
+    let messages = withCacheMarks(toMessages(input));
     const apiTools = tools.map((t) => ({ name: t.name, description: String(t.description || "").slice(0, 1024), input_schema: t.inputSchema || { type: "object", properties: {} } }));
     const texts = [];
     for (let round = 1; round <= this.maxRounds; round++) {
@@ -216,7 +246,10 @@ export class Sampler {
     this.usage.requests++; if (direct) this.usage.direct_requests++;
     this.usage.input += u.input_tokens || 0; this.usage.output += u.output_tokens || 0;
     this.usage.cacheWrite += u.cache_creation_input_tokens || 0; this.usage.cacheRead += u.cache_read_input_tokens || 0;
-    const usd = f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + (u.cache_creation_input_tokens || 0) * p.cacheWrite + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+    // A 1-hour cache write costs twice the input price (a 5-minute one 1.25x); the API says which it was.
+    const w1h = u.cache_creation?.ephemeral_1h_input_tokens ?? (CACHE_TTL === "1h" ? u.cache_creation_input_tokens || 0 : 0), w5m = Math.max(0, (u.cache_creation_input_tokens || 0) - w1h);
+    const usd = f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + w5m * p.cacheWrite + w1h * p.input * 2 + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
+    this.usage.saved = (this.usage.saved || 0) + f * ((u.cache_read_input_tokens || 0) * (p.input - p.cacheRead)) / 1e6;
     this.usage.usd += usd;
     const s = (this.byStep[this.stepOf.get(key) || "Other"] ||= { usd: 0, requests: 0, reused: 0 }); s.usd += usd; s.requests++; this.stepOf.delete(key);
   }

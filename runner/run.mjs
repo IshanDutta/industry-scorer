@@ -37,7 +37,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "
 import { gzipSync, gunzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Sampler } from "./lib/sampler.mjs";
+import { Sampler, setCacheTtl } from "./lib/sampler.mjs";
 import { McpBridge } from "./lib/mcp.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -66,6 +66,7 @@ async function main() {
   await mcp.connectAll();
 
   let page = null;
+  setCacheTtl(env.CLAUDE_CACHE_TTL || "1h");
   const sampler = new Sampler({
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
     // As the page asks in claude.ai: the most capable model for "complex" steps, the balanced model for the rest.
@@ -190,7 +191,7 @@ async function main() {
   }
   for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
   if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);
-  log(`${finished ? "Finished" : outOfTime ? "Paused (out of time)" : "Stopped"}: ${done} of ${total} industries · ${cost.requests} Claude requests (${cost.cached_results} reused) in ${cost.batches} batches · $${cost.usd} · ${cost.minutes} min`);
+  log(`${finished ? "Finished" : outOfTime ? "Paused (out of time)" : "Stopped"}: ${done} of ${total} industries · ${cost.requests} Claude requests (${cost.cached_results} reused) in ${cost.batches} batches · $${cost.usd}${cost.saved ? ` (prompt caching saved $${cost.saved.toFixed(2)})` : ""} · ${cost.minutes} min`);
   summary([`### ${sector}: ${finished ? "finished" : outOfTime ? "continuing in a new session" : "stopped"}`, "",
     `- Industries finished: **${done} of ${total}**${Object.keys(rec.skip || {}).length ? ` (left out: ${Object.entries(rec.skip).map(([n, w]) => `${n}: ${w}`).join("; ")})` : ""}`,
     `- Claude (${cost.model}, ${cost.mode}): ${cost.requests} requests in ${cost.batches} batches, ${cost.cached_results} reused, ${cost.resent || 0} slow ones re-sent at the standard price · input ${(cost.input / 1e6).toFixed(2)}M tokens, output ${(cost.output / 1e6).toFixed(2)}M, cache reads ${(cost.cacheRead / 1e6).toFixed(2)}M`,
