@@ -1854,25 +1854,36 @@ a.btnlink:hover { border-color: var(--accent); }
    */
   async function dailySections(name, sections, dr) {
     const sl = slug(name), run = { name, cancel: false, ctls: new Set(), team: [], label: "" };
-    const TEAM = { kpi: ["kpi", "calls"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"] };
+    const TEAM = { kpi: ["kpi", "calls"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"] };
     const only = [...new Set(sections.flatMap((sct) => TEAM[sct.key] || []))];
-    const before = Object.fromEntries(["kpi", "calls", "world", "trade", "reg", "chain", "regverdict"].map((k) => [k, rep(name, k)?.run_at || null]));
+    const before = Object.fromEntries(["kpi", "calls", "macro", "world", "trade", "reg", "chain", "regverdict"].map((k) => [k, rep(name, k)?.run_at || null]));
     const fail = (sct, why) => { sct.ok = false; sct.error = why; };
     try { if (only.length) await runTeam(name, { only, run }); }
     catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; for (const sct of sections) if (TEAM[sct.key]) fail(sct, sampleErr(e)); }
     // A new regulation read, or a regulator's rules in the news: its rule book (named ones only) and the regulatory verdict.
     const bodies = regBodies(name);
     const named = sections.filter((sct) => sct.key === "rulebook").flatMap((sct) => sct.regulators || []);
-    const keys = [...new Set(named.map((r) => { const lr = lc(r); const b = bodies.find((b) => lc(b.name).includes(lr) || lr.includes(lc(b.name)) || [...libAcr(b.name)].some((x) => lc(x) === lr || new RegExp(`\\b${lc(x)}\\b`).test(lr))); return b ? RegBook.bodyKey(b.name) : null; }).filter(Boolean))];
-    for (const sct of sections) if (sct.key === "rulebook" && !keys.length) fail(sct, "none of the named regulators has a rule book for this industry");
+    const matched = [...new Set(named.map((r) => { const lr = lc(r); const b = bodies.find((b) => lc(b.name).includes(lr) || lr.includes(lc(b.name)) || [...libAcr(b.name)].some((x) => lc(x) === lr || new RegExp(`\\b${lc(x)}\\b`).test(lr))); return b ? RegBook.bodyKey(b.name) : null; }).filter(Boolean))];
+    // Named regulators: their books; none named (or none matched): every book this industry has.
+    const wantBooks = sections.some((sct) => sct.key === "rulebook"), keys = wantBooks ? (matched.length ? matched : bodies.map((b) => RegBook.bodyKey(b.name))) : [];
+    for (const sct of sections) if (sct.key === "rulebook" && !bodies.length) fail(sct, "this industry has no regulator rule books");
     if (bodies.length && (keys.length || sections.some((sct) => sct.key === "reg"))) {
       try { await runRegBooks(name, keys.length ? { keys, run } : { verdictOnly: true, run }); }
       catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; for (const sct of sections) if (sct.key === "rulebook") fail(sct, sampleErr(e)); }
     }
     const errs = S.teamErrors[sl] || {};
-    const kindsOf = { kpi: ["kpi"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"], rulebook: ["regverdict"] };
+    // Last, when the day's changes add up to a different story: the whole analysis, rewritten by the lead strategist
+    // from every section as it now stands (thesis, drivers, debates, scenarios, every call, the calendar).
+    const th = sections.find((sct) => sct.key === "thesis");
+    if (th && !th.ok) {
+      const was = S.agents[sl]?.run_at;
+      try { await runLead(name, { run: { name, cancel: false, ctls: new Set(), team: [], label: "" } }); }
+      catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; fail(th, sampleErr(e)); }
+      if (th.ok !== false) { if (S.agents[sl]?.run_at && S.agents[sl].run_at !== was) th.ok = true; else fail(th, "the lead strategist didn't finish; the calls were revised instead"); }
+    }
+    const kindsOf = { kpi: ["kpi"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"], rulebook: ["regverdict"] };
     for (const sct of sections) {
-      if (sct.ok === false) continue;
+      if (sct.ok === false || sct.key === "thesis") continue;
       const ks = kindsOf[sct.key] || [], fresh = ks.filter((k) => rep(name, k)?.run_at && rep(name, k).run_at !== before[k]);
       if (!fresh.length) { fail(sct, errs[sct.key === "world" ? "scout" : sct.key] || "the analyst didn't return a new report"); continue; }
       sct.ok = true;
@@ -1927,7 +1938,18 @@ a.btnlink:hover { border-color: var(--accent); }
           // Sections the news made stale: the same analysts as the full run, for this industry only.
           const sections = Daily.pickSections(tri, x, res.sections_rewritten || {}, today());
           if (sections.length) await dailySections(name, sections, dr);
-          const rewritten = sections.filter((sct) => sct.ok).map((sct) => { const k = sct.key === "rulebook" ? "regverdict" : sct.key; const r = rep(name, k)?.result;
+          const whole = sections.find((sct) => sct.key === "thesis" && sct.ok);
+          if (whole) {
+            // The lead strategist rewrote the whole analysis (and logged its new calls): keep the daily history and stamp it.
+            const ag2 = S.agents[sl], r = { ...ag2.result, daily_history: res.daily_history || [] };
+            const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world], sections });
+            a2.result.daily.revised = true;
+            S.agents[sl] = jsonSafe({ ...ag2, result: a2.result, daily_at: new Date().toISOString() });
+            await doFlush(name); dr.revised.push(name);
+            for (const sct of sections) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}`);
+            return;
+          }
+          const rewritten = sections.filter((sct) => sct.ok && sct.key !== "thesis").map((sct) => { const k = sct.key === "rulebook" ? "regverdict" : sct.key; const r = rep(name, k)?.result;
             const txt = k === "regverdict" ? `${r?.summary || r?.verdict || ""}` : k === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : k === "trade" ? `${r?.verdict?.summary || r?.verdict?.headline || ""}` : Team.digest(k, r);
             return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
           let upd = null;
@@ -3288,12 +3310,12 @@ a.btnlink:hover { border-color: var(--accent); }
     const rev = Object.entries(d.horizons || {}).filter(([h, v]) => h !== "_scenarios" && v.status === "revised");
     const hist = (r.daily_history || []).slice(1, 6);
     return `<div class="callout daily-card"><div class="callout-head"><span class="eyebrow">Daily update · ${esc(fmtDate(d.date))}</span><span class="pill ${d.revised ? "warn" : "neu"}">${d.revised ? `${rev.length} call${rev.length === 1 ? "" : "s"} revised` : "calls unchanged"}</span>
-      <span class="small muted">${isNum(num(d.move)) ? `industry ${sg(d.move)} vs SPY ${sg(d.spy)} since ${esc(fmtShort(d.since))}` : ""}${isNum(num(d.z)) ? ` · ${Math.abs(d.z)}× a normal move` : ""}${d.via === "triage" ? " · checked by the quick model" : d.via === "code" ? "" : " · reviewed by the strategist"}</span></div>
+      <span class="small muted">${isNum(num(d.move)) ? `industry ${sg(d.move)} vs SPY ${sg(d.spy)} since ${esc(fmtShort(d.since))}` : ""}${isNum(num(d.z)) ? ` · ${Math.abs(d.z)}× a normal move` : ""}${d.via === "triage" ? " · checked by the quick model" : d.via === "code" ? "" : d.via === "rewrite" ? " · the whole analysis was rewritten" : " · reviewed by the strategist"}</span></div>
       <b>${dailyRich(d.headline, d.sources)}</b>${d.summary ? `<p class="small" style="margin:0">${dailyRich(d.summary, d.sources)}</p>` : ""}
       ${(d.changes || []).length ? `<ul class="dlist small" style="margin:0">${d.changes.map((c) => `<li><span class="pill ${EFF[c.effect] || "neu"}">${esc(c.effect)}</span> ${dailyRich(c.text, d.sources)}</li>`).join("")}</ul>` : ""}
       ${rev.length ? `<div class="small"><b>Revised:</b> ${rev.map(([h, v]) => `${h} ${esc(v.from?.call || "")} ${esc((v.from?.expected_move || []).join(" to "))}% → <b>${esc(v.to?.call || "")} ${esc((v.to?.expected_move || []).join(" to "))}%</b>`).join(" · ")}</div>` : ""}
       ${d.horizons?._scenarios ? `<div class="small"><b>Scenario odds:</b> ${Object.keys(d.horizons._scenarios.to).map((k) => `${k} ${d.horizons._scenarios.from[k]}% → ${d.horizons._scenarios.to[k]}%`).join(" · ")}</div>` : ""}
-      ${(d.sections || []).length ? `<div class="small"><b>Sections rewritten for the news:</b><ul class="dlist" style="margin:2px 0 0">${d.sections.map((sct) => `<li><span class="pill ${sct.ok ? "pos" : "neu"}">${sct.ok ? "rewritten" : "couldn't rewrite"}</span> <b>${esc(sct.label)}</b>${sct.regulators?.length ? ` (${esc(sct.regulators.join(", "))})` : ""}: ${dailyRich(sct.why, d.sources)}${sct.ok ? "" : ` <span class="muted">${esc(sct.error || "")}</span>`}</li>`).join("")}</ul></div>` : ""}
+      ${(d.sections || []).length ? `<div class="small"><b>Rewritten today:</b><ul class="dlist" style="margin:2px 0 0">${d.sections.map((sct) => `<li><span class="pill ${sct.ok ? "pos" : "neu"}">${sct.ok ? "rewritten" : "couldn't rewrite"}</span> <b>${esc(sct.label)}</b>${sct.regulators?.length ? ` (${esc(sct.regulators.join(", "))})` : ""}: ${dailyRich(sct.why, d.sources)}${sct.ok ? "" : ` <span class="muted">${esc(sct.error || "")}</span>`}</li>`).join("")}</ul></div>` : ""}
       ${(d.triggers || []).length ? `<div class="small muted"><b>Flagged by the data:</b> ${d.triggers.map(esc).join("; ")}</div>` : ""}
       ${(d.watch || []).length ? `<div class="small muted"><b>Watch:</b> ${d.watch.map((w) => dailyRich(w, d.sources)).join("; ")}</div>` : ""}
       ${hist.length ? `<details class="small"><summary>Earlier daily updates (${hist.length})</summary><ul class="dlist">${hist.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.revised ? `<span class="pill warn">revised</span> ` : ""}${dailyRich(h.headline, [])}${isNum(num(h.move)) ? ` <span class="muted">(${sg(h.move)})</span>` : ""}${(h.sections || []).filter((x) => x.ok).length ? ` <span class="muted">· rewrote ${esc(h.sections.filter((x) => x.ok).map((x) => x.label).join(", "))}</span>` : ""}</li>`).join("")}</ul></details>` : ""}</div>`;

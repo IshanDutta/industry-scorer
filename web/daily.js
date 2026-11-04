@@ -112,25 +112,25 @@ WHAT CHANGED SINCE THE LAST UPDATE (computed from market data and news)
 ${deltaText(x)}
 
 1. Is any of this material enough that the 1M, 3M, 6M or 12M call could change (direction, range or the chance of a gain)? Routine moves inside the normal range, expected events landing as expected and generic headlines are not material.
-2. Does any headline make one of the deeper sections out of date? Name a section only for a concrete new fact it doesn't have, cited by its [D#] ID:
+2. Which parts of the team's work should be rewritten today so everything stays current? Name EVERY section that anything since the last update changes or adds to: a fact, a headline, commentary or an analyst's view, a preview, a price, estimate or macro move, an event that passed. Rewriting is cheap compared with a stale report, so when in doubt, name it; leave a section out only when nothing since the last update touches it. Cite what prompts each one ([D#] headlines, [I#] macro rows, or the event or move in words):
 ${Object.entries(SECTIONS).map(([k, v]) => `   - "${k}": ${v.when}`).join("\n")}
-   Most days the answer is none. Never name a section for commentary, previews, price moves or something the section already covers.
 Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizons worth revisiting, e.g. 1M"], "why": "one sentence",
- "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "why": "one sentence: the new fact, cited [D#]", "regulators": ["only for rulebook: the regulator's name as listed above"]}]}`;
+ "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "why": "one sentence: what changed for it, cited", "regulators": ["for rulebook: the regulators' names as listed above, or [] for all of them"]}]}`;
   }
 
   /**
-   * The deeper sections the daily update can rewrite when the news makes them stale. Each one is the same analyst
-   * the full run uses, rerun for this industry only; "cool" is how many days must pass before the same section is
-   * rewritten again for news alone (a company's earnings, flagged by code, can rewrite KPIs sooner).
+   * Everything the daily update can rewrite, each by the same analyst as the full run, for this industry only. There
+   * is no cool-down and no daily limit: whatever the day's data touches is rewritten, every day if need be.
    */
   const SECTIONS = {
-    kpi: { label: "KPIs and earnings calls", cool: 5, when: "a top company reported, pre-announced or changed guidance; or an industry statistic (shipments, prices, orders, volumes) was published" },
-    world: { label: "World-event deep dives", cool: 4, when: "a war, conflict, sanction, election result, disaster or other world situation began, escalated, ended or turned, and it reaches this industry" },
-    trade: { label: "Trade map and country relations", cool: 4, when: "a tariff, export control, trade deal, quota or a change in relations with one of the industry's countries was announced or took effect" },
-    reg: { label: "Regulation, litigation and deals", cool: 4, when: "a law, rule, court ruling, enforcement action, investigation, settlement, merger or deal touching the industry was announced, passed, decided or closed" },
-    rulebook: { label: "Regulator rule books", cool: 10, when: "one of the regulators listed above finalized, proposed, changed, delayed or struck down one of its rules or instruments for this industry" },
-    chain: { label: "Customers and suppliers", cool: 5, when: "a key customer or supplier reported, changed guidance or capex, was acquired, failed, or won or lost a major contract" },
+    kpi: { label: "KPIs and earnings calls", when: "a company reported, pre-announced or changed guidance; an industry statistic (shipments, prices, orders, volumes) came out; or commentary or estimates moved on demand, pricing or margins" },
+    macro: { label: "Macro regime and indicators", when: "a macro indicator the industry tracks moved or was released; a central bank, inflation, jobs, growth, rates, currency or commodity headline; or commentary on the macro outlook" },
+    world: { label: "World-event deep dives", when: "anything new on a war, conflict, sanction, election, disaster or other world situation that reaches this industry, including commentary and escalation risk" },
+    trade: { label: "Trade map and country relations", when: "anything new on tariffs, export controls, trade deals, quotas, or relations with one of the industry's countries, including talks, threats and commentary" },
+    reg: { label: "Regulation, litigation and deals", when: "anything new on a law, rule, court case, enforcement action, investigation, settlement, merger or deal touching the industry, including proposals, filings and commentary" },
+    rulebook: { label: "Regulator rule books", when: "anything new from or about one of the regulators listed above: a rule finalized, proposed, changed, delayed, challenged or struck down, guidance or speeches" },
+    chain: { label: "Customers and suppliers", when: "anything new from a key customer or supplier: results, guidance, capex, orders, deals, contract wins or losses, troubles" },
+    thesis: { label: "The whole analysis: thesis, scenarios and every call", when: "the day's changes add up to a different story for the industry, so the thesis, drivers, debates and bull/base/bear scenarios need rewriting, not just the calls" },
   };
   /** A short brief of what each deeper section says now, so the quick model can tell whether a headline is new to it. */
   function sectionBrief({ kpi, world, trade, reg, chain, bodies = [] } = {}) {
@@ -145,27 +145,29 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     return L.join("\n");
   }
   /**
-   * Which sections to rewrite today: the quick model's picks (each must cite a headline) plus code's (a top company
-   * reported: KPIs), minus any rewritten too recently. last: {key: "YYYY-MM-DD"}; at most `max` a day.
+   * Which sections to rewrite today: everything the quick model names (with its reason), plus what code knows on its
+   * own: a top company reported (KPIs), a large move in a macro indicator the industry tracks (macro), a big move in
+   * the industry or a run of triggers (the whole analysis). No cool-down, no daily limit. `last` is kept for the record.
    */
-  function pickSections(tri, x, last = {}, today, { max = 3 } = {}) {
-    const out = [], ids = new Set((x.news || []).concat(x.world || []).map((n) => n.id));
-    const days = (d) => (d ? Math.round((Date.parse(today) - Date.parse(String(d).slice(0, 10))) / 864e5) : 999);
+  function pickSections(tri, x, last = {}, today) {
+    const out = [];
     const add = (key, why, { code = false, regulators = [] } = {}) => {
-      if (!SECTIONS[key] || out.some((o) => o.key === key)) return;
-      if (days(last[key]) < (code ? 1 : SECTIONS[key].cool)) return;
+      if (!SECTIONS[key] || !String(why || "").trim()) return;
+      const have = out.find((o) => o.key === key);
+      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; return; }
       out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", ...(regulators.length ? { regulators } : {}) });
     };
     for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
+    const bigMacro = (x.macro || []).filter((m) => m.relevance === "high");
+    if (bigMacro.length) add("macro", `${bigMacro.slice(0, 3).map((m) => `${m.label} ${m.prev}${m.unit} → ${m.value}${m.unit} [${m.id}]`).join("; ")}`, { code: true });
+    if (isNum(x.z) && Math.abs(x.z) >= 2.5) add("thesis", `the industry moved ${pc(x.move)} since ${x.since}, ${Math.abs(x.z).toFixed(1)} times its normal move`, { code: true });
     for (const s of Array.isArray(tri?.sections) ? tri.sections : []) {
-      const key = lc(s?.key), why = String(s?.why || "");
-      const cited = [...why.matchAll(/\[([A-Z]{1,2}\d{1,4})\]/g)].map((m) => m[1]).filter((i) => ids.has(i));
-      if (!cited.length) continue; // a section is rewritten only for a headline the data actually has
-      const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 2) : [];
-      if (key === "rulebook" && !regulators.length) continue;
-      add(key, why, { regulators });
+      const key = lc(s?.key);
+      const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 8) : [];
+      add(key, String(s?.why || ""), { regulators });
     }
-    return out.slice(0, max);
+    void last; void today;
+    return out;
   }
 
   /** Step 4: revisit the calls against what changed. */
