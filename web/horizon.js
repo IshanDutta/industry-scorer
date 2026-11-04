@@ -56,10 +56,13 @@
         breadth: isNum(s[`breadth_${w}`]) ? Math.round(s[`breadth_${w}`] * 100) : null,
         reporting: rep.slice(0, 8).map((c) => ({ symbol: c.symbol, date: String(c.next).slice(0, 10), weight: Math.round((c.weight || 0) * 1000) / 10 })),
         reporting_weight: Math.round(rep.reduce((a, c) => a + (c.weight || 0), 0) * 100),
-        base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null };
+        base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null,
+        // Times like this: the 20 past months most like today (macro and the industry's setup), and the 5 closest episodes.
+        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })() };
     });
   }
-  const factsLine = (f) => `${f.h} (to ${f.end}): one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
+  const likeText = (l) => (l ? `in the ${l.n} past months most like today (macro backdrop and industry setup) the industry was higher ${l.pos}% of the time (all months ${l.all_pos}%), median ${l.median > 0 ? "+" : ""}${l.median}%, middle half ${l.p25}% to ${l.p75}%; in the 5 closest episodes up ${l.top_up} of ${l.top_n}, median ${l.top_median}%; ` : "");
+  const factsLine = (f) => `${f.h} (to ${f.end}): ${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
 
   // ---------------------------------------------------------------- economic calendar
   // Countries pulled from the forward economic calendar: the US, the big blocs, and the industry's top trade partners.
@@ -208,6 +211,7 @@ ${rules}
 - "conflicts": every war, armed conflict, invasion or blockade threat, sanctions fight and other live geopolitical situation, AND every high-importance rule, policy, export control or other standing situation in the list below, from STANDING SITUATIONS and the world, trade and regulation reports (cite S-IDs in "refs"; several S-IDs about the same regulator or situation can share one entry, citing all of them). For each: what is likely to happen within THIS window (escalation, ceasefire, status quo, enforcement, a ruling or a change of the rule, with a probability), and what that does to the industry's prices and earnings in the window, by ticker where it differs. Cover at least these S-IDs in EVERY horizon, which code checks: ${req["12M"].standing.join(", ") || "none"}.
 - Size every decision and shock with the MEASURED MACRO SENSITIVITIES (e.g. a Fed outcome that moves the 10-year yield 25bp, a war that lifts oil 10%), and weigh POSITIONING (crowded or washed out), the direction of estimate REVISIONS and the BALANCE-SHEET CYCLE in every window. If there is a TRACK RECORD, use it to calibrate your ranges and probabilities.
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
+- Start every horizon from history: where HORIZON FACTS give the past months most like today, "probability_up" starts from that hit rate and "expected_move" from that middle half; move away only for reasons this time is different (say which, in "drivers", citing the TIMES LIKE THIS episodes [HE#] that agree or disagree). A call far from history needs a stated reason.
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
 
 Reply with ONLY this JSON:
@@ -264,6 +268,9 @@ Reply with ONLY this JSON:
         out.missing_standing = req.standing.filter((id) => !hasS.has(id));
         out.missing_sections = keys.length && x.section_reads ? keys.filter((k) => !x.section_reads[k]) : [];
       }
+      // How far the call sits from history (a note for the reader, not an error).
+      if (f.like && isNum(x.probability_up)) { out.history = { pos: f.like.pos, gap: x.probability_up - f.like.pos, median: f.like.median, top_up: f.like.top_up, top_n: f.like.top_n };
+        if (Math.abs(out.history.gap) >= 25) out.history.note = `${x.probability_up}% chance of a gain vs ${f.like.pos}% in the past months most like today`; }
       out.ok = !issues.length;
       out.covered = cal ? !out.missing_events.length && !out.missing_standing.length && !out.missing_sections.length : null;
       return out;

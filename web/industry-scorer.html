@@ -57,6 +57,17 @@ label.check { display: inline-flex; gap: 8px; align-items: center; font-size: 13
 .pick.cur { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .pick .when { font: 400 12px var(--mono); color: var(--muted); white-space: nowrap; }
 .hz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 8px; }
+.times-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 8px; margin-bottom: 10px; }
+.ep-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)); gap: 10px; margin: 10px 0; }
+.ep-card { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.ep-card.ep-closest { border-color: var(--accent); }
+.ep-card .dim-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ep-ret { font-size: 12px; }
+.ep-ret td, .ep-ret th { padding: 3px 5px; }
+.times-now { display: flex; flex-wrap: wrap; gap: 4px 6px; align-items: center; margin: 8px 0; }
+.chip-s { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 12px; max-width: 100%; }
+.hz-hist { color: var(--muted); }
+.ep-path { display: block; }
 .hz-grid.hz2 { grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); }
 .hz .dim-head { flex-wrap: wrap; justify-content: flex-start; }
 .hz { display: grid; gap: 6px; align-content: start; }
@@ -343,7 +354,8 @@ table.pillars summary { cursor: pointer; }
 .node.trig { border-left: 3px solid var(--neg); }
 .chans { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 10px; margin-top: 6px; }
 .chan { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 5px; align-content: start; }
-.chan-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.chan-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; justify-content: space-between; }
+.chans > .chan { min-width: 0; }
 .arrow { font: 700 15px var(--mono); } .arrow.up { color: var(--pos); } .arrow.down { color: var(--neg); } .arrow.mixed { color: var(--muted); }
 .sec-phases { display: grid; gap: 4px; font-size: 13px; } .sec-phases .done { color: var(--ink); } .sec-phases .now { color: var(--accent); font-weight: 600; } .sec-phases .todo { color: var(--faint); }
 .sector-run { display: grid; gap: 8px; grid-column: 1/-1; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--r); background: var(--sunk); }
@@ -1957,6 +1969,179 @@ a.btnlink:hover { border-color: var(--accent); }
   const History = { H, levelSeries, peSeries, drawdowns, analogs, valuation, seasonality, rateRegime, tracking, build, trailing, trailingByDate, peerTable, digest, quant };
   if (typeof module !== "undefined" && module.exports) module.exports = History;
   else root.History = History;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* Industry Scorer: "times like this" — the past months that looked most like today, for one industry.
+ *
+ * Each month since 2009 gets a fingerprint: the macro backdrop (the Fed funds rate and its 12-month change, CPI
+ * inflation, unemployment and its change, Treasuries, credit, oil, the dollar, the VIX, the S&P 500's 6-month return
+ * and drawdown) and the industry's own setup (3- and 12-month returns, distance from its 200-day average, 6 months vs
+ * the S&P 500, P/E percentile, drawdown). Today's fingerprint is compared with every past month (each feature
+ * standardized; missing ones skipped), and the closest months, at least 9 months apart, become the episodes. For each,
+ * code measures what the industry and the S&P 500 did over the next 1, 3, 6 and 12 months, the worst drop in the
+ * next 6 months, and the path. The 20 closest months (3+ months apart) give the base rates the calls start from.
+ * Pure functions, no I/O.
+ */
+(function (root) {
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const H = { "1M": 21, "3M": 63, "6M": 126, "12M": 252 };
+  const FEATURES = [
+    // key, label, unit, group, weight
+    ["ff", "Fed funds rate", "%", "macro", 1], ["ff12", "Fed funds change over 12 months", "pp", "macro", 1],
+    ["cpi", "CPI inflation, year on year", "%", "macro", 1], ["un", "Unemployment rate", "%", "macro", 0.8], ["un12", "Unemployment change over 12 months", "pp", "macro", 0.8],
+    ["rates6", "7-10 year Treasuries (IEF), 6 months (down = yields up)", "%", "macro", 1], ["credit6", "High-yield bonds vs Treasuries, 6 months", "pp", "macro", 0.8],
+    ["oil6", "Oil (USO), 6 months", "%", "macro", 0.8], ["usd6", "US dollar (UUP), 6 months", "%", "macro", 0.7], ["vix", "VIX", "", "macro", 1],
+    ["spy6", "S&P 500, 6 months", "%", "market", 1], ["spydd", "S&P 500 below its 12-month high", "%", "market", 0.8],
+    ["i3", "Industry, 3 months", "%", "industry", 1.2], ["i12", "Industry, 12 months", "%", "industry", 1.2], ["v200", "Industry vs its 200-day average", "%", "industry", 1.1],
+    ["rel6", "Industry vs S&P 500, 6 months", "pp", "industry", 1.1], ["pe", "Industry P/E percentile (own history)", "pctile", "industry", 1], ["idd", "Industry below its 12-month high", "%", "industry", 0.9],
+  ];
+  const FMAP = Object.fromEntries(FEATURES.map(([k, label, unit, group, w]) => [k, { key: k, label, unit, group, w }]));
+
+  function quant(a, q) { const s = a.filter(isNum).sort((x, y) => x - y); if (!s.length) return NaN; const p = (s.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return s[lo] + (s[hi] - s[lo]) * (p - lo); }
+  const stats = (a) => { const v = a.filter(isNum); return { n: v.length, median: quant(v, 0.5), p25: quant(v, 0.25), p75: quant(v, 0.75), pos: v.length ? v.filter((x) => x > 0).length / v.length : NaN }; };
+  const sd = (a) => { const v = a.filter(isNum); if (v.length < 3) return NaN; const m = v.reduce((x, y) => x + y, 0) / v.length; return Math.sqrt(v.reduce((x, y) => x + (y - m) ** 2, 0) / (v.length - 1)); };
+  const r1 = (x, k = 1) => (isNum(x) ? Math.round(x * 10 ** k) / 10 ** k : null);
+
+  /** Index of the last date <= d in a sorted date list (binary search), or -1. */
+  function at(dates, d) { let lo = 0, hi = dates.length - 1, ans = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (dates[m] <= d) { ans = m; lo = m + 1; } else hi = m - 1; } return ans; }
+  /** A daily series' value on or before d, if it is no more than `staleDays` old. */
+  function valueAt(s, d, staleDays = 10) { if (!s?.dates?.length) return NaN; const i = at(s.dates, d); if (i < 0) return NaN; return (Date.parse(d) - Date.parse(s.dates[i])) / 864e5 <= staleDays ? s.values[i] : NaN; }
+  const addMonths = (d, k) => { const t = new Date(d.slice(0, 10) + "T00:00:00Z"); t.setUTCDate(1); t.setUTCMonth(t.getUTCMonth() + k); return t.toISOString().slice(0, 10); };
+  const monthEnd = (d) => { const t = new Date(d.slice(0, 7) + "-01T00:00:00Z"); t.setUTCMonth(t.getUTCMonth() + 1); t.setUTCDate(0); return t.toISOString().slice(0, 10); };
+  /** n-month return of a daily series ending at d (in %). */
+  function ret(s, d, months) { const a = valueAt(s, d), b = valueAt(s, monthEnd(addMonths(d, -months)), 12); return isNum(a) && isNum(b) && b > 0 ? (a / b - 1) * 100 : NaN; }
+  /** How far below its 12-month high the series is at d (in %, <= 0). */
+  function drawdown(s, d) { const i = at(s.dates, d); if (i < 200) return NaN; let hi = -Infinity; for (let j = Math.max(0, i - 252); j <= i; j++) hi = Math.max(hi, s.values[j]); return (s.values[i] / hi - 1) * 100; }
+
+  /** Monthly indicator rows [{date, value}] -> {dates, values} (the reference month's first day). */
+  const monthly = (rows) => { const pts = (rows || []).filter((r) => r?.date && isNum(+r.value)).map((r) => [String(r.date).slice(0, 10), +r.value]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+    const dates = [], values = []; for (const [d, v] of pts) { if (dates.length && dates[dates.length - 1] === d) continue; dates.push(d); values.push(v); } return { dates, values }; };
+
+  /**
+   * The fingerprint for month-end date d. mk: {spy, ief, hyg, uso, uup, vix} daily series {dates, values};
+   * {ff, cpi, un} monthly series. ind: the industry's daily index {dates, values}; pePct(d): its P/E percentile or NaN.
+   */
+  function fingerprint(d, mk, ind, pePct) {
+    // Monthly indicators are dated by the month they describe and come out 2-6 weeks later: take the latest reading
+    // within ~3 months (today's often describes the month before last).
+    const mv = (s, back = 0) => valueAt(s, back ? monthEnd(addMonths(d, -back)) : d, 100);
+    const f = {};
+    f.ff = mv(mk.ff); f.ff12 = isNum(f.ff) && isNum(mv(mk.ff, 12)) ? f.ff - mv(mk.ff, 12) : NaN;
+    const c0 = mv(mk.cpi), c12 = mv(mk.cpi, 12); f.cpi = isNum(c0) && isNum(c12) && c12 > 0 ? (c0 / c12 - 1) * 100 : NaN;
+    f.un = mv(mk.un); f.un12 = isNum(f.un) && isNum(mv(mk.un, 12)) ? f.un - mv(mk.un, 12) : NaN;
+    f.rates6 = ret(mk.ief, d, 6); const hy = ret(mk.hyg, d, 6); f.credit6 = isNum(hy) && isNum(f.rates6) ? hy - f.rates6 : NaN;
+    f.oil6 = ret(mk.uso, d, 6); f.usd6 = ret(mk.uup, d, 6); f.vix = valueAt(mk.vix, d);
+    f.spy6 = ret(mk.spy, d, 6); f.spydd = mk.spy?.dates?.length ? drawdown(mk.spy, d) : NaN;
+    f.i3 = ret(ind, d, 3); f.i12 = ret(ind, d, 12);
+    const i = at(ind.dates, d); if (i >= 199) { let s = 0; for (let j = i - 199; j <= i; j++) s += ind.values[j]; f.v200 = (ind.values[i] / (s / 200) - 1) * 100; } else f.v200 = NaN;
+    const i6 = ret(ind, d, 6); f.rel6 = isNum(i6) && isNum(f.spy6) ? i6 - f.spy6 : NaN;
+    f.pe = pePct ? pePct(d) : NaN; f.idd = drawdown(ind, d);
+    return f;
+  }
+
+  /** Forward returns from date d over each horizon (in %), the worst drop over the next 6 months, and a monthly path. */
+  function forward(s, d) {
+    const i = at(s.dates, d); const out = { ret: {}, maxdd6: null, path: [] }; if (i < 0) return out;
+    for (const [h, n] of Object.entries(H)) out.ret[h] = i + n < s.values.length ? r1((s.values[i + n] / s.values[i] - 1) * 100) : null;
+    let peak = s.values[i], dd = 0; for (let j = i + 1; j <= Math.min(s.values.length - 1, i + 126); j++) { peak = Math.max(peak, s.values[j]); dd = Math.min(dd, s.values[j] / peak - 1); }
+    out.maxdd6 = i + 5 < s.values.length ? r1(dd * 100) : null;
+    for (let m = 0; m <= 12; m++) { const j = i + Math.round(m * 21); if (j >= s.values.length) break; out.path.push(r1((s.values[j] / s.values[i] - 1) * 100)); }
+    return out;
+  }
+
+  /**
+   * The episodes. ind: {dates, values} (daily industry index since 2008); pe: {dates, pe} or null; mk: market and
+   * macro series (any may be missing); today: the last date. Returns null without enough history.
+   */
+  function episodes({ ind, pe = null, mk = {}, today, k = 5, pool = 20, gapMonths = 9, recentMonths = 12 }) {
+    if (!ind?.dates?.length || ind.dates.length < 600) return null;
+    const last = ind.dates[ind.dates.length - 1], now = today && today < last ? today : last;
+    let pePct = null;
+    if (pe?.dates?.length > 250) { const sorted = [...pe.pe].filter(isNum).sort((a, b) => a - b); const ser = { dates: pe.dates, values: pe.pe };
+      pePct = (d) => { const v = valueAt(ser, d, 20); if (!isNum(v)) return NaN; let lo = 0, hi = sorted.length; while (lo < hi) { const m = (lo + hi) >> 1; if (sorted[m] <= v) lo = m + 1; else hi = m; } return (lo / sorted.length) * 100; }; }
+    // Month-end trading days, from the first with 12 months of history behind it.
+    const ends = []; for (let i = 0; i < ind.dates.length; i++) { const d = ind.dates[i]; if (i === ind.dates.length - 1 || ind.dates[i + 1].slice(0, 7) !== d.slice(0, 7)) ends.push(d); }
+    const first = addMonths(ind.dates[0], 13);
+    const months = ends.filter((d) => d >= first && d < now);
+    const fNow = fingerprint(now, mk, ind, pePct);
+    const rows = months.map((d) => ({ d, f: fingerprint(d, mk, ind, pePct) }));
+    if (rows.length < 36) return null;
+    const keys = FEATURES.map(([kk]) => kk).filter((kk) => isNum(fNow[kk]) && rows.filter((r) => isNum(r.f[kk])).length >= rows.length * 0.5);
+    if (keys.length < 4) return null;
+    const sds = Object.fromEntries(keys.map((kk) => [kk, sd(rows.map((r) => r.f[kk])) || 1]));
+    const totW = keys.reduce((a, kk) => a + FMAP[kk].w, 0);
+    for (const r of rows) { let s = 0, w = 0; for (const kk of keys) { if (!isNum(r.f[kk])) continue; s += FMAP[kk].w * ((r.f[kk] - fNow[kk]) / sds[kk]) ** 2; w += FMAP[kk].w; }
+      r.dist = w >= totW * 0.6 ? Math.sqrt(s / w) : Infinity; }
+    const cutoff = addMonths(now, -recentMonths);
+    const ranked = rows.filter((r) => isNum(r.dist) && r.dist < Infinity).sort((a, b) => a.dist - b.dist);
+    const N = ranked.length;
+    const pick = (n, gap, list) => { const out = []; for (const r of list) { if (r.d > cutoff) continue; if (out.every((o) => Math.abs((Date.parse(o.d) - Date.parse(r.d)) / (30.44 * 864e5)) >= gap)) out.push(r); if (out.length >= n) break; } return out; };
+    const top = pick(k, gapMonths, ranked), wide = pick(pool, 3, ranked);
+    const spy = mk.spy?.dates?.length ? mk.spy : null;
+    const fmt = (kk, v) => (isNum(v) ? r1(v, FMAP[kk].unit === "" || FMAP[kk].unit === "pctile" ? 0 : 1) : null);
+    const ep = top.map((r) => {
+      const fi = forward(ind, r.d), fs = spy ? forward(spy, r.d) : { ret: {}, path: [] };
+      const diffs = keys.filter((kk) => isNum(r.f[kk])).map((kk) => ({ key: kk, z: Math.abs(r.f[kk] - fNow[kk]) / sds[kk] })).sort((a, b) => a.z - b.z);
+      return { date: r.d, month: r.d.slice(0, 7), similarity: Math.round((1 - ranked.indexOf(r) / N) * 1000) / 10, distance: r1(r.dist, 2),
+        then: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, r.f[kk])])),
+        alike: diffs.slice(0, 4).map((x) => x.key), unlike: diffs.slice(-3).reverse().map((x) => x.key),
+        industry: fi.ret, spy: fs.ret, excess: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(fi.ret[h]) && isNum(fs.ret[h]) ? r1(fi.ret[h] - fs.ret[h]) : null])),
+        maxdd6: fi.maxdd6, path: fi.path, spy_path: fs.path };
+    });
+    const allIdx = rows.filter((r) => r.d <= cutoff).map((r) => r.d);
+    const base = {};
+    for (const h of Object.keys(H)) {
+      const w = wide.map((r) => forward(ind, r.d).ret[h]), a = allIdx.map((d) => forward(ind, d).ret[h]);
+      const ex = spy ? wide.map((r) => { const x = forward(ind, r.d).ret[h], y = forward(spy, r.d).ret[h]; return isNum(x) && isNum(y) ? x - y : NaN; }) : [];
+      const t = top.map((r) => forward(ind, r.d).ret[h]).filter(isNum);
+      base[h] = { top_up: t.filter((x) => x > 0).length, top_n: t.length, top_median: r1(quant(t, 0.5)),
+        ...Object.fromEntries(Object.entries(stats(w)).map(([kk, v]) => [kk, kk === "n" ? v : kk === "pos" ? r1(v * 100, 0) : r1(v)])),
+        beat_spy: spy ? r1(stats(ex).pos * 100, 0) : null, all_pos: r1(stats(a).pos * 100, 0), all_median: r1(quant(a, 0.5)) };
+    }
+    return { as_of: now, months: N, features: keys, now: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, fNow[kk])])), episodes: ep, base, pool: wide.length,
+      pool_dates: wide.map((r) => r.d.slice(0, 7)).sort() };
+  }
+
+  /** "Fed funds 5.3%, CPI 3.1%, ..." for a fingerprint (the keys in order given). */
+  const fval = (kk, v) => { if (!isNum(v)) return "n/a"; const u = FMAP[kk].unit; return u === "pctile" ? `${Math.round(v)}th pct` : u === "" ? `${v}` : u === "pp" ? `${v > 0 ? "+" : ""}${v}pp` : `${kk === "ff" || kk === "cpi" || kk === "un" ? "" : v > 0 ? "+" : ""}${v}%`; };
+  const pc = (x) => (isNum(x) ? `${x > 0 ? "+" : ""}${x}%` : "n/a");
+  /** The episodes and base rates as prompt text (HE1-HE5 to cite). */
+  function text(R) {
+    if (!R?.episodes?.length) return "";
+    const L = [`TIMES LIKE THIS (computed by code from ${R.months} month-ends since 2009: the macro backdrop and the industry's own setup, today vs every past month)`];
+    L.push(`Today (${R.as_of}): ${R.features.map((kk) => `${FMAP[kk].label} ${fval(kk, R.now[kk])}`).join("; ")}.`);
+    for (const [i, e] of R.episodes.entries()) {
+      L.push(`[HE${i + 1}] ${e.month} (closer than ${e.similarity}% of all months). Then: ${R.features.map((kk) => `${FMAP[kk].label} ${fval(kk, e.then[kk])}`).join("; ")}. Most alike: ${e.alike.map((kk) => FMAP[kk].label).join(", ")}; least alike: ${e.unlike.map((kk) => FMAP[kk].label).join(", ")}. After: industry ${Object.keys(H).map((h) => `${h} ${pc(e.industry[h])}`).join(", ")}; S&P 500 ${Object.keys(H).map((h) => `${h} ${pc(e.spy[h])}`).join(", ")}; worst drop in the next 6 months ${pc(e.maxdd6)}.`);
+    }
+    L.push(`Base rates from the ${R.pool} closest months (3+ months apart) vs all months: ${Object.entries(R.base).map(([h, b]) => `${h}: up ${b.pos ?? "n/a"}% of the time (all months ${b.all_pos ?? "n/a"}%), median ${pc(b.median)} (middle half ${pc(b.p25)} to ${pc(b.p75)})${isNum(b.beat_spy) ? `, beat the S&P 500 ${b.beat_spy}%` : ""}; the 5 episodes: up ${b.top_up} of ${b.top_n}`).join("; ")}.`);
+    return L.join("\n");
+  }
+
+  /** The historian's prompt: what was going on in each episode, what happened next and why, and what differs now. */
+  function historianPrompt(name, R, { today, thesis = "" } = {}) {
+    return `You are the market historian for the US-listed "${name}" industry. Today is ${today}. Code compared today's macro backdrop and the industry's own setup with every month since 2009 and found the five most similar past months (TIMES LIKE THIS). For each, it measured what the industry and the S&P 500 did next.
+${thesis ? `\nTHE TEAM'S CURRENT VIEW: ${thesis}\n` : ""}
+${text(R)}
+
+For each episode, write from what you know of market history:
+- "then": what was going on in markets and the economy that month, and for this industry (2 sentences; well-known events only, e.g. a Fed pivot, a recession scare, an oil collapse, a war, a pandemic wave).
+- "after": what happened over the next 12 months and why, using the measured returns above for every number (2-3 sentences). Never invent a number: the returns come from code.
+- "different": the most important way today differs from then, and which way it cuts (1-2 sentences).
+Then "read": 3-4 sentences on what the five episodes and the base rates say about the next 1, 3, 6 and 12 months, how much weight they deserve given the differences, and which episode today most resembles. Cite episodes by their IDs, e.g. [HE2].
+If you are not sure what happened in a given month, say so plainly rather than guessing.
+
+Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "...", "different": "...", "lesson": "one short phrase"}], "read": "...", "closest": "HE#"}`;
+  }
+  function cleanHistorian(raw, R) {
+    const n = R?.episodes?.length || 0, s = (x, k) => String(x || "").replace(/\s+/g, " ").trim().slice(0, k);
+    const eps = Array.from({ length: n }, (_, i) => { const x = (Array.isArray(raw?.episodes) ? raw.episodes : []).find((y) => String(y?.id || "").toUpperCase().replace(/^E/, "HE") === `HE${i + 1}`) || (Array.isArray(raw?.episodes) ? raw.episodes[i] : null) || {};
+      return { id: `HE${i + 1}`, month: R.episodes[i].month, then: s(x.then, 500), after: s(x.after, 600), different: s(x.different, 400), lesson: s(x.lesson, 120) }; });
+    return { episodes: eps, read: s(raw?.read, 900), closest: /^H?E[1-9]$/.test(String(raw?.closest || "")) ? "HE" + String(raw.closest).replace(/^H?E/, "") : "", months: R.episodes.map((e) => e.month) };
+  }
+
+  const Regimes = { H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval };
+  if (typeof module !== "undefined" && module.exports) module.exports = Regimes;
+  else root.Regimes = Regimes;
 })(typeof window !== "undefined" ? window : globalThis);
 
 /* Industry Scorer: Companies, concentration, trade plans and credit.
@@ -5056,10 +5241,13 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
         breadth: isNum(s[`breadth_${w}`]) ? Math.round(s[`breadth_${w}`] * 100) : null,
         reporting: rep.slice(0, 8).map((c) => ({ symbol: c.symbol, date: String(c.next).slice(0, 10), weight: Math.round((c.weight || 0) * 1000) / 10 })),
         reporting_weight: Math.round(rep.reduce((a, c) => a + (c.weight || 0), 0) * 100),
-        base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null };
+        base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null,
+        // Times like this: the 20 past months most like today (macro and the industry's setup), and the 5 closest episodes.
+        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })() };
     });
   }
-  const factsLine = (f) => `${f.h} (to ${f.end}): one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
+  const likeText = (l) => (l ? `in the ${l.n} past months most like today (macro backdrop and industry setup) the industry was higher ${l.pos}% of the time (all months ${l.all_pos}%), median ${l.median > 0 ? "+" : ""}${l.median}%, middle half ${l.p25}% to ${l.p75}%; in the 5 closest episodes up ${l.top_up} of ${l.top_n}, median ${l.top_median}%; ` : "");
+  const factsLine = (f) => `${f.h} (to ${f.end}): ${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
 
   // ---------------------------------------------------------------- economic calendar
   // Countries pulled from the forward economic calendar: the US, the big blocs, and the industry's top trade partners.
@@ -5208,6 +5396,7 @@ ${rules}
 - "conflicts": every war, armed conflict, invasion or blockade threat, sanctions fight and other live geopolitical situation, AND every high-importance rule, policy, export control or other standing situation in the list below, from STANDING SITUATIONS and the world, trade and regulation reports (cite S-IDs in "refs"; several S-IDs about the same regulator or situation can share one entry, citing all of them). For each: what is likely to happen within THIS window (escalation, ceasefire, status quo, enforcement, a ruling or a change of the rule, with a probability), and what that does to the industry's prices and earnings in the window, by ticker where it differs. Cover at least these S-IDs in EVERY horizon, which code checks: ${req["12M"].standing.join(", ") || "none"}.
 - Size every decision and shock with the MEASURED MACRO SENSITIVITIES (e.g. a Fed outcome that moves the 10-year yield 25bp, a war that lifts oil 10%), and weigh POSITIONING (crowded or washed out), the direction of estimate REVISIONS and the BALANCE-SHEET CYCLE in every window. If there is a TRACK RECORD, use it to calibrate your ranges and probabilities.
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
+- Start every horizon from history: where HORIZON FACTS give the past months most like today, "probability_up" starts from that hit rate and "expected_move" from that middle half; move away only for reasons this time is different (say which, in "drivers", citing the TIMES LIKE THIS episodes [HE#] that agree or disagree). A call far from history needs a stated reason.
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
 
 Reply with ONLY this JSON:
@@ -5264,6 +5453,9 @@ Reply with ONLY this JSON:
         out.missing_standing = req.standing.filter((id) => !hasS.has(id));
         out.missing_sections = keys.length && x.section_reads ? keys.filter((k) => !x.section_reads[k]) : [];
       }
+      // How far the call sits from history (a note for the reader, not an error).
+      if (f.like && isNum(x.probability_up)) { out.history = { pos: f.like.pos, gap: x.probability_up - f.like.pos, median: f.like.median, top_up: f.like.top_up, top_n: f.like.top_n };
+        if (Math.abs(out.history.gap) >= 25) out.history.note = `${x.probability_up}% chance of a gain vs ${f.like.pos}% in the past months most like today`; }
       out.ok = !issues.length;
       out.covered = cal ? !out.missing_events.length && !out.missing_standing.length && !out.missing_sections.length : null;
       return out;
@@ -5801,7 +5993,7 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
   const SECTIONS = ["performance", "risk", "fundamentals", "valuation", "earnings", "health"];
   const req = (f, g) => (typeof module !== "undefined" && module.exports ? require(f) : root[g]);
   const Horizon = req("./horizon.js", "Horizon"), Sensitivity = req("./sensitivity.js", "Sensitivity"), Positioning = req("./positioning.js", "Positioning"), Fund = req("./fund.js", "Fund");
-  const History = req("./history.js", "History"), Plan = req("./plan.js", "Plan"), Chain = req("./chain.js", "Chain");
+  const History = req("./history.js", "History"), Regimes = req("./regimes.js", "Regimes"), Plan = req("./plan.js", "Plan"), Chain = req("./chain.js", "Chain");
   /** The multiple the scenario math starts from: forward P/E when consensus covers at least half the industry, else trailing. */
   function basePE(doc) {
     const fw = doc.forward;
@@ -5858,6 +6050,7 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
     if (doc.positioning) { H("POSITIONING"); out.push(Positioning.digest(doc.positioning)); }
     if (ctx.track) { H("TRACK RECORD"); out.push(ctx.track); }
     if (doc.history || doc.peers) { H("LONG HISTORY, BASE RATES AND SECTOR PEERS"); out.push(History.digest(doc.history, doc.peers, doc.etf)); }
+    if (doc.history?.times?.episodes?.length && Regimes) { H("TIMES LIKE THIS: THE PAST MONTHS MOST LIKE TODAY, AND WHAT FOLLOWED"); out.push(Regimes.text(doc.history.times)); if (ctx.historian?.read) out.push(`The historian's read: ${ctx.historian.read}`); }
     if (doc.ranking || doc.concentration || doc.credit) { H("COMPANIES, CONCENTRATION, LEVELS, LIQUIDITY AND CREDIT"); out.push(Plan.digest({ ranking: doc.ranking, conc: doc.concentration, earn: doc.plan?.earnings, liq: doc.plan?.liquidity, credit: doc.credit, lv: doc.plan?.index_levels })); }
     if (R.chain?.partners?.length) { H("VALUE CHAIN"); out.push(Chain.chainDigest(R.chain)); }
     if (R.calls?.companies?.length) { H("EARNINGS CALLS: WHAT CHANGED"); out.push(Chain.callsDigest(R.calls)); }
@@ -7695,6 +7888,7 @@ YOUR THESIS IN BRIEF: ${noIds(res?.headline, 300)} ${noIds(res?.summary || res?.
 SCENARIOS (12 months): ${["bull", "base", "bear"].filter((k) => sc[k]).map((k) => `${k} ${sc[k].probability}% (${(sc[k].price_move || []).join(" to ")}%)`).join("; ") || "n/a"}
 KEY DRIVERS: ${(res?.drivers || []).slice(0, 5).map((d) => `${d.title} (${d.direction})`).join("; ") || "n/a"}
 NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`).join(", ") || "n/a"}
+${(facts || []).some((f) => f.like) ? `TIMES LIKE THIS (the past months most like today, macro and industry setup; start from these and move away only for a stated reason): ${(facts || []).filter((f) => f.like).map((f) => `${f.h} up ${f.like.pos}% of the time, median ${f.like.median}% (middle half ${f.like.p25}% to ${f.like.p75}%), 5 closest episodes up ${f.like.top_up} of ${f.like.top_n}`).join("; ")}` : ""}
 
 WHAT CHANGED SINCE THE LAST UPDATE
 ${deltaText(x)}
@@ -8113,6 +8307,25 @@ Reply with ONLY this JSON:
   }
   /** The other industries in the sector: 1-year performance and today's P/E, plus the sector ETF. */
   /** Shared fetches reused across industries within 30 minutes (a sector run fetches each once). */
+  /**
+   * The market and macro history every industry's "times like this" is matched on, since 2008: the S&P 500, Treasuries
+   * (IEF), high-yield credit (HYG), oil (USO), the dollar (UUP), the VIX, and the Fed funds rate, CPI and unemployment
+   * (monthly). Pulled once and shared by every industry for 6 hours. Any piece that fails is just left out.
+   */
+  async function regimeData() {
+    return cached("regimes", async () => {
+      const end = today(), out = {};
+      const px = async (sym) => optional(async () => { const s = toSeries(await fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: "2007-06-01", to_date: end })); return s.dates.length > 500 ? { dates: s.dates, values: s.closes } : null; }, null);
+      for (const [k, sym] of [["spy", "SPY"], ["ief", "IEF"], ["hyg", "HYG"], ["uso", "USO"], ["uup", "UUP"]]) out[k] = await px(sym);
+      out.vix = await optional(async () => { const rows = []; for (let y = 2008; y <= Number(end.slice(0, 4)); y += 5) rows.push(...(await fmp("chart", { endpoint: "historical-price-eod-light", symbol: "^VIX", from_date: `${y}-01-01`, to_date: y + 4 >= Number(end.slice(0, 4)) ? end : `${y + 4}-12-31` }) || []));
+        const pts = rows.filter((r) => r?.date && isNum(+(r.price ?? r.close))).map((r) => [String(r.date).slice(0, 10), +(r.price ?? r.close)]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+        const dates = [], values = []; for (const [d, v] of pts) { if (dates.length && dates[dates.length - 1] === d) continue; dates.push(d); values.push(v); } return dates.length > 500 ? { dates, values } : null; }, null);
+      for (const [k, name] of [["ff", "federalFunds"], ["cpi", "CPI"], ["un", "unemploymentRate"]]) out[k] = await optional(async () => { const rows = [];
+        for (let y = 2007; y <= Number(end.slice(0, 4)); y += 5) rows.push(...(await fmp("economics", { endpoint: "economics-indicators", name, from_date: `${y}-01-01`, to_date: y + 4 >= Number(end.slice(0, 4)) ? end : `${y + 4}-12-31` }) || []));
+        const s = Regimes.monthly(rows); return s.dates.length > 24 ? s : null; }, null);
+      return out;
+    }, 6 * 3600 * 1000);
+  }
   async function cached(key, fn, ttl = 30 * 60 * 1000) {
     const c = S.cache[key]; if (c && Date.now() - c.at < ttl) return c.v;
     // Several industries can ask at once (a sector run): they share one fetch.
@@ -8409,6 +8622,12 @@ Reply with ONLY this JSON:
     const weights = exchangeWeights(uni.map((u) => ({ exchange: u.exchange, market_cap: u.market_cap })));
     const hraw = await fetchHistory(name, weights);
     const history = History.build({ perfRows: hraw.perfRows, peRows: hraw.peRows, primary: hraw.primary, weights, ief: hraw.ief, index: { dates: res.index.dates, levels: res.index.levels } });
+    // Times like this: the past months most like today (macro backdrop and the industry's own setup) and what followed.
+    if (history) try {
+      onStep("Times like this: the past months most like today, since 2009", 0.968);
+      const ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
+      history.times = Regimes.episodes({ ind: { dates: ls.dates, values: ls.levels }, pe: pes?.dates?.length ? pes : null, mk: await regimeData(), today: today() });
+    } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("times like this", e); }
     const pe = fallback ? { table: null, etf: null } : await fetchPeers(name, sector, org, bench);
     if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = res.summary.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }
     const cmdi = S.eod ? await cached("cmdi", () => optionalEod(async () => { const a = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100 }); const b = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100, offset: 100 }).catch(() => null); return [...(a?.data || []), ...(b?.data || [])]; }, [])) : [];
@@ -8705,6 +8924,24 @@ Reply with ONLY this JSON:
    * The lead strategist (the "brain"): runs last, after every specialist report, every rule book and the
    * regulatory verdict. Synthesis, then verdicts, then a skeptical review that fixes what it finds.
    */
+  /**
+   * The market historian: what was going on in each of the five past months most like today, what happened next and
+   * why, and what differs now (one call, the default tier). Rewritten only when the set of episodes changes.
+   * Returns the report's result, or null. Never throws for a failed answer (the calls don't depend on it).
+   */
+  async function runHistorian(name, { signal = null, force = false } = {}) {
+    const sl = slug(name), d = S.industries[sl], T = d?.history?.times;
+    if (!T?.episodes?.length || !S.sample) return null;
+    const have = rep(name, "history")?.result;
+    if (!force && have && (have.months || []).join() === T.episodes.map((e) => e.month).join()) return have;
+    try {
+      const raw = await sampleJson(Regimes.historianPrompt(name, T, { today: today(), thesis: S.agents[sl]?.result?.headline || "" }), { modelTier: "default", cache: false, ...(signal ? { signal } : {}), ...(JOB ? { jobStep: "Market historian (times like this)" } : {}) });
+      const result = Regimes.cleanHistorian(raw, T);
+      S.reports[`${sl}--history`] = jsonSafe({ name, kind: "history", as_of: today(), run_at: new Date().toISOString(), result });
+      return result;
+    } catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; console.warn("historian", e); return have || null; }
+  }
+
   async function runLead(name, { inSector = false, run = null } = {}) {
     if ((S.run && !run) || (S.sectorRun && !inSector) || !S.mcp || !S.sample) return;
     const d = S.industries[slug(name)]; if (!d?.summary) return;
@@ -8732,12 +8969,18 @@ Reply with ONLY this JSON:
       // Every source any team cited, so the strategist can cite across sections.
       const regSources = Object.entries(S.regbooks).filter(([k]) => k.startsWith(slug(name) + "--")).flatMap(([, v]) => v.sources || []);
       const idx = Team.index(pack, tx, macro, S.world?.items, rep(name, "world")?.result?.sources, rep(name, "macro")?.sources, rep(name, "trade")?.sources, regSources);
+      for (const [i, e] of (d.history?.times?.episodes || []).entries()) idx["HE" + (i + 1)] = { id: "HE" + (i + 1), kind: "HE", title: `A past month like today: ${e.month}`, source: "times like this", date: e.date };
       const sc = Score.scoreIndustries([d], {}, today(), { relative: false, sections: { [d.name]: sectionScores(name, { withLead: false }) } })[d.name];
       const books = regBodies(name).map((b) => ({ body: b.name, book: bookDoc(name, RegBook.bodyKey(b.name))?.book || null }));
       const ctx = { today: today(), pack, scores: sc, rf: S.bench?.rf_latest, y10: S.bench?.y10_latest, macroRows: macro.rows, idx, books, regVerdict: rep(name, "regverdict")?.result || null,
         reports: { kpi: rep(name, "kpi")?.result, macro: rep(name, "macro")?.result, world: rep(name, "world")?.result, trade: rep(name, "trade")?.result, reg: rep(name, "reg")?.result, chain: rep(name, "chain")?.result, calls: rep(name, "calls")?.result } };
       const trackLog = S.track[slug(name)] || (await idbGet("calls:" + slug(name)).catch(() => null)) || [];
       ctx.track = Track.digest(trackLog);
+      if (d.history?.times?.episodes?.length) await step("Market historian: the five past months most like today, and what followed", async (en) => {
+        const ctl = new AbortController(); ctls.add(ctl);
+        try { ctx.historian = await runHistorian(name, { signal: ctl.signal }); } finally { ctls.delete(ctl); }
+        en.note = ctx.historian ? `${d.history.times.episodes.map((e) => e.month).join(", ")}` : "the historian didn't answer; the calls use the measured base rates only";
+      }).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; });
       ctx.dossier = Brain.dossier(d, ctx);
       const { tools, seen, log } = Agent.buildTools(fmp, { today: today(), onStep: () => {} });
       let syn, ver, review = null;
@@ -9172,6 +9415,8 @@ Reply with ONLY this JSON:
             S.macroBy[sl] = { ...om, rows, as_of: today() };
           }
           const ag = S.agents[sl], res = ag.result, d = S.industries[sl];
+          // Times like this was recomputed with today's data; the historian rewrites only when the episodes changed.
+          if (d.history?.times?.episodes?.length) { const before = rep(name, "history")?.run_at; await runHistorian(name); if (rep(name, "history")?.run_at !== before) dr.calls++; }
           const relevance = Object.fromEntries(Object.entries(rep(name, "macro")?.result?.indicators || {}).map(([id, v]) => [id, v?.relevance || ""]));
           const x = Daily.deltas(prev, { doc: d, pack: S.research[sl], world: S.world, macroRows: S.macroBy[sl]?.rows || [], calendar: ag.calendar, spy: { dates: bench.spy.dates, closes: bench.spy.closes }, relevance }, today());
           // The quick model reads every industry's day: is it material, and does any headline make a deeper section stale?
@@ -10353,6 +10598,7 @@ Reply with ONLY this JSON:
     const pack = S.research[slug(d.name)] || null;
     const tx = S.tx[slug(d.name)] || null;
     IDX = Team.index(pack, tx, S.macro, S.world?.items, rep(d.name, "world")?.result?.sources, rep(d.name, "macro")?.sources, rep(d.name, "trade")?.sources);
+    for (const [i, e] of (d.history?.times?.episodes || []).entries()) IDX["HE" + (i + 1)] = { id: "HE" + (i + 1), kind: "HE", title: `A past month like today: ${e.month}`, source: "times like this", anchor: "ep-HE" + (i + 1) };
     calIndex(IDX, S.agents[slug(d.name)]?.calendar);
     const agMap = ag?.result ? { [d.name]: { overlay: ag.result.overlay, as_of: ag.as_of } } : {};
     const secs = sectionScores(d.name);
@@ -10486,6 +10732,7 @@ Reply with ONLY this JSON:
         <div class="prof-cards">${cards}</div>
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
+      ${timesSection(d)}
       ${trackSection(d)}
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
           <div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
@@ -10667,6 +10914,8 @@ Reply with ONLY this JSON:
       return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${HZC[x.call] || "neu"}">${esc(x.call)}</span>${x.conviction ? `<span class="small muted">${esc(x.conviction)} conviction</span>` : ""}</div>${dvL}
         <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
         <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>
+        ${(() => { const b = d.history?.times?.base?.[h]; if (!b || !isNum(num(b.pos))) return ""; const gap = isNum(num(x.probability_up)) ? x.probability_up - b.pos : null;
+          return `<div class="small hz-hist"><a href="#times">Times like this</a>: up in <b>${b.top_up} of ${b.top_n}</b> closest episodes (median ${b.top_median > 0 ? "+" : ""}${b.top_median ?? "—"}%); ${b.pos}% of the ${b.n} closest months${isNum(gap) && Math.abs(gap) >= 25 ? ` <span class="pill warn" title="The call's chance of a gain is far from what followed the past months most like today">${gap > 0 ? "+" : ""}${gap} pts vs history</span>` : ""}</div>`; })()}
         ${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}
         ${x.decisions?.length ? `<div class="small"><span class="eyebrow">Decisions and events in the window</span><ul class="dlist small" style="margin:2px 0 0">${x.decisions.map((c) => `<li>${c.date ? `<b class="mono">${esc(fmtShort(c.date))}</b> ` : ""}<b>${rich(c.event)}</b> ${c.lean && c.lean !== "neutral" ? `<span class="pill ${c.lean === "positive" ? "pos" : c.lean === "negative" ? "neg" : "warn"}">${esc(c.lean)}</span>` : ""} ${cites(c.refs)} <span class="muted">${rich(c.outcomes)}</span></li>`).join("")}</ul></div>` : ""}
         ${x.conflicts?.length ? `<div class="small"><span class="eyebrow">Wars, conflicts and threats</span><ul class="dlist small" style="margin:2px 0 0">${x.conflicts.map((c) => `<li><b>${rich(c.situation)}</b> ${cites(c.refs)} ${rich(c.in_window)}${c.impact ? ` <span class="muted">→ ${rich(c.impact)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}
@@ -11074,6 +11323,41 @@ Reply with ONLY this JSON:
   // ------------------------------------------------------------- history & peers, ranking, value chain, calls, trade plan, credit, red team
   const pp = (x, dgt = 1) => (isNum(num(x)) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(dgt)}%` : "—");
   const p0 = (x) => (isNum(num(x)) ? Math.round(x * 100) + "%" : "—");
+  /** A small two-line chart: the industry (solid) and the S&P 500 (dashed) over the 12 months after an episode, in %. */
+  function epPath(a, b) {
+    const W = 220, Hh = 56, all = [...(a || []), ...(b || [])].filter(isNum); if (!all.length) return "";
+    const lo = Math.min(0, ...all), hi = Math.max(0, ...all), sx = (i) => 2 + (i / 12) * (W - 4), sy = (v) => Hh - 4 - ((v - lo) / (hi - lo || 1)) * (Hh - 8);
+    const line = (p, st) => (p?.length > 1 ? `<polyline fill="none" ${st} points="${p.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(" ")}"/>` : "");
+    return `<svg class="ep-path" viewBox="0 0 ${W} ${Hh}" width="100%" height="${Hh}" role="img" aria-label="12 months after: industry vs S&P 500"><line x1="0" x2="${W}" y1="${sy(0).toFixed(1)}" y2="${sy(0).toFixed(1)}" stroke="var(--line)" stroke-width="1"/>
+      ${line(b, 'stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="3 3"')}${line(a, 'stroke="var(--accent)" stroke-width="2"')}</svg>`;
+  }
+  /** Times like this: the five past months most like today (macro and the industry's setup) and what followed. */
+  function timesSection(d) {
+    const T = d.history?.times;
+    if (!T?.episodes?.length) return sec("times", "Times like this", "", `<div class="small muted">Not in this saved run yet. The next daily update (or Run again) finds the five past months since 2009 most like today, on the macro backdrop and the industry's own setup, and shows what happened next.</div>`);
+    const hist = rep(d.name, "history")?.result, by = Object.fromEntries((hist?.episodes || []).map((e) => [e.month, e]));
+    const lead = S.agents[slug(d.name)]?.result, HZC = { bullish: "pos", neutral: "neu", bearish: "neg" };
+    const sg = (v) => (isNum(num(v)) ? `<span style="color:${v >= 0 ? "var(--pos)" : "var(--neg)"}">${v > 0 ? "+" : ""}${v}%</span>` : "—");
+    const HS = Object.keys(Regimes.H), ML = (m) => { const [y, mo] = m.split("-"); return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+mo - 1]} ${y}`; };
+    const F = Regimes.FMAP, fv = (k, v) => esc(Regimes.fval(k, v));
+    const strip = `<div class="times-strip">${HS.map((h) => { const b = T.base[h] || {}, c = lead?.horizons?.[h];
+      return `<div class="box"><div class="dim-head"><b>${h}</b>${c ? `<span class="pill ${HZC[c.call] || "neu"}">our call: ${esc(c.call)}${isNum(num(c.probability_up)) ? ` · ${c.probability_up}%` : ""}</span>` : ""}</div>
+        <div class="hz-num"><span class="v">${b.top_up ?? "—"} of ${b.top_n ?? 5}</span><span class="small muted">closest episodes higher · median ${sg(b.top_median)}</span></div>
+        <div class="small">${T.pool} closest months: up <b>${b.pos ?? "—"}%</b> (all months ${b.all_pos ?? "—"}%), median ${sg(b.median)}, middle half ${sg(b.p25)} to ${sg(b.p75)}${isNum(num(b.beat_spy)) ? `; beat the S&P 500 ${b.beat_spy}%` : ""}</div></div>`; }).join("")}</div>`;
+    const now = `<div class="small times-now"><b>Today (${esc(fmtShort(T.as_of))}):</b> ${T.features.map((k) => `<span class="chip-s">${esc(F[k].label)} <b>${fv(k, T.now[k])}</b></span>`).join(" ")}</div>`;
+    const cards = T.episodes.map((e, i) => { const n = by[e.month], id = `HE${i + 1}`;
+      return `<div class="box ep-card${hist?.closest === id ? " ep-closest" : ""}" id="ep-${id}"><div class="dim-head"><span class="idtag">${id}</span><b>${ML(e.month)}</b><span class="small muted">closer than ${e.similarity}% of all months</span>${hist?.closest === id ? `<span class="pill pos">most like today</span>` : ""}</div>
+        <div class="tbl-wrap"><table class="ep-ret"><thead><tr><th>Next</th>${HS.map((h) => `<th class="n">${h}</th>`).join("")}</tr></thead><tbody>
+          <tr><td>Industry</td>${HS.map((h) => `<td class="n">${sg(e.industry[h])}</td>`).join("")}</tr><tr><td>S&amp;P 500</td>${HS.map((h) => `<td class="n">${sg(e.spy[h])}</td>`).join("")}</tr>
+          <tr><td>Difference</td>${HS.map((h) => `<td class="n">${isNum(num(e.excess[h])) ? `${e.excess[h] > 0 ? "+" : ""}${e.excess[h]}pp` : "—"}</td>`).join("")}</tr></tbody></table></div>
+        ${epPath(e.path, e.spy_path)}<div class="small muted">Worst drop in the next 6 months: ${sg(e.maxdd6)} · <span style="color:var(--accent)">━</span> industry <span>┅</span> S&amp;P 500, 12 months</div>
+        ${n?.then ? `<p class="small" style="margin:0"><b>Then.</b> ${rich(n.then)}</p>` : ""}${n?.after ? `<p class="small" style="margin:0"><b>What happened next.</b> ${rich(n.after)}</p>` : ""}${n?.different ? `<p class="small" style="margin:0"><b>What's different now.</b> ${rich(n.different)}</p>` : ""}${n?.lesson ? `<div class="small"><span class="pill neu">${esc(n.lesson)}</span></div>` : ""}
+        <div class="small"><b>Most alike:</b> ${e.alike.map((k) => esc(F[k].label)).join(", ")} · <b>least alike:</b> ${e.unlike.map((k) => esc(F[k].label)).join(", ")}</div>
+        <details class="small"><summary>Then vs now, every measure</summary><div class="tbl-wrap"><table><thead><tr><th>Measure</th><th class="n">${ML(e.month)}</th><th class="n">Today</th></tr></thead><tbody>${T.features.map((k) => `<tr><td>${esc(F[k].label)}</td><td class="n">${fv(k, e.then[k])}</td><td class="n">${fv(k, T.now[k])}</td></tr>`).join("")}</tbody></table></div></details></div>`; }).join("");
+    const read = hist?.read ? `<div class="callout"><span class="eyebrow">The historian's read</span><p class="small" style="margin:4px 0 0">${rich(hist.read)}</p></div>` : `<div class="small muted">The historian's notes on each episode (what was going on, what happened next and why, what's different now) come with the next daily update or Run again.</div>`;
+    return sec("times", "Times like this", `the 5 past months most like today, out of ${T.months} since 2009 · what followed`, `${strip}${read}${now}<div class="ep-grid">${cards}</div>
+      <div class="small muted">How it's found: every month-end since 2009 gets a fingerprint of the macro backdrop (Fed funds rate and its 12-month change, CPI inflation, unemployment and its change, Treasuries, high-yield credit, oil, the dollar, the VIX, the S&amp;P 500's 6-month return and drawdown) and the industry's own setup (3- and 12-month returns, distance from its 200-day average, 6 months vs the S&amp;P 500, P/E percentile, drawdown). Each measure is standardized and today's fingerprint is compared with every past month; the closest five at least 9 months apart are shown, the last 12 months left out. Returns are FMP's equal-weighted industry average, including companies that later failed. The calls start from these base rates and must say why they differ.</div>`);
+  }
   function historySection(d) {
     const h = d.history, pr = d.peers, etf = d.etf;
     if (pr?.rows?.length && !busy() && pr.rows.some((r) => !("r6m" in r) || r.r3m === null || r.r1y === null)) setTimeout(() => refreshPeers(d), 0);
@@ -11402,7 +11686,7 @@ Reply with ONLY this JSON:
   /** The industry report's sidebar, in the order the sections appear. */
   function industryGroups(d) {
     const has = (id) => true;
-    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["track", "Track record"]] },
+    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"], ["track", "Track record"]] },
       { label: "Performance", items: [["performance", "Returns vs SPY"], ["risk", "Risk"]] },
       { label: "Analyst Consensus", items: [["estimates", "Estimates & revisions"]] },
       { label: "Industry Landscape", items: [["ranking", "Company ranking"], ["history", "History & peers"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["companies", "The companies"]] },
@@ -11413,7 +11697,7 @@ Reply with ONLY this JSON:
       { label: "News & Sentiment", items: [["news", "Sentiment & news"]] }];
   }
   function secNav() {
-    const links = [["overview", "Overview"], ["plan", "Trade plan"], ["track", "Track record"], ["scores", "Scores"], ["estimates", "Estimates"], ["positioning", "Positioning"], ["history", "History & peers"], ["ranking", "Company ranking"], ["industry", "Industry"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"], ["regulation", "Regulation & legal"], ["news", "Sentiment & news"], ["performance", "Performance"], ["fundamentals", "Fundamentals"], ["valuation", "Valuation"], ["earnings", "Earnings"], ["health", "Health"], ["companies", "Companies"]];
+    const links = [["overview", "Overview"], ["plan", "Trade plan"], ["track", "Track record"], ["scores", "Scores"], ["times", "Times like this"], ["estimates", "Estimates"], ["positioning", "Positioning"], ["history", "History & peers"], ["ranking", "Company ranking"], ["industry", "Industry"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"], ["regulation", "Regulation & legal"], ["news", "Sentiment & news"], ["performance", "Performance"], ["fundamentals", "Fundamentals"], ["valuation", "Valuation"], ["earnings", "Earnings"], ["health", "Health"], ["companies", "Companies"]];
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 

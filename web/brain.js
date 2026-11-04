@@ -34,7 +34,7 @@
   const SECTIONS = ["performance", "risk", "fundamentals", "valuation", "earnings", "health"];
   const req = (f, g) => (typeof module !== "undefined" && module.exports ? require(f) : root[g]);
   const Horizon = req("./horizon.js", "Horizon"), Sensitivity = req("./sensitivity.js", "Sensitivity"), Positioning = req("./positioning.js", "Positioning"), Fund = req("./fund.js", "Fund");
-  const History = req("./history.js", "History"), Plan = req("./plan.js", "Plan"), Chain = req("./chain.js", "Chain");
+  const History = req("./history.js", "History"), Regimes = req("./regimes.js", "Regimes"), Plan = req("./plan.js", "Plan"), Chain = req("./chain.js", "Chain");
   /** The multiple the scenario math starts from: forward P/E when consensus covers at least half the industry, else trailing. */
   function basePE(doc) {
     const fw = doc.forward;
@@ -91,6 +91,7 @@
     if (doc.positioning) { H("POSITIONING"); out.push(Positioning.digest(doc.positioning)); }
     if (ctx.track) { H("TRACK RECORD"); out.push(ctx.track); }
     if (doc.history || doc.peers) { H("LONG HISTORY, BASE RATES AND SECTOR PEERS"); out.push(History.digest(doc.history, doc.peers, doc.etf)); }
+    if (doc.history?.times?.episodes?.length && Regimes) { H("TIMES LIKE THIS: THE PAST MONTHS MOST LIKE TODAY, AND WHAT FOLLOWED"); out.push(Regimes.text(doc.history.times)); if (ctx.historian?.read) out.push(`The historian's read: ${ctx.historian.read}`); }
     if (doc.ranking || doc.concentration || doc.credit) { H("COMPANIES, CONCENTRATION, LEVELS, LIQUIDITY AND CREDIT"); out.push(Plan.digest({ ranking: doc.ranking, conc: doc.concentration, earn: doc.plan?.earnings, liq: doc.plan?.liquidity, credit: doc.credit, lv: doc.plan?.index_levels })); }
     if (R.chain?.partners?.length) { H("VALUE CHAIN"); out.push(Chain.chainDigest(R.chain)); }
     if (R.calls?.companies?.length) { H("EARNINGS CALLS: WHAT CHANGED"); out.push(Chain.callsDigest(R.calls)); }

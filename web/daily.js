@@ -180,6 +180,7 @@ YOUR THESIS IN BRIEF: ${noIds(res?.headline, 300)} ${noIds(res?.summary || res?.
 SCENARIOS (12 months): ${["bull", "base", "bear"].filter((k) => sc[k]).map((k) => `${k} ${sc[k].probability}% (${(sc[k].price_move || []).join(" to ")}%)`).join("; ") || "n/a"}
 KEY DRIVERS: ${(res?.drivers || []).slice(0, 5).map((d) => `${d.title} (${d.direction})`).join("; ") || "n/a"}
 NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`).join(", ") || "n/a"}
+${(facts || []).some((f) => f.like) ? `TIMES LIKE THIS (the past months most like today, macro and industry setup; start from these and move away only for a stated reason): ${(facts || []).filter((f) => f.like).map((f) => `${f.h} up ${f.like.pos}% of the time, median ${f.like.median}% (middle half ${f.like.p25}% to ${f.like.p75}%), 5 closest episodes up ${f.like.top_up} of ${f.like.top_n}`).join("; ")}` : ""}
 
 WHAT CHANGED SINCE THE LAST UPDATE
 ${deltaText(x)}
