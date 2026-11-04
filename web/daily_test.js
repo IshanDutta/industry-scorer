@@ -29,4 +29,18 @@ ok(a.result.scenarios.bull.probability === 35 && a.result.daily.horizons._scenar
 ok(a.result.daily.sources.length === 1 && a.result.daily_history.length === 1, "sources and history");
 const b = D.apply(a.result, null, x, { today: "2026-10-29", via: "triage", tri: { why: "Routine day." } });
 ok(!b.changed && b.result.daily.headline === "Routine day." && b.result.daily_history.length === 2 && b.result.horizons["1M"].call === "bullish", "a quiet day stamps the calls and keeps them");
+// Sections: the brief, the quick model's picks (cited, cooled down), and code's earnings pick.
+const rr = (k) => Object.entries(recs).find(([kk]) => kk.startsWith("run:"))[1].reports?.[Object.keys(rec.reports || {}).find((z) => z.endsWith("--" + k))]?.result;
+const brief = D.sectionBrief({ kpi: rr("kpi"), world: rr("world"), trade: rr("trade"), reg: rr("reg"), chain: rr("chain"), bodies: ["FDA", "FTC"] });
+ok(/KPIs:/.test(brief) && /Regulators with rule books: FDA; FTC/.test(brief) && brief.length < 6000, `section brief (${brief.length} chars)`);
+const tp = D.triagePrompt("Beverages", res, x, nd, brief); ok(/"sections"/.test(tp) && /rulebook/.test(tp) && tp.length < 26000, `triage prompt asks for sections (${tp.length} chars)`);
+const tri2 = { material: true, sections: [{ key: "reg", why: "The FTC sued to block the merger [D1]." }, { key: "world", why: "Generic commentary." }, { key: "rulebook", why: "FDA finalized the rule [D1]", regulators: ["FDA"] }, { key: "rulebook", why: "no regulator [D1]" }, { key: "bogus", why: "[D1]" }] };
+const xn = { ...x, passed: [] }, picks = D.pickSections(tri2, xn, {}, nd);
+ok(picks.map((p) => p.key).join(",") === "reg,rulebook" && picks[1].regulators[0] === "FDA", "only cited, known sections are picked: " + picks.map((p) => p.key).join(","));
+ok(D.pickSections(tri2, xn, { reg: "2026-10-26" }, nd).map((p) => p.key).join(",") === "rulebook", "a section rewritten 2 days ago waits out its cool-down");
+const xe = { ...x, passed: [{ date: "2026-10-28", kind: "earnings", tickers: ["KO"], title: "KO earnings" }], triggers: ["KO reported (2026-10-28)"] };
+ok(D.pickSections(null, xe, { kpi: "2026-10-27" }, nd).map((p) => p.key).join(",") === "kpi", "a top company's earnings rewrites KPIs even the next day");
+const c = D.apply(res, upd, x, { today: nd, via: "update", sources: x.news, sections: [{ ...picks[0], ok: true }, { ...picks[1], ok: false, error: "no rules came back" }] });
+ok(c.result.daily.sections.length === 2 && c.result.sections_rewritten.reg === nd && !c.result.sections_rewritten.rulebook, "sections recorded; only the ones that worked start a cool-down");
+ok(D.updatePrompt("Beverages", res, x, nd, res.horizon_facts, "Regulation: the FTC sued [R3].").includes("SECTIONS YOUR TEAM REWROTE TODAY"), "update prompt carries what the rewritten sections say");
 console.log(fails ? fails + " FAILED" : "daily tests passed"); process.exit(fails ? 1 : 0);

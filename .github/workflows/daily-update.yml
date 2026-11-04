@@ -4,7 +4,11 @@
 #   1. code refreshes every number (prices, returns, estimates, positioning, macro values, news): no Claude;
 #   2. code compares today with the last update and flags hard triggers (a big move, a top company reporting, ...);
 #   3. without a trigger, the quick model (Haiku) checks whether anything is material;
-#   4. only where something is, the strategist (Sonnet) revisits the 1M-12M calls; the rest stand as they were.
+#   4. only where something is, the strategist (Sonnet) revisits the 1M-12M calls; the rest stand as they were;
+#   5. when a headline makes a deeper section stale (a new law or ruling, a war or sanction, a tariff, a top company's
+#      earnings, a key customer's news, a regulator's rule), that section is rewritten by the same analyst as the full
+#      run, for that industry only, before the calls are revisited. Each section waits a few days before it can be
+#      rewritten again for news alone.
 # The updated sector goes back to the exports branch, so "Pull from GitHub" in Industry Scorer gets it.
 # The full analysis is still the weekly "Sector run" (list the sectors in runner/weekly-sectors.txt).
 #
@@ -22,7 +26,7 @@ on:
       budget:
         description: "Most to spend on Claude per sector today, in US dollars"
         required: false
-        default: "5"
+        default: "8"
   schedule:
     - cron: "37 21 * * 1-5" # weekdays at 21:37 UTC (4:37 pm New York in winter, 5:37 pm in summer), after the close
 
@@ -46,14 +50,15 @@ jobs:
             echo "sectors=$(echo "$SECTOR" | tr ',' '\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d' | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Every sector with a finished full analysis in the exports branch.
+          # Every sector in the exports branch with at least one finished industry (a sector still adding industries,
+          # or stopped part-way, updates the industries it has finished).
           if git fetch -q origin exports 2>/dev/null; then
             git show FETCH_HEAD --name-only --format= >/dev/null
             list=$(git ls-tree --name-only FETCH_HEAD runs/ | sed -n 's#^runs/\([a-z-]*\)\.json\.gz$#\1#p')
             names="[]"
             for slug in $list; do
               git show "FETCH_HEAD:runs/$slug.json.gz" > s.json.gz
-              name=$(node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("s.json.gz")));process.stdout.write(j.finished&&j.sector?j.sector:"")')
+              name=$(node -e 'const j=JSON.parse(require("zlib").gunzipSync(require("fs").readFileSync("s.json.gz")));const k=Object.keys(j.records||{}).find((x)=>/^sector:[^:]+$/.test(x));let r=k?j.records[k]:null;if(typeof r==="string")r=JSON.parse(r);process.stdout.write(j.sector&&(j.finished||(r&&r.done&&(r.done.H||[]).length))?j.sector:"")')
               [ -n "$name" ] && names=$(echo "$names" | jq -c --arg n "$name" '. + [$n]')
             done
             rm -f s.json.gz
@@ -115,9 +120,11 @@ jobs:
           JOB_DAILY_INDUSTRIES: ${{ vars.DAILY_INDUSTRIES || '4' }}
           CLAUDE_MODEL_QUICK: ${{ vars.CLAUDE_MODEL_QUICK || 'claude-haiku-4-5-20251001' }}
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
+          # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
+          CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch
           CLAUDE_STRAGGLER_MIN: "30"
-          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || '5' }}
+          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || '8' }}
         run: node run.mjs --daily --sector "$SECTOR" --resume ../base/checkpoint.json.gz --out ../out --deadline-min 170
       - name: Keep the updated sector in the exports branch
         if: success() && hashFiles('out/checkpoint.json.gz') != ''

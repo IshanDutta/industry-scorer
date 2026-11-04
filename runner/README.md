@@ -67,10 +67,18 @@ fraction of the cost:
 2. **What changed:** code compares today with the last update and flags hard triggers: the industry moving more than
    1.5x its normal move, a top-10 company reporting, a big constituent move, a large move in a high-relevance macro
    indicator, a jump in estimate revisions or in news volume.
-3. **Triage (Haiku 4.5):** with no trigger, a short prompt asks whether anything is material.
-4. **Revisions (Sonnet 5.5):** only where something is, the strategist revisits the 1M-12M calls (and, if warranted,
-   the scenario odds) against what changed. Calls it leaves alone stay exactly as they were; revised ones keep where
-   they came from, and the industry report shows a "Daily update" box with what changed.
+3. **Triage (Haiku 4.5):** a short prompt asks whether anything is material, and whether any headline makes one of
+   the deeper sections out of date (it must cite the headline, and most days the answer is none).
+4. **Sections rewritten for the news:** a section the news made stale is rewritten by the same analyst as the full
+   run, for that industry only: KPIs and earnings calls (also whenever a top-10 company reports), world-event deep
+   dives, the trade map, regulation/litigation/deals (with the regulatory verdict), a named regulator's rule book,
+   or customers and suppliers. Each section then waits 4-10 days before news alone can rewrite it again, and at most
+   three are rewritten per industry per day. These run on Sonnet 5.5 (repository variable
+   `CLAUDE_MODEL_DAILY_COMPLEX=claude-opus-5-5` for full quality, about twice the cost).
+5. **Revisions (Sonnet 5.5):** where something is material or a section was rewritten, the strategist revisits the
+   1M-12M calls (and, if warranted, the scenario odds) against what changed and what the rewritten sections now say.
+   Calls it leaves alone stay exactly as they were; revised ones keep where they came from, and the industry report
+   shows a "Daily update" box with what changed and which sections were rewritten, and why.
 
 It runs every weekday after the US close (all analyzed sectors, four at a time), or on demand for chosen sectors.
 Settings (repository variables): `DAILY_BUDGET_USD` (default 5 per sector), `DAILY_INDUSTRIES` (industries refreshed

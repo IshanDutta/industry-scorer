@@ -33,7 +33,14 @@ const rev = runs.filter((x) => x.agent.result.daily.revised);
 ok(rev.length >= 1 && rev.every((x) => x.agent.result.horizons["1M"].daily?.from?.call), `revised industries keep where each call came from (${rev.length} revised)`);
 ok(runs.some((x) => !x.agent.result.daily.revised && x.agent.result.daily.via === "triage"), "a quiet industry was stamped after triage, its calls untouched");
 const dailyReq = fa.stats.requests - fullReq;
-ok(dailyReq > 0 && dailyReq <= runs.length * 2, `the daily update used ${dailyReq} Claude requests (the full run used ${fullReq})`);
+ok(dailyReq > 0 && dailyReq < fullReq / 2, `the daily update used ${dailyReq} Claude requests (the full run used ${fullReq})`);
+// Sections the news made stale: the mock's triage names regulation, world events and a rule book for Semiconductors.
+const semi = runs.find((v) => v.name === "Semiconductors"), secs = semi?.agent?.result?.daily?.sections || [];
+console.log("    sections:", JSON.stringify(secs.map((x) => [x.key, x.ok, x.error || ""])));
+ok(secs.some((x) => x.key === "reg" && x.ok) && semi.reports["semiconductors--reg"]?.daily?.date, "a regulation headline rewrote Semiconductors' regulation section, stamped with why");
+ok(secs.some((x) => x.key === "world" && x.ok) && semi.reports["semiconductors--world"]?.daily?.date, "a world headline rewrote its world-event deep dives");
+ok(secs.some((x) => x.key === "rulebook" && x.ok) && semi.reports["semiconductors--regverdict"]?.daily?.date, "a regulator's rule in the news rebuilt that rule book and the regulatory verdict");
+ok(semi.agent.result.sections_rewritten?.reg && runs.filter((v) => v.name !== "Semiconductors").every((v) => !(v.agent.result.daily.sections || []).length), "only the industry with news had sections rewritten; the cool-down is recorded");
 const sec = recs["sector:technology"]; ok(!!sec?.daily?.date && !!sec.finished_at, "the sector record notes the daily update and stays finished");
 const quick = fa.stats.prompts?.filter?.((p) => /^You watch the /.test(p.prompt || p)).length; void quick;
 console.log(process.exitCode ? "DAILY TEST FAILED" : "DAILY TEST PASSED"); process.exit(process.exitCode || 0);

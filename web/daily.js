@@ -101,19 +101,75 @@
     return `${h}: ${x.call}, ${x.conviction || "?"} conviction, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% chance higher. Why: ${noIds(x.drivers, 500)}${(x.decisions || []).length ? ` Decisions in the window: ${x.decisions.slice(0, 6).map((c) => `${c.date || ""} ${noIds(c.event, 90)}`).join("; ")}.` : ""}`; }).join("\n");
 
   /** Step 3: is anything material? A short prompt for the quick model. */
-  function triagePrompt(name, res, x, today) {
+  function triagePrompt(name, res, x, today, brief = "") {
     return `You watch the "${name}" industry for an investment team. Today is ${today}. The team's current calls (from ${res?.daily?.date || "its last full analysis"}):
 ${callsText(res)}
-
+${brief ? `
+WHAT THE TEAM'S DEEPER SECTIONS SAY NOW (written ${res?.daily?.date ? "earlier" : "in the last full analysis"})
+${brief}
+` : ""}
 WHAT CHANGED SINCE THE LAST UPDATE (computed from market data and news)
 ${deltaText(x)}
 
-Is any of this material enough that the 1M, 3M, 6M or 12M call could change (direction, range or the chance of a gain)? Routine moves inside the normal range, expected events landing as expected and generic headlines are not material.
-Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizons worth revisiting, e.g. 1M"], "why": "one sentence"}`;
+1. Is any of this material enough that the 1M, 3M, 6M or 12M call could change (direction, range or the chance of a gain)? Routine moves inside the normal range, expected events landing as expected and generic headlines are not material.
+2. Does any headline make one of the deeper sections out of date? Name a section only for a concrete new fact it doesn't have, cited by its [D#] ID:
+${Object.entries(SECTIONS).map(([k, v]) => `   - "${k}": ${v.when}`).join("\n")}
+   Most days the answer is none. Never name a section for commentary, previews, price moves or something the section already covers.
+Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizons worth revisiting, e.g. 1M"], "why": "one sentence",
+ "sections": [{"key": "${Object.keys(SECTIONS).join(" | ")}", "why": "one sentence: the new fact, cited [D#]", "regulators": ["only for rulebook: the regulator's name as listed above"]}]}`;
+  }
+
+  /**
+   * The deeper sections the daily update can rewrite when the news makes them stale. Each one is the same analyst
+   * the full run uses, rerun for this industry only; "cool" is how many days must pass before the same section is
+   * rewritten again for news alone (a company's earnings, flagged by code, can rewrite KPIs sooner).
+   */
+  const SECTIONS = {
+    kpi: { label: "KPIs and earnings calls", cool: 5, when: "a top company reported, pre-announced or changed guidance; or an industry statistic (shipments, prices, orders, volumes) was published" },
+    world: { label: "World-event deep dives", cool: 4, when: "a war, conflict, sanction, election result, disaster or other world situation began, escalated, ended or turned, and it reaches this industry" },
+    trade: { label: "Trade map and country relations", cool: 4, when: "a tariff, export control, trade deal, quota or a change in relations with one of the industry's countries was announced or took effect" },
+    reg: { label: "Regulation, litigation and deals", cool: 4, when: "a law, rule, court ruling, enforcement action, investigation, settlement, merger or deal touching the industry was announced, passed, decided or closed" },
+    rulebook: { label: "Regulator rule books", cool: 10, when: "one of the regulators listed above finalized, proposed, changed, delayed or struck down one of its rules or instruments for this industry" },
+    chain: { label: "Customers and suppliers", cool: 5, when: "a key customer or supplier reported, changed guidance or capex, was acquired, failed, or won or lost a major contract" },
+  };
+  /** A short brief of what each deeper section says now, so the quick model can tell whether a headline is new to it. */
+  function sectionBrief({ kpi, world, trade, reg, chain, bodies = [] } = {}) {
+    const L = [], cut = (t, n) => trim(noIds(t), n);
+    if (kpi) L.push(`KPIs: ${cut(kpi.summary, 300)}`);
+    if (world?.dives?.length || world?.scout?.situations?.length) L.push(`World situations covered: ${(world.dives?.length ? world.dives : world.scout.situations).slice(0, 10).map((d) => d.title).join("; ")}`);
+    if (trade?.map?.countries?.length) L.push(`Trade map countries: ${trade.map.countries.slice(0, 12).map((c) => c.country).join(", ")}`);
+    if (reg) { const it = [...(reg.policy || []).map((p) => p.title), ...(reg.litigation || []).map((l) => l.case), ...(reg.deals || []).map((d) => d.title)].slice(0, 14);
+      if (it.length) L.push(`Regulation, litigation and deals covered: ${it.join("; ")}`); }
+    if (bodies.length) L.push(`Regulators with rule books: ${bodies.slice(0, 10).join("; ")}`);
+    if (chain?.partners?.length) L.push(`Key customers and suppliers: ${chain.partners.slice(0, 12).map((p) => `${p.symbol || p.name} (${p.role})`).join(", ")}`);
+    return L.join("\n");
+  }
+  /**
+   * Which sections to rewrite today: the quick model's picks (each must cite a headline) plus code's (a top company
+   * reported: KPIs), minus any rewritten too recently. last: {key: "YYYY-MM-DD"}; at most `max` a day.
+   */
+  function pickSections(tri, x, last = {}, today, { max = 3 } = {}) {
+    const out = [], ids = new Set((x.news || []).concat(x.world || []).map((n) => n.id));
+    const days = (d) => (d ? Math.round((Date.parse(today) - Date.parse(String(d).slice(0, 10))) / 864e5) : 999);
+    const add = (key, why, { code = false, regulators = [] } = {}) => {
+      if (!SECTIONS[key] || out.some((o) => o.key === key)) return;
+      if (days(last[key]) < (code ? 1 : SECTIONS[key].cool)) return;
+      out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", ...(regulators.length ? { regulators } : {}) });
+    };
+    for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
+    for (const s of Array.isArray(tri?.sections) ? tri.sections : []) {
+      const key = lc(s?.key), why = String(s?.why || "");
+      const cited = [...why.matchAll(/\[([A-Z]{1,2}\d{1,4})\]/g)].map((m) => m[1]).filter((i) => ids.has(i));
+      if (!cited.length) continue; // a section is rewritten only for a headline the data actually has
+      const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 2) : [];
+      if (key === "rulebook" && !regulators.length) continue;
+      add(key, why, { regulators });
+    }
+    return out.slice(0, max);
   }
 
   /** Step 4: revisit the calls against what changed. */
-  function updatePrompt(name, res, x, today, facts) {
+  function updatePrompt(name, res, x, today, facts, rewritten = "") {
     const sc = res?.scenarios || {};
     return `You are the lead strategist for the "${name}" industry. Today is ${today}. Your full analysis is below in brief; since then, the market and news moved (WHAT CHANGED). Update your 1M, 3M, 6M and 12M calls only where the evidence warrants: keep a call that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.
 
@@ -128,7 +184,7 @@ NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`)
 WHAT CHANGED SINCE THE LAST UPDATE
 ${deltaText(x)}
 ${x.triggers.length ? `\nFLAGGED BY CODE: ${x.triggers.join("; ")}` : ""}
-
+${rewritten ? `\nSECTIONS YOUR TEAM REWROTE TODAY BECAUSE OF THIS NEWS (their new conclusions; weigh them in your calls)\n${noIds(rewritten)}\n` : ""}
 RULES
 - Cite what you rely on with its ID in square brackets: [D#] for today's headlines, [I#] for macro rows. Never invent a fact or figure.
 - A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more.
@@ -144,7 +200,7 @@ Reply with ONLY this JSON:
    * Apply an update to the lead's result (returns a new result). upd: the update JSON (or null for "nothing material"); via: "code" | "triage" | "update".
    * Each revised horizon keeps where it came from; a daily history of the last 20 updates is kept.
    */
-  function apply(res, upd, x, { today, via, tri = null, sources = [] }) {
+  function apply(res, upd, x, { today, via, tri = null, sources = [], sections = [] }) {
     const out = JSON.parse(JSON.stringify(res || {}));
     const ids = new Set(sources.map((s) => s.id).concat((x.macro || []).map((m) => m.id)));
     const cite = (t, k = 600) => trim(String(t || "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter((i) => ids.has(i)); return keep.length ? `[${keep.join(", ")}]` : ""; }), k);
@@ -172,13 +228,16 @@ Reply with ONLY this JSON:
       horizons: hz, revised: changed, watch: upd ? (Array.isArray(upd.watch) ? upd.watch : []).slice(0, 3).map((w) => cite(w, 200)).filter(Boolean) : [], triggers: x.triggers || [],
       move: isNum(x.move) ? Math.round(x.move * 1000) / 10 : null, spy: isNum(x.spy) ? Math.round(x.spy * 1000) / 10 : null, z: isNum(x.z) ? Math.round(x.z * 10) / 10 : null,
       movers: (x.movers || []).slice(0, 5).map((m) => ({ symbol: m.symbol, ret: Math.round(m.ret * 1000) / 10 })),
+      sections: sections.map((s) => ({ key: s.key, label: s.label, why: cite(s.why, 300), by: s.by, ok: s.ok !== false, ...(s.regulators ? { regulators: s.regulators } : {}), ...(s.error ? { error: trim(s.error, 200) } : {}) })),
       sources: sources.filter((s) => JSON.stringify(upd || {}).includes(s.id)).map(({ id, date, source, title, url }) => ({ id, date, source, title, url })) };
-    const hist = [entry, ...((out.daily_history || []).filter((h) => h.date !== today))].slice(0, 20).map((h, i) => (i === 0 ? h : { date: h.date, via: h.via, material: h.material, revised: h.revised, headline: h.headline, move: h.move }));
+    const hist = [entry, ...((out.daily_history || []).filter((h) => h.date !== today))].slice(0, 20).map((h, i) => (i === 0 ? h : { date: h.date, via: h.via, material: h.material, revised: h.revised, headline: h.headline, move: h.move, ...(h.sections?.length ? { sections: h.sections.map((x) => ({ key: x.key, label: x.label, why: x.why, ok: x.ok })) } : {}) }));
     out.daily = entry; out.daily_history = hist;
+    // When each section was last rewritten (the cool-down for the next day's picks).
+    for (const sct of sections) if (sct.ok !== false) out.sections_rewritten = { ...(out.sections_rewritten || {}), [sct.key]: today };
     return { result: out, changed };
   }
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);
