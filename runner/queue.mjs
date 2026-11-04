@@ -85,7 +85,7 @@ async function credit() {
       body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1, messages: [{ role: "user", content: "ok" }] }) });
     if (r.ok) return { ok: true, message: "The API key works and has credit.", checked_at: now };
     const t = await r.text();
-    if (/credit balance/i.test(t)) return { ok: false, reason: "credits", message: "Your Anthropic credit balance is too low. Add credits at console.anthropic.com → Plans & Billing; the queue resumes by itself within the hour.", checked_at: now };
+    if (/credit balance/i.test(t)) return { ok: false, reason: "credits", message: "Your Anthropic credit balance is too low. Add credits at console.anthropic.com → Plans & Billing.", checked_at: now };
     if (r.status === 401) return { ok: false, reason: "key", message: "The ANTHROPIC_API_KEY secret was refused (401). Check it in the repository's secrets.", checked_at: now };
     if (r.status === 429 || r.status === 529) return { ok: true, message: `The API is busy (${r.status}); the key works.`, checked_at: now };
     return { ok: null, message: `Credit check: HTTP ${r.status}.`, checked_at: now };
@@ -126,7 +126,7 @@ if (action === "start") {
     start_usd: Object.fromEntries(SECTORS.map((s) => [s, sectors[s]?.usd || 0])), items, daily_dispatched: false, stopped: false, note: "Starting." };
   log.push(`Queue started: ${items.map((i) => `${i.sector} ($${i.budget})`).join(", ")}; cap $${queue.cap}.`);
 }
-if (queue && action === "stop") { queue.stopped = true; queue.note = "Stopped by you. Start or resume it from the Queue and status workflow."; }
+if (queue && action === "stop") { queue.stopped = true; queue.note = "Stopped. Nothing runs until you press Start the runs."; }
 if (queue && action === "resume") { queue.stopped = false; for (const i of queue.items) if (["failed", "credits"].includes(i.state)) { i.state = "waiting"; i.attempts = 0; } }
 
 const cred = await credit(), cost = await costReport();
@@ -160,7 +160,7 @@ if (queue && !queue.stopped && REPO) {
     const next = queue.items.find((i) => ["waiting", "credits"].includes(i.state));
     if (next && !(next.state === "credits" && cred.ok === false)) {
       const left = r2(queue.cap - spentInQueue());
-      if (cred.ok === false) { queue.note = cred.message; next.state = "credits"; }
+      if (cred.ok === false) { queue.note = `${cred.message} The queue carries on by itself within the hour of credit arriving.`; next.state = "credits"; }
       else if (left < 1) { queue.stopped = true; queue.note = `The queue's $${queue.cap} cap is used up ($${spentInQueue()} spent). Raise it and resume to continue.`; }
       else {
         const budget = Math.max(1, Math.min(next.budget - Math.max(0, (sectors[next.sector]?.usd || 0) - (next.usd_at_first_dispatch ?? sectors[next.sector]?.usd ?? 0)), left));
@@ -168,7 +168,7 @@ if (queue && !queue.stopped && REPO) {
         if (dispatch(next, Math.round(budget * 100) / 100)) { next.state = "dispatched"; next.dispatched_at = now; next.dispatched_budget = r2(budget); queue.note = `Started ${next.sector} (up to $${r2(budget)}).`; log.push(queue.note); }
         else queue.note = `Couldn't start ${next.sector}; trying again next hour.`;
       }
-    } else if (next?.state === "credits") queue.note = cred.message;
+    } else if (next?.state === "credits") queue.note = `${cred.message} The queue carries on by itself within the hour of credit arriving.`;
     else if (!next && cur && cur.state === "done") queue.note = "Waiting for the next step.";
   }
   if (queue.items.every((i) => ["done", "skipped", "budget", "failed"].includes(i.state))) {
