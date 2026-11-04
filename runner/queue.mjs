@@ -197,8 +197,41 @@ if (env.CREDIT_BALANCE_USD && env.CREDIT_BALANCE_AT) {
 }
 const day = (n) => { const t = new Date(Date.now() - n * 864e5).toISOString(); const b = [...sl].reverse().find((x) => x.at <= t) || sl[0]; return r2(tot - (b?.total ?? tot)); };
 
+// ------------------------------------------------------------------ is the daily update working? (the page's indicator)
+/** The next scheduled daily update (21:37 UTC every day), and the midday alarm's checks (15:47 and 18:17 UTC, weekdays). */
+const nextAt = (h, m, days = [0, 1, 2, 3, 4, 5, 6]) => { const t = new Date(now); for (let k = 0; k < 8; k++) { const c = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() + k, h, m));
+  if (c > t && days.includes(c.getUTCDay())) return c.toISOString(); } return null; };
+function dailyIndicator() {
+  const live = dailyRuns.find((r) => r.status !== "completed"), last = dailyRuns.find((r) => r.status === "completed");
+  const doneSectors = Object.values(sectors).filter((x) => x.industries.some((i) => i.status === "done"));
+  const newest = doneSectors.map((x) => x.daily).filter(Boolean).sort().pop() || null;
+  const out = { daily_next_at: nextAt(21, 37), daily_newest: newest, daily_sectors_with_analysis: doneSectors.length,
+    daily_sectors_current: newest ? doneSectors.filter((x) => x.daily === newest).length : 0,
+    daily_sectors_behind: newest ? doneSectors.filter((x) => x.daily !== newest).map((x) => x.sector).join(", ") || null : null };
+  const how = (r) => (r.event === "schedule" ? "on schedule" : r.event === "workflow_dispatch" ? "started early (the market alarm, the queue or by hand)" : r.event);
+  if (live) {
+    // Which sectors are done and which are working right now (the workflow's matrix jobs).
+    const v = JSON.parse(gh(["run", "view", String(live.databaseId), "--repo", REPO, "--json", "jobs"], { quiet: true }) || "{}");
+    const jobs = (v.jobs || []).filter((j) => /^update\b/.test(j.name)), nameOf = (j) => (String(j.name).match(/\(([^,)]+)/) || [])[1] || j.name;
+    const fin = jobs.filter((j) => j.status === "completed"), wk = jobs.filter((j) => j.status === "in_progress");
+    return { ...out, daily_state: "running", daily_started_at: live.createdAt, daily_how: how(live), daily_url: live.url,
+      daily_progress: jobs.length ? `${fin.length} of ${jobs.length} sectors done` : "planning which sectors to update", daily_working: wk.map(nameOf).join(", ") || null,
+      daily_failed_sectors: fin.filter((j) => j.conclusion && j.conclusion !== "success").map(nameOf).join(", ") || null };
+  }
+  if (!last) return { ...out, daily_state: doneSectors.length ? "never" : "nothing to update", daily_note: doneSectors.length ? "No daily update has run yet." : "No sector has a finished analysis yet." };
+  const ok = last.conclusion === "success", why = ok ? "ok" : reasonOf(last);
+  // Overdue: nothing finished in the last 26 hours though something should have.
+  const overdue = Date.parse(now) - Date.parse(last.updatedAt) > 26 * 3600e3;
+  return { ...out, daily_state: overdue ? "overdue" : ok ? "ok" : why === "credits" ? "credits" : "failed", daily_started_at: last.createdAt, daily_finished_at: last.updatedAt, daily_how: how(last),
+    daily_url: last.url, daily_result: last.conclusion, daily_note: overdue ? "The last daily update finished over 26 hours ago." : ok ? null : why === "credits" ? "The last daily update stopped: your Anthropic credit is too low." : `The last daily update ended: ${last.conclusion}.` };
+}
+const daily = REPO ? dailyIndicator() : {};
+const alarmRuns = REPO ? listRuns("market-alarm.yml", 3) : [];
+const alarm = { alarm_checked_at: alarmRuns[0]?.createdAt || null, alarm_result: alarmRuns[0] ? alarmRuns[0].conclusion || alarmRuns[0].status : null, alarm_next_at: [nextAt(15, 47, [1, 2, 3, 4, 5]), nextAt(18, 17, [1, 2, 3, 4, 5])].filter(Boolean).sort()[0] };
+
 // ------------------------------------------------------------------ status.json
 const status = {
+  daily, alarm,
   updated_at: now, repo: REPO || null,
   credit: cred, cost_report: cost, balance,
   spend: { tracked_total: tot, last_24h: day(1), last_7d: day(7), cache_saved: r2(Object.values(sectors).reduce((a, s) => a + (s.cache_saved || 0), 0)),
@@ -227,7 +260,8 @@ W("industries", status.sectors.flatMap((x) => x.industries.map((i) => ({ sector:
   since_full: i.status === "done" ? `${i.updates_since_full}${i.rewrite_due ? " · full rewrite due" : ""}` : null, times_like_this: i.times ? "yes" : "no", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
 W("sectors", status.sectors.map((x) => ({ sector: x.sector, total: x.industries.length, done: x.counts.done || 0, working: x.counts.working || 0, waiting: x.counts.waiting || 0, left_out: x.counts["left out"] || 0,
   spend_usd: x.usd || 0, state: x.running ? "running" : x.never_run ? "never run" : x.finished ? "finished" : x.round ? "adding industries" : (x.counts.waiting ? "unfinished" : "finished"),
-  queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null })));
+  queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null, daily_updated: x.daily_updated || 0, big_day: x.big_day || null,
+  updating_now: daily.daily_state === "running" && (daily.daily_working || "").split(", ").includes(x.sector) })));
 W("queue", (queue?.items || []).map((i, k) => ({ order: k + 1, sector: i.sector, budget_usd: i.budget, state: i.state, started: i.dispatched_at || null, finished: i.finished_at || null, reason: i.last_reason || null })));
 W("runs", status.recent_runs.map((r) => ({ when: r.started, what: r.title, sector: r.sector, result: r.conclusion, ended: r.ended, url: r.url })));
 W("spend", sl.slice(-400).map((x) => ({ at: x.at, total_usd: x.total })));
@@ -242,6 +276,7 @@ W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === f
   daily_held_today: Object.values(sectors).reduce((a, x) => a + (x.daily_held || 0), 0),
   daily_updated_last: Object.values(sectors).reduce((a, x) => a + (x.daily_updated || 0), 0),
   daily_big_day: [...new Set(Object.values(sectors).map((x) => x.big_day).filter(Boolean))].join("; ") || null,
+  ...daily, ...alarm,
   industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
 console.log(`Status: ${status.totals.done} of ${status.totals.industries} industries done, ${status.totals.working} working, ${status.totals.waiting} waiting · tracked spend $${tot} · credit: ${cred.message}`);
 for (const l of log) console.log(l);

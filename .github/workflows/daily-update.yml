@@ -41,6 +41,7 @@ on:
 
 permissions:
   contents: write # to save the updated sectors in the exports branch
+  actions: write # to refresh the status page's data as it goes
 
 jobs:
   plan:
@@ -66,6 +67,10 @@ jobs:
           mkdir -p exp/runs
           if git fetch -q origin exports 2>/dev/null; then for f in $(git ls-tree --name-only FETCH_HEAD runs/); do git show "FETCH_HEAD:$f" > "exp/$f"; done; fi
           echo "sectors=$(node runner/daily-plan.mjs exp)" >> "$GITHUB_OUTPUT"
+      - name: Tell the status page an update has started
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run queue.yml --ref "${{ github.ref_name }}" -f action=status || true
 
   update:
     needs: plan
@@ -148,3 +153,8 @@ jobs:
             (cd ex-wt && git add runs && { git diff --cached --quiet || git commit -qm "Daily update: $SECTOR (run ${{ github.run_id }})"; } && git push -q origin HEAD:refs/heads/exports) && break
             git worktree remove --force ex-wt; sleep $((RANDOM % 20 + 5))
           done
+      - name: Tell the status page this sector is done
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run queue.yml --ref "${{ github.ref_name }}" -f action=status || true

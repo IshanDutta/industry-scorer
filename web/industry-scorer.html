@@ -272,6 +272,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .cite.t { color: var(--gA); background: var(--gA-bg); } .cite.i { color: var(--gD); background: var(--gD-bg); }
 .tk { font-size: 12px; padding: 0 5px; border-radius: 4px; background: var(--sunk); }
 .chip.est { background: var(--warn-bg); color: var(--warn-ink); width: fit-content; }
+.fresh { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; margin-top: 2px; } .fresh .muted { min-width: 0; overflow-wrap: anywhere; }
 .pill { display: inline-block; font: 600 11.5px var(--body); padding: 2px 8px; border-radius: 999px; white-space: nowrap; text-transform: none; }
 .pill.pos { color: var(--gA); background: var(--gA-bg); } .pill.neg { color: var(--gF); background: var(--gF-bg); } .pill.neu { color: var(--gC); background: var(--gC-bg); } .pill.warn { color: var(--gD); background: var(--gD-bg); }
 .tstats { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
@@ -10415,6 +10416,7 @@ Reply with ONLY this JSON:
         const file = JSON.parse(text);
         const n = await importRecords(file);
         done.push({ sector: file.sector, n, finished: file.finished, at: file.exported_at });
+        if (file.sector && file.exported_at) { S.copyAt = { ...(S.copyAt || {}), [file.sector]: file.exported_at }; await idbPut("copyAt", S.copyAt).catch(() => {}); }
       } catch (e) { failed.push(`${f.name}: ${e?.message || e}`); }
     }
     if (done.length) {
@@ -10811,7 +10813,7 @@ Reply with ONLY this JSON:
       : `<div class="small muted">Industries appear here as each one finishes.</div>`;
     return `<section class="hero"><span class="eyebrow">Sector run · every industry</span><h1>${esc(sec)}</h1>
         <span class="small muted">${N} industries${skipped.length ? ` (${skipped.length} left out)` : ""} · started ${esc(fmtDate(rec.started_at))} · ${rows.filter((r) => r.done).length} finished</span>
-        ${notices}${run}</section>
+        ${sectorFresh(sec, rec)}${notices}${run}</section>
       <section class="panel" id="sector-overview"><div class="panel-head"><h2>Every industry, side by side</h2><span class="small muted">Scores are 0–100 for each investor type, from the same pillars as each industry's own page. Click a column to sort${sr ? "" : ", an industry to open its full report"}.</span></div>${table}</section>
       ${sr ? "" : sectorTrackBlock(sec, rec.names.filter((n) => !rec.skip?.[n]))}
       ${issues.length ? `<section class="panel"><h2>What didn't go to plan</h2><ul class="small">${issues.join("")}</ul><div class="small muted">A step that failed is left out of that industry's report; open the industry and use its own Resume or Retry buttons to finish it.</div></section>` : ""}`;
@@ -11045,7 +11047,7 @@ Reply with ONLY this JSON:
     el.innerHTML = `
       <section class="hero">
         <div class="hero-row"><div style="display:grid;gap:4px"><span class="eyebrow">Industry analysis</span><h1>${esc(d.name)}</h1>
-          <span class="small muted">${d.universe ? `${esc(d.sector)} sector${d.universe.rank ? ` · #${d.universe.rank} of ${d.universe.of} industries by total market cap` : ""} · ${d.universe.companies === 1 ? "its only company" : `top ${s.n_constituents} of ${d.universe.companies} companies`} (industry total ${cap(d.universe.total_market_cap)}) · ` : ""}${s.n_constituents === 1 ? "1 company" : `${s.n_constituents} companies`} · ${cap(s.total_market_cap)} total market cap · largest is ${esc(s.largest_company)} at ${pct(s.top1_weight, false, 0)} · prices as of ${esc(fmtDate(d.as_of))} · generated ${esc(ago(d.updated_at))}${S.storeError ? ` · couldn't save in this browser${S.storeErrorMsg ? ` (${esc(S.storeErrorMsg.slice(0, 80))})` : ""}` : S.savedAt[slug(d.name)] ? " · saved in this browser" : ""}${d.us_only ? " · US-headquartered only" : ""}</span></div>
+          <span class="small muted">${d.universe ? `${esc(d.sector)} sector${d.universe.rank ? ` · #${d.universe.rank} of ${d.universe.of} industries by total market cap` : ""} · ${d.universe.companies === 1 ? "its only company" : `top ${s.n_constituents} of ${d.universe.companies} companies`} (industry total ${cap(d.universe.total_market_cap)}) · ` : ""}${s.n_constituents === 1 ? "1 company" : `${s.n_constituents} companies`} · ${cap(s.total_market_cap)} total market cap · largest is ${esc(s.largest_company)} at ${pct(s.top1_weight, false, 0)} · prices as of ${esc(fmtDate(d.as_of))} · generated ${esc(ago(d.updated_at))}${S.storeError ? ` · couldn't save in this browser${S.storeErrorMsg ? ` (${esc(S.storeErrorMsg.slice(0, 80))})` : ""}` : S.savedAt[slug(d.name)] ? " · saved in this browser" : ""}${d.us_only ? " · US-headquartered only" : ""}</span>${freshLine(d.name, d.sector)}</div>
           <div class="actions">${S.sectorRec[d.sector]?.rows?.[d.name] ? `<button data-sector-view="${esc(d.sector)}" ${busy() ? "disabled" : ""}>← ${esc(d.sector)} overview</button>` : ""}<button id="run-full" title="Fetches and writes everything again from scratch, replacing the saved copy" ${canRun ? "" : "disabled"}>Run again</button></div></div>
         ${notices}${restoredBlock(d)}${progressBlock()}
         ${s.notes ? `<div class="notice info">${esc(s.notes)}</div>` : ""}
@@ -11108,6 +11110,31 @@ Reply with ONLY this JSON:
     const by = Object.fromEntries((sources || []).map((x) => [x.id, x]));
     return esc(String(t || "")).replace(/\[((?:[DI]\d{1,4})(?:,\s*[DI]\d{1,4})*)\]/g, (m, g) => g.split(/,\s*/).map((id) => { const x = by[id];
       return x?.url ? `<a class="cite" href="${esc(x.url)}" target="_blank" rel="noopener noreferrer" title="${esc(`${x.date || ""} ${x.source || ""}: ${x.title || ""}`)}">${esc(id)}</a>` : `<span class="idtag">${esc(id)}</span>`; }).join(""));
+  }
+  /** The next scheduled daily update (21:37 UTC every day), in the viewer's own time. */
+  function nextDaily() {
+    const t = new Date(), c = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 21, 37)); if (c <= t) c.setUTCDate(c.getUTCDate() + 1);
+    const hm = c.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }), same = c.toDateString() === t.toDateString();
+    return `${same ? "today" : "tomorrow"} ${hm}`;
+  }
+  const daysOld = (d) => (d ? Math.round((Date.parse(today() + "T00:00:00Z") - Date.parse(String(d).slice(0, 10) + "T00:00:00Z")) / 864e5) : null);
+  const ageWord = (k) => (k <= 0 ? "today" : k === 1 ? "yesterday" : `${k} days ago`);
+  const ageCls = (k) => (k <= 1 ? "pos" : k <= 3 ? "warn" : "neg");
+  /** How fresh an industry's analysis is: its last daily update (or full analysis), coloured by age, and what comes next. */
+  function freshLine(name, sector) {
+    const ag = S.agents[slug(name)], r = ag?.result || {}, dd = r.daily?.date || null, full = ag?.run_at ? String(ag.run_at).slice(0, 10) : null;
+    const last = [dd, full].filter(Boolean).sort().pop(); if (!last) return "";
+    const k = daysOld(last), copy = S.copyAt?.[sector], n = Number(r.rewrites_since_full) || 0;
+    const due = r.rethink?.same === false ? " · a full rewrite is due (the story changed)" : n >= 6 ? " · a full rewrite is due (upkeep)" : "";
+    return `<div class="fresh small" title="The daily update runs every day after the US close: fresh data, the news, and the whole analysis brought up to date"><span class="pill ${ageCls(k)}">${dd ? "Updated" : "Analyzed"} ${ageWord(k)}</span>
+      <span class="muted">${dd ? `daily update ${esc(fmtDate(dd))}${(r.daily?.analysis || []).length ? ` (${esc(r.daily.analysis.join(", "))} rewritten)` : r.daily?.revised ? " (calls revised)" : " (nothing material changed)"} · ` : "no daily update yet · "}full analysis ${esc(fmtDate(full))}${n ? `, ${n} core update${n === 1 ? "" : "s"} since` : ""}${due} · next daily update ${esc(nextDaily())}${copy ? ` · this page's copy from GitHub: ${esc(fmtDate(copy))}` : ""}</span></div>`;
+  }
+  /** The same for a sector: its last daily update, how many industries it covered, and what it did. */
+  function sectorFresh(sec, rec) {
+    const dl = rec?.daily, copy = S.copyAt?.[sec];
+    if (!dl?.date) return `<div class="fresh small"><span class="pill neu">No daily update yet</span> <span class="muted">next one ${esc(nextDaily())}${copy ? ` · this page's copy from GitHub: ${esc(fmtDate(copy))}` : ""}</span></div>`;
+    const k = daysOld(dl.date), n = (dl.revised || []).length + (dl.quiet || []).length;
+    return `<div class="fresh small"><span class="pill ${ageCls(k)}">Daily update ${ageWord(k)}</span> <span class="muted">${esc(fmtDate(dl.date))}: ${n} industr${n === 1 ? "y" : "ies"} checked${dl.analyses_updated ? `, ${dl.analyses_updated} ${dl.analyses_updated === 1 ? "analysis" : "analyses"} brought up to date` : ""}${(dl.sections || []).length ? `, ${dl.sections.length} sections rewritten` : ""}${(dl.held || []).length ? `, ${dl.held.length} waiting for budget` : ""}${(dl.failed || []).length ? `, ${dl.failed.length} failed` : ""}${dl.big_day ? ` · big day: ${esc(dl.big_day)}` : ""} · next ${esc(nextDaily())}${copy ? ` · this page's copy from GitHub: ${esc(fmtDate(copy))}` : ""}</span></div>`;
   }
   /** What the daily update found: today's move, what changed, which calls it revised (or that they stand), and the last few days. */
   function dailyBlock(r) {
@@ -13557,6 +13584,7 @@ Reply with ONLY this JSON:
   // Reopen the run this browser was last on, exactly as it was saved.
   const restored = (async () => {
     S.saved = (await idbGet("index")) || [];
+    S.copyAt = (await idbGet("copyAt").catch(() => null)) || {};
     for (const x of S.saved) S.savedAt[x.slug] = x.saved_at;
     // Clear the false "macro" gap older sector runs saved (their macro report is there), so they don't read as unfinished.
     let fixed = 0;
