@@ -1901,6 +1901,25 @@ a.btnlink:hover { border-color: var(--accent); }
    * more urgent), plus one rolling rewrite of the whole analysis for the industry analyzed longest ago; every
    * industry whose day mattered gets its calls revised by the lead model. Without a budget, everything named runs.
    */
+  /** The SEC's 8-K filings of the last few days (one shared list for every industry; ~500 a day, in pages of 1000). */
+  async function recent8Ks(days = 5) {
+    const to = today(), t = new Date(to + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() - days); const from = t.toISOString().slice(0, 10), out = [];
+    for (let page = 0; page < 6; page++) {
+      const rows = await fmp("secFilings", { endpoint: "8k-latest", from_date: from, to_date: to, limit: 1000, page }).catch(() => null);
+      if (!Array.isArray(rows) || !rows.length) break;
+      for (const r of rows) if (r?.symbol) out.push({ symbol: r.symbol, filingDate: r.filingDate, acceptedDate: r.acceptedDate, hasFinancials: !!r.hasFinancials, link: r.link, finalLink: r.finalLink });
+      if (rows.length < 1000) break;
+    }
+    return out;
+  }
+  /** Today's market: the S&P 500's last daily move (from the benchmark) and the VIX's change today (live quote), in %. */
+  async function marketDay(bench) {
+    const c = bench?.spy?.closes || [], n = c.length, spy1d = n > 1 && c[n - 2] > 0 ? (c[n - 1] / c[n - 2] - 1) * 100 : NaN;
+    let vix1d = NaN;
+    try { const q = (await fmp("quote", { endpoint: "batch-quote-short", symbols: ["^VIX"] }))?.[0]; const p = num(q?.price), ch = num(q?.change); if (p > 0 && isNum(ch) && p - ch > 0) vix1d = (ch / (p - ch)) * 100; } catch {}
+    return { spy1d, vix1d };
+  }
+
   async function runDaily(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     const dr = S.dailyRun = { sector, phase: "data", label: "Starting the daily update", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set() };
@@ -1913,6 +1932,9 @@ a.btnlink:hover { border-color: var(--accent); }
       dr.label = "Market data, the macro catalog and the news wire (no Claude)";
       const bench = await refreshBenchmark();
       await detectEod(); await sharedResearch();
+      // One shared list of SEC 8-K filings, and today's market (a midday alarm, if one sent this run, comes as JOB.shock).
+      dr.label = "SEC 8-K filings and today's market (no Claude)";
+      const filings = await recent8Ks().catch(() => []), mkt = await marketDay(bench).catch(() => ({})), shock = JOB?.shock || "";
       const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
       const call = async (prompt, tier, step) => { dr.calls++; const opts = { modelTier: tier, cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt.slice(0, (lim?.maxPromptBytes || 262144) - 4096), opts); };
       const leadTier = JOB ? "lead" : "complex";
@@ -1941,12 +1963,21 @@ a.btnlink:hover { border-color: var(--accent); }
           // Times like this was recomputed with today's data; the historian rewrites only when the episodes changed.
           if (d.history?.times?.episodes?.length) { const before = rep(name, "history")?.run_at; await runHistorian(name); if (rep(name, "history")?.run_at !== before) dr.calls++; }
           const relevance = Object.fromEntries(Object.entries(rep(name, "macro")?.result?.indicators || {}).map(([id, v]) => [id, v?.relevance || ""]));
-          const x = Daily.deltas(prev, { doc: d, pack: S.research[sl], world: S.world, macroRows: S.macroBy[sl]?.rows || [], calendar: ag.calendar, spy: { dates: bench.spy.dates, closes: bench.spy.closes }, relevance }, today());
+          const x = Daily.deltas(prev, { doc: d, pack: S.research[sl], world: S.world, macroRows: S.macroBy[sl]?.rows || [], calendar: ag.calendar, spy: { dates: bench.spy.dates, closes: bench.spy.closes }, relevance, filings, shock }, today());
           const bodies = regBodies(name);
           const brief = Daily.sectionBrief({ kpi: rep(name, "kpi")?.result, world: rep(name, "world")?.result, trade: rep(name, "trade")?.result, reg: rep(name, "reg")?.result, chain: rep(name, "chain")?.result, bodies: bodies.map((b) => b.name) });
-          const tri = await call(Daily.triagePrompt(name, res, x, today(), brief), "quick", `Daily triage: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return { material: true, why: "triage failed; reviewed in full" }; });
-          const cands = Daily.pickSections(tri, x, { pending: res.daily_pending || [] }, today());
-          day[name] = { x, tri, cands, runAt: ag.run_at || "", bodies: bodies.length };
+          const tp = Daily.triagePrompt(name, res, x, today(), brief);
+          let tri = await call(tp, "quick", `Daily triage: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return { material: true, why: "triage failed; reviewed in full" }; });
+          // A second opinion: the industry moved well outside its normal range but the quick model saw nothing. Ask the stronger model.
+          if (isNum(x.z) && Math.abs(x.z) >= 1.5 && tri?.material !== true && !(tri?.sections || []).length) {
+            const t2 = await call(tp, "default", `Daily triage, second opinion: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+            if (t2) tri = { ...t2, second_opinion: true };
+          }
+          // The drift guard: how far the industry has gone since its last full rewrite, how many updates since, and the last rethink.
+          const dft = Daily.drift(d, String(ag.run_at || "").slice(0, 10));
+          const drift = dft ? { ...dft, updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null } : { updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null };
+          const cands = Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
+          day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length };
           await doFlush(name);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
@@ -1961,12 +1992,20 @@ a.btnlink:hover { border-color: var(--accent); }
       // The rolling rewrite: the industry whose whole analysis is oldest (30+ days) gets one, as low-priority work that waits longest.
       const oldest = Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
       if (oldest && !all.some((c) => c.industry === oldest[0] && c.key === "thesis")) all.push({ industry: oldest[0], key: "thesis", label: Daily.SECTIONS.thesis.label, why: `rolling refresh: the whole analysis is from ${oldest[1].runAt.slice(0, 10)}`, by: "rotation", importance: "low", waited: Math.min(5, Math.floor((Date.now() - Date.parse(oldest[1].runAt)) / (15 * 864e5))) });
-      let budget = Infinity;
+      let budget = Infinity, stretch = 0;
+      const vals = Object.values(day), highShare = vals.length ? vals.filter((v) => v.cands.some((c) => c.importance === "high")).length / vals.length : 0;
+      const big = Daily.bigDay({ ...mkt, highShare, shock });
+      dr.bigDay = big.big ? big.why : "";
       if (JOB?.monthBudget > 0) {
-        const callsReserve = Object.values(day).filter((v) => v.x.triggers.length || v.tri?.material || v.cands.length).length * Daily.COST.calls;
-        budget = Math.max(0, Daily.dayBudget(JOB.monthBudget, ds.usd, today()) - spentAtStart - callsReserve);
+        const callsReserve = vals.filter((v) => v.x.triggers.length || v.tri?.material || v.cands.length).length * Daily.COST.calls;
+        const share = Daily.dayBudget(JOB.monthBudget, ds.usd, today()), cap = Daily.borrowCap(JOB.monthBudget, ds.usd, today());
+        // A big day spends up to three days' share (never more than a quarter of the month's remainder); any day, the
+        // urgent rewrites (drift guard, earnings, two days' wait) may borrow up to that much.
+        budget = Math.max(0, (big.big ? Math.max(share, cap) : share) - spentAtStart - callsReserve);
+        stretch = Math.max(0, cap - share);
       }
-      const pl = budget === Infinity ? { run: all, held: [] } : Daily.plan(all, budget);
+      const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch: big.big ? 0 : stretch });
+      dr.borrowed = pl.borrowed || 0;
       const chosen = {}; for (const c of pl.run) (chosen[c.industry] ||= []).push(c);
       const heldBy = {}; for (const c of pl.held) (heldBy[c.industry] ||= []).push(c);
       dr.held = pl.held.map((c) => `${c.industry}: ${c.label}`);
@@ -1988,7 +2027,7 @@ a.btnlink:hover { border-color: var(--accent); }
           if (whole) {
             // The lead strategist rewrote the whole analysis (and logged its new calls): keep the daily history and stamp it.
             const ag2 = S.agents[sl], r = { ...ag2.result, daily_history: res.daily_history || [] };
-            const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world], sections });
+            const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world, ...(x.filings || [])], sections });
             r2 = a2.result; r2.daily.revised = true; changed = true;
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             S.agents[sl] = jsonSafe({ ...ag2, result: r2, daily_at: new Date().toISOString() });
@@ -1997,15 +2036,25 @@ a.btnlink:hover { border-color: var(--accent); }
               const txt = k === "regverdict" ? `${r?.summary || r?.verdict || ""}` : k === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : k === "trade" ? `${r?.verdict?.summary || r?.verdict?.headline || ""}` : Team.digest(k, r);
               return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
             let upd = null;
-            if (x.triggers.length || tri?.material || rewritten || v.cands.length) { via = "update"; upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten), leadTier, `Daily update: ${name}`); }
-            const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world], sections });
+            // The whole analysis brought up to date by the lead strategist: every part today's news changes, nothing else.
+            if (x.triggers.length || tri?.material || rewritten || v.cands.length) { via = "update";
+              const bp = Brain.basePE(d);
+              upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten, { pe: bp?.pe, drift: v.drift }), leadTier, `Daily update: ${name}`); }
+            const known = [...(ag.sources || []).map((s) => s.id), ...(ag.calendar?.events || []).map((e) => e.id), ...(ag.calendar?.standing || []).map((e) => e.id),
+              ...(d.history?.times?.episodes || []).map((e, i) => "HE" + (i + 1)), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean);
+            const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world, ...(x.filings || [])], sections, known });
             r2 = a.result; changed = a.changed;
+            if (a.refs?.length) ag.sources = [...(ag.sources || []).filter((s) => !/^DU\d+$/.test(s.id) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id}]`) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id},`)), ...a.refs];
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             r2.horizon_facts = Brain.horizonFacts(d, today());
             if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
+            // Code's checks, as after a full run: does the opportunity verdict still match its own numbers?
+            if (r2.opportunity && r2.math) { const m = r2.math, ov = r2.opportunity.verdict; r2.opportunity.consistent = !((ov === "yes" && (m.expected_return < 4 || (m.reward_risk !== null && m.reward_risk < 1.2))) || (ov === "no" && m.expected_return >= 10)); }
             try { r2.horizon_checks = Brain.horizonChecks(r2.horizons || {}, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS); } catch {}
             S.agents[sl] = jsonSafe({ ...ag, result: r2, daily_at: new Date().toISOString() });
-            if (a.changed) await logCalls(name, r2, d, new Date().toISOString()).catch(() => {});
+            if ((a.parts || []).length) dr.updated = (dr.updated || 0) + 1;
+            if (r2.rethink?.same === false && r2.rethink.date === today()) (dr.rethinks ||= []).push(name);
+            if (Object.entries(r2.daily?.horizons || {}).some(([h, hv]) => h === "_scenarios" || hv.status === "revised")) await logCalls(name, r2, d, new Date().toISOString()).catch(() => {});
           }
           await doFlush(name);
           (changed ? dr.revised : dr.quiet).push(name);
@@ -2020,8 +2069,9 @@ a.btnlink:hover { border-color: var(--accent); }
       const spent = JOB && window.__job_spent ? Number(await window.__job_spent().catch(() => 0)) || 0 : 0;
       const r0 = await secGet(sector);
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
-        daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100 } }));
-      S.notices = [{ kind: "info", text: `Daily update of ${sector}: ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with revised calls, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+        daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
+          analyses_updated: dr.updated || 0, rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
+      S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
@@ -3170,6 +3220,7 @@ a.btnlink:hover { border-color: var(--accent); }
     IDX = Team.index(pack, tx, S.macro, S.world?.items, rep(d.name, "world")?.result?.sources, rep(d.name, "macro")?.sources, rep(d.name, "trade")?.sources);
     for (const [i, e] of (d.history?.times?.episodes || []).entries()) IDX["HE" + (i + 1)] = { id: "HE" + (i + 1), kind: "HE", title: `A past month like today: ${e.month}`, source: "times like this", anchor: "ep-HE" + (i + 1) };
     calIndex(IDX, S.agents[slug(d.name)]?.calendar);
+    for (const x of S.agents[slug(d.name)]?.sources || []) if (!IDX[x.id]) IDX[x.id] = x;
     const agMap = ag?.result ? { [d.name]: { overlay: ag.result.overlay, as_of: ag.as_of } } : {};
     const secs = sectionScores(d.name);
     const sc = Score.scoreIndustries([d], agMap, today(), { relative: false, sections: { [d.name]: secs } })[d.name] || { profiles: {}, pillars: {} };
@@ -3363,6 +3414,8 @@ a.btnlink:hover { border-color: var(--accent); }
       <b>${dailyRich(d.headline, d.sources)}</b>${d.summary ? `<p class="small" style="margin:0">${dailyRich(d.summary, d.sources)}</p>` : ""}
       ${(d.changes || []).length ? `<ul class="dlist small" style="margin:0">${d.changes.map((c) => `<li><span class="pill ${EFF[c.effect] || "neu"}">${esc(c.effect)}</span> ${dailyRich(c.text, d.sources)}</li>`).join("")}</ul>` : ""}
       ${rev.length ? `<div class="small"><b>Revised:</b> ${rev.map(([h, v]) => `${h} ${esc(v.from?.call || "")} ${esc((v.from?.expected_move || []).join(" to "))}% → <b>${esc(v.to?.call || "")} ${esc((v.to?.expected_move || []).join(" to "))}%</b>`).join(" · ")}</div>` : ""}
+      ${(d.analysis || []).length ? `<div class="small"><b>Analysis brought up to date:</b> ${esc(d.analysis.join(", "))} rewritten for today's news; the rest still holds.</div>` : ""}
+      ${d.rethink && d.rethink.same === false ? `<div class="small"><span class="pill warn">full rewrite ordered</span> The strategist would now write this story differently from scratch: ${dailyRich(d.rethink.why, d.sources)}</div>` : ""}
       ${d.horizons?._scenarios ? `<div class="small"><b>Scenario odds:</b> ${Object.keys(d.horizons._scenarios.to).map((k) => `${k} ${d.horizons._scenarios.from[k]}% → ${d.horizons._scenarios.to[k]}%`).join(" · ")}</div>` : ""}
       ${(d.sections || []).length ? `<div class="small"><b>Rewritten today:</b><ul class="dlist" style="margin:2px 0 0">${d.sections.map((sct) => `<li><span class="pill ${sct.ok ? "pos" : "neu"}">${sct.ok ? "rewritten" : "couldn't rewrite"}</span> <b>${esc(sct.label)}</b>${sct.regulators?.length ? ` (${esc(sct.regulators.join(", "))})` : ""}: ${dailyRich(sct.why, d.sources)}${sct.ok ? "" : ` <span class="muted">${esc(sct.error || "")}</span>`}</li>`).join("")}</ul></div>` : ""}
       ${(d.held || []).length ? `<div class="small muted"><b>Waiting for budget (first in line tomorrow):</b> ${d.held.map((h) => esc(h.label)).join("; ")}</div>` : ""}

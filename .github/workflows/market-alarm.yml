@@ -1,0 +1,59 @@
+# Industry Scorer: the midday market alarm (no Claude; a few seconds of GitHub time).
+#
+# Twice each weekday during US trading it reads one live quote of the S&P 500 (SPY) and the VIX. On a crash-sized
+# day (SPY up or down 2.5% or more, or the VIX up 20% or more; change with the SHOCK_SPY_PCT and SHOCK_VIX_PCT
+# variables) it starts the daily update right away instead of waiting for the evening run, with what moved as its
+# note. The note makes it a "big day": the update may spend up to three days' share of the monthly budget (never more
+# than a quarter of what's left), and every industry sees the alarm as a hard trigger. It fires at most once a day.
+# Run it by hand with "force" to start a big-day update whatever the market did.
+name: Market alarm
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Start the big-day update whatever the market did"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "47 15 * * 1-5" # 15:47 UTC: about 10:47 am New York in winter (11:47 in summer)
+    - cron: "17 18 * * 1-5" # 18:17 UTC: about 1:17 pm New York in winter (2:17 in summer)
+
+permissions:
+  contents: read
+  actions: write # to start the daily update
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund --omit=optional
+      - id: q
+        name: Read SPY and the VIX
+        working-directory: runner
+        env:
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          SHOCK_SPY_PCT: ${{ vars.SHOCK_SPY_PCT || '2.5' }}
+          SHOCK_VIX_PCT: ${{ vars.SHOCK_VIX_PCT || '20' }}
+          SHOCK_FORCE: ${{ inputs.force && '1' || '' }}
+        run: node shock.mjs
+      - name: Start the daily update now
+        if: steps.q.outputs.fire == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTE: ${{ steps.q.outputs.note }}
+        run: |
+          # Once a day: skip if an alarm already started one today.
+          today=$(date -u +%F)
+          n=$(gh run list --workflow daily-update.yml --event workflow_dispatch --created ">=$today" --json databaseId --jq length 2>/dev/null || echo 0)
+          if [ "${n:-0}" -gt 0 ]; then echo "An update already started today; not starting another."; exit 0; fi
+          gh workflow run daily-update.yml --ref "${{ github.ref_name }}" -f shock="$NOTE"
+          echo "Started the daily update: $NOTE" | tee -a "$GITHUB_STEP_SUMMARY"

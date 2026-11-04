@@ -27,6 +27,7 @@
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
 //   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
+//   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
 //   CLAUDE_MODEL_LEAD           daily update: model for revising the calls and rewriting the whole analysis (default: the complex model)
 //   JOB_MIN_COMPANIES           leave out industries with fewer companies than this (default 1: every industry is analyzed)
 //   ADD_NEW=true (or --add-new)  with --resume of a finished sector: analyze only the industries it doesn't have yet
@@ -100,7 +101,7 @@ async function main() {
   await page.exposeFunction("__job_spent", () => Math.round((sampler.usage.usd - sampler.usdAtStart) * 10000) / 10000);
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230), ...(Number(env.JOB_MIN_COMPANIES) > 0 ? { minCompanies: Number(env.JOB_MIN_COMPANIES) } : {}), ...(Number(env.JOB_MONTH_BUDGET) > 0 ? { monthBudget: Number(env.JOB_MONTH_BUDGET) } : {}) };
+  const job = { industries: Number(env.JOB_INDUSTRIES || 10), pool: Number(env.JOB_POOL || 8), bodies: Number(env.JOB_BODIES || 12), fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230), ...(Number(env.JOB_MIN_COMPANIES) > 0 ? { minCompanies: Number(env.JOB_MIN_COMPANIES) } : {}), ...(Number(env.JOB_MONTH_BUDGET) > 0 ? { monthBudget: Number(env.JOB_MONTH_BUDGET) } : {}), ...(env.JOB_SHOCK ? { shock: String(env.JOB_SHOCK).slice(0, 300) } : {}) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   // The page is served from a file so its saved runs (IndexedDB) persist for the whole session.
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8");

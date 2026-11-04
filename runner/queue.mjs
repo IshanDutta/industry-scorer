@@ -47,13 +47,13 @@ function sectorStatus(file) {
       analyzed_at: ag?.run_at || null, data_as_of: run?.industry?.as_of || null, daily: res.daily?.date || null, revised: !!res.daily?.revised,
       call_12m: res.horizons?.["12M"]?.call || null, opportunity: rec.rows?.[n]?.opportunity || res.opportunity?.verdict || null,
       times: !!run?.industry?.history?.times?.episodes?.length, historian: !!run?.reports?.[slug(n) + "--history"]?.result?.read,
-      in_round: round ? round.has(n) : false };
+      in_round: round ? round.has(n) : false, updates_since_full: Number(res.rewrites_since_full) || 0, rewrite_due: res.rethink?.same === false || (Number(res.rewrites_since_full) || 0) >= 6 };
   });
   const u = j.sampler?.usage || {};
   return { sector: j.sector, finished: !!j.finished, exported_at: j.exported_at, round: rec.round ? { n: rec.round.n, adding: rec.round.names.length } : null,
     daily: rec.daily?.date || null, usd: r2(u.usd || 0),
     daily_month: rec.daily_spend?.month === now.slice(0, 7) ? { usd: rec.daily_spend.usd || 0, budget: rec.daily_spend.budget || null } : { usd: 0, budget: rec.daily_spend?.budget || null },
-    daily_held: (rec.daily?.held || []).length, requests: u.requests || 0, cache_saved: r2(u.saved || 0), failed_steps: (rec.failed_steps || []).slice(-5), industries };
+    daily_held: (rec.daily?.held || []).length, daily_updated: rec.daily?.analyses_updated || 0, big_day: rec.daily?.date === now.slice(0, 10) ? rec.daily?.big_day || "" : "", requests: u.requests || 0, cache_saved: r2(u.saved || 0), failed_steps: (rec.failed_steps || []).slice(-5), industries };
 }
 const sectors = {};
 const runsDir = join(exportsDir, "runs");
@@ -223,7 +223,8 @@ const dashDir = join(statusDir, "dash"); mkdirSync(dashDir, { recursive: true })
 const W = (name, rows) => writeFileSync(join(dashDir, name + ".json"), JSON.stringify(rows));
 const ORDER = { working: 0, waiting: 1, done: 2, "left out": 3 };
 W("industries", status.sectors.flatMap((x) => x.industries.map((i) => ({ sector: x.sector, industry: i.name, status: i.status, order: ORDER[i.status] ?? 9, companies: i.companies,
-  analyzed: i.analyzed_at ? i.analyzed_at.slice(0, 10) : null, daily: i.daily, times_like_this: i.times ? "yes" : "no", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
+  analyzed: i.analyzed_at ? i.analyzed_at.slice(0, 10) : null, daily: i.daily,
+  since_full: i.status === "done" ? `${i.updates_since_full}${i.rewrite_due ? " · full rewrite due" : ""}` : null, times_like_this: i.times ? "yes" : "no", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
 W("sectors", status.sectors.map((x) => ({ sector: x.sector, total: x.industries.length, done: x.counts.done || 0, working: x.counts.working || 0, waiting: x.counts.waiting || 0, left_out: x.counts["left out"] || 0,
   spend_usd: x.usd || 0, state: x.running ? "running" : x.never_run ? "never run" : x.finished ? "finished" : x.round ? "adding industries" : (x.counts.waiting ? "unfinished" : "finished"),
   queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null })));
@@ -239,6 +240,8 @@ W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === f
   daily_month_usd: r2(Object.values(sectors).reduce((a, x) => a + (x.daily_month?.usd || 0), 0)),
   daily_month_budget_usd: (() => { const b = Object.values(sectors).map((x) => x.daily_month?.budget).filter((v) => v > 0); return b.length ? r2(b.reduce((a, v) => a + v, 0)) : null; })(),
   daily_held_today: Object.values(sectors).reduce((a, x) => a + (x.daily_held || 0), 0),
+  daily_updated_last: Object.values(sectors).reduce((a, x) => a + (x.daily_updated || 0), 0),
+  daily_big_day: [...new Set(Object.values(sectors).map((x) => x.big_day).filter(Boolean))].join("; ") || null,
   industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
 console.log(`Status: ${status.totals.done} of ${status.totals.industries} industries done, ${status.totals.working} working, ${status.totals.waiting} waiting · tracked spend $${tot} · credit: ${cred.message}`);
 for (const l of log) console.log(l);

@@ -49,10 +49,18 @@ console.log("    biotech:", JSON.stringify(bsec.map((x) => [x.key, x.ok, x.error
 ok(bsec.some((x) => x.key === "thesis" && x.ok) && bio.agent.run_at !== (typeof bio0 === "string" ? JSON.parse(bio0) : bio0).agent.run_at && bio.agent.result.daily.via === "rewrite", "a changed story rewrote the whole analysis (new thesis, scenarios and calls), stamped as a daily rewrite");
 ok(bsec.some((x) => x.key === "macro" && x.ok) && bio.reports["biotechnology--macro"]?.daily?.date, "the macro section was rewritten too");
 const sec = recs["sector:technology"]; ok(!!sec?.daily?.date && !!sec.finished_at, "the sector record notes the daily update and stays finished");
+// The whole analysis brought up to date (not just the calls), with lasting citations; the drift guard's inputs; the safeguards.
+const upd = runs.filter((v) => (v.agent.result.daily.analysis || []).length);
+console.log("    analysis parts:", JSON.stringify(upd.map((v) => [v.name, v.agent.result.daily.analysis, v.agent.result.rewrites_since_full, v.agent.result.rethink?.same])));
+ok(upd.length >= 1 && upd.every((v) => v.agent.result.thesis.startsWith("Mock thesis brought up to date") && !/\[D\d+\]|ZZ99/.test(v.agent.result.thesis)), `the strategist brought the whole analysis up to date in ${upd.length} industr${upd.length === 1 ? "y" : "ies"}: thesis, drivers, scenarios`);
+ok(upd.some((v) => /\[DU\d+\]/.test(v.agent.result.thesis) && (v.agent.sources || []).some((s) => /^DU\d+$/.test(s.id) && v.agent.result.thesis.includes(s.id))), "today's headlines it cites became lasting sources of the analysis");
+ok(upd.every((v) => v.agent.result.rewrites_since_full === 1 && v.agent.result.drivers[0].title === "Mock new driver" && ["bull", "base", "bear"].reduce((a, k) => a + v.agent.result.scenarios[k].probability, 0) === 100 && v.agent.result.math), "each update is counted for the drift guard; drivers re-ranked; scenario odds sum to 100; the scenario math recomputed");
+ok(runs.some((v) => v.agent.result.rethink?.same === false), "the strategist's 'would I write this differently from scratch' answer is kept for tomorrow's drift guard");
+ok(sec.daily.filings > 0 && runs.some((v) => (v.agent.result.daily.filings || []).length), `one shared 8-K list (${sec.daily.filings} filings) reached the industries' own companies`);
 const quick = fa.stats.prompts?.filter?.((p) => /^You watch the /.test(p.prompt || p)).length; void quick;
 // A tight monthly budget: the plan buys only what fits and holds the rest for tomorrow, first in line.
 const before2 = fa.stats.requests;
-const tight = await run(7812, join(tmp, "tight"), ["--daily", "--resume", join(tmp, "full", "checkpoint.json.gz")], { CLAUDE_MODEL_QUICK: "claude-haiku-4-5-20251001", JOB_MONTH_BUDGET: "6" });
+const tight = await run(7812, join(tmp, "tight"), ["--daily", "--resume", join(tmp, "full", "checkpoint.json.gz")], { CLAUDE_MODEL_QUICK: "claude-haiku-4-5-20251001", JOB_MONTH_BUDGET: "6", JOB_SHOCK: "Midday alarm: SPY -3.1% at 17:30 UTC" });
 ok(tight.code === 0, `daily update on a tight budget finished (exit ${tight.code})`);
 const tf = readdirSync(join(tmp, "tight")).find((x) => x.startsWith("results-")), trecs = tf ? read(join(tmp, "tight", tf)).records : {};
 const truns = Object.entries(trecs).filter(([k]) => k.startsWith("run:")).map(([, v]) => v);
@@ -60,5 +68,6 @@ const heldAll = truns.flatMap((v) => v.agent.result.daily_pending || []);
 console.log("    held:", JSON.stringify(heldAll.map((h) => h.key)), "budget:", JSON.stringify(trecs["sector:technology"]?.daily?.budget), "spent:", trecs["sector:technology"]?.daily?.spent);
 ok(heldAll.length > 0 && truns.some((v) => (v.agent.result.daily.held || []).length), "work that didn't fit the day's budget is held, and shown");
 ok(trecs["sector:technology"]?.daily_spend?.month && trecs["sector:technology"].daily_spend.budget === 6, "the sector records what the daily updates spent this month against its budget");
+ok(truns.every((v) => v.agent.result.daily.triggers?.[0]?.startsWith("Midday alarm")) && trecs["sector:technology"]?.daily?.big_day?.includes("Midday alarm"), "the midday alarm reached every industry and made it a big day");
 ok(fa.stats.requests - before2 < dailyReq, `the tight budget made fewer Claude requests (${fa.stats.requests - before2} vs ${dailyReq})`);
 console.log(process.exitCode ? "DAILY TEST FAILED" : "DAILY TEST PASSED"); process.exit(process.exitCode || 0);

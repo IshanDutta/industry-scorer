@@ -4,8 +4,10 @@
  *   1. code refreshes every number (prices, returns, estimates, positioning, macro values, news) - no Claude;
  *   2. code compares today with the last update and lists what moved (deltas) and any hard triggers;
  *   3. with no trigger, a quick model reads the deltas and says whether anything is material (triage);
- *   4. if something is, one call revisits the 1M-12M calls against what changed and writes a short
- *      "what changed today" note; calls it leaves alone stay exactly as they were.
+ *   4. the lead strategist brings the WHOLE analysis up to date against what changed: thesis, drivers, debates,
+ *      scenarios, the opportunity, the investor verdicts and the calls; what nothing touched stays exactly as it was;
+ *   5. a drift guard orders a full rewrite from scratch when the updates have piled up, the industry has moved far
+ *      since the last one, or the strategist says it would now write the story differently.
  * Pure functions, no I/O.
  */
 (function (root) {
@@ -27,6 +29,7 @@
       updated: res.daily?.date || ag.as_of || null,
       cons: Object.fromEntries((d.constituents || []).filter((c) => isNum(num(c.px))).map((c) => [c.symbol, num(c.px)])),
       items: (rec?.research?.items || []).map((i) => lc(i.title).slice(0, 90)),
+      filings: res.daily?.filings || [],
       world: (rec?.world?.items || []).map((i) => lc(i.title).slice(0, 90)),
       macro: Object.fromEntries((rec?.macro?.rows || []).filter((r) => r.id || r.key).map((r) => [r.id || r.key, { value: num(r.value), id: r.id }])),
       rev30: num(d.forward?.rev30), breadth: num(d.forward?.breadth), sent7: num(rec?.research?.sentiment?.last_7d), rsi: num(d.positioning?.price?.rsi14),
@@ -57,6 +60,13 @@
     const world = (cur.world?.items || []).filter((i) => i.title && !seenW.has(lc(i.title).slice(0, 90)) && (!i.date || i.date >= since))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 12)
       .map((i) => ({ id: "D" + ++k, kind: "W", date: i.date || "", source: i.source || "", title: trim(i.title, 200), summary: trim(i.summary, 200), url: i.url || "" }));
+    // 8-K filings by the industry's 25 largest companies (one shared SEC list a day); with financial statements it is usually results.
+    const top25 = new Set((d.constituents || []).slice().sort((a, b) => num(b.weight) - num(a.weight)).slice(0, 25).map((c) => c.symbol));
+    const seenF = new Set(prev.filings || []), nameOf = Object.fromEntries((d.constituents || []).map((c) => [c.symbol, c.name]));
+    const filings = (cur.filings || []).filter((f) => top25.has(f.symbol) && String(f.filingDate || "").slice(0, 10) >= since && !seenF.has(f.finalLink || f.link))
+      .sort((a, b) => String(b.acceptedDate || b.filingDate).localeCompare(String(a.acceptedDate || a.filingDate))).slice(0, 10)
+      .map((f) => ({ id: "D" + ++k, kind: "F", date: String(f.filingDate || "").slice(0, 10), source: "SEC 8-K", symbol: f.symbol, fin: !!f.hasFinancials,
+        title: `${f.symbol}${nameOf[f.symbol] ? ` (${trim(nameOf[f.symbol], 60)})` : ""} filed an 8-K${f.hasFinancials ? " with financial statements (usually results)" : ""}`, summary: "", url: f.finalLink || f.link || "" }));
     const macro = (cur.macroRows || []).map((r) => { const p = prev.macro[r.id || r.key]; const v = num(r.value), pv = p ? p.value : NaN;
       const ch = isNum(v) && isNum(pv) ? v - pv : NaN, rel = isNum(ch) && pv ? ch / Math.abs(pv) : NaN, pctUnit = r.unit === "%";
       const big = isNum(ch) && (pctUnit ? Math.abs(ch) >= 0.1 : Math.abs(rel) >= 0.02);
@@ -77,8 +87,10 @@
     for (const m of macro) if (m.relevance === "high" && (m.unit === "%" ? Math.abs(m.change) >= 0.15 : Math.abs(m.rel) >= 0.05)) triggers.push(`${m.label} moved to ${m.value}${m.unit} from ${m.prev}${m.unit}`);
     if (isNum(revisions.rev30) && isNum(revisions.was) && Math.abs(revisions.rev30 - revisions.was) >= 0.01) triggers.push(`EPS revisions moved from ${pc(revisions.was)} to ${pc(revisions.rev30)} over 30 days`);
     if (fresh.length >= 18) triggers.push(`${fresh.length} new company headlines`);
+    for (const f of filings) if (f.fin && top10.has(f.symbol)) triggers.push(`${f.symbol} filed an 8-K with financial statements (${f.date})`);
+    if (cur.shock) triggers.unshift(String(cur.shock));
     void wOf;
-    return { since, to, days, move, spy, z, sigma, movers, news: fresh, world, macro, passed, ahead, revisions, sentiment, rsi, triggers: [...new Set(triggers)].slice(0, 10) };
+    return { since, to, days, move, spy, z, sigma, movers, news: fresh, world, filings, shock: cur.shock || "", macro, passed, ahead, revisions, sentiment, rsi, triggers: [...new Set(triggers)].slice(0, 10) };
   }
   function addDays(d, k) { const t = new Date(String(d).slice(0, 10) + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
 
@@ -94,6 +106,8 @@
     if (isNum(x.sentiment.now)) L.push(`News sentiment, last 7 days: ${x.sentiment.now.toFixed(2)} (was ${isNum(x.sentiment.was) ? x.sentiment.was.toFixed(2) : "n/a"}).`);
     if (isNum(x.rsi.now)) L.push(`Industry RSI: ${x.rsi.now.toFixed(0)} (was ${isNum(x.rsi.was) ? x.rsi.was.toFixed(0) : "n/a"}).`);
     L.push(`New company headlines:\n${x.news.map((n) => `[${n.id}] ${n.date} ${n.symbol ? n.symbol + " · " : ""}${n.source}: ${n.title}${n.summary ? ". " + n.summary : ""}`).join("\n") || "(none)"}`);
+    if (x.shock) L.push(`MARKET SHOCK TODAY: ${x.shock}.`);
+    if ((x.filings || []).length) L.push(`New SEC 8-K filings by the industry's largest companies:\n${x.filings.map((f) => `[${f.id}] ${f.date} ${f.title}`).join("\n")}`);
     L.push(`New world headlines:\n${x.world.map((n) => `[${n.id}] ${n.date} ${n.source}: ${n.title}`).join("\n") || "(none)"}`);
     return L.join("\n");
   }
@@ -130,7 +144,7 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     reg: { label: "Regulation, litigation and deals", when: "anything new on a law, rule, court case, enforcement action, investigation, settlement, merger or deal touching the industry, including proposals, filings and commentary" },
     rulebook: { label: "Regulator rule books", when: "anything new from or about one of the regulators listed above: a rule finalized, proposed, changed, delayed, challenged or struck down, guidance or speeches" },
     chain: { label: "Customers and suppliers", when: "anything new from a key customer or supplier: results, guidance, capex, orders, deals, contract wins or losses, troubles" },
-    thesis: { label: "The whole analysis: thesis, scenarios and every call", when: "the day's changes add up to a different story for the industry, so the thesis, drivers, debates and bull/base/bear scenarios need rewriting, not just the calls" },
+    thesis: { label: "The whole analysis rewritten from scratch", when: "the day's changes add up to a different story, one you would build differently from scratch (the strategist updates the thesis, scenarios and calls every day anyway; this is for a story that no longer holds)" },
   };
   /** A short brief of what each deeper section says now, so the quick model can tell whether a headline is new to it. */
   function sectionBrief({ kpi, world, trade, reg, chain, bodies = [] } = {}) {
@@ -145,24 +159,49 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     return L.join("\n");
   }
   /**
+   * How far the industry has moved since the last full rewrite (`since`, its date): the move and how many normal moves
+   * that is. doc: the refreshed industry.
+   */
+  function drift(doc, since) {
+    const idx = doc?.index || {}, dates = idx.dates || [], s = String(since || "").slice(0, 10);
+    if (!s || !dates.length) return null;
+    const l0 = levelAt(idx, s), l1 = lastOf(idx), days = dates.filter((x) => x > s).length, vol = num(doc?.summary?.vol_1y);
+    const move = l0 > 0 && l1 > 0 ? l1 / l0 - 1 : NaN, sigma = isNum(vol) && days > 0 ? vol * Math.sqrt(days / 252) : NaN;
+    return { since: s, days, move, z: isNum(move) && sigma > 0 ? move / sigma : NaN };
+  }
+  /**
+   * The drift guard's limits: a full rewrite once the industry has moved this many normal moves since the last one, or
+   * after this many updates that changed the core story (thesis, drivers, scenarios, the opportunity).
+   */
+  const DRIFT = { z: 2, updates: 6 };
+  const CORE = /^(thesis|drivers|scenario odds|the opportunity|bull scenario|base scenario|bear scenario)$/;
+
+  /**
    * Which sections to rewrite today: everything the quick model names (with its reason), plus what code knows on its
-   * own: a top company reported (KPIs), a large move in a macro indicator the industry tracks (macro), a big move in
-   * the industry or a run of triggers (the whole analysis). No cool-down, no daily limit. `last` is kept for the record.
+   * own: a top company reported or filed results (KPIs), a large move in a macro indicator the industry tracks (macro),
+   * and the drift guard (the whole analysis from scratch: a big move today, a big move since the last full rewrite,
+   * too many updates since it, or yesterday's update saying it would write the story differently now). No cool-down,
+   * no daily limit. last: {pending (held yesterday), drift: {z, move, since, updates, rethink}}.
    */
   function pickSections(tri, x, last = {}, today) {
     const out = [];
     const IMP = { high: 3, medium: 2, low: 1 };
-    const add = (key, why, { code = false, regulators = [], importance = "medium" } = {}) => {
+    const add = (key, why, { code = false, regulators = [], importance } = {}) => {
       if (!SECTIONS[key] || !String(why || "").trim()) return;
-      const imp = code ? "high" : IMP[lc(importance)] ? lc(importance) : "medium";
+      const imp = IMP[lc(importance)] ? lc(importance) : code ? "high" : "medium";
       const have = out.find((o) => o.key === key);
-      if (have) { if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; if (IMP[imp] > IMP[have.importance]) have.importance = imp; return; }
+      if (have) { if (!have.why.includes(trim(why, 60))) have.why = trim(`${have.why}; ${why}`, 300); if (code && have.by !== "code") have.by = "code"; if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; if (IMP[imp] > IMP[have.importance]) have.importance = imp; return; }
       out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", importance: imp, ...(regulators.length ? { regulators } : {}) });
     };
     for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
     const bigMacro = (x.macro || []).filter((m) => m.relevance === "high");
     if (bigMacro.length) add("macro", `${bigMacro.slice(0, 3).map((m) => `${m.label} ${m.prev}${m.unit} → ${m.value}${m.unit} [${m.id}]`).join("; ")}`, { code: true });
+    for (const f of x.filings || []) if (f.fin && (x.triggers || []).some((t) => t.startsWith(`${f.symbol} filed an 8-K`))) add("kpi", `${f.symbol} filed an 8-K with financial statements on ${f.date} [${f.id}]`, { code: true });
     if (isNum(x.z) && Math.abs(x.z) >= 2.5) add("thesis", `the industry moved ${pc(x.move)} since ${x.since}, ${Math.abs(x.z).toFixed(1)} times its normal move`, { code: true });
+    const dg = last?.drift || {};
+    if (isNum(dg.z) && Math.abs(dg.z) >= DRIFT.z) add("thesis", `drift guard: the industry has moved ${pc(dg.move)} since the last full rewrite (${dg.since}), ${Math.abs(dg.z).toFixed(1)} times a normal move for that time`, { code: true });
+    if (dg.rethink && dg.rethink.same === false) add("thesis", `drift guard: the last update said it would write the story differently from scratch: ${trim(dg.rethink.why, 200)}`, { code: true });
+    if ((dg.updates || 0) >= DRIFT.updates) add("thesis", `drift guard: ${dg.updates} updates to the core story since the last full rewrite${dg.since ? ` (${dg.since})` : ""}; a fresh one rereads every section in full and clears what the patches may have missed`, { code: true, importance: "low" });
     for (const s of Array.isArray(tri?.sections) ? tri.sections : []) {
       const key = lc(s?.key);
       const regulators = key === "rulebook" ? (Array.isArray(s.regulators) ? s.regulators : []).map((r) => trim(r, 120)).filter(Boolean).slice(0, 8) : [];
@@ -178,7 +217,7 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
    * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
    */
-  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.05, triage: 0.002 };
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.06, triage: 0.002, second: 0.01 };
   const IMPV = { high: 3, medium: 2, low: 1 };
   const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
   /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
@@ -186,14 +225,21 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
   /**
    * Plan a day within a budget. cands: [{industry, key, importance, by, waited, regulators?, bodies?}]; budget in $.
    * Returns {run: [...], held: [...], planned} in order of worth; the cheapest worthwhile work is never starved by an
-   * expensive item that doesn't fit (it is skipped and the next one tried).
+   * expensive item that doesn't fit (it is skipped and the next one tried). `stretch`: extra money (borrowed from the
+   * rest of the month) that only urgent items may use, so a rewrite bigger than a small sector's daily share (a drift
+   * guard's full rewrite, or anything code flagged high, or that has waited two days) still happens.
    */
-  function plan(cands, budget) {
+  function plan(cands, budget, { stretch = 0 } = {}) {
     const est = (c) => (c.key === "rulebook" ? COST.rulebook * Math.max(1, (c.regulators?.length || c.bodies || 2)) : COST[c.key] || 0.5);
     const ranked = cands.map((c) => ({ ...c, score: scoreOf(c), est: est(c) })).sort((a, b) => b.score - a.score || a.est - b.est);
-    const run = [], held = []; let left = Math.max(0, budget);
-    for (const c of ranked) { if (c.est <= left) { run.push(c); left -= c.est; } else held.push(c); }
-    return { run, held, planned: Math.round((budget - left) * 100) / 100 };
+    const run = [], held = []; let left = Math.max(0, budget), extra = Math.max(0, stretch), borrowed = 0;
+    const urgent = (c) => (c.by === "code" && c.importance === "high") || (c.waited || 0) >= 2;
+    for (const c of ranked) {
+      if (c.est <= left) { run.push(c); left -= c.est; }
+      else if (urgent(c) && c.est <= left + extra) { const b = c.est - left; extra -= b; borrowed += b; left = 0; run.push({ ...c, borrowed: true }); }
+      else held.push(c);
+    }
+    return { run, held, planned: Math.round((budget - left + borrowed) * 100) / 100, borrowed: Math.round(borrowed * 100) / 100 };
   }
   /** Today's share of a monthly budget: what is left this month, spread over the days left (today included). */
   function dayBudget(monthBudget, spentThisMonth, today) {
@@ -201,42 +247,146 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     const daysLeft = last - d.getUTCDate() + 1;
     return Math.max(0, Math.round(((monthBudget - (spentThisMonth || 0)) / daysLeft) * 100) / 100);
   }
+  /**
+   * The most a day may borrow from the rest of the month: three days' share, and never more than a quarter of what is
+   * left. Used on a big day (a market shock, or news hitting much of the sector at once) and for urgent rewrites.
+   */
+  function borrowCap(monthBudget, spentThisMonth, today) {
+    const left = Math.max(0, monthBudget - (spentThisMonth || 0));
+    return Math.round(Math.min(3 * dayBudget(monthBudget, spentThisMonth, today), 0.25 * left) * 100) / 100;
+  }
+  /**
+   * Is today a big day? spy1d / vix1d: today's % changes; highShare: the share of the sector's industries with
+   * something the quick model called high importance; shock: a midday alarm's note. Returns {big, why}.
+   */
+  function bigDay({ spy1d = NaN, vix1d = NaN, highShare = 0, shock = "" } = {}) {
+    const why = [];
+    if (shock) why.push(String(shock));
+    if (isNum(spy1d) && Math.abs(spy1d) >= 2) why.push(`the S&P 500 moved ${spy1d > 0 ? "+" : ""}${spy1d.toFixed(1)}% in a day`);
+    if (isNum(vix1d) && vix1d >= 15) why.push(`the VIX jumped ${vix1d.toFixed(0)}%`);
+    if (highShare >= 0.4) why.push(`${Math.round(highShare * 100)}% of the sector's industries had high-importance news`);
+    return { big: why.length > 0, why: why.join("; ") };
+  }
 
-  /** Step 4: revisit the calls against what changed. */
-  function updatePrompt(name, res, x, today, facts, rewritten = "") {
-    const sc = res?.scenarios || {};
-    return `You are the lead strategist for the "${name}" industry. Today is ${today}. Your full analysis is below in brief; since then, the market and news moved (WHAT CHANGED). Update your 1M, 3M, 6M and 12M calls only where the evidence warrants: keep a call that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.
+  /** The parts of the lead's analysis the daily update may rewrite, as it reads them (citations kept: a kept passage keeps its sources). */
+  function analysisOf(res) {
+    const sc = res?.scenarios || {}, op = res?.opportunity || {};
+    const out = { headline: res?.headline || "", thesis: res?.thesis || "", summary: res?.summary || "", priced_in: res?.priced_in || "", confidence: res?.confidence || "",
+      drivers: (res?.drivers || []).map(({ title, direction, magnitude, horizon, text }) => ({ title, direction, magnitude, horizon, text })),
+      debates: (res?.debates || []).map(({ question, bull, bear, resolves_with, lean, why }) => ({ question, bull, bear, resolves_with, lean, why })),
+      change_mind: res?.change_mind || [],
+      scenarios: Object.fromEntries(SCN.filter((k) => sc[k]).map((k) => [k, { probability: sc[k].probability, narrative: sc[k].narrative, triggers: sc[k].triggers || [], eps_change: sc[k].eps_change, pe: sc[k].pe, price_move: sc[k].price_move, earnings: sc[k].earnings, valuation: sc[k].valuation, sections: sc[k].sections || {} }])) };
+    if (op.verdict) out.opportunity = { verdict: op.verdict, headline: op.headline, why: op.why, entry_triggers: op.entry_triggers || [] };
+    if (res?.profiles && Object.keys(res.profiles).length) out.profiles = Object.fromEntries(Object.entries(res.profiles).map(([k, p]) => [k, { fit: p.fit, conviction: p.conviction, verdict: p.verdict }]));
+    return out;
+  }
+  const SCN = ["bull", "base", "bear"];
 
-YOUR CURRENT CALLS
+  /**
+   * Step 4: the whole analysis brought up to date. The lead strategist reads its entire current analysis and what
+   * changed, rewrites every part the evidence changes (and only those), revisits the calls, and says whether it would
+   * now write the story differently from scratch (which orders a full rewrite). opts: {pe: today's P/E basis for the
+   * scenario math, drift: {move, z, since, updates}}.
+   */
+  function updatePrompt(name, res, x, today, facts, rewritten = "", { pe = null, drift: dg = null } = {}) {
+    return `You are the lead strategist for the "${name}" industry. Today is ${today}. Below is your WHOLE current analysis, then everything that changed since it was last updated, and the sections your team rewrote today because of it. Bring the whole analysis up to date so it reads exactly as you would write it today: every sentence, number, probability and call that today's evidence makes wrong, stale or incomplete, you rewrite; everything it doesn't touch, you leave exactly as it is.
+
+YOUR WHOLE ANALYSIS NOW (JSON, last updated ${res?.daily?.date || "at the full analysis"}; the IDs in [brackets] are your sources)
+${JSON.stringify(analysisOf(res))}
+
+YOUR CURRENT 1M, 3M, 6M AND 12M CALLS
 ${callsText(res)}
 
-YOUR THESIS IN BRIEF: ${noIds(res?.headline, 300)} ${noIds(res?.summary || res?.thesis, 900)}
-SCENARIOS (12 months): ${["bull", "base", "bear"].filter((k) => sc[k]).map((k) => `${k} ${sc[k].probability}% (${(sc[k].price_move || []).join(" to ")}%)`).join("; ") || "n/a"}
-KEY DRIVERS: ${(res?.drivers || []).slice(0, 5).map((d) => `${d.title} (${d.direction})`).join("; ") || "n/a"}
 NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`).join(", ") || "n/a"}
 ${(facts || []).some((f) => f.like) ? `TIMES LIKE THIS (the past months most like today, macro and industry setup; start from these and move away only for a stated reason): ${(facts || []).filter((f) => f.like).map((f) => `${f.h} up ${f.like.pos}% of the time, median ${f.like.median}% (middle half ${f.like.p25}% to ${f.like.p75}%), 5 closest episodes up ${f.like.top_up} of ${f.like.top_n}`).join("; ")}` : ""}
+${isNum(num(pe)) ? `TODAY'S P/E FOR THE SCENARIO MATH: ${num(pe)}` : ""}
+${dg && isNum(dg.move) ? `SINCE YOUR LAST FULL REWRITE (${dg.since}): the industry moved ${pc(dg.move)}${isNum(dg.z) ? `, ${Math.abs(dg.z).toFixed(1)} times a normal move for that time` : ""}; ${dg.updates || 0} daily update${dg.updates === 1 ? "" : "s"} since.` : ""}
 
 WHAT CHANGED SINCE THE LAST UPDATE
 ${deltaText(x)}
 ${x.triggers.length ? `\nFLAGGED BY CODE: ${x.triggers.join("; ")}` : ""}
-${rewritten ? `\nSECTIONS YOUR TEAM REWROTE TODAY BECAUSE OF THIS NEWS (their new conclusions; weigh them in your calls)\n${noIds(rewritten)}\n` : ""}
-RULES
-- Cite what you rely on with its ID in square brackets: [D#] for today's headlines, [I#] for macro rows. Never invent a fact or figure.
-- A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more.
-- Events that have passed: say how they landed and what that does to the call.
+${rewritten ? `\nSECTIONS YOUR TEAM REWROTE TODAY BECAUSE OF THIS NEWS (their new conclusions; weigh them everywhere they bear)\n${noIds(rewritten)}\n` : ""}
+HOW TO UPDATE
+1. Go through every part in turn: headline, thesis, summary, priced_in, confidence, each driver, each debate (has one been settled? is a new one live?), change_mind, each scenario (probability, numbers, narrative, triggers, earnings, valuation, each section read), the opportunity, each investor profile, then each call. For each, ask: does anything above make this wrong, stale or incomplete? If yes, rewrite it in full, as you would from scratch, weaving the new facts in with their citations. If no, leave it out of your reply (it stays as it is).
+2. Lists (drivers, debates, change_mind, a scenario's triggers, entry_triggers): if any item changes, return the whole new list, re-ranked: drop what no longer matters, add what now does.
+3. Scenario numbers stay consistent: price_move ≈ (1 + eps_change/100) × (end P/E ÷ today's P/E) − 1, and probabilities sum to 100; if you change one probability, give all three. A scenario's "sections" object: only the section reads that change.
+4. A call: keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it. A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
+5. Keep it all consistent: the headline, thesis, scenarios, opportunity, profiles and calls must tell one story after your changes.
+6. Then answer honestly: if you threw this analysis away and wrote it from scratch today, with everything above, would you reach the same core thesis, the same scenario set and the same opportunity verdict? "different" if the story itself would be built differently, not merely updated. A "different" orders a full rewrite.
+- Cite what you rely on: [D#] for today's headlines and filings, [I#] for macro rows, and the IDs already in your analysis. Never invent a fact, figure or ID.
 
 Reply with ONLY this JSON:
 {"material": true or false, "headline": "one sentence: what changed today for this industry", "summary": "2-4 sentences, cited", "changes": [{"text": "one change and what it means, cited", "effect": "positive | negative | mixed"}],
  "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", "call": "bullish | neutral | bearish", "conviction": "high | medium | low", "expected_move": [-3, 4], "probability_up": 52, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
- "scenario_probabilities": {"bull": 25, "base": 50, "bear": 25} or null if unchanged, "watch": ["1-3 things to watch tomorrow"]}`;
+ "analysis": {only the parts that change, in the same shape as YOUR WHOLE ANALYSIS above; {} if nothing changes},
+ "rethink": {"from_scratch": "same | different", "why": "one sentence"},
+ "watch": ["1-3 things to watch tomorrow"]}`;
+  }
+
+  /**
+   * Merge the update's "analysis" into the result (in place). cite: the citation cleaner for analysis text. Returns the
+   * labels of the parts that changed. A part the update left out, or gave in a shape code can't trust, stays as it was.
+   */
+  function mergeAnalysis(out, an, cite) {
+    const changed = [];
+    if (!an || typeof an !== "object") return changed;
+    const en = (v, list) => (list.includes(lc(v)) ? lc(v) : "");
+    const rng = (r) => { const v = Array.isArray(r) ? r.map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b) : []; return v.length === 2 ? v : null; };
+    const str = (v, k) => (typeof v === "string" && v.trim() ? cite(v, k) : "");
+    const set = (obj, key, val, label) => { if (val === "" || val === null || val === undefined) return; if (JSON.stringify(obj[key]) === JSON.stringify(val)) return; obj[key] = val; if (label && !changed.includes(label)) changed.push(label); };
+    const strs = (a, n, k) => (Array.isArray(a) ? a.map((t) => str(t, k)).filter(Boolean).slice(0, n) : []);
+    for (const [k, n, l] of [["headline", 400, "headline"], ["thesis", 4000, "thesis"], ["summary", 2000, "summary"], ["priced_in", 1500, "what's priced in"]]) set(out, k, str(an[k], n), l);
+    set(out, "confidence", en(an.confidence, ["low", "medium", "high"]), "confidence");
+    if (Array.isArray(an.drivers)) {
+      const old = Object.fromEntries((out.drivers || []).map((d) => [lc(d.title), d]));
+      const dv = an.drivers.filter((d) => d && str(d.title, 120) && str(d.text, 1200)).slice(0, 7).map((d, i) => ({ rank: i + 1, title: str(d.title, 120), direction: en(d.direction, ["tailwind", "headwind", "mixed"]) || "mixed",
+        magnitude: en(d.magnitude, ["high", "medium", "low"]) || "medium", horizon: trim(d.horizon, 20), text: str(d.text, 1200), sections: old[lc(d.title)]?.sections || (Array.isArray(d.sections) ? d.sections.slice(0, 10) : []) }));
+      if (dv.length >= 2) set(out, "drivers", dv, "drivers");
+    }
+    if (Array.isArray(an.debates)) {
+      const db = an.debates.filter((d) => d && str(d.question, 300) && (str(d.bull, 900) || str(d.bear, 900))).slice(0, 5).map((d) => ({ question: str(d.question, 300), bull: str(d.bull, 900), bear: str(d.bear, 900),
+        resolves_with: str(d.resolves_with, 300), lean: en(d.lean, ["bull", "bear", "balanced"]) || "balanced", why: str(d.why, 400) }));
+      if (db.length) set(out, "debates", db, "debates");
+    }
+    const cm = strs(an.change_mind, 6, 300); if (cm.length) set(out, "change_mind", cm, "what would change the view");
+    if (an.scenarios && typeof an.scenarios === "object" && out.scenarios) {
+      const ks = SCN.filter((k) => out.scenarios[k]);
+      for (const k of ks) { const y = an.scenarios[k], o = out.scenarios[k]; if (!y || typeof y !== "object") continue; const lab = `${k} scenario`;
+        for (const [f, n] of [["narrative", 1200], ["earnings", 400], ["valuation", 400]]) set(o, f, str(y[f], n), lab);
+        const tg = strs(y.triggers, 5, 240); if (tg.length) set(o, "triggers", tg, lab);
+        for (const f of ["eps_change", "pe", "price_move"]) set(o, f, rng(y[f]), lab);
+        if (y.sections && typeof y.sections === "object") { o.sections = { ...(o.sections || {}) }; for (const [s2, t] of Object.entries(y.sections)) if (s2 in o.sections || Object.keys(o.sections).length === 0) set(o.sections, s2, str(t, 600), lab); }
+      }
+      // Probabilities only as a full set, normalized to 100.
+      const ps = ks.map((k) => num(an.scenarios[k]?.probability));
+      if (ps.every((p) => isNum(p) && p >= 0) && ps.reduce((a, b) => a + b, 0) > 0) {
+        const tot = ps.reduce((a, b) => a + b, 0), np = ps.map((p) => Math.round((p / tot) * 100)); const bi = ks.indexOf("base"); np[bi >= 0 ? bi : 0] += 100 - np.reduce((a, b) => a + b, 0);
+        if (ks.some((k, i) => out.scenarios[k].probability !== np[i])) { ks.forEach((k, i) => (out.scenarios[k].probability = np[i])); changed.push("scenario odds"); }
+      }
+    }
+    if (an.opportunity && typeof an.opportunity === "object" && out.opportunity) { const o = out.opportunity, y = an.opportunity;
+      set(o, "verdict", en(y.verdict, ["yes", "conditional", "no"]), "the opportunity"); set(o, "headline", str(y.headline, 300), "the opportunity"); set(o, "why", str(y.why, 1500), "the opportunity");
+      const et = strs(y.entry_triggers, 5, 240); if (et.length) set(o, "entry_triggers", et, "the opportunity"); }
+    if (an.profiles && typeof an.profiles === "object" && out.profiles) for (const [k, y] of Object.entries(an.profiles)) { const o = out.profiles[k]; if (!o || !y || typeof y !== "object") continue;
+      set(o, "fit", en(y.fit, ["strong", "moderate", "weak"]), "investor verdicts"); set(o, "conviction", en(y.conviction, ["high", "medium", "low"]), "investor verdicts"); set(o, "verdict", str(y.verdict, 1200), "investor verdicts"); }
+    return changed;
   }
 
   /**
    * Apply an update to the lead's result (returns a new result). upd: the update JSON (or null for "nothing material"); via: "code" | "triage" | "update".
    * Each revised horizon keeps where it came from; a daily history of the last 20 updates is kept.
    */
-  function apply(res, upd, x, { today, via, tri = null, sources = [], sections = [] }) {
+  function apply(res, upd, x, { today, via, tri = null, sources = [], sections = [], known = [] }) {
     const out = JSON.parse(JSON.stringify(res || {}));
+    // The analysis keeps citing after today, so today's [D#] become lasting IDs (DU1, DU2, ...) with their source kept
+    // in `refs` (the page adds them to the lead's sources); IDs already in the analysis, or known to the page, stay.
+    const bracket = /\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g;
+    const had = new Set(known); for (const m of JSON.stringify([analysisOf(res), res?.horizons || {}]).matchAll(bracket)) for (const id of m[1].split(/,\s*/)) if (!/^D\d+$/.test(id)) had.add(id);
+    const byD = Object.fromEntries(sources.map((s) => [s.id, s])), mapD = {}, refs = [];
+    let refN = num(out.ref_n) || 0;
+    const citeA = (t, k) => trim(String(t || "").replace(bracket, (m, g) => { const keep = [...new Set(g.split(/,\s*/).map((id) => {
+      if (byD[id]) { if (!mapD[id]) { mapD[id] = "DU" + ++refN; const s = byD[id]; refs.push({ id: mapD[id], kind: "N", date: s.date, source: s.source, title: s.title, url: s.url || "", symbol: s.symbol || "" }); } return mapD[id]; }
+      return had.has(id) || /^I\d+$/.test(id) && (x.macro || []).some((r) => r.id === id) ? id : ""; }).filter(Boolean))]; return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
     const ids = new Set(sources.map((s) => s.id).concat((x.macro || []).map((m) => m.id)));
     const cite = (t, k = 600) => trim(String(t || "").replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { const keep = g.split(/,\s*/).filter((i) => ids.has(i)); return keep.length ? `[${keep.join(", ")}]` : ""; }), k);
     const en = (v, list, dflt) => (list.includes(lc(v)) ? lc(v) : dflt);
@@ -256,11 +406,20 @@ Reply with ONLY this JSON:
         ks.forEach((k) => (out.scenarios[k].probability = Math.round((num(sp[k]) / tot) * 100)));
         const diff = 100 - ks.reduce((a, k) => a + out.scenarios[k].probability, 0); if (out.scenarios.base) out.scenarios.base.probability += diff;
         if (ks.some((k) => was[k] !== out.scenarios[k].probability)) hz._scenarios = { from: was, to: Object.fromEntries(ks.map((k) => [k, out.scenarios[k].probability])) }; } }
-    const changed = Object.values(hz).some((v) => v.status === "revised") || !!hz._scenarios;
+    // The rest of the analysis, part by part.
+    const scnWas = out.scenarios ? Object.fromEntries(SCN.filter((k) => out.scenarios[k]).map((k) => [k, out.scenarios[k].probability])) : null;
+    const parts = upd?.analysis ? mergeAnalysis(out, upd.analysis, citeA) : [];
+    if (parts.includes("scenario odds") && scnWas && !hz._scenarios) hz._scenarios = { from: scnWas, to: Object.fromEntries(Object.keys(scnWas).map((k) => [k, out.scenarios[k].probability])) };
+    const rt = upd?.rethink && typeof upd.rethink === "object" ? { date: today, same: lc(upd.rethink.from_scratch) !== "different", why: cite(upd.rethink.why, 300) } : null;
+    if (rt) out.rethink = rt;
+    if (parts.length) out.ref_n = refN;
+    if (parts.some((p) => CORE.test(p))) out.rewrites_since_full = (num(out.rewrites_since_full) || 0) + 1;
+    if (refs.length) out.daily_refs = [...(out.daily_refs || []), ...refs].slice(-200);
+    const changed = Object.values(hz).some((v) => v.status === "revised") || !!hz._scenarios || parts.length > 0;
     const entry = { date: today, as_of: x.to, since: x.since, via, material: !!(upd ? upd.material !== false && (changed || (upd.changes || []).length) : false),
       headline: upd ? cite(upd.headline, 300) : trim(tri?.why || "Nothing material since the last update; the calls stand.", 300), summary: upd ? cite(upd.summary, 900) : "",
       changes: upd ? (Array.isArray(upd.changes) ? upd.changes : []).slice(0, 6).map((c) => ({ text: cite(c?.text, 400), effect: en(c?.effect, ["positive", "negative", "mixed"], "mixed") })).filter((c) => c.text) : [],
-      horizons: hz, revised: changed, watch: upd ? (Array.isArray(upd.watch) ? upd.watch : []).slice(0, 3).map((w) => cite(w, 200)).filter(Boolean) : [], triggers: x.triggers || [],
+      horizons: hz, revised: changed, analysis: parts, ...(rt ? { rethink: rt } : {}), filings: [...(prev_filings(res)), ...(x.filings || []).map((f) => f.url).filter(Boolean)].slice(-60), watch: upd ? (Array.isArray(upd.watch) ? upd.watch : []).slice(0, 3).map((w) => cite(w, 200)).filter(Boolean) : [], triggers: x.triggers || [],
       move: isNum(x.move) ? Math.round(x.move * 1000) / 10 : null, spy: isNum(x.spy) ? Math.round(x.spy * 1000) / 10 : null, z: isNum(x.z) ? Math.round(x.z * 10) / 10 : null,
       movers: (x.movers || []).slice(0, 5).map((m) => ({ symbol: m.symbol, ret: Math.round(m.ret * 1000) / 10 })),
       sections: sections.map((s) => ({ key: s.key, label: s.label, why: cite(s.why, 300), by: s.by, ok: s.ok !== false, ...(s.regulators ? { regulators: s.regulators } : {}), ...(s.error ? { error: trim(s.error, 200) } : {}) })),
@@ -269,10 +428,11 @@ Reply with ONLY this JSON:
     out.daily = entry; out.daily_history = hist;
     // When each section was last rewritten (the cool-down for the next day's picks).
     for (const sct of sections) if (sct.ok !== false) out.sections_rewritten = { ...(out.sections_rewritten || {}), [sct.key]: today };
-    return { result: out, changed };
+    return { result: out, changed, parts, refs };
   }
+  const prev_filings = (res) => res?.daily?.filings || [];
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, COST, scoreOf };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, borrowCap, bigDay, COST, scoreOf, drift, DRIFT, analysisOf, mergeAnalysis };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);

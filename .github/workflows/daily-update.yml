@@ -1,14 +1,19 @@
 # Industry Scorer: the cheap daily update of every analyzed sector.
 #
-# Each weekday after the US close, for every sector whose full analysis is in the "exports" branch:
-#   1. code refreshes every number (prices, returns, estimates, positioning, macro values, news): no Claude;
-#   2. code compares today with the last update and flags hard triggers (a big move, a top company reporting, ...);
-#   3. without a trigger, the quick model (Haiku) checks whether anything is material;
-#   4. only where something is, the strategist (Sonnet) revisits the 1M-12M calls; the rest stand as they were;
-#   5. every section the day's data touches (KPIs and earnings calls, macro, world events, trade, regulation, rule books,
-#      customers and suppliers, or the whole analysis when the story changes) is rewritten by the same analyst as the
-#      full run, for that industry only, before the calls are revisited. No cool-down, no daily limit, no spending cap:
-#      whatever needs it is rewritten, every day if need be.
+# Every day after the US close, for every sector whose full analysis is in the "exports" branch:
+#   1. code refreshes every number (prices, returns, estimates, positioning, macro values, news, the SEC's 8-K
+#      filings): no Claude;
+#   2. code compares today with the last update and flags hard triggers (a big move, a top company reporting or
+#      filing results, a midday market alarm, ...);
+#   3. the quick model (Haiku) reads the day and names every section it touches; when the industry moved far but Haiku
+#      saw nothing, Sonnet gives a second opinion;
+#   4. the sections worth the most are rewritten by the same analysts as the full run, within the day's share of the
+#      monthly budget (a big day borrows up to three days' share);
+#   5. the strategist (Opus) brings the WHOLE analysis up to date: thesis, drivers, debates, scenarios, the opportunity,
+#      the investor verdicts and the 1M-12M calls, changing only what the day changes;
+#   6. the drift guard orders a full rewrite from scratch when the industry has moved 2+ normal moves since the last
+#      one or when the strategist says it would now write the story differently (and, as upkeep, after 6 updates to the
+#      core story).
 # The updated sector goes back to the exports branch, so "Pull from GitHub" in Industry Scorer gets it.
 # The full analysis is still the weekly "Sector run" (list the sectors in runner/weekly-sectors.txt).
 #
@@ -25,6 +30,10 @@ on:
         default: ""
       budget:
         description: "Most to spend on Claude per sector today, in US dollars (empty = no limit)"
+        required: false
+        default: ""
+      shock:
+        description: "Set by the midday market alarm: what moved (makes today a big day)"
         required: false
         default: ""
   schedule:
@@ -50,7 +59,7 @@ jobs:
           ONLY: ${{ inputs.sector }}
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
-          MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '470' }}
+          MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '455' }}
         run: |
           # Every sector in the exports branch with at least one finished industry (a sector still adding industries,
           # or stopped part-way, updates the industries it has finished).
@@ -111,9 +120,10 @@ jobs:
           JOB_DAILY_INDUSTRIES: ${{ vars.DAILY_INDUSTRIES || '8' }}
           CLAUDE_MODEL_QUICK: ${{ vars.CLAUDE_MODEL_QUICK || 'claude-haiku-4-5-20251001' }}
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
-          # Revising the calls and rewriting a whole analysis: the best model, where it matters most.
+          # Bringing the whole analysis up to date, and rewriting it from scratch: the best model, where it matters most.
           CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
           JOB_MONTH_BUDGET: ${{ matrix.budget }}
+          JOB_SHOCK: ${{ inputs.shock }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch

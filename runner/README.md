@@ -58,14 +58,37 @@ Only the connections change:
 
 ## A monthly budget for the daily updates (default about $500 a month)
 
-The daily update runs every day and can rewrite anything the day touches, so it runs on a budget: the repository
-variable `DAILY_MONTHLY_BUDGET_USD` (default 470, about $500 a month with GitHub's minutes) is split across sectors by
-their number of industries, and each day spends its share of what's left this month (a quiet day leaves more for a busy
-one). Within the day, the work worth the most goes first across the whole sector: a top company's earnings, then
-whatever changes a section's conclusions, then new facts, then nuance; what doesn't fit waits and comes back the next
-day, more urgent. One industry a day (the one analyzed longest ago) also gets its whole analysis rewritten. The cheap
-model (Haiku) reads every industry's day; Sonnet rewrites sections; Opus 5.5 (`CLAUDE_MODEL_DAILY_LEAD`) revises the
-calls and rewrites whole analyses. A day can't spend more than three times its share (a safety stop).
+The daily update runs every day and keeps every analysis as current as a full rewrite would, on a budget: the
+repository variable `DAILY_MONTHLY_BUDGET_USD` (default 455, about $500 a month with GitHub's minutes) is split across
+sectors by their number of industries, and each day spends its share of what's left this month (a quiet day leaves
+more for a busy one). Each day, per industry:
+
+1. **Data, no Claude:** prices, estimates, positioning, macro values, news, and one shared list of the SEC's 8-K
+   filings (a top company filing one with financial statements is usually results: a hard trigger).
+2. **Triage (Haiku):** reads the day and names every section it touches, with how important. When the industry moved
+   1.5+ normal moves but Haiku saw nothing, **Sonnet gives a second opinion**.
+3. **Section rewrites (Sonnet):** the work worth the most goes first across the whole sector (a top company's results,
+   then whatever changes a section's conclusions, then new facts, then nuance); what doesn't fit waits and comes back
+   the next day, more urgent.
+4. **The whole analysis brought up to date (Opus 5.5, `CLAUDE_MODEL_DAILY_LEAD`):** the strategist reads its entire
+   analysis and everything that changed, and rewrites every part the day changes (headline, thesis, summary, what's
+   priced in, drivers, debates, each scenario's numbers, odds and story, the opportunity, the investor verdicts, the
+   1M-12M calls), leaving the rest exactly as it was. It then answers: "written from scratch today, would this be the
+   same story?" Code recomputes the scenario math and its checks. Today's headlines it cites become lasting sources
+   (DU-IDs).
+5. **The drift guard:** a full rewrite from scratch (every section reread, the strategist's full process) is ordered
+   when the industry has moved 2+ normal moves since the last one, or when the strategist says the story would be
+   built differently (these go first in line and may borrow from the rest of the month), and, as upkeep, after 6
+   updates that changed the core story (this one waits for room in the budget, moving up each day it waits). The industry
+   analyzed longest ago also gets one as a rolling refresh.
+
+**Big days** (the S&P 500 moving 2%+, the VIX jumping 15%+, high-importance news in 40%+ of a sector's industries, or a
+midday alarm) may spend up to three days' share, never more than a quarter of what's left this month; urgent rewrites
+may borrow the same way on any day. A day can't spend more than three times its share in all (a safety stop).
+
+**The midday market alarm** (`market-alarm.yml`, no Claude): twice each weekday during trading it reads SPY and the
+VIX; on a crash-sized day (SPY ±2.5%, VIX +20%; variables `SHOCK_SPY_PCT`, `SHOCK_VIX_PCT`) it starts the daily
+update right away as a big day, at most once a day. Run it by hand with "force" to do that whatever the market did.
 
 ## Run everything in order (the queue) and the status page
 
