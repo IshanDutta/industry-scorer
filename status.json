@@ -17,27 +17,27 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T10:23:24.226Z",
+ "updated_at": "2026-11-05T11:05:57.079Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T10:23:24.226Z"
+  "checked_at": "2026-11-05T11:05:57.079Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 581.25,
-  "last_24h": 65.74,
-  "last_7d": 65.74,
-  "cache_saved": 10.73,
+  "tracked_total": 598.66,
+  "last_24h": 83.15,
+  "last_7d": 83.15,
+  "cache_saved": 13.67,
   "by_sector": {
    "Basic Materials": 53.79,
    "Communication Services": 1.43,
    "Consumer Cyclical": 0.28,
    "Consumer Defensive": 87.13,
    "Energy": 3.25,
-   "Financial Services": 65.56,
+   "Financial Services": 82.97,
    "Healthcare": 56.9,
    "Industrials": 94.15,
    "Real Estate": 52.43,
@@ -80,6 +80,10 @@
    {
     "at": "2026-11-05T09:41:56.061Z",
     "total": 581.25
+   },
+   {
+    "at": "2026-11-05T11:05:57.079Z",
+    "total": 598.66
    }
   ]
  },
@@ -178,13 +182,14 @@
    {
     "sector": "Financial Services",
     "budget": 17,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 65.56,
     "dispatched_at": "2026-11-05T08:17:51.273Z",
     "dispatched_budget": 30,
     "usd_at_dispatch": 65.56,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013",
+    "finished_at": "2026-11-05T11:05:57.079Z"
    },
    {
     "sector": "Industrials",
@@ -211,8 +216,12 @@
    {
     "sector": "Communication Services",
     "budget": 18,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 1.43,
+    "dispatched_at": "2026-11-05T11:05:57.079Z",
+    "dispatched_budget": "none",
+    "usd_at_dispatch": 1.43
    },
    {
     "sector": "Consumer Cyclical",
@@ -223,18 +232,10 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Financial Services, Industrials, Energy (3 at once, up to 3).",
-  "updated_at": "2026-11-05T10:23:24.226Z",
-  "spent": 65.74,
+  "note": "Running Industrials, Energy, Communication Services (3 at once, up to 3).",
+  "updated_at": "2026-11-05T11:05:57.079Z",
+  "spent": 83.15,
   "log": [
-   {
-    "at": "2026-11-05T01:46:32.372Z",
-    "text": "Started Technology (up to $8)."
-   },
-   {
-    "at": "2026-11-05T05:03:00.926Z",
-    "text": "Technology finished."
-   },
    {
     "at": "2026-11-05T05:03:00.926Z",
     "text": "Started Utilities (up to $8)."
@@ -306,6 +307,14 @@
    {
     "at": "2026-11-05T09:41:56.061Z",
     "text": "Started Energy (no spending limit)."
+   },
+   {
+    "at": "2026-11-05T11:05:57.079Z",
+    "text": "Financial Services finished."
+   },
+   {
+    "at": "2026-11-05T11:05:57.079Z",
+    "text": "Started Communication Services (no spending limit)."
    }
   ],
   "parallel": 3,
@@ -326,13 +335,6 @@
    "status": "in_progress",
    "started": "2026-11-05T09:09:39Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628"
-  },
-  {
-   "sector": "Financial Services",
-   "title": "Sector run · Financial Services",
-   "status": "in_progress",
-   "started": "2026-11-05T08:18:05Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013"
   }
  ],
  "recent_runs": [
@@ -343,6 +345,14 @@
    "started": "2026-11-05T09:03:31Z",
    "ended": "2026-11-05T09:41:38Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41999256691"
+  },
+  {
+   "sector": "Financial Services",
+   "title": "Sector run · Financial Services",
+   "conclusion": "success",
+   "started": "2026-11-05T08:18:05Z",
+   "ended": "2026-11-05T11:05:37Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013"
   },
   {
    "sector": "Healthcare",
@@ -447,14 +457,6 @@
    "started": "2026-11-03T23:09:39Z",
    "ended": "2026-11-03T23:38:52Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736889653"
-  },
-  {
-   "sector": "Technology",
-   "title": "Run Technology",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:37Z",
-   "ended": "2026-11-03T23:41:05Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736885505"
   }
  ],
  "sectors": [
@@ -1600,14 +1602,11 @@
   },
   {
    "sector": "Financial Services",
-   "finished": false,
-   "exported_at": "2026-11-03T23:36:18.834Z",
-   "round": {
-    "n": 1,
-    "adding": 8
-   },
+   "finished": true,
+   "exported_at": "2026-11-05T11:04:58.371Z",
+   "round": null,
    "daily": null,
-   "usd": 65.56,
+   "usd": 82.97,
    "daily_month": {
     "usd": 0,
     "budget": null
@@ -1615,9 +1614,12 @@
    "daily_held": 0,
    "daily_updated": 0,
    "big_day": "",
-   "requests": 1119,
-   "cache_saved": 0,
-   "failed_steps": [],
+   "requests": 1601,
+   "cache_saved": 2.94,
+   "failed_steps": [
+    "Trade-relations analyst: North Korea: The agent's answer wasn't in the expected format. Run it again.",
+    "Trade-relations analyst (retry): North Korea: The agent's answer wasn't in the expected format. Run it again."
+   ],
    "industries": [
     {
      "name": "Banks - Diversified",
@@ -1825,145 +1827,144 @@
     },
     {
      "name": "Financial - Data & Stock Exchanges",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 12,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:33.351Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Investment - Banking & Investment Services",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 8,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:33.609Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Banks",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 2,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:04:34.868Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Insurance - Reinsurance",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 8,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:33.825Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Financial - Mortgages",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 12,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:34.106Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Asset Management - Cryptocurrency",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 3,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:04:34.668Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Asset Management - Global",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:34.255Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Financial - Diversified",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T11:03:34.402Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "no",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "done": 12,
-    "working": 8
+    "done": 20
    }
   },
   {
@@ -3337,8 +3338,8 @@
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 96,
-  "working": 31,
+  "done": 104,
+  "working": 23,
   "waiting": 26,
   "left_out": 0,
   "with_times": 3,
