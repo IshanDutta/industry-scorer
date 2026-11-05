@@ -17,12 +17,12 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T08:16:40.696Z",
+ "updated_at": "2026-11-05T08:17:51.273Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T08:16:40.696Z"
+  "checked_at": "2026-11-05T08:17:51.273Z"
  },
  "cost_report": null,
  "balance": null,
@@ -106,7 +106,7 @@
    {
     "sector": "Healthcare",
     "budget": 8,
-    "state": "running",
+    "state": "budget",
     "attempts": 0,
     "usd_at_first_dispatch": 45.61,
     "dispatched_at": "2026-11-05T08:14:32.835Z",
@@ -163,8 +163,12 @@
    {
     "sector": "Financial Services",
     "budget": 17,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 65.56,
+    "dispatched_at": "2026-11-05T08:17:51.273Z",
+    "dispatched_budget": 30,
+    "usd_at_dispatch": 65.56
    },
    {
     "sector": "Industrials",
@@ -193,8 +197,8 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Healthcare, Basic Materials, Consumer Defensive (3 at once, up to 3).",
-  "updated_at": "2026-11-05T08:16:40.696Z",
+  "note": "Running Basic Materials, Consumer Defensive, Financial Services (3 at once, up to 3).",
+  "updated_at": "2026-11-05T08:17:51.273Z",
   "spent": 32.31,
   "log": [
    {
@@ -256,19 +260,20 @@
    {
     "at": "2026-11-05T08:16:40.696Z",
     "text": "Finish everything: 8 sectors with industries still waiting; then Times like this for the rest."
+   },
+   {
+    "at": "2026-11-05T08:17:51.273Z",
+    "text": "Healthcare reached its spending limit; moving on."
+   },
+   {
+    "at": "2026-11-05T08:17:51.273Z",
+    "text": "Started Financial Services (up to $30)."
    }
   ],
   "parallel": 3,
   "then_history": true
  },
  "running": [
-  {
-   "sector": "Healthcare",
-   "title": "Sector run · Healthcare",
-   "status": "in_progress",
-   "started": "2026-11-05T08:14:46Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41992972664"
-  },
   {
    "sector": "Consumer Defensive",
    "title": "Sector run · Consumer Defensive",
@@ -285,6 +290,14 @@
   }
  ],
  "recent_runs": [
+  {
+   "sector": "Healthcare",
+   "title": "Sector run · Healthcare",
+   "conclusion": "failure",
+   "started": "2026-11-05T08:14:46Z",
+   "ended": "2026-11-05T08:16:46Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41992972664"
+  },
   {
    "sector": "Utilities",
    "title": "Sector run · Utilities",
@@ -396,14 +409,6 @@
    "started": "2026-11-03T23:09:31Z",
    "ended": "2026-11-03T23:37:44Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736873810"
-  },
-  {
-   "sector": "Financial Services",
-   "title": "Run Financial Services",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:30Z",
-   "ended": "2026-11-03T23:36:39Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736869618"
   }
  ],
  "sectors": [
@@ -1926,7 +1931,7 @@
   {
    "sector": "Healthcare",
    "finished": false,
-   "exported_at": "2026-11-05T00:34:39.373Z",
+   "exported_at": "2026-11-05T08:16:20.878Z",
    "round": {
     "n": 1,
     "adding": 3
@@ -2116,7 +2121,7 @@
     },
     {
      "name": "Medical - Healthcare Plans",
-     "status": "working",
+     "status": "waiting",
      "why": "",
      "companies": 11,
      "analyzed_at": null,
@@ -2133,7 +2138,7 @@
     },
     {
      "name": "Medical - Distribution",
-     "status": "working",
+     "status": "waiting",
      "why": "",
      "companies": 10,
      "analyzed_at": null,
@@ -2166,10 +2171,10 @@
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
     "done": 11,
-    "working": 2
+    "waiting": 2
    }
   },
   {
@@ -3299,8 +3304,8 @@
   "sectors": 11,
   "industries": 153,
   "done": 83,
-  "working": 13,
-  "waiting": 57,
+  "working": 11,
+  "waiting": 59,
   "left_out": 0,
   "with_times": 3,
   "with_historian": 3
