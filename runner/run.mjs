@@ -193,7 +193,8 @@ async function main() {
     summary([`### ${sector}: daily update ${dd.date || ""}`, "", `- Revised calls: **${(dd.revised || []).join(", ") || "none"}**`, `- Unchanged: ${(dd.quiet || []).join(", ") || "none"}`,
       ...((dd.failed || []).length ? [`- Failed: ${dd.failed.join("; ")}`] : []), `- Claude: ${cost.requests} requests, **$${cost.session_usd}** (${cost.mode}) · data calls ${cost.mcp_calls}`, ...status.notices.map((n) => `> ${n}`)].join("\n"));
     await browser.close(); await mcp.close();
-    process.exit(sampler.fatal || (!(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);
+    // Reaching the day's spending cap is the budget working, not a failure: what finished is saved.
+    process.exit((sampler.fatal && !sampler.fatal.budget) || (!(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);
   }
   for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
   if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);

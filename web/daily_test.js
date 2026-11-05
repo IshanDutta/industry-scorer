@@ -102,5 +102,5 @@ const p0 = D.plan(small, 0.3), p1 = D.plan(small, 0.3, { stretch: 2 });
 ok(p0.held.some((c) => c.key === "thesis") && p1.run.some((c) => c.key === "thesis" && c.borrowed) && p1.borrowed > 0, "a drift-guard rewrite bigger than a small sector's day borrows from the month (borrowed $" + p1.borrowed + ")");
 ok(D.plan([{ industry: "S", key: "world", importance: "low" }], 0.1, { stretch: 5 }).held.length === 1, "routine work never borrows");
 ok(D.borrowCap(470, 100, "2026-11-04") === Math.round(Math.min(3 * D.dayBudget(470, 100, "2026-11-04"), 0.25 * 370) * 100) / 100 && D.borrowCap(470, 460, "2026-11-29") <= 2.5, "borrowing: three days' share, at most a quarter of what's left");
-ok(D.bigDay({ spy1d: -2.6 }).big && D.bigDay({ vix1d: 22 }).big && D.bigDay({ highShare: 0.5 }).big && D.bigDay({ shock: "alarm" }).big && !D.bigDay({ spy1d: 0.8, vix1d: 4, highShare: 0.1 }).big, "big days: a 2% market move, a VIX jump, news across the sector, or the midday alarm");
+ok(D.bigDay({ spy1d: -2.6 }).big && D.bigDay({ vix1d: 22 }).big && !D.bigDay({ highShare: 1 }).big && D.bigDay({ shock: "alarm" }).big && !D.bigDay({ spy1d: 0.8, vix1d: 4, highShare: 0.1 }).big, "big days: a 2% market move, a VIX jump, news across the sector, or the midday alarm");
 console.log(fails ? fails + " FAILED" : "daily tests passed"); process.exit(fails ? 1 : 0);

@@ -139,6 +139,13 @@ function dispatch(item, budget) {
   return gh(f) !== null;
 }
 if (queue && !queue.stopped && REPO) {
+  // Each sector's limit is a first pass: once every sector has had its turn, a sector that reached its limit with
+  // industries still waiting gets one more run from what's left of the queue's total cap (the cap you set is the
+  // real limit), sized at about $4 per waiting industry.
+  if (!active.length && !queue.items.some((i) => ["waiting", "credits", "dispatched", "running"].includes(i.state))) {
+    for (const i of queue.items) { const w = (sectors[i.sector]?.industries || []).filter((x) => x.status === "waiting").length;
+      if (i.state === "budget" && !i.second_pass && w > 0) { i.second_pass = true; i.state = "waiting"; i.budget = r2(i.budget + 2 + 4 * w); log.push(`${i.sector}: ${w} industr${w === 1 ? "y" : "ies"} still waiting after its limit; one more run with up to $${r2(2 + 4 * w)} more from the queue's cap.`); } }
+  }
   const running = active.find((r) => r.sector);
   const cur = queue.items.find((i) => !["done", "skipped", "budget"].includes(i.state));
   if (running) {

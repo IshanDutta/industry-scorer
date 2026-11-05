@@ -7965,15 +7965,16 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
     return Math.round(Math.min(3 * dayBudget(monthBudget, spentThisMonth, today), 0.25 * left) * 100) / 100;
   }
   /**
-   * Is today a big day? spy1d / vix1d: today's % changes; highShare: the share of the sector's industries with
-   * something the quick model called high importance; shock: a midday alarm's note. Returns {big, why}.
+   * Is today a big day? Only the market says so: spy1d / vix1d (today's % changes) or a midday alarm's note (shock).
+   * (The quick model's "high importance" is not a signal: it calls most days high for most industries, which made
+   * every day a big day and spent three days' share daily.) highShare is accepted and ignored. Returns {big, why}.
    */
   function bigDay({ spy1d = NaN, vix1d = NaN, highShare = 0, shock = "" } = {}) {
     const why = [];
     if (shock) why.push(String(shock));
     if (isNum(spy1d) && Math.abs(spy1d) >= 2) why.push(`the S&P 500 moved ${spy1d > 0 ? "+" : ""}${spy1d.toFixed(1)}% in a day`);
     if (isNum(vix1d) && vix1d >= 15) why.push(`the VIX jumped ${vix1d.toFixed(0)}%`);
-    if (highShare >= 0.4) why.push(`${Math.round(highShare * 100)}% of the sector's industries had high-importance news`);
+    void highShare;
     return { big: why.length > 0, why: why.join("; ") };
   }
 

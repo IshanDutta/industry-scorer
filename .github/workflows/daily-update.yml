@@ -142,7 +142,8 @@ jobs:
           if [ $code -eq 75 ]; then exit 0; fi
           exit $code
       - name: Keep the updated sector in the exports branch
-        if: success() && hashFiles('out/checkpoint.json.gz') != ''
+        # Saved even when the run stopped early: every industry it finished is complete in the checkpoint.
+        if: always() && hashFiles('out/checkpoint.json.gz') != ''
         env:
           SLUG: ${{ steps.slug.outputs.slug }}
         run: |

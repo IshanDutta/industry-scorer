@@ -6,7 +6,7 @@
 # yet. A sector that runs out of credit waits and resumes by itself once you add credit; one that reaches its limit is
 # skipped; when the queue is done, a daily update of every sector adds "Times like this" where it's missing.
 #
-# Every hour and whenever a sector run or daily update ends, this also writes status.json to the "status" branch:
+# Every hour and whenever a sector run or daily update ends (a sector run asks for it as its last step), this also writes status.json to the "status" branch:
 # every industry's status, the queue, the runs, and spending (tracked by the runs; with the optional ANTHROPIC_ADMIN_KEY
 # secret, Anthropic's own cost report; with the CREDIT_BALANCE_USD and CREDIT_BALANCE_AT repository variables, an
 # estimate of what's left of your credit).
@@ -39,6 +39,10 @@ on:
         type: choice
         options: [cheap, quick]
         default: cheap
+      wait_for:
+        description: "(set automatically) a run that just ended: wait for it to finish, then start the next sector"
+        required: false
+        default: ""
       then_daily:
         description: "start: when the queue is done, run a daily update of every sector"
         type: boolean
@@ -62,6 +66,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      - name: Wait for the run that just ended to finish
+        if: inputs.wait_for != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.wait_for }}
+        run: |
+          # A sector run asks for this as its last step, so the next sector starts within a minute or two instead of
+          # at the next hourly check (GitHub doesn't start workflows when a run started by the workflow token ends).
+          for i in $(seq 1 60); do
+            s=$(gh api "repos/${{ github.repository }}/actions/runs/$RUN_ID" --jq .status 2>/dev/null || echo unknown)
+            [ "$s" = "completed" ] && exit 0; sleep 10
+          done
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

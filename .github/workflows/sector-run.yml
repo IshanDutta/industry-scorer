@@ -235,3 +235,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run sector-run.yml --ref "$GITHUB_REF_NAME" -f sector="$SECTOR" -f continue_from="${{ github.run_id }}" -f speed="${{ inputs.speed || 'cheap' }}" -f model="${{ inputs.model || 'auto' }}" -f budget="${{ steps.run.outputs.budget_left || inputs.budget || '150' }}"
+      - name: Start the next sector in the queue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run queue.yml --ref "$GITHUB_REF_NAME" -f action=status -f wait_for="${{ github.run_id }}" || true
