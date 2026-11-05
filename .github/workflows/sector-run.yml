@@ -175,7 +175,8 @@ jobs:
           JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
           CLAUDE_MODE: ${{ inputs.speed == 'quick' && 'direct' || 'batch' }}
           CLAUDE_STRAGGLER_MIN: ${{ vars.STRAGGLER_MIN || '0' }}
-          CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.BUDGET_USD || '150' }}
+          # "none": no spending cap (the run goes until it's done or the Anthropic credit runs out).
+          CLAUDE_BUDGET_USD: ${{ inputs.budget == 'none' && '0' || inputs.budget || vars.BUDGET_USD || '150' }}
           CLAUDE_DIRECT_CONCURRENCY: ${{ vars.DIRECT_CONCURRENCY || '16' }}
           JOB_INDUSTRIES: ${{ vars.JOB_INDUSTRIES || '10' }}
           JOB_POOL: ${{ vars.JOB_POOL || '8' }}
