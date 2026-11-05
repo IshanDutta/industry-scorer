@@ -2,9 +2,9 @@
  "daily": {
   "daily_next_at": null,
   "daily_newest": "2026-11-05",
-  "daily_sectors_with_analysis": 8,
+  "daily_sectors_with_analysis": 9,
   "daily_sectors_current": 1,
-  "daily_sectors_behind": "Basic Materials, Consumer Defensive, Financial Services, Healthcare, Industrials, Real Estate, Technology",
+  "daily_sectors_behind": "Basic Materials, Consumer Defensive, Energy, Financial Services, Healthcare, Industrials, Real Estate, Technology",
   "daily_state": "paused",
   "daily_started_at": "2026-11-05T01:45:46Z",
   "daily_finished_at": "2026-11-05T05:02:43Z",
@@ -17,26 +17,26 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T13:38:57.921Z",
+ "updated_at": "2026-11-05T13:43:35.850Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T13:38:57.921Z"
+  "checked_at": "2026-11-05T13:43:35.850Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 628.36,
-  "last_24h": 112.85,
-  "last_7d": 112.85,
-  "cache_saved": 18.33,
+  "tracked_total": 655.02,
+  "last_24h": 139.51,
+  "last_7d": 139.51,
+  "cache_saved": 22.47,
   "by_sector": {
    "Basic Materials": 53.79,
    "Communication Services": 1.43,
    "Consumer Cyclical": 0.28,
    "Consumer Defensive": 87.13,
-   "Energy": 3.25,
+   "Energy": 29.91,
    "Financial Services": 82.97,
    "Healthcare": 56.9,
    "Industrials": 123.85,
@@ -88,6 +88,10 @@
    {
     "at": "2026-11-05T13:38:57.921Z",
     "total": 628.36
+   },
+   {
+    "at": "2026-11-05T13:43:35.850Z",
+    "total": 655.02
    }
   ]
  },
@@ -210,13 +214,14 @@
    {
     "sector": "Energy",
     "budget": 22,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 3.25,
     "dispatched_at": "2026-11-05T09:41:56.061Z",
     "dispatched_budget": "none",
     "usd_at_dispatch": 3.25,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42004541157"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42004541157",
+    "finished_at": "2026-11-05T13:43:35.850Z"
    },
    {
     "sector": "Communication Services",
@@ -232,24 +237,21 @@
    {
     "sector": "Consumer Cyclical",
     "budget": 42,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 0.28,
     "dispatched_at": "2026-11-05T13:38:57.921Z",
     "dispatched_budget": "none",
-    "usd_at_dispatch": 0.28
+    "usd_at_dispatch": 0.28,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42037670419"
    }
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Energy, Communication Services, Consumer Cyclical (3 at once, up to 3).",
-  "updated_at": "2026-11-05T13:38:57.921Z",
-  "spent": 112.85,
+  "note": "Running Communication Services, Consumer Cyclical (2 at once, up to 3).",
+  "updated_at": "2026-11-05T13:43:35.850Z",
+  "spent": 139.51,
   "log": [
-   {
-    "at": "2026-11-05T06:05:14.460Z",
-    "text": "Started Consumer Defensive (up to $26.5)."
-   },
    {
     "at": "2026-11-05T06:16:06.822Z",
     "text": "Daily updates turned off."
@@ -325,6 +327,10 @@
    {
     "at": "2026-11-05T13:38:57.921Z",
     "text": "Started Consumer Cyclical (no spending limit)."
+   },
+   {
+    "at": "2026-11-05T13:43:35.850Z",
+    "text": "Energy finished."
    }
   ],
   "parallel": 3,
@@ -333,21 +339,29 @@
  },
  "running": [
   {
+   "sector": "Consumer Cyclical",
+   "title": "Sector run · Consumer Cyclical",
+   "status": "in_progress",
+   "started": "2026-11-05T13:39:15Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42037670419"
+  },
+  {
    "sector": "Communication Services",
    "title": "Sector run · Communication Services",
    "status": "in_progress",
    "started": "2026-11-05T11:06:09Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42016174687"
-  },
-  {
-   "sector": "Energy",
-   "title": "Sector run · Energy",
-   "status": "in_progress",
-   "started": "2026-11-05T09:42:09Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42004541157"
   }
  ],
  "recent_runs": [
+  {
+   "sector": "Energy",
+   "title": "Sector run · Energy",
+   "conclusion": "success",
+   "started": "2026-11-05T09:42:09Z",
+   "ended": "2026-11-05T13:43:21Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42004541157"
+  },
   {
    "sector": "Industrials",
    "title": "Sector run · Industrials",
@@ -459,14 +473,6 @@
    "started": "2026-11-03T23:09:43Z",
    "ended": "2026-11-03T23:40:28Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736898671"
-  },
-  {
-   "sector": "Communication Services",
-   "title": "Run Communication Services",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:41Z",
-   "ended": "2026-11-03T23:37:27Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736894789"
   }
  ],
  "sectors": [
@@ -844,7 +850,7 @@
    "industries": [
     {
      "name": "Specialty Retail",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 84,
      "analyzed_at": null,
@@ -861,7 +867,7 @@
     },
     {
      "name": "Auto - Manufacturers",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 33,
      "analyzed_at": null,
@@ -878,7 +884,7 @@
     },
     {
      "name": "Restaurants",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 50,
      "analyzed_at": null,
@@ -895,7 +901,7 @@
     },
     {
      "name": "Travel Services",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 18,
      "analyzed_at": null,
@@ -912,7 +918,7 @@
     },
     {
      "name": "Home Improvement",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 6,
      "analyzed_at": null,
@@ -929,7 +935,7 @@
     },
     {
      "name": "Apparel - Retail",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 32,
      "analyzed_at": null,
@@ -946,7 +952,7 @@
     },
     {
      "name": "Travel Lodging",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -963,7 +969,7 @@
     },
     {
      "name": "Residential Construction",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 20,
      "analyzed_at": null,
@@ -980,7 +986,7 @@
     },
     {
      "name": "Auto - Dealerships",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 22,
      "analyzed_at": null,
@@ -997,7 +1003,7 @@
     },
     {
      "name": "Packaging & Containers",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 19,
      "analyzed_at": null,
@@ -1014,7 +1020,7 @@
     },
     {
      "name": "Auto - Parts",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 46,
      "analyzed_at": null,
@@ -1031,7 +1037,7 @@
     },
     {
      "name": "Gambling, Resorts & Casinos",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 28,
      "analyzed_at": null,
@@ -1048,7 +1054,7 @@
     },
     {
      "name": "Apparel - Footwear & Accessories",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 16,
      "analyzed_at": null,
@@ -1065,7 +1071,7 @@
     },
     {
      "name": "Leisure",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 30,
      "analyzed_at": null,
@@ -1082,7 +1088,7 @@
     },
     {
      "name": "Apparel - Manufacturers",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 19,
      "analyzed_at": null,
@@ -1099,7 +1105,7 @@
     },
     {
      "name": "Furnishings, Fixtures & Appliances",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 28,
      "analyzed_at": null,
@@ -1116,7 +1122,7 @@
     },
     {
      "name": "Luxury Goods",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 9,
      "analyzed_at": null,
@@ -1133,7 +1139,7 @@
     },
     {
      "name": "Personal Products & Services",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -1150,7 +1156,7 @@
     },
     {
      "name": "Auto - Recreational Vehicles",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 13,
      "analyzed_at": null,
@@ -1167,7 +1173,7 @@
     },
     {
      "name": "Department Stores",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 3,
      "analyzed_at": null,
@@ -1183,9 +1189,9 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
-    "waiting": 20
+    "working": 20
    }
   },
   {
@@ -1418,11 +1424,11 @@
   },
   {
    "sector": "Energy",
-   "finished": false,
-   "exported_at": "2026-11-03T23:37:48.575Z",
+   "finished": true,
+   "exported_at": "2026-11-05T13:42:55.972Z",
    "round": null,
    "daily": null,
-   "usd": 3.25,
+   "usd": 29.91,
    "daily_month": {
     "usd": 0,
     "budget": null
@@ -1430,21 +1436,21 @@
    "daily_held": 0,
    "daily_updated": 0,
    "big_day": "",
-   "requests": 56,
-   "cache_saved": 0,
+   "requests": 761,
+   "cache_saved": 4.14,
    "failed_steps": [],
    "industries": [
     {
      "name": "Oil & Gas Integrated",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 17,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:46.019Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1453,15 +1459,15 @@
     },
     {
      "name": "Oil & Gas Midstream",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 39,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:46.262Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bullish",
+     "opportunity": "yes",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1470,15 +1476,15 @@
     },
     {
      "name": "Oil & Gas Exploration & Production",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 74,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:46.507Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1487,15 +1493,15 @@
     },
     {
      "name": "Oil & Gas Refining & Marketing",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 17,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:47.583Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bullish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1504,15 +1510,15 @@
     },
     {
      "name": "Oil & Gas Equipment & Services",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 50,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:47.819Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1521,15 +1527,15 @@
     },
     {
      "name": "Uranium",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 13,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:48.038Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1538,15 +1544,15 @@
     },
     {
      "name": "Solar",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 20,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:46.762Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1555,15 +1561,15 @@
     },
     {
      "name": "Oil & Gas Drilling",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 10,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:46.978Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1572,15 +1578,15 @@
     },
     {
      "name": "Coal",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 9,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:47.181Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1589,15 +1595,15 @@
     },
     {
      "name": "Oil & Gas Energy",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:42:47.352Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
      "in_round": false,
@@ -1605,9 +1611,9 @@
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "working": 10
+    "done": 10
    }
   },
   {
@@ -3344,9 +3350,9 @@
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 117,
-  "working": 16,
-  "waiting": 20,
+  "done": 127,
+  "working": 26,
+  "waiting": 0,
   "left_out": 0,
   "with_times": 3,
   "with_historian": 3
