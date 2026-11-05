@@ -17,20 +17,20 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T11:28:50.973Z",
+ "updated_at": "2026-11-05T13:38:57.921Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T11:28:50.973Z"
+  "checked_at": "2026-11-05T13:38:57.921Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 598.66,
-  "last_24h": 83.15,
-  "last_7d": 83.15,
-  "cache_saved": 13.67,
+  "tracked_total": 628.36,
+  "last_24h": 112.85,
+  "last_7d": 112.85,
+  "cache_saved": 18.33,
   "by_sector": {
    "Basic Materials": 53.79,
    "Communication Services": 1.43,
@@ -39,7 +39,7 @@
    "Energy": 3.25,
    "Financial Services": 82.97,
    "Healthcare": 56.9,
-   "Industrials": 94.15,
+   "Industrials": 123.85,
    "Real Estate": 52.43,
    "Technology": 134.95,
    "Utilities": 31.38
@@ -84,6 +84,10 @@
    {
     "at": "2026-11-05T11:05:57.079Z",
     "total": 598.66
+   },
+   {
+    "at": "2026-11-05T13:38:57.921Z",
+    "total": 628.36
    }
   ]
  },
@@ -194,13 +198,14 @@
    {
     "sector": "Industrials",
     "budget": 27,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 94.15,
     "dispatched_at": "2026-11-05T09:09:27.076Z",
     "dispatched_budget": 47.5,
     "usd_at_dispatch": 94.15,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628",
+    "finished_at": "2026-11-05T13:38:57.921Z"
    },
    {
     "sector": "Energy",
@@ -227,24 +232,20 @@
    {
     "sector": "Consumer Cyclical",
     "budget": 42,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 0.28,
+    "dispatched_at": "2026-11-05T13:38:57.921Z",
+    "dispatched_budget": "none",
+    "usd_at_dispatch": 0.28
    }
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Industrials, Energy, Communication Services (3 at once, up to 3).",
-  "updated_at": "2026-11-05T11:28:50.973Z",
-  "spent": 83.15,
+  "note": "Running Energy, Communication Services, Consumer Cyclical (3 at once, up to 3).",
+  "updated_at": "2026-11-05T13:38:57.921Z",
+  "spent": 112.85,
   "log": [
-   {
-    "at": "2026-11-05T05:03:00.926Z",
-    "text": "Started Utilities (up to $8)."
-   },
-   {
-    "at": "2026-11-05T06:05:14.460Z",
-    "text": "Started Basic Materials (up to $16)."
-   },
    {
     "at": "2026-11-05T06:05:14.460Z",
     "text": "Started Consumer Defensive (up to $26.5)."
@@ -316,6 +317,14 @@
    {
     "at": "2026-11-05T11:05:57.079Z",
     "text": "Started Communication Services (no spending limit)."
+   },
+   {
+    "at": "2026-11-05T13:38:57.921Z",
+    "text": "Industrials finished."
+   },
+   {
+    "at": "2026-11-05T13:38:57.921Z",
+    "text": "Started Consumer Cyclical (no spending limit)."
    }
   ],
   "parallel": 3,
@@ -336,16 +345,17 @@
    "status": "in_progress",
    "started": "2026-11-05T09:42:09Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42004541157"
-  },
-  {
-   "sector": "Industrials",
-   "title": "Sector run · Industrials",
-   "status": "in_progress",
-   "started": "2026-11-05T09:09:39Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628"
   }
  ],
  "recent_runs": [
+  {
+   "sector": "Industrials",
+   "title": "Sector run · Industrials",
+   "conclusion": "success",
+   "started": "2026-11-05T09:09:39Z",
+   "ended": "2026-11-05T13:38:39Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628"
+  },
   {
    "sector": "Healthcare",
    "title": "Sector run · Healthcare",
@@ -457,14 +467,6 @@
    "started": "2026-11-03T23:09:41Z",
    "ended": "2026-11-03T23:37:27Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736894789"
-  },
-  {
-   "sector": "Utilities",
-   "title": "Run Utilities",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:39Z",
-   "ended": "2026-11-03T23:38:52Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736889653"
   }
  ],
  "sectors": [
@@ -2222,14 +2224,11 @@
   },
   {
    "sector": "Industrials",
-   "finished": false,
-   "exported_at": "2026-11-03T23:37:41.877Z",
-   "round": {
-    "n": 1,
-    "adding": 13
-   },
+   "finished": true,
+   "exported_at": "2026-11-05T13:38:00.838Z",
+   "round": null,
    "daily": null,
-   "usd": 94.15,
+   "usd": 123.85,
    "daily_month": {
     "usd": 0,
     "budget": null
@@ -2237,8 +2236,8 @@
    "daily_held": 0,
    "daily_updated": 0,
    "big_day": "",
-   "requests": 1393,
-   "cache_saved": 0,
+   "requests": 2205,
+   "cache_saved": 4.66,
    "failed_steps": [],
    "industries": [
     {
@@ -2532,230 +2531,229 @@
     },
     {
      "name": "Railroads",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 11,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:21.611Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Agricultural - Machinery",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 13,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:21.771Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Manufacturing - Tools & Accessories",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 10,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:21.968Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Industrial - Pollution & Treatment Controls",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 13,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.095Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Industrial - Specialties",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 4,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.228Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Manufacturing - Textiles",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 6,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.309Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Manufacturing - Miscellaneous",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.408Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Business Equipment & Supplies",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 3,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.534Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Construction",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.804Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Industrial - Infrastructure Operations",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T12:53:22.670Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "General Transportation",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 2,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:37:44.744Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "no",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Environmental Services",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:37:44.972Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "no",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Agricultural - Commodities/Milling",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 1,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T13:37:44.859Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "done": 17,
-    "working": 13
+    "done": 30
    }
   },
   {
@@ -3346,8 +3344,8 @@
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 104,
-  "working": 29,
+  "done": 117,
+  "working": 16,
   "waiting": 20,
   "left_out": 0,
   "with_times": 3,
