@@ -17,20 +17,20 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T06:16:48.115Z",
+ "updated_at": "2026-11-05T08:14:32.835Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T06:16:48.115Z"
+  "checked_at": "2026-11-05T08:14:32.835Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 539.34,
-  "last_24h": 23.83,
-  "last_7d": 23.83,
-  "cache_saved": 3.76,
+  "tracked_total": 547.82,
+  "last_24h": 32.31,
+  "last_7d": 32.31,
+  "cache_saved": 5.16,
   "by_sector": {
    "Basic Materials": 41.72,
    "Communication Services": 1.43,
@@ -42,7 +42,7 @@
    "Industrials": 94.15,
    "Real Estate": 52.43,
    "Technology": 134.95,
-   "Utilities": 22.9
+   "Utilities": 31.38
   },
   "history": [
    {
@@ -64,6 +64,10 @@
    {
     "at": "2026-11-05T05:03:00.926Z",
     "total": 539.34
+   },
+   {
+    "at": "2026-11-05T08:14:32.835Z",
+    "total": 547.82
    }
   ]
  },
@@ -102,13 +106,14 @@
    {
     "sector": "Healthcare",
     "budget": 8,
-    "state": "waiting",
+    "state": "dispatched",
     "attempts": 0,
     "usd_at_first_dispatch": 45.61,
-    "dispatched_at": "2026-11-04T22:11:23.315Z",
-    "dispatched_budget": 8,
+    "dispatched_at": "2026-11-05T08:14:32.835Z",
+    "dispatched_budget": 1,
     "last_reason": "budget",
-    "second_pass": false
+    "second_pass": false,
+    "usd_at_dispatch": 53.66
    },
    {
     "sector": "Technology",
@@ -124,12 +129,13 @@
    {
     "sector": "Utilities",
     "budget": 8,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 22.9,
     "dispatched_at": "2026-11-05T05:03:00.926Z",
     "dispatched_budget": 8,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020",
+    "finished_at": "2026-11-05T08:14:32.835Z"
    },
    {
     "sector": "Basic Materials",
@@ -186,9 +192,9 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Utilities, Basic Materials, Consumer Defensive (3 at once, up to 3).",
-  "updated_at": "2026-11-05T06:16:48.115Z",
-  "spent": 23.83,
+  "note": "Running Healthcare, Basic Materials, Consumer Defensive (3 at once, up to 3).",
+  "updated_at": "2026-11-05T08:14:32.835Z",
+  "spent": 32.31,
   "log": [
    {
     "at": "2026-11-04T18:49:07.093Z",
@@ -237,6 +243,14 @@
    {
     "at": "2026-11-05T06:16:48.115Z",
     "text": "Finish everything: 9 sectors with industries still waiting; then Times like this for the rest."
+   },
+   {
+    "at": "2026-11-05T08:14:32.835Z",
+    "text": "Utilities finished."
+   },
+   {
+    "at": "2026-11-05T08:14:32.835Z",
+    "text": "Started Healthcare (up to $1)."
    }
   ],
   "parallel": 3,
@@ -256,16 +270,17 @@
    "status": "in_progress",
    "started": "2026-11-05T06:05:26Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
-  },
-  {
-   "sector": "Utilities",
-   "title": "Sector run · Utilities",
-   "status": "in_progress",
-   "started": "2026-11-05T05:03:15Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020"
   }
  ],
  "recent_runs": [
+  {
+   "sector": "Utilities",
+   "title": "Sector run · Utilities",
+   "conclusion": "success",
+   "started": "2026-11-05T05:03:15Z",
+   "ended": "2026-11-05T07:09:23Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020"
+  },
   {
    "sector": "Technology",
    "title": "Sector run · Technology",
@@ -377,14 +392,6 @@
    "started": "2026-11-03T23:09:30Z",
    "ended": "2026-11-03T23:36:39Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736869618"
-  },
-  {
-   "sector": "Consumer Defensive",
-   "title": "Run Consumer Defensive",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:28Z",
-   "ended": "2026-11-03T23:36:57Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736865530"
   }
  ],
  "sectors": [
@@ -3149,14 +3156,11 @@
   },
   {
    "sector": "Utilities",
-   "finished": false,
-   "exported_at": "2026-11-05T03:18:58.805Z",
-   "round": {
-    "n": 1,
-    "adding": 3
-   },
+   "finished": true,
+   "exported_at": "2026-11-05T07:09:03.515Z",
+   "round": null,
    "daily": "2026-11-05",
-   "usd": 22.9,
+   "usd": 31.38,
    "daily_month": {
     "usd": 2.45,
     "budget": 23.33
@@ -3164,9 +3168,11 @@
    "daily_held": 15,
    "daily_updated": 2,
    "big_day": "100% of the sector's industries had high-importance news",
-   "requests": 382,
-   "cache_saved": 0.46,
-   "failed_steps": [],
+   "requests": 640,
+   "cache_saved": 1.86,
+   "failed_steps": [
+    "Rule book: CPUC — California Public Utilities Commission (2 industries): The agent didn't finish (error). Run it again."
+   ],
    "industries": [
     {
      "name": "Regulated Electric",
@@ -3221,68 +3227,67 @@
     },
     {
      "name": "Independent Power Producers",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 12,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T07:07:48.730Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Diversified Utilities",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 7,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T07:07:48.862Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Regulated Water",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 13,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T07:08:50.629Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "done": 3,
-    "working": 3
+    "done": 6
    }
   }
  ],
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 80,
-  "working": 14,
+  "done": 83,
+  "working": 11,
   "waiting": 59,
   "left_out": 0,
   "with_times": 3,
