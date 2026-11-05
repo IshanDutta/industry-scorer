@@ -18,12 +18,12 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T05:03:00.926Z",
+ "updated_at": "2026-11-05T05:03:40.712Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T05:03:00.926Z"
+  "checked_at": "2026-11-05T05:03:40.712Z"
  },
  "cost_report": null,
  "balance": null,
@@ -124,11 +124,12 @@
    {
     "sector": "Utilities",
     "budget": 8,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 22.9,
     "dispatched_at": "2026-11-05T05:03:00.926Z",
-    "dispatched_budget": 8
+    "dispatched_budget": 8,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020"
    },
    {
     "sector": "Basic Materials",
@@ -175,8 +176,8 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Started Utilities (up to $8).",
-  "updated_at": "2026-11-05T05:03:00.926Z",
+  "note": "Utilities is running (started 2026-11-05T05:03:15Z).",
+  "updated_at": "2026-11-05T05:03:40.712Z",
   "spent": 23.83,
   "log": [
    {
@@ -213,7 +214,15 @@
    }
   ]
  },
- "running": [],
+ "running": [
+  {
+   "sector": "Utilities",
+   "title": "Sector run · Utilities",
+   "status": "in_progress",
+   "started": "2026-11-05T05:03:15Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41971546020"
+  }
+ ],
  "recent_runs": [
   {
    "sector": "Technology",
@@ -3170,7 +3179,7 @@
     },
     {
      "name": "Independent Power Producers",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -3187,7 +3196,7 @@
     },
     {
      "name": "Diversified Utilities",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 7,
      "analyzed_at": null,
@@ -3204,7 +3213,7 @@
     },
     {
      "name": "Regulated Water",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 13,
      "analyzed_at": null,
@@ -3220,10 +3229,10 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
     "done": 3,
-    "waiting": 3
+    "working": 3
    }
   }
  ],
@@ -3231,8 +3240,8 @@
   "sectors": 11,
   "industries": 153,
   "done": 80,
-  "working": 0,
-  "waiting": 73,
+  "working": 3,
+  "waiting": 70,
   "left_out": 0,
   "with_times": 3,
   "with_historian": 3
