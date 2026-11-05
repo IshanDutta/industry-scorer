@@ -36,6 +36,10 @@ on:
         description: "Set by the midday market alarm: what moved (makes today a big day)"
         required: false
         default: ""
+      backfill:
+        description: "The history pass only: add Times like this to industries that lack it (runs even while daily updates are paused)"
+        type: boolean
+        default: false
   schedule:
     - cron: "37 21 * * *" # every day at 21:37 UTC (after the US close on weekdays; weekends catch the news)
 
@@ -61,13 +65,20 @@ jobs:
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
           MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '455' }}
+          BACKFILL: ${{ inputs.backfill && '1' || '' }}
         run: |
+          # Paused from the runs page ("Daily updates: off", kept in the status branch's control.json): nothing runs
+          # except the history pass.
+          if [ "$BACKFILL" != "1" ] && git fetch -q origin status 2>/dev/null && git show FETCH_HEAD:control.json 2>/dev/null | grep -q '"daily_paused": *true'; then
+            echo "Daily updates are paused (turn them on from the runs page)." | tee -a "$GITHUB_STEP_SUMMARY"; echo "sectors=[]" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           # Every sector in the exports branch with at least one finished industry (a sector still adding industries,
           # or stopped part-way, updates the industries it has finished).
           mkdir -p exp/runs
           if git fetch -q origin exports 2>/dev/null; then for f in $(git ls-tree --name-only FETCH_HEAD runs/); do git show "FETCH_HEAD:$f" > "exp/$f"; done; fi
           echo "sectors=$(node runner/daily-plan.mjs exp)" >> "$GITHUB_OUTPUT"
       - name: Tell the status page an update has started
+        if: steps.p.outputs.sectors != '[]'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run queue.yml --ref "${{ github.ref_name }}" -f action=status || true
@@ -127,8 +138,9 @@ jobs:
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
           # Bringing the whole analysis up to date, and rewriting it from scratch: the best model, where it matters most.
           CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
-          JOB_MONTH_BUDGET: ${{ matrix.budget }}
+          JOB_MONTH_BUDGET: ${{ inputs.backfill && '' || matrix.budget }}
           JOB_SHOCK: ${{ inputs.shock }}
+          JOB_BACKFILL: ${{ inputs.backfill && '1' || '' }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch

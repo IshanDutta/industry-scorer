@@ -17,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status = just refresh the status; start = start a new queue; stop; resume (after a failure)"
+        description: "status = refresh; finish = generate everything still missing (every waiting industry, then Times like this); start = a new queue from a list; stop; resume; daily_on / daily_off = turn the daily updates on or off"
         type: choice
-        options: [status, start, stop, resume]
+        options: [status, finish, start, stop, resume, daily_on, daily_off]
         default: status
       sectors:
         description: "start: the sectors in order, each with its spending limit in dollars, e.g. Utilities:9, Energy:20"

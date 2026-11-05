@@ -51,6 +51,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NOTE: ${{ steps.q.outputs.note }}
         run: |
+          # Daily updates paused from the runs page: no early update either.
+          if git fetch -q origin status 2>/dev/null && git show FETCH_HEAD:control.json 2>/dev/null | grep -q '"daily_paused": *true'; then echo "Daily updates are paused; not starting one."; exit 0; fi
           # Once a day: skip if an alarm already started one today.
           today=$(date -u +%F)
           n=$(gh run list --workflow daily-update.yml --event workflow_dispatch --created ">=$today" --json databaseId --jq length 2>/dev/null || echo 0)

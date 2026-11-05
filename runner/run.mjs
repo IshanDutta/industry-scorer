@@ -27,6 +27,7 @@
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
 //   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
+//   JOB_BACKFILL=1              daily update: the history pass only (Times like this for industries that lack it; no triage, no sections)
 //   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
 //   CLAUDE_MODEL_LEAD           the lead strategist (synthesis, scenarios, calls, red team, investor verdicts) in every run,
 //                               and the daily update's whole-analysis update (default: the complex model)
@@ -132,7 +133,7 @@ async function main() {
   if (daily) {
     if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
-    await page.evaluate(([s, c]) => window.__industryScorer.daily(s, { concurrency: c }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4)]);
+    await page.evaluate(([s, c, b]) => window.__industryScorer.daily(s, { concurrency: c, backfill: b }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), env.JOB_BACKFILL === "1"]);
   } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);
 
   // Save a checkpoint every 20 minutes while it runs, and again if GitHub stops the job (Cancel, or the session
@@ -194,7 +195,7 @@ async function main() {
       ...((dd.failed || []).length ? [`- Failed: ${dd.failed.join("; ")}`] : []), `- Claude: ${cost.requests} requests, **$${cost.session_usd}** (${cost.mode}) · data calls ${cost.mcp_calls}`, ...status.notices.map((n) => `> ${n}`)].join("\n"));
     await browser.close(); await mcp.close();
     // Reaching the day's spending cap is the budget working, not a failure: what finished is saved.
-    process.exit((sampler.fatal && !sampler.fatal.budget) || (!(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);
+    process.exit((sampler.fatal && !sampler.fatal.budget) || (env.JOB_BACKFILL !== "1" && !(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);
   }
   for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
   if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);

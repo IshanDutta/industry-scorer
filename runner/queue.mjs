@@ -128,6 +128,31 @@ if (action === "start") {
     start_usd: Object.fromEntries(SECTORS.map((s) => [s, sectors[s]?.usd || 0])), items, daily_dispatched: false, stopped: false, note: "Starting." };
   log.push(`Queue started: ${items.map((i) => `${i.sector} ($${i.budget})`).join(", ")}; cap $${queue.cap}.`);
 }
+// Daily updates on or off (control.json in the status branch; the daily update and the market alarm read it).
+const cPath = join(statusDir, "control.json");
+const control = readJson(cPath, {}) || {};
+if (action === "daily_off") { control.daily_paused = true; control.daily_changed_at = now; log.push("Daily updates turned off."); }
+if (action === "daily_on") { control.daily_paused = false; control.daily_changed_at = now; log.push("Daily updates turned on."); }
+writeFileSync(cPath, JSON.stringify(control, null, 2));
+// Finish everything: every sector with industries still waiting, smallest first (in-flight ones kept as they are),
+// then the history pass (Times like this for every industry that lacks it). No daily update afterwards.
+if (action === "finish") {
+  const cap = Number(env.QUEUE_CAP) || 0;
+  const waitingOf = (sec) => (sectors[sec]?.industries || []).filter((x) => x.status === "waiting").length || (sectors[sec] ? 0 : 10);
+  const need = SECTORS.filter((sec) => waitingOf(sec) > 0).sort((a, b) => waitingOf(a) - waitingOf(b));
+  if (queue && !queue.finished_at) {
+    queue.stopped = false; queue.then_daily = false; queue.then_history = true; if (cap) queue.cap = cap; queue.parallel = Number(env.QUEUE_PARALLEL) || queue.parallel || 3;
+    for (const sec of need) { const it = queue.items.find((i) => i.sector === sec);
+      if (!it) queue.items.push({ sector: sec, budget: r2(2 + 3.5 * waitingOf(sec)), state: "waiting", attempts: 0 });
+      else if (["budget", "failed", "done", "skipped", "credits"].includes(it.state)) { it.state = "waiting"; it.attempts = 0; it.second_pass = false; } }
+    log.push(`Finish everything: ${need.length} sectors with industries still waiting; then Times like this for the rest.`);
+  } else {
+    queue = { id: now, created_at: now, cap: cap || r2(need.reduce((a, sec) => a + 2 + 3.5 * waitingOf(sec), 0) + 10), parallel: Number(env.QUEUE_PARALLEL) || 3, model: env.QUEUE_MODEL || "auto", speed: env.QUEUE_SPEED || "cheap",
+      then_daily: false, then_history: true, start_usd: Object.fromEntries(SECTORS.map((sec) => [sec, sectors[sec]?.usd || 0])),
+      items: need.map((sec) => ({ sector: sec, budget: r2(2 + 3.5 * waitingOf(sec)), state: "waiting", attempts: 0 })), daily_dispatched: false, stopped: false, note: "Starting." };
+    log.push(`Finish everything: ${need.map((sec) => `${sec} (${waitingOf(sec)})`).join(", ") || "no industry is waiting"}; then Times like this; cap $${queue.cap}.`);
+  }
+}
 if (queue && action === "stop") { queue.stopped = true; queue.note = "Stopped. Nothing runs until you press Start the runs."; }
 if (queue && action === "resume") { queue.stopped = false; for (const i of queue.items) if (["failed", "credits"].includes(i.state)) { i.state = "waiting"; i.attempts = 0; } }
 
@@ -192,10 +217,15 @@ if (queue && !queue.stopped && REPO) {
   const busyNow = queue.items.filter((i) => ["running", "dispatched"].includes(i.state)).map((i) => i.sector);
   if (busyNow.length) queue.note = `Running ${busyNow.join(", ")} (${busyNow.length} at once, up to ${par}).`;
   if (queue.items.every((i) => ["done", "skipped", "budget", "failed"].includes(i.state)) && !active.length) {
+    // The history pass: Times like this (and the historian's read, and the calls checked against it) for every
+    // finished industry that doesn't have it yet. Cheap: about $0.10 an industry.
+    if (queue.then_history && !queue.history_dispatched) {
+      if (gh(["workflow", "run", "daily-update.yml", "--repo", REPO, "--ref", env.QUEUE_REF || "main", "-f", "backfill=true"]) !== null) { queue.history_dispatched = now; log.push("Every sector is done: started the history pass (Times like this for every industry that lacks it)."); }
+    }
     if (queue.then_daily && !queue.daily_dispatched) {
       if (gh(["workflow", "run", "daily-update.yml", "--repo", REPO, "--ref", env.QUEUE_REF || "main"]) !== null) { queue.daily_dispatched = now; log.push("Queue done: started a daily update of every sector."); }
     }
-    queue.finished_at ||= now; queue.note = `Queue finished${queue.daily_dispatched ? "; a daily update of every sector was started (it adds Times like this where it's missing)" : ""}.`;
+    queue.finished_at ||= now; queue.note = `Queue finished${queue.history_dispatched ? "; the history pass (Times like this) was started" : ""}${queue.daily_dispatched ? "; a daily update of every sector was started" : ""}.`;
   }
 }
 if (queue) { queue.updated_at = now; queue.spent = spentInQueue(); queue.log = [...(queue.log || []), ...log.map((t) => ({ at: now, text: t }))].slice(-60); writeFileSync(qPath, JSON.stringify(queue, null, 2)); }
@@ -236,6 +266,8 @@ function dailyIndicator() {
       daily_progress: jobs.length ? `${fin.length} of ${jobs.length} sectors done` : "planning which sectors to update", daily_working: wk.map(nameOf).join(", ") || null,
       daily_failed_sectors: fin.filter((j) => j.conclusion && j.conclusion !== "success").map(nameOf).join(", ") || null };
   }
+  if (control.daily_paused) return { ...out, daily_next_at: null, daily_state: "paused", daily_started_at: last?.createdAt || null, daily_finished_at: last?.updatedAt || null, daily_url: last?.url || null, daily_result: last?.conclusion || null,
+    daily_note: "Daily updates are off until you turn them back on. The history pass still runs when every sector is done." };
   if (!last) return { ...out, daily_state: doneSectors.length ? "never" : "nothing to update", daily_note: doneSectors.length ? "No daily update has run yet." : "No sector has a finished analysis yet." };
   const ok = last.conclusion === "success", why = ok ? "ok" : reasonOf(last);
   // Overdue: nothing finished in the last 26 hours though something should have.
@@ -294,7 +326,7 @@ W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === f
   daily_held_today: Object.values(sectors).reduce((a, x) => a + (x.daily_held || 0), 0),
   daily_updated_last: Object.values(sectors).reduce((a, x) => a + (x.daily_updated || 0), 0),
   daily_big_day: [...new Set(Object.values(sectors).map((x) => x.big_day).filter(Boolean))].join("; ") || null,
-  ...daily, ...alarm,
+  ...daily, ...alarm, daily_paused: !!control.daily_paused, history_pass: queue?.history_dispatched || null,
   industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
 console.log(`Status: ${status.totals.done} of ${status.totals.industries} industries done, ${status.totals.working} working, ${status.totals.waiting} waiting · tracked spend $${tot} · credit: ${cred.message}`);
 for (const l of log) console.log(l);
