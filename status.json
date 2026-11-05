@@ -17,20 +17,20 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T09:30:59.359Z",
+ "updated_at": "2026-11-05T09:41:56.061Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T09:30:59.359Z"
+  "checked_at": "2026-11-05T09:41:56.061Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 578.01,
-  "last_24h": 62.5,
-  "last_7d": 62.5,
-  "cache_saved": 9.85,
+  "tracked_total": 581.25,
+  "last_24h": 65.74,
+  "last_7d": 65.74,
+  "cache_saved": 10.73,
   "by_sector": {
    "Basic Materials": 53.79,
    "Communication Services": 1.43,
@@ -38,7 +38,7 @@
    "Consumer Defensive": 87.13,
    "Energy": 3.25,
    "Financial Services": 65.56,
-   "Healthcare": 53.66,
+   "Healthcare": 56.9,
    "Industrials": 94.15,
    "Real Estate": 52.43,
    "Technology": 134.95,
@@ -76,6 +76,10 @@
    {
     "at": "2026-11-05T09:09:27.076Z",
     "total": 578.01
+   },
+   {
+    "at": "2026-11-05T09:41:56.061Z",
+    "total": 581.25
    }
   ]
  },
@@ -114,7 +118,7 @@
    {
     "sector": "Healthcare",
     "budget": 8,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 45.61,
     "dispatched_at": "2026-11-05T09:03:14.680Z",
@@ -122,7 +126,8 @@
     "last_reason": "budget",
     "second_pass": false,
     "usd_at_dispatch": 53.66,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41999256691"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41999256691",
+    "finished_at": "2026-11-05T09:41:56.061Z"
    },
    {
     "sector": "Technology",
@@ -195,8 +200,12 @@
    {
     "sector": "Energy",
     "budget": 22,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 3.25,
+    "dispatched_at": "2026-11-05T09:41:56.061Z",
+    "dispatched_budget": "none",
+    "usd_at_dispatch": 3.25
    },
    {
     "sector": "Communication Services",
@@ -213,18 +222,10 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Healthcare, Financial Services, Industrials (3 at once, up to 3).",
-  "updated_at": "2026-11-05T09:30:59.359Z",
-  "spent": 62.5,
+  "note": "Running Financial Services, Industrials, Energy (3 at once, up to 3).",
+  "updated_at": "2026-11-05T09:41:56.061Z",
+  "spent": 65.74,
   "log": [
-   {
-    "at": "2026-11-04T22:11:23.315Z",
-    "text": "Started Healthcare (up to $8)."
-   },
-   {
-    "at": "2026-11-05T01:46:32.372Z",
-    "text": "Healthcare reached its spending cap; moving on."
-   },
    {
     "at": "2026-11-05T01:46:32.372Z",
     "text": "Started Technology (up to $8)."
@@ -296,6 +297,14 @@
    {
     "at": "2026-11-05T09:30:59.359Z",
     "text": "Finish everything: 6 sectors with industries still waiting; then Times like this for the rest."
+   },
+   {
+    "at": "2026-11-05T09:41:56.061Z",
+    "text": "Healthcare finished."
+   },
+   {
+    "at": "2026-11-05T09:41:56.061Z",
+    "text": "Started Energy (no spending limit)."
    }
   ],
   "parallel": 3,
@@ -311,13 +320,6 @@
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/42000084628"
   },
   {
-   "sector": "Healthcare",
-   "title": "Sector run · Healthcare",
-   "status": "in_progress",
-   "started": "2026-11-05T09:03:31Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41999256691"
-  },
-  {
    "sector": "Financial Services",
    "title": "Sector run · Financial Services",
    "status": "in_progress",
@@ -326,6 +328,14 @@
   }
  ],
  "recent_runs": [
+  {
+   "sector": "Healthcare",
+   "title": "Sector run · Healthcare",
+   "conclusion": "success",
+   "started": "2026-11-05T09:03:31Z",
+   "ended": "2026-11-05T09:41:38Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41999256691"
+  },
   {
    "sector": "Healthcare",
    "title": "Sector run · Healthcare",
@@ -437,14 +447,6 @@
    "started": "2026-11-03T23:09:37Z",
    "ended": "2026-11-03T23:41:05Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736885505"
-  },
-  {
-   "sector": "Real Estate",
-   "title": "Run Real Estate",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:35Z",
-   "ended": "2026-11-03T23:40:57Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736881585"
   }
  ],
  "sectors": [
@@ -1958,14 +1960,11 @@
   },
   {
    "sector": "Healthcare",
-   "finished": false,
-   "exported_at": "2026-11-05T08:16:20.878Z",
-   "round": {
-    "n": 1,
-    "adding": 3
-   },
+   "finished": true,
+   "exported_at": "2026-11-05T09:41:12.156Z",
+   "round": null,
    "daily": null,
-   "usd": 53.66,
+   "usd": 56.9,
    "daily_month": {
     "usd": 0,
     "budget": null
@@ -1973,8 +1972,8 @@
    "daily_held": 0,
    "daily_updated": 0,
    "big_day": "",
-   "requests": 910,
-   "cache_saved": 1.01,
+   "requests": 937,
+   "cache_saved": 1.89,
    "failed_steps": [],
    "industries": [
     {
@@ -2149,35 +2148,35 @@
     },
     {
      "name": "Medical - Healthcare Plans",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 11,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:34:37.897Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Medical - Distribution",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 10,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:40:56.312Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
@@ -2194,15 +2193,14 @@
      "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "done": 11,
-    "working": 2
+    "done": 13
    }
   },
   {
@@ -3331,8 +3329,8 @@
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 94,
-  "working": 23,
+  "done": 96,
+  "working": 21,
   "waiting": 36,
   "left_out": 0,
   "with_times": 3,
