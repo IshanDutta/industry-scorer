@@ -18,12 +18,12 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T05:54:14.891Z",
+ "updated_at": "2026-11-05T06:05:14.460Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T05:54:14.891Z"
+  "checked_at": "2026-11-05T06:05:14.460Z"
  },
  "cost_report": null,
  "balance": null,
@@ -134,14 +134,22 @@
    {
     "sector": "Basic Materials",
     "budget": 10,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 41.72,
+    "dispatched_at": "2026-11-05T06:05:14.460Z",
+    "dispatched_budget": 16,
+    "usd_at_dispatch": 41.72
    },
    {
     "sector": "Consumer Defensive",
     "budget": 15,
-    "state": "waiting",
-    "attempts": 0
+    "state": "dispatched",
+    "attempts": 0,
+    "usd_at_first_dispatch": 69.01,
+    "dispatched_at": "2026-11-05T06:05:14.460Z",
+    "dispatched_budget": 26.5,
+    "usd_at_dispatch": 69.01
    },
    {
     "sector": "Financial Services",
@@ -176,8 +184,8 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Utilities is running (started 2026-11-05T05:03:15Z).",
-  "updated_at": "2026-11-05T05:54:14.891Z",
+  "note": "Running Utilities, Basic Materials, Consumer Defensive (3 at once, up to 3).",
+  "updated_at": "2026-11-05T06:05:14.460Z",
   "spent": 23.83,
   "log": [
    {
@@ -211,8 +219,17 @@
    {
     "at": "2026-11-05T05:03:00.926Z",
     "text": "Started Utilities (up to $8)."
+   },
+   {
+    "at": "2026-11-05T06:05:14.460Z",
+    "text": "Started Basic Materials (up to $16)."
+   },
+   {
+    "at": "2026-11-05T06:05:14.460Z",
+    "text": "Started Consumer Defensive (up to $26.5)."
    }
-  ]
+  ],
+  "parallel": 3
  },
  "running": [
   {
