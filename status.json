@@ -17,12 +17,12 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T08:17:51.273Z",
+ "updated_at": "2026-11-05T08:18:25.023Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T08:17:51.273Z"
+  "checked_at": "2026-11-05T08:18:25.023Z"
  },
  "cost_report": null,
  "balance": null,
@@ -106,7 +106,7 @@
    {
     "sector": "Healthcare",
     "budget": 8,
-    "state": "budget",
+    "state": "waiting",
     "attempts": 0,
     "usd_at_first_dispatch": 45.61,
     "dispatched_at": "2026-11-05T08:14:32.835Z",
@@ -163,12 +163,13 @@
    {
     "sector": "Financial Services",
     "budget": 17,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 65.56,
     "dispatched_at": "2026-11-05T08:17:51.273Z",
     "dispatched_budget": 30,
-    "usd_at_dispatch": 65.56
+    "usd_at_dispatch": 65.56,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013"
    },
    {
     "sector": "Industrials",
@@ -198,7 +199,7 @@
   "daily_dispatched": false,
   "stopped": false,
   "note": "Running Basic Materials, Consumer Defensive, Financial Services (3 at once, up to 3).",
-  "updated_at": "2026-11-05T08:17:51.273Z",
+  "updated_at": "2026-11-05T08:18:25.023Z",
   "spent": 32.31,
   "log": [
    {
@@ -268,12 +269,23 @@
    {
     "at": "2026-11-05T08:17:51.273Z",
     "text": "Started Financial Services (up to $30)."
+   },
+   {
+    "at": "2026-11-05T08:18:25.023Z",
+    "text": "Finish everything: 8 sectors with industries still waiting; then Times like this for the rest."
    }
   ],
   "parallel": 3,
   "then_history": true
  },
  "running": [
+  {
+   "sector": "Financial Services",
+   "title": "Sector run · Financial Services",
+   "status": "in_progress",
+   "started": "2026-11-05T08:18:05Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41993394013"
+  },
   {
    "sector": "Consumer Defensive",
    "title": "Sector run · Consumer Defensive",
@@ -1787,7 +1799,7 @@
     },
     {
      "name": "Financial - Data & Stock Exchanges",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -1804,7 +1816,7 @@
     },
     {
      "name": "Investment - Banking & Investment Services",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 8,
      "analyzed_at": null,
@@ -1821,7 +1833,7 @@
     },
     {
      "name": "Banks",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 2,
      "analyzed_at": null,
@@ -1838,7 +1850,7 @@
     },
     {
      "name": "Insurance - Reinsurance",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 8,
      "analyzed_at": null,
@@ -1855,7 +1867,7 @@
     },
     {
      "name": "Financial - Mortgages",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -1872,7 +1884,7 @@
     },
     {
      "name": "Asset Management - Cryptocurrency",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 3,
      "analyzed_at": null,
@@ -1889,7 +1901,7 @@
     },
     {
      "name": "Asset Management - Global",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 1,
      "analyzed_at": null,
@@ -1906,7 +1918,7 @@
     },
     {
      "name": "Financial - Diversified",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 1,
      "analyzed_at": null,
@@ -1922,10 +1934,10 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
     "done": 12,
-    "waiting": 8
+    "working": 8
    }
   },
   {
@@ -3304,8 +3316,8 @@
   "sectors": 11,
   "industries": 153,
   "done": 83,
-  "working": 11,
-  "waiting": 59,
+  "working": 19,
+  "waiting": 51,
   "left_out": 0,
   "with_times": 3,
   "with_historian": 3
