@@ -113,7 +113,12 @@ async function main() {
   await page.waitForFunction(() => window.__industryScorer?.ready(), null, { timeout: 120000 });
 
   if (checkpoint) {
-    const n = await page.evaluate((f) => window.__industryScorer.importRecords(f), checkpoint);
+    // In pieces of about 8 MB: a big sector's checkpoint (Industrials is ~100 MB) in one call closes the browser.
+    const { records, sampler: _s, library: _l, ...head } = checkpoint, rk = Object.keys(records || {}).find((k) => /^sector:/.test(k));
+    let n = 0, chunk = {}, size = 0;
+    const flush = async () => { if (!Object.keys(chunk).length) return; n += await page.evaluate((f) => window.__industryScorer.importRecords(f), { ...head, sector: rk && chunk[rk] ? head.sector : undefined, records: chunk }); chunk = {}; size = 0; };
+    for (const [k, v] of Object.entries(records || {})) { const z = JSON.stringify(v).length; if (size && size + z > 8e6) await flush(); chunk[k] = v; size += z; }
+    await flush();
     log(`Restored ${n} industries' saved progress`);
   }
   // The shared library: facts earlier sectors researched. A checkpoint carries its own copy too.
