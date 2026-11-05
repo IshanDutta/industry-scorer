@@ -9,21 +9,21 @@
   "daily_started_at": "2026-11-05T01:45:46Z",
   "daily_how": "on schedule",
   "daily_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41950696235",
-  "daily_progress": "0 of 6 sectors done",
-  "daily_working": "Basic Materials, Healthcare, Consumer Defensive, Real Estate, Industrials, Financial Services",
-  "daily_failed_sectors": null
+  "daily_progress": "1 of 7 sectors done",
+  "daily_working": "Basic Materials, Healthcare, Consumer Defensive, Industrials, Financial Services",
+  "daily_failed_sectors": "Real Estate"
  },
  "alarm": {
   "alarm_checked_at": "2026-11-04T23:44:36Z",
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T01:46:32.372Z",
+ "updated_at": "2026-11-05T02:33:05.353Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T01:46:32.372Z"
+  "checked_at": "2026-11-05T02:33:05.353Z"
  },
  "cost_report": null,
  "balance": null,
@@ -105,11 +105,12 @@
    {
     "sector": "Technology",
     "budget": 8,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 126.62,
     "dispatched_at": "2026-11-05T01:46:32.372Z",
-    "dispatched_budget": 8
+    "dispatched_budget": 8,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41950811322"
    },
    {
     "sector": "Utilities",
@@ -162,8 +163,8 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Started Technology (up to $8).",
-  "updated_at": "2026-11-05T01:46:32.372Z",
+  "note": "Technology is running (started 2026-11-05T01:46:48Z).",
+  "updated_at": "2026-11-05T02:33:05.353Z",
   "spent": 13.05,
   "log": [
    {
@@ -192,14 +193,22 @@
    }
   ]
  },
- "running": [],
+ "running": [
+  {
+   "sector": "Technology",
+   "title": "Sector run · Technology",
+   "status": "in_progress",
+   "started": "2026-11-05T01:46:48Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41950811322"
+  }
+ ],
  "recent_runs": [
   {
    "sector": "every sector (daily update)",
    "title": "Daily update",
    "conclusion": "",
    "started": "2026-11-05T01:45:46Z",
-   "ended": "2026-11-05T01:46:20Z",
+   "ended": "2026-11-05T02:32:51Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41950696235"
   },
   {
@@ -3023,7 +3032,7 @@
     },
     {
      "name": "Software - Services",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 8,
      "analyzed_at": null,
@@ -3040,7 +3049,7 @@
     },
     {
      "name": "Technology Distributors",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 7,
      "analyzed_at": null,
@@ -3057,7 +3066,7 @@
     },
     {
      "name": "Media & Entertainment",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 3,
      "analyzed_at": null,
@@ -3073,10 +3082,10 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
     "done": 9,
-    "waiting": 3
+    "working": 3
    }
   },
   {
@@ -3214,8 +3223,8 @@
   "sectors": 11,
   "industries": 153,
   "done": 77,
-  "working": 0,
-  "waiting": 76,
+  "working": 3,
+  "waiting": 73,
   "left_out": 0,
   "with_times": 0,
   "with_historian": 0
