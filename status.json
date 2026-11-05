@@ -1,29 +1,28 @@
 {
  "daily": {
-  "daily_next_at": "2026-11-05T21:37:00.000Z",
+  "daily_next_at": null,
   "daily_newest": "2026-11-05",
   "daily_sectors_with_analysis": 8,
   "daily_sectors_current": 1,
   "daily_sectors_behind": "Basic Materials, Consumer Defensive, Financial Services, Healthcare, Industrials, Real Estate, Technology",
-  "daily_state": "failed",
+  "daily_state": "paused",
   "daily_started_at": "2026-11-05T01:45:46Z",
   "daily_finished_at": "2026-11-05T05:02:43Z",
-  "daily_how": "on schedule",
   "daily_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41950696235",
   "daily_result": "failure",
-  "daily_note": "The last daily update ended: failure."
+  "daily_note": "Daily updates are off until you turn them back on. The history pass still runs when every sector is done."
  },
  "alarm": {
   "alarm_checked_at": "2026-11-04T23:44:36Z",
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T06:05:14.460Z",
+ "updated_at": "2026-11-05T06:16:06.822Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T06:05:14.460Z"
+  "checked_at": "2026-11-05T06:16:06.822Z"
  },
  "cost_report": null,
  "balance": null,
@@ -134,22 +133,24 @@
    {
     "sector": "Basic Materials",
     "budget": 10,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 41.72,
     "dispatched_at": "2026-11-05T06:05:14.460Z",
     "dispatched_budget": 16,
-    "usd_at_dispatch": 41.72
+    "usd_at_dispatch": 41.72,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
    },
    {
     "sector": "Consumer Defensive",
     "budget": 15,
-    "state": "dispatched",
+    "state": "running",
     "attempts": 0,
     "usd_at_first_dispatch": 69.01,
     "dispatched_at": "2026-11-05T06:05:14.460Z",
     "dispatched_budget": 26.5,
-    "usd_at_dispatch": 69.01
+    "usd_at_dispatch": 69.01,
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978096031"
    },
    {
     "sector": "Financial Services",
@@ -185,7 +186,7 @@
   "daily_dispatched": false,
   "stopped": false,
   "note": "Running Utilities, Basic Materials, Consumer Defensive (3 at once, up to 3).",
-  "updated_at": "2026-11-05T06:05:14.460Z",
+  "updated_at": "2026-11-05T06:16:06.822Z",
   "spent": 23.83,
   "log": [
    {
@@ -227,11 +228,29 @@
    {
     "at": "2026-11-05T06:05:14.460Z",
     "text": "Started Consumer Defensive (up to $26.5)."
+   },
+   {
+    "at": "2026-11-05T06:16:06.822Z",
+    "text": "Daily updates turned off."
    }
   ],
   "parallel": 3
  },
  "running": [
+  {
+   "sector": "Consumer Defensive",
+   "title": "Sector run · Consumer Defensive",
+   "status": "in_progress",
+   "started": "2026-11-05T06:05:28Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978096031"
+  },
+  {
+   "sector": "Basic Materials",
+   "title": "Sector run · Basic Materials",
+   "status": "in_progress",
+   "started": "2026-11-05T06:05:26Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
+  },
   {
    "sector": "Utilities",
    "title": "Sector run · Utilities",
@@ -522,7 +541,7 @@
     },
     {
      "name": "Copper",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 9,
      "analyzed_at": null,
@@ -539,7 +558,7 @@
     },
     {
      "name": "Paper, Lumber & Forest Products",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 12,
      "analyzed_at": null,
@@ -556,7 +575,7 @@
     },
     {
      "name": "Aluminum",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 4,
      "analyzed_at": null,
@@ -573,7 +592,7 @@
     },
     {
      "name": "Silver",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 6,
      "analyzed_at": null,
@@ -589,10 +608,10 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
     "done": 8,
-    "waiting": 4
+    "working": 4
    }
   },
   {
@@ -1193,7 +1212,7 @@
     },
     {
      "name": "Discount Stores",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 9,
      "analyzed_at": null,
@@ -1210,7 +1229,7 @@
     },
     {
      "name": "Tobacco",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 11,
      "analyzed_at": null,
@@ -1227,7 +1246,7 @@
     },
     {
      "name": "Beverages - Alcoholic",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 8,
      "analyzed_at": null,
@@ -1244,7 +1263,7 @@
     },
     {
      "name": "Food Confectioners",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 6,
      "analyzed_at": null,
@@ -1261,7 +1280,7 @@
     },
     {
      "name": "Food Distribution",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 10,
      "analyzed_at": null,
@@ -1278,7 +1297,7 @@
     },
     {
      "name": "Grocery Stores",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 14,
      "analyzed_at": null,
@@ -1295,7 +1314,7 @@
     },
     {
      "name": "Beverages - Wineries & Distilleries",
-     "status": "waiting",
+     "status": "working",
      "why": "",
      "companies": 8,
      "analyzed_at": null,
@@ -1311,10 +1330,10 @@
      "rewrite_due": false
     }
    ],
-   "running": false,
+   "running": true,
    "counts": {
     "done": 5,
-    "waiting": 7
+    "working": 7
    }
   },
   {
@@ -3257,8 +3276,8 @@
   "sectors": 11,
   "industries": 153,
   "done": 80,
-  "working": 3,
-  "waiting": 70,
+  "working": 14,
+  "waiting": 59,
   "left_out": 0,
   "with_times": 3,
   "with_historian": 3
