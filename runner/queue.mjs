@@ -35,6 +35,7 @@ const r2 = (x) => Math.round(x * 100) / 100;
 const gh = (a, { quiet = false } = {}) => { try { return execFileSync("gh", a, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", quiet ? "ignore" : "inherit"] }); } catch (e) { if (!quiet) console.error(`gh ${a.slice(0, 3).join(" ")} failed: ${e.message}`); return null; } };
 
 // ------------------------------------------------------------------ every sector's results
+const CALL_LEVELS = ["strongly bearish", "slightly bearish", "neutral", "slightly bullish", "strongly bullish"];
 function sectorStatus(file) {
   const j = JSON.parse(gunzipSync(readFileSync(file)).toString());
   const k = Object.keys(j.records || {}).find((x) => /^sector:[^:]+$/.test(x)), rec = k ? P(j.records[k]) : null;
@@ -46,7 +47,8 @@ function sectorStatus(file) {
     return { name: n, status, why: rec.skip?.[n] || "", companies: run?.industry?.universe?.companies ?? run?.industry?.constituents?.length ?? null,
       analyzed_at: ag?.run_at || null, data_as_of: run?.industry?.as_of || null, daily: res.daily?.date || null, revised: !!res.daily?.revised,
       call_12m: res.horizons?.["12M"]?.call || null, opportunity: rec.rows?.[n]?.opportunity || res.opportunity?.verdict || null,
-      times: !!run?.industry?.history?.times?.episodes?.length, historian: !!run?.reports?.[slug(n) + "--history"]?.result?.read,
+      times: !!run?.industry?.history?.times?.episodes?.length,
+      new_scale: Object.values(res.horizons || {}).length > 0 && Object.values(res.horizons).every((x) => CALL_LEVELS.includes(x?.call) && Number.isFinite(x?.conviction)), historian: !!run?.reports?.[slug(n) + "--history"]?.result?.read,
       in_round: round ? round.has(n) : false, updates_since_full: Number(res.rewrites_since_full) || 0, rewrite_due: res.rethink?.same === false || (Number(res.rewrites_since_full) || 0) >= 6 };
   });
   const u = j.sampler?.usage || {};
@@ -265,7 +267,10 @@ function dailyIndicator() {
     const v = JSON.parse(gh(["run", "view", String(live.databaseId), "--repo", REPO, "--json", "jobs"], { quiet: true }) || "{}");
     const jobs = (v.jobs || []).filter((j) => /^update\b/.test(j.name)), nameOf = (j) => (String(j.name).match(/\(([^,)]+)/) || [])[1] || j.name;
     const fin = jobs.filter((j) => j.status === "completed"), wk = jobs.filter((j) => j.status === "in_progress");
-    return { ...out, daily_state: "running", daily_started_at: live.createdAt, daily_how: how(live), daily_url: live.url,
+    // The history pass (Times like this, calls re-graded): named so, or any run that does work while daily updates are paused.
+    const kind = /history pass/i.test(live.displayTitle || "") || (control.daily_paused && jobs.length) ? "history" : "daily";
+    const sectorJobs = Object.fromEntries(jobs.map((j) => [nameOf(j), j.status === "completed" ? (j.conclusion === "success" ? "done" : "failed") : j.status === "in_progress" ? "running" : "queued"]));
+    return { ...out, daily_state: "running", daily_kind: kind, daily_jobs: sectorJobs, daily_started_at: live.createdAt, daily_how: how(live), daily_url: live.url,
       daily_progress: jobs.length ? `${fin.length} of ${jobs.length} sectors done` : "planning which sectors to update", daily_working: wk.map(nameOf).join(", ") || null,
       daily_failed_sectors: fin.filter((j) => j.conclusion && j.conclusion !== "success").map(nameOf).join(", ") || null };
   }
@@ -308,13 +313,24 @@ writeFileSync(join(statusDir, "status.json"), JSON.stringify(status, null, 1));
 const dashDir = join(statusDir, "dash"); mkdirSync(dashDir, { recursive: true });
 const W = (name, rows) => writeFileSync(join(dashDir, name + ".json"), JSON.stringify(rows));
 const ORDER = { working: 0, waiting: 1, done: 2, "left out": 3 };
+// Times like this for one industry: "yes" (it has it, and its calls are on the five-level scale), "running" (the history
+// pass is on its sector right now), "queued" (the pass will get to its sector), "failed" (the pass stopped on its sector),
+// "old calls" (it has Times like this but its calls still need re-grading) or "no".
+const HP = daily.daily_state === "running" && daily.daily_kind === "history" ? daily.daily_jobs || {} : null;
+function timesState(sector, i) {
+  const done = i.times && i.new_scale;
+  if (i.status !== "done" || done) return done ? "yes" : "no";
+  const j = HP?.[sector];
+  if (j === "running" || j === "queued") return j; if (j === "failed") return "failed";
+  return i.times ? "old calls" : "no";
+}
 W("industries", status.sectors.flatMap((x) => x.industries.map((i) => ({ sector: x.sector, industry: i.name, status: i.status, order: ORDER[i.status] ?? 9, companies: i.companies,
   analyzed: i.analyzed_at ? i.analyzed_at.slice(0, 10) : null, daily: i.daily,
-  since_full: i.status === "done" ? `${i.updates_since_full}${i.rewrite_due ? " · full rewrite due" : ""}` : null, times_like_this: i.times ? "yes" : "no", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
+  since_full: i.status === "done" ? `${i.updates_since_full}${i.rewrite_due ? " · full rewrite due" : ""}` : null, times_like_this: timesState(x.sector, i), calls_scale: i.status !== "done" ? null : i.new_scale ? "new" : "old", historian: i.historian ? "yes" : "no", call_12m: i.call_12m, opportunity: i.opportunity }))));
 W("sectors", status.sectors.map((x) => ({ sector: x.sector, total: x.industries.length, done: x.counts.done || 0, working: x.counts.working || 0, waiting: x.counts.waiting || 0, left_out: x.counts["left out"] || 0,
   spend_usd: x.usd || 0, state: x.running ? "running" : x.never_run ? "never run" : x.finished ? "finished" : x.round ? "adding industries" : (x.counts.waiting ? "unfinished" : "finished"),
   queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null, daily_updated: x.daily_updated || 0, big_day: x.big_day || null,
-  updating_now: daily.daily_state === "running" && (daily.daily_working || "").split(", ").includes(x.sector) })));
+  updating_now: daily.daily_state === "running" && (daily.daily_working || "").split(", ").includes(x.sector), history_now: HP?.[x.sector] || null })));
 W("queue", (queue?.items || []).map((i, k) => ({ order: k + 1, sector: i.sector, budget_usd: i.budget, state: i.state, started: i.dispatched_at || null, finished: i.finished_at || null, reason: i.last_reason || null })));
 W("runs", status.recent_runs.map((r) => ({ when: r.started, what: r.title, sector: r.sector, result: r.conclusion, ended: r.ended, url: r.url })));
 W("spend", sl.slice(-400).map((x) => ({ at: x.at, total_usd: x.total })));
@@ -330,6 +346,11 @@ W("account", [{ updated_at: now, credit: cred.ok === true ? "OK" : cred.ok === f
   daily_updated_last: Object.values(sectors).reduce((a, x) => a + (x.daily_updated || 0), 0),
   daily_big_day: [...new Set(Object.values(sectors).map((x) => x.big_day).filter(Boolean))].join("; ") || null,
   ...daily, ...alarm, daily_paused: !!control.daily_paused, history_pass: queue?.history_dispatched || null,
+  history_running: !!HP, history_url: HP ? daily.daily_url : null, history_started_at: HP ? daily.daily_started_at : null,
+  history_sectors_running: HP ? Object.entries(HP).filter(([, v]) => v === "running").map(([k]) => k).join(", ") || null : null,
+  history_sectors_done: HP ? Object.values(HP).filter((v) => v === "done").length : null, history_sectors_total: HP ? Object.keys(HP).length : null,
+  history_sectors_failed: HP ? Object.entries(HP).filter(([, v]) => v === "failed").map(([k]) => k).join(", ") || null : null,
+  with_new_calls: allInd.filter((i) => i.status === "done" && i.new_scale).length,
   industries_done: status.totals.done, industries_total: status.totals.industries, industries_working: status.totals.working, industries_waiting: status.totals.waiting, with_times: status.totals.with_times }]);
 console.log(`Status: ${status.totals.done} of ${status.totals.industries} industries done, ${status.totals.working} working, ${status.totals.waiting} waiting · tracked spend $${tot} · credit: ${cred.message}`);
 for (const l of log) console.log(l);

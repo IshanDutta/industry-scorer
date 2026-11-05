@@ -20,6 +20,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
+run-name: ${{ inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:
