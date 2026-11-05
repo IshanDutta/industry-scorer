@@ -209,7 +209,8 @@ if (queue && !queue.stopped && REPO) {
     // shared research), so a sector isn't stopped part-way and run twice; the queue's total cap still bounds it.
     const waitingN = (sectors[next.sector]?.industries || []).filter((x) => x.status === "waiting").length || (sectors[next.sector] ? 0 : 10);
     const want = Math.max(next.budget, r2(2 + 3.5 * waitingN));
-    const budget = r2(Math.max(1, Math.min(want - Math.max(0, (sectors[next.sector]?.usd || 0) - next.usd_at_first_dispatch), left)));
+    // At least what its waiting industries need now, even if earlier runs of this sector already spent its first limit.
+    const budget = r2(Math.max(1, Math.min(Math.max(want - Math.max(0, (sectors[next.sector]?.usd || 0) - next.usd_at_first_dispatch), waitingN ? 2 + 3.5 * waitingN : 0), left)));
     if (!dispatch(next, budget)) { queue.note = `Couldn't start ${next.sector}; trying again at the next check.`; break; }
     next.state = "dispatched"; next.dispatched_at = now; next.dispatched_budget = budget; next.usd_at_dispatch = sectors[next.sector]?.usd || 0;
     log.push(`Started ${next.sector} (up to $${budget}).`); started.push(next); left = r2(left - budget); slots--;
