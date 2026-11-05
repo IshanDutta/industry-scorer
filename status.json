@@ -17,22 +17,22 @@
   "alarm_result": "success",
   "alarm_next_at": "2026-11-05T15:47:00.000Z"
  },
- "updated_at": "2026-11-05T08:26:35.863Z",
+ "updated_at": "2026-11-05T09:03:14.680Z",
  "repo": "IshanDutta/industry-scorer",
  "credit": {
   "ok": true,
   "message": "The API key works and has credit.",
-  "checked_at": "2026-11-05T08:26:35.863Z"
+  "checked_at": "2026-11-05T09:03:14.680Z"
  },
  "cost_report": null,
  "balance": null,
  "spend": {
-  "tracked_total": 547.82,
-  "last_24h": 32.31,
-  "last_7d": 32.31,
-  "cache_saved": 5.16,
+  "tracked_total": 559.89,
+  "last_24h": 44.38,
+  "last_7d": 44.38,
+  "cache_saved": 6.89,
   "by_sector": {
-   "Basic Materials": 41.72,
+   "Basic Materials": 53.79,
    "Communication Services": 1.43,
    "Consumer Cyclical": 0.28,
    "Consumer Defensive": 69.01,
@@ -68,6 +68,10 @@
    {
     "at": "2026-11-05T08:14:32.835Z",
     "total": 547.82
+   },
+   {
+    "at": "2026-11-05T09:03:14.680Z",
+    "total": 559.89
    }
   ]
  },
@@ -106,11 +110,11 @@
    {
     "sector": "Healthcare",
     "budget": 8,
-    "state": "waiting",
+    "state": "dispatched",
     "attempts": 0,
     "usd_at_first_dispatch": 45.61,
-    "dispatched_at": "2026-11-05T08:14:32.835Z",
-    "dispatched_budget": 1,
+    "dispatched_at": "2026-11-05T09:03:14.680Z",
+    "dispatched_budget": 9,
     "last_reason": "budget",
     "second_pass": false,
     "usd_at_dispatch": 53.66,
@@ -141,13 +145,14 @@
    {
     "sector": "Basic Materials",
     "budget": 10,
-    "state": "running",
+    "state": "done",
     "attempts": 0,
     "usd_at_first_dispatch": 41.72,
     "dispatched_at": "2026-11-05T06:05:14.460Z",
     "dispatched_budget": 16,
     "usd_at_dispatch": 41.72,
-    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
+    "run_url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846",
+    "finished_at": "2026-11-05T09:03:14.680Z"
    },
    {
     "sector": "Consumer Defensive",
@@ -198,9 +203,9 @@
   ],
   "daily_dispatched": false,
   "stopped": false,
-  "note": "Running Basic Materials, Consumer Defensive, Financial Services (3 at once, up to 3).",
-  "updated_at": "2026-11-05T08:26:35.863Z",
-  "spent": 32.31,
+  "note": "Running Healthcare, Consumer Defensive, Financial Services (3 at once, up to 3).",
+  "updated_at": "2026-11-05T09:03:14.680Z",
+  "spent": 44.38,
   "log": [
    {
     "at": "2026-11-04T18:49:07.093Z",
@@ -273,6 +278,14 @@
    {
     "at": "2026-11-05T08:18:25.023Z",
     "text": "Finish everything: 8 sectors with industries still waiting; then Times like this for the rest."
+   },
+   {
+    "at": "2026-11-05T09:03:14.680Z",
+    "text": "Basic Materials finished."
+   },
+   {
+    "at": "2026-11-05T09:03:14.680Z",
+    "text": "Started Healthcare (up to $9)."
    }
   ],
   "parallel": 3,
@@ -292,13 +305,6 @@
    "status": "in_progress",
    "started": "2026-11-05T06:05:28Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978096031"
-  },
-  {
-   "sector": "Basic Materials",
-   "title": "Sector run · Basic Materials",
-   "status": "in_progress",
-   "started": "2026-11-05T06:05:26Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
   }
  ],
  "recent_runs": [
@@ -309,6 +315,14 @@
    "started": "2026-11-05T08:14:46Z",
    "ended": "2026-11-05T08:16:46Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41992972664"
+  },
+  {
+   "sector": "Basic Materials",
+   "title": "Sector run · Basic Materials",
+   "conclusion": "success",
+   "started": "2026-11-05T06:05:26Z",
+   "ended": "2026-11-05T09:02:56Z",
+   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41978092846"
   },
   {
    "sector": "Utilities",
@@ -413,27 +427,16 @@
    "started": "2026-11-03T23:09:33Z",
    "ended": "2026-11-03T23:38:26Z",
    "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736877569"
-  },
-  {
-   "sector": "Healthcare",
-   "title": "Run Healthcare",
-   "conclusion": "failure",
-   "started": "2026-11-03T23:09:31Z",
-   "ended": "2026-11-03T23:37:44Z",
-   "url": "https://github.com/IshanDutta/industry-scorer/actions/runs/41736873810"
   }
  ],
  "sectors": [
   {
    "sector": "Basic Materials",
-   "finished": false,
-   "exported_at": "2026-11-03T23:37:28.503Z",
-   "round": {
-    "n": 1,
-    "adding": 4
-   },
+   "finished": true,
+   "exported_at": "2026-11-05T09:02:25.400Z",
+   "round": null,
    "daily": null,
-   "usd": 41.72,
+   "usd": 53.79,
    "daily_month": {
     "usd": 0,
     "budget": null
@@ -441,8 +444,8 @@
    "daily_held": 0,
    "daily_updated": 0,
    "big_day": "",
-   "requests": 792,
-   "cache_saved": 0,
+   "requests": 1150,
+   "cache_saved": 1.73,
    "failed_steps": [],
    "industries": [
     {
@@ -583,77 +586,76 @@
     },
     {
      "name": "Copper",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 9,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:02:14.710Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Paper, Lumber & Forest Products",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 12,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:02:14.890Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "bearish",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Aluminum",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 4,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:02:15.044Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     },
     {
      "name": "Silver",
-     "status": "working",
+     "status": "done",
      "why": "",
      "companies": 6,
-     "analyzed_at": null,
+     "analyzed_at": "2026-11-05T09:02:15.183Z",
      "data_as_of": "2026-11-03",
      "daily": null,
      "revised": false,
-     "call_12m": null,
-     "opportunity": null,
+     "call_12m": "neutral",
+     "opportunity": "conditional",
      "times": false,
      "historian": false,
-     "in_round": true,
+     "in_round": false,
      "updates_since_full": 0,
      "rewrite_due": false
     }
    ],
-   "running": true,
+   "running": false,
    "counts": {
-    "done": 8,
-    "working": 4
+    "done": 12
    }
   },
   {
@@ -3315,8 +3317,8 @@
  "totals": {
   "sectors": 11,
   "industries": 153,
-  "done": 83,
-  "working": 19,
+  "done": 87,
+  "working": 15,
   "waiting": 51,
   "left_out": 0,
   "with_times": 3,
