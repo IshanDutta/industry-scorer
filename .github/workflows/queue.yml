@@ -1,8 +1,8 @@
 # Industry Scorer: the run queue and the status page's data.
 #
 # Start a queue: Actions → "Queue and status" → Run workflow → action "start", the sectors in order with each one's
-# spending limit ("Utilities:9, Healthcare:9, Energy:20"), the total cap and speed (the model is chosen by step: Opus for the strategist, Sonnet for the rest). Sectors then run strictly
-# one after another (each reuses what the ones before it researched), each adding only the industries it doesn't have
+# spending limit ("Utilities:9, Healthcare:9, Energy:20"), the total cap and speed (the model is chosen by step: Opus for the strategist, Sonnet for the rest). Up to three sectors run
+# at once, started in order (each reuses what the ones before it researched), each adding only the industries it doesn't have
 # yet. A sector that runs out of credit waits and resumes by itself once you add credit; one that reaches its limit is
 # skipped; when the queue is done, a daily update of every sector adds "Times like this" where it's missing.
 #
@@ -39,6 +39,10 @@ on:
         type: choice
         options: [cheap, quick]
         default: cheap
+      parallel:
+        description: "start: how many sectors run at once (1-6)"
+        required: false
+        default: "3"
       wait_for:
         description: "(set automatically) a run that just ended: wait for it to finish, then start the next sector"
         required: false
@@ -98,6 +102,7 @@ jobs:
           QUEUE_CAP: ${{ inputs.cap }}
           QUEUE_MODEL: ${{ inputs.model }}
           QUEUE_SPEED: ${{ inputs.speed }}
+          QUEUE_PARALLEL: ${{ inputs.parallel || '3' }}
           QUEUE_THEN_DAILY: ${{ inputs.then_daily }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_ADMIN_KEY: ${{ secrets.ANTHROPIC_ADMIN_KEY }}

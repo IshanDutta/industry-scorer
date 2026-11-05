@@ -94,9 +94,11 @@ update right away as a big day, at most once a day. Run it by hand with "force" 
 ## Run everything in order (the queue) and the status page
 
 Actions → **Queue and status** → Run workflow → action `start`, the sectors in the order to run them with each one's
-spending limit (`Real Estate:6, Healthcare:8, Energy:22`), the total cap and speed (models: Opus for the strategist, Sonnet for the rest). The sectors then run
-**one after another**, never two at once, so each one reuses everything the ones before it researched (the shared
-library: world situations, countries, regulator instruments, the news wire) and its prompts hit the cache. Each sector
+spending limit (`Real Estate:6, Healthcare:8, Energy:22`), the total cap and speed (models: Opus for the strategist, Sonnet for the rest). Up to
+**three sectors run at once** (`parallel`, 1-6), started in order; the next starts a minute or two after one ends.
+Each reuses what the sectors finished before it researched (the shared library: world situations, countries,
+regulator instruments, the news wire). A sector's limit is raised to what its waiting industries need (about $3.50
+each plus $2); the total cap bounds everything. Each sector
 adds only the industries it doesn't have yet. If the API runs out of credit, the queue waits and resumes by itself
 within the hour of you adding credit; a sector that reaches its limit is skipped; one that fails otherwise is retried
 twice. When the queue is done, a daily update of every sector runs (it also adds "Times like this" to industries that

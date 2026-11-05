@@ -5,7 +5,7 @@
 //   1. reads every sector's latest results in the exports branch and works out each industry's status;
 //   2. checks that the Anthropic API key still has credit (a one-token request), and, with an Admin key, reads
 //      Anthropic's own cost report;
-//   3. moves the queue along: sectors run strictly one after another, so each one reuses everything the ones before it
+//   3. moves the queue along: up to QUEUE_PARALLEL sectors at once (default 3), started in order, so later ones reuse what the earlier ones
 //      researched (the shared library) and nothing runs twice at once. A sector that stops for lack of credit waits
 //      and resumes by itself once there is credit again; one that reaches its share of the spending cap is skipped;
 //      one that fails for another reason is retried twice. When the queue is done, it can start a daily update of
@@ -14,7 +14,7 @@
 //
 // Usage: node queue.mjs --exports <dir with runs/*.json.gz> --status <dir of the status branch>
 // Env: QUEUE_ACTION status | start | stop | resume; QUEUE_ITEMS "Utilities:9, Energy:20" (start); QUEUE_CAP total $;
-//      QUEUE_MODEL auto (Opus strategist, Sonnet analysts) | opus | sonnet; QUEUE_SPEED cheap | quick; QUEUE_THEN_DAILY true | false; GH_TOKEN, GITHUB_REPOSITORY,
+//      QUEUE_PARALLEL sectors at once (default 3); QUEUE_MODEL auto (Opus strategist, Sonnet analysts) | opus | sonnet; QUEUE_SPEED cheap | quick; QUEUE_THEN_DAILY true | false; GH_TOKEN, GITHUB_REPOSITORY,
 //      QUEUE_REF (branch to dispatch on); ANTHROPIC_API_KEY (credit check); ANTHROPIC_ADMIN_KEY (optional cost report);
 //      CREDIT_BALANCE_USD + CREDIT_BALANCE_AT (optional: your balance on a date, to estimate what's left).
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
@@ -124,7 +124,7 @@ if (action === "start") {
   const items = String(env.QUEUE_ITEMS || "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => { const [s, b] = x.split(":").map((y) => y.trim()); return { sector: s, budget: Number(b) || 25, state: "waiting", attempts: 0 }; })
     .filter((x) => SECTORS.includes(x.sector));
   if (!items.length) { console.error("QUEUE_ITEMS lists no known sector."); process.exit(2); }
-  queue = { id: now, created_at: now, cap: Number(env.QUEUE_CAP) || 200, model: env.QUEUE_MODEL || "auto", speed: env.QUEUE_SPEED || "cheap", then_daily: env.QUEUE_THEN_DAILY !== "false",
+  queue = { id: now, created_at: now, cap: Number(env.QUEUE_CAP) || 200, parallel: Number(env.QUEUE_PARALLEL) || 3, model: env.QUEUE_MODEL || "auto", speed: env.QUEUE_SPEED || "cheap", then_daily: env.QUEUE_THEN_DAILY !== "false",
     start_usd: Object.fromEntries(SECTORS.map((s) => [s, sectors[s]?.usd || 0])), items, daily_dispatched: false, stopped: false, note: "Starting." };
   log.push(`Queue started: ${items.map((i) => `${i.sector} ($${i.budget})`).join(", ")}; cap $${queue.cap}.`);
 }
@@ -146,42 +146,53 @@ if (queue && !queue.stopped && REPO) {
     for (const i of queue.items) { const w = (sectors[i.sector]?.industries || []).filter((x) => x.status === "waiting").length;
       if (i.state === "budget" && !i.second_pass && w > 0) { i.second_pass = true; i.state = "waiting"; i.budget = r2(i.budget + 2 + 4 * w); log.push(`${i.sector}: ${w} industr${w === 1 ? "y" : "ies"} still waiting after its limit; one more run with up to $${r2(2 + 4 * w)} more from the queue's cap.`); } }
   }
-  const running = active.find((r) => r.sector);
-  const cur = queue.items.find((i) => !["done", "skipped", "budget"].includes(i.state));
-  if (running) {
-    const it = queue.items.find((i) => i.sector === running.sector);
-    if (it && it.state !== "running") { it.state = "running"; it.run_url = running.url; }
-    queue.note = `${running.sector} is running (started ${running.createdAt}).`;
-  } else if (cur) {
-    // What happened to the sector this queue last started?
-    if (["running", "dispatched"].includes(cur.state)) {
-      const last = lastRunOf(cur.sector, cur.dispatched_at || "");
-      const s = sectors[cur.sector];
-      if (s?.finished && s.industries.every((x) => x.status !== "waiting")) { cur.state = "done"; cur.finished_at = now; log.push(`${cur.sector} finished.`); }
-      else if (last) {
-        const why = reasonOf(last); cur.last_reason = why;
-        if (why === "credits") { cur.state = "credits"; log.push(`${cur.sector} stopped: out of credit.`); }
-        else if (why === "budget") { cur.state = "budget"; log.push(`${cur.sector} reached its spending cap; moving on.`); }
-        else if (why === "ok") { cur.state = "done"; cur.finished_at = now; }
-        else { cur.attempts = (cur.attempts || 0) + 1; cur.state = cur.attempts >= 3 ? "failed" : "waiting"; log.push(`${cur.sector} stopped (${why}); ${cur.state === "failed" ? "giving up after 3 tries" : "retrying"}.`); }
-      } else if (Date.now() - Date.parse(cur.dispatched_at || 0) > 30 * 60000) { cur.state = "waiting"; log.push(`${cur.sector}: no run appeared; starting it again.`); }
-    }
-    const next = queue.items.find((i) => ["waiting", "credits"].includes(i.state));
-    if (next && !(next.state === "credits" && cred.ok === false)) {
-      const left = r2(queue.cap - spentInQueue());
-      if (cred.ok === false) { queue.note = `${cred.message} The queue carries on by itself within the hour of credit arriving.`; next.state = "credits"; }
-      else if (left < 1) { queue.stopped = true; queue.note = `The queue's $${queue.cap} cap is used up ($${spentInQueue()} spent). Raise it and resume to continue.`; }
-      else {
-        const budget = Math.max(1, Math.min(next.budget - Math.max(0, (sectors[next.sector]?.usd || 0) - (next.usd_at_first_dispatch ?? sectors[next.sector]?.usd ?? 0)), left));
-        if (next.usd_at_first_dispatch === undefined) next.usd_at_first_dispatch = sectors[next.sector]?.usd || 0;
-        if (dispatch(next, Math.round(budget * 100) / 100)) { next.state = "dispatched"; next.dispatched_at = now; next.dispatched_budget = r2(budget); queue.note = `Started ${next.sector} (up to $${r2(budget)}).`; log.push(queue.note); }
-        else queue.note = `Couldn't start ${next.sector}; trying again next hour.`;
+  // Several sectors at once (queue.parallel, default 3): each that ends is settled, and free slots are filled in order.
+  const par = Math.max(1, Math.min(6, Number(queue.parallel) || Number(env.QUEUE_PARALLEL) || 3)); queue.parallel = par;
+  const runningNow = new Set(active.map((r) => r.sector).filter(Boolean));
+  for (const it of queue.items) {
+    if (runningNow.has(it.sector)) { const r = active.find((x) => x.sector === it.sector); if (it.state !== "running") { it.state = "running"; it.run_url = r?.url; } continue; }
+    if (!["running", "dispatched"].includes(it.state)) continue;
+    // A sector this queue started that is no longer running: what happened to it?
+    const last = lastRunOf(it.sector, it.dispatched_at || "");
+    const s = sectors[it.sector];
+    if (s?.finished && s.industries.every((x) => x.status !== "waiting")) { it.state = "done"; it.finished_at = now; log.push(`${it.sector} finished.`); }
+    else if (last && last.status === "completed") {
+      const why = reasonOf(last); it.last_reason = why;
+      if (why === "credits") { it.state = "credits"; log.push(`${it.sector} stopped: out of credit.`); }
+      else if (why === "budget") { it.state = "budget"; log.push(`${it.sector} reached its spending limit; moving on.`); }
+      else if (why === "ok") {
+        // A run that ran out of GitHub time continues in a new run by itself: wait for it rather than call the sector done.
+        if (s?.industries.some((x) => x.status === "waiting") && Date.now() - Date.parse(last.updatedAt || 0) < 30 * 60000) { /* its continuation is on its way */ }
+        else if (s?.industries.some((x) => x.status === "waiting")) { it.attempts = (it.attempts || 0) + 1; it.state = it.attempts >= 3 ? "failed" : "waiting"; log.push(`${it.sector} ended with industries still waiting; ${it.state === "failed" ? "giving up after 3 tries" : "starting it again"}.`); }
+        else { it.state = "done"; it.finished_at = now; log.push(`${it.sector} finished.`); }
       }
-    } else if (next?.state === "credits") queue.note = `${cred.message} The queue carries on by itself within the hour of credit arriving.`;
-    else if (!next && cur && cur.state === "done") queue.note = "Waiting for the next step.";
+      else { it.attempts = (it.attempts || 0) + 1; it.state = it.attempts >= 3 ? "failed" : "waiting"; log.push(`${it.sector} stopped (${why}); ${it.state === "failed" ? "giving up after 3 tries" : "retrying"}.`); }
+    } else if (!last && Date.now() - Date.parse(it.dispatched_at || 0) > 30 * 60000) { it.state = "waiting"; log.push(`${it.sector}: no run appeared; starting it again.`); }
   }
-  if (queue.items.every((i) => ["done", "skipped", "budget", "failed"].includes(i.state))) {
-    if (queue.then_daily && !queue.daily_dispatched && !active.length) {
+  // Money already promised to sectors in flight (their limit minus what they've spent), so parallel runs can't overshoot the cap.
+  const inFlight = queue.items.filter((i) => ["running", "dispatched"].includes(i.state));
+  const promised = inFlight.reduce((a, i) => a + Math.max(0, (i.dispatched_budget || 0) - Math.max(0, (sectors[i.sector]?.usd || 0) - (i.usd_at_dispatch ?? sectors[i.sector]?.usd ?? 0))), 0);
+  let left = r2(queue.cap - spentInQueue() - promised), slots = par - inFlight.length;
+  const started = [];
+  while (slots > 0) {
+    const next = queue.items.find((i) => ["waiting", "credits"].includes(i.state) && !runningNow.has(i.sector) && !started.includes(i));
+    if (!next) break;
+    if (cred.ok === false) { next.state = "credits"; queue.note = `${cred.message} The queue carries on by itself within the hour of credit arriving.`; break; }
+    if (left < 1) { if (!inFlight.length) { queue.stopped = true; queue.note = `The queue's $${queue.cap} cap is used up ($${spentInQueue()} spent). Raise it and resume to continue.`; } break; }
+    if (next.usd_at_first_dispatch === undefined) next.usd_at_first_dispatch = sectors[next.sector]?.usd || 0;
+    // Its limit: what was set, raised to what its waiting industries need (about $3.50 each, plus $2 for the sector's
+    // shared research), so a sector isn't stopped part-way and run twice; the queue's total cap still bounds it.
+    const waitingN = (sectors[next.sector]?.industries || []).filter((x) => x.status === "waiting").length || (sectors[next.sector] ? 0 : 10);
+    const want = Math.max(next.budget, r2(2 + 3.5 * waitingN));
+    const budget = r2(Math.max(1, Math.min(want - Math.max(0, (sectors[next.sector]?.usd || 0) - next.usd_at_first_dispatch), left)));
+    if (!dispatch(next, budget)) { queue.note = `Couldn't start ${next.sector}; trying again at the next check.`; break; }
+    next.state = "dispatched"; next.dispatched_at = now; next.dispatched_budget = budget; next.usd_at_dispatch = sectors[next.sector]?.usd || 0;
+    log.push(`Started ${next.sector} (up to $${budget}).`); started.push(next); left = r2(left - budget); slots--;
+  }
+  const busyNow = queue.items.filter((i) => ["running", "dispatched"].includes(i.state)).map((i) => i.sector);
+  if (busyNow.length) queue.note = `Running ${busyNow.join(", ")} (${busyNow.length} at once, up to ${par}).`;
+  if (queue.items.every((i) => ["done", "skipped", "budget", "failed"].includes(i.state)) && !active.length) {
+    if (queue.then_daily && !queue.daily_dispatched) {
       if (gh(["workflow", "run", "daily-update.yml", "--repo", REPO, "--ref", env.QUEUE_REF || "main"]) !== null) { queue.daily_dispatched = now; log.push("Queue done: started a daily update of every sector."); }
     }
     queue.finished_at ||= now; queue.note = `Queue finished${queue.daily_dispatched ? "; a daily update of every sector was started (it adds Times like this where it's missing)" : ""}.`;
