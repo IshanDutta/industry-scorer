@@ -16,6 +16,7 @@
     const w = cut.lastIndexOf(" "); return (w > K * 0.6 ? cut.slice(0, w) : cut).replace(/[,;:\s]+$/, "") + "…"; };
   const median = (a) => { const v = a.filter(isNum).sort((x, y) => x - y); if (!v.length) return NaN; const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
   const lc = (s) => String(s || "").toLowerCase();
+  const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
 
   // ------------------------------------------------------------------ versus the industry's top 50
   /** [key, label, higher is better (true/false/null = neither), kind] */
@@ -477,7 +478,7 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     quality: `"quality": "2 sentences on earnings quality and the balance sheet"`,
     valuation: `"valuation": {"read": "2-3 sentences vs history, peers and what is priced in", "fair_value": [low, high]}`,
     scenarios: `"scenarios": {"bull": {"probability": 25, "narrative": "...", "eps_change": [8, 14], "pe": [24, 27], "price_target": [100, 110]}, "base": {...}, "bear": {...}}`,
-    horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {"call": "bullish | neutral | bearish", "conviction": "high | medium | low", "expected_move": [-3, 5], "probability_up": 55, "vs_industry": "outperform | in line | underperform", "drivers": "5-8 sentences, cited, with numbers: what drives the stock in this window, which dated prints and decisions land in it and what each is worth to the stock, the macro channel that measurably moves it (its own factor sensitivities), positioning and technicals, and how the pieces net out against its one-sigma move", "decisions": [{"refs": ["E1"], "date": "YYYY-MM-DD", "event": "the decision or event", "lean": "positive | negative | binary | neutral", "outcomes": "if X, the stock moves about +a% (why); if Y, about -b%"}], "conflicts": [{"refs": ["Q1"], "situation": "the war, conflict or threat", "in_window": "what is likely inside this window, with probabilities", "impact": "what it does to this company: revenue, costs, the multiple, with sizes"}], "positioning": "what to do with the stock in this window: buy, add, hold, trim or avoid, with price levels and sizing", "risk": "wrong if: the combination of outcomes that breaks this call and where the stock would go", "sections": ["the 2-5 drivers of this call, from: ${SEC_KEYS.join(", ")}"]}`).join(", ")}}`,
+    horizons: `"horizons": {${["1M", "3M", "6M", "12M"].map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 5], "probability_up": 58, "vs_industry": "outperform | in line | underperform", "drivers": "5-8 sentences, cited, with numbers: what drives the stock in this window, which dated prints and decisions land in it and what each is worth to the stock, the macro channel that measurably moves it (its own factor sensitivities), positioning and technicals, and how the pieces net out against its one-sigma move", "decisions": [{"refs": ["E1"], "date": "YYYY-MM-DD", "event": "the decision or event", "lean": "positive | negative | binary | neutral", "outcomes": "if X, the stock moves about +a% (why); if Y, about -b%"}], "conflicts": [{"refs": ["Q1"], "situation": "the war, conflict or threat", "in_window": "what is likely inside this window, with probabilities", "impact": "what it does to this company: revenue, costs, the multiple, with sizes"}], "positioning": "what to do with the stock in this window: buy, add, hold, trim or avoid, with price levels and sizing", "risk": "wrong if: the combination of outcomes that breaks this call and where the stock would go", "sections": ["the 2-5 drivers of this call, from: ${SEC_KEYS.join(", ")}"]}`).join(", ")}}`,
     risks: `"risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "evidence": []}]`,
     catalysts: `"catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "..."}]`,
     watch: `"watch": ["..."]`, fit: `"fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2-3 sentences for this investor, cited: what they get and what they give up", "watch": "the one or two numbers this investor should track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}}`,
@@ -558,7 +559,7 @@ ${(ctx.mentions || []).map((m) => `[${m.id}] ${m.section}${m.where ? ` › ${m.w
 COMPANY NEWS AND PRESS RELEASES (last 60 days; cite by ID)
 ${(ctx.news || []).map((x) => `[${x.id}] ${x.date} · ${x.source || ""} — ${x.title}${x.summary ? `. ${trim(x.summary, 240)}` : ""}`).join("\n") || "(none)"}
 ${ctx.transcript ? `\nLATEST EARNINGS CALL [${ctx.transcript.id}] (${ctx.transcript.period || ""}, ${ctx.transcript.date || ""}; cite by ID)\n${trim(ctx.transcript.text, 7000)}\n` : ""}
-${ctx.lens && (part === "context" || part === "calls" || part === "exposures") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${ctx.indPanels && part !== "exposures" ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}${part === "exposures" ? "" : `THE INDUSTRY ANALYSIS (your team's; the industry-level view)
+${ctx.lens && (part === "context" || part === "calls" || part === "exposures") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${(part === "calls" || part === "core") && ctx.times ? `${ctx.times}\n\n` : ""}${ctx.indPanels && part !== "exposures" ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}${part === "exposures" ? "" : `THE INDUSTRY ANALYSIS (your team's; the industry-level view)
 Lead strategist: ${J(lean(D.lead, 600, 8))}
 KPIs and cycle: ${J(lean(D.kpi, 300, 6))}
 Macro: ${J(lean(D.macro, 300, 6))}
@@ -574,6 +575,8 @@ Rule books (top rules): ${J(lean(D.books, 220, 6))}
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
+- Start every call from history: ${ctx.times ? `${ctx.sym} IN TIMES LIKE THIS gives what ${ctx.sym} did after the industry's closest past months, next to the industry. "probability_up" starts from ${ctx.sym}'s own hit rate there, "expected_move" from its middle half, and "vs_industry" from how often it beat the industry in those months; move away only for a stated reason this time is different, citing the episodes [HE#] that agree or disagree.` : `use ${ctx.sym}'s own history over each span (in ${ctx.sym}'S WINDOWS) and the industry's calls.`}
+${Calls.rules(ctx.sym)}
 - Street: compare your view with the sell-side consensus given above (ratings, average target and range, how targets moved, FY estimates, recent rating changes). Agree only if your scenarios land near the consensus target and your EPS view matches; otherwise say where you differ (estimates, margins, the multiple, catalysts, risks) and why.
 - "expected_move" is the LIKELY range: the middle half of outcomes, centered on your expected return for the window. Its half-width should be about two-thirds of the stock's one-sigma move for that window, never more${ctx.sigmas ? ` (one-sigma moves from ${ctx.sym}'s own volatility: ${Object.entries(ctx.sigmas).map(([h, v]) => `${h} ±${v}%`).join(", ")})` : ""}. A narrow, well-reasoned range is the point; don't widen it to cover every outcome.
 
@@ -610,7 +613,7 @@ ${schemaFor(part)}`;
       management: txt(raw.management, 800), quality: txt(raw.quality, 600), valuation: { read: txt(raw.valuation?.read, 900), fair_value: rng(raw.valuation?.fair_value) },
       scenarios: { bull: sc(raw.scenarios?.bull), base: sc(raw.scenarios?.base), bear: sc(raw.scenarios?.bear) },
       horizons: Object.fromEntries(HZ.filter((h) => raw.horizons?.[h]).map((h) => { const x = raw.horizons[h]; const pu = Number(x.probability_up);
-        return [h, { call: en(x.call, ["bullish", "neutral", "bearish"], "neutral"), conviction: en(x.conviction, ["high", "medium", "low"], ""), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_industry: en(x.vs_industry, ["outperform", "in line", "underperform"], ""), drivers: txt(x.drivers, 2400),
+        return [h, { call: Calls.norm(x.call, "neutral"), conviction: Calls.conviction(x.conviction), conviction_why: txt(x.conviction_why, 400), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_industry: en(x.vs_industry, ["outperform", "in line", "underperform"], ""), drivers: txt(x.drivers, 2400),
           decisions: arr(x.decisions, 8).map((d) => ({ refs: ev(d?.refs), date: String(d?.date || "").slice(0, 10), event: txt(d?.event, 240), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral"), outcomes: txt(d?.outcomes, 700) })).filter((d) => d.event),
           conflicts: arr(x.conflicts, 8).map((c) => ({ refs: ev(c?.refs), situation: txt(c?.situation, 240), in_window: txt(c?.in_window, 500), impact: txt(c?.impact, 500) })).filter((c) => c.situation),
           positioning: txt(x.positioning, 700), risk: txt(x.risk, 600), sections: arr(x.sections, 6).map((k) => lc(k)).filter((k) => SEC_KEYS.includes(k)) }]; })),
@@ -634,6 +637,21 @@ ${schemaFor(part)}`;
       x.sigma = Math.round(sg * 10) / 10; }
     return notes;
   }
+  /**
+   * Hold each call to its own numbers and its conviction to history, as for the industry: sig = {"1M": sigma%, ...};
+   * times = the company's Times like this (Regimes.company). Changes t in place; returns notes on what changed.
+   */
+  function holdCalls(t, sig, times = null) {
+    const notes = [];
+    for (const h of HZ) { const x = t?.horizons?.[h]; if (!x) continue;
+      x.call = Calls.norm(x.call, "neutral"); x.conviction = Calls.conviction(x.conviction);
+      const r = Calls.reconcile(x, Number(sig?.[h]) || null);
+      if (r.fixed) { x.model_call = x.model_call || x.call; x.call = r.call; x.call_fixed = r.fixed; notes.push(`${h} ${r.fixed}`); }
+      const b = times?.base?.[h], hp = b && b.n >= 8 ? b.pos : null, hl = isNum(hp) ? Calls.implied({ p: hp }) : null;
+      if (hl && Calls.dir(hl) && Calls.dir(x.call) && Calls.dir(hl) !== Calls.dir(x.call) && isNum(x.conviction) && x.conviction > 6) {
+        x.conviction_fixed = `conviction ${x.conviction} cut to 6: the call goes against history (up ${hp}% of the time in the industry's closest past months)`; notes.push(`${h} ${x.conviction_fixed}`); x.conviction = 6; } }
+    return notes;
+  }
   /** Code checks: scenario probabilities and math, expected return, the 1M-12M calls against their own numbers. */
   function checks(t, px, pe) {
     const issues = [], mid = (r) => (r?.length ? r.reduce((a, x) => a + x, 0) / r.length : NaN);
@@ -649,13 +667,13 @@ ${schemaFor(part)}`;
     const exp = rows.length && rows.every((r) => isNum(r.move) && isNum(r.probability)) ? rows.reduce((a, r) => a + r.move * r.probability / 100, 0) : null;
     const up = rows.find((r) => r.k === "bull")?.move ?? null, down = rows.find((r) => r.k === "bear")?.move ?? null;
     for (const h of HZ) { const x = t?.horizons?.[h]; if (!x) continue; const m = mid(x.expected_move);
-      if (x.call === "bullish" && isNum(m) && m <= 0) issues.push(`${h} is bullish but its range is centered below zero`);
-      if (x.call === "bearish" && isNum(m) && m >= 0) issues.push(`${h} is bearish but its range is centered above zero`);
+      if (Calls.dir(x.call) > 0 && isNum(m) && m <= 0) issues.push(`${h} is ${x.call} but its range is centered below zero`);
+      if (Calls.dir(x.call) < 0 && isNum(m) && m >= 0) issues.push(`${h} is ${x.call} but its range is centered above zero`);
       if (h === "12M" && isNum(exp) && isNum(m) && Math.abs(m - exp * 100) > 8) issues.push(`the 12M range (${m.toFixed(0)}%) and the scenarios' expected return (${(exp * 100).toFixed(0)}%) disagree`); }
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);

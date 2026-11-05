@@ -166,7 +166,46 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     return { episodes: eps, read: s(raw?.read, 900), closest: /^H?E[1-9]$/.test(String(raw?.closest || "")) ? "HE" + String(raw.closest).replace(/^H?E/, "") : "", months: R.episodes.map((e) => e.month) };
   }
 
-  const Regimes = { H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval };
+  /**
+   * One company in its industry's Times like this: what the stock did after each of the industry's episodes and over
+   * the pool of closest months, next to the industry and the S&P 500. R: the industry's episodes(); ser: the company's
+   * daily closes {dates, closes|values}; spy: SPY's {dates, closes|values} (optional). Months before the stock traded
+   * are skipped. Returns null when the stock has no forward returns in any of them.
+   */
+  function company(R, ser, spy = null) {
+    if (!R?.episodes?.length || !ser?.dates?.length) return null;
+    const S = { dates: ser.dates, values: ser.values || ser.closes }, P = spy?.dates?.length ? { dates: spy.dates, values: spy.values || spy.closes } : null;
+    const first = S.dates[0];
+    const eps = R.episodes.map((e, i) => {
+      const traded = e.date >= first, f = traded ? forward(S, e.date) : { ret: {} };
+      return { id: `HE${i + 1}`, month: e.month, traded, company: f.ret, industry: e.industry, spy: e.spy, maxdd6: traded ? f.maxdd6 : null,
+        vs_industry: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(f.ret[h]) && isNum(e.industry?.[h]) ? r1(f.ret[h] - e.industry[h]) : null])) };
+    });
+    const pool = (R.pool_dates || []).map((m) => monthEnd(m + "-01")).filter((d) => d >= first);
+    const base = {};
+    for (const h of Object.keys(H)) {
+      const w = pool.map((d) => forward(S, d).ret[h]).filter(isNum), st = stats(w);
+      const ex = P ? pool.map((d) => { const x = forward(S, d).ret[h], y = forward(P, d).ret[h]; return isNum(x) && isNum(y) ? x - y : NaN; }).filter(isNum) : [];
+      const t = eps.filter((e) => isNum(e.company[h])), vi = eps.map((e) => e.vs_industry[h]).filter(isNum);
+      const ib = R.base?.[h] || {};
+      base[h] = { n: st.n, pos: st.n ? r1(st.pos * 100, 0) : null, median: r1(st.median), p25: r1(st.p25), p75: r1(st.p75), beat_spy: ex.length ? r1(stats(ex).pos * 100, 0) : null,
+        top_up: t.filter((e) => e.company[h] > 0).length, top_n: t.length, top_median: r1(quant(t.map((e) => e.company[h]), 0.5)),
+        beat_ind: vi.filter((x) => x > 0).length, beat_ind_n: vi.length, vs_ind_median: r1(quant(vi, 0.5)),
+        ind_pos: ib.pos ?? null, ind_median: ib.median ?? null };
+    }
+    if (!eps.some((e) => Object.values(e.company).some(isNum)) && !Object.values(base).some((b) => b.n)) return null;
+    return { as_of: R.as_of, pool: pool.length, episodes: eps, base };
+  }
+  /** The company's Times like this as prompt text (same HE IDs as the industry's). */
+  function companyText(sym, C) {
+    if (!C) return "";
+    const L = [`${sym} IN TIMES LIKE THIS (code: what ${sym} did after each of the industry's closest past months [HE#], next to the industry and the S&P 500)`];
+    for (const e of C.episodes) L.push(e.traded ? `[${e.id}] ${e.month}: ${sym} ${Object.keys(H).map((h) => `${h} ${pc(e.company[h])}`).join(", ")}; industry ${Object.keys(H).map((h) => `${h} ${pc(e.industry?.[h])}`).join(", ")}; ${sym} minus industry ${Object.keys(H).map((h) => `${h} ${isNum(e.vs_industry[h]) ? (e.vs_industry[h] > 0 ? "+" : "") + e.vs_industry[h] + "pp" : "n/a"}`).join(", ")}; worst drop in the next 6 months ${pc(e.maxdd6)}.` : `[${e.id}] ${e.month}: ${sym} wasn't trading yet.`);
+    L.push(`Base rates for ${sym} from the ${C.pool} closest months: ${Object.entries(C.base).map(([h, b]) => `${h}: up ${b.pos ?? "n/a"}% of the time (industry ${b.ind_pos ?? "n/a"}%), median ${pc(b.median)} (industry ${pc(b.ind_median)}), middle half ${pc(b.p25)} to ${pc(b.p75)}${isNum(b.beat_spy) ? `, beat the S&P 500 ${b.beat_spy}%` : ""}; in the 5 episodes up ${b.top_up} of ${b.top_n}, beat the industry ${b.beat_ind} of ${b.beat_ind_n}`).join("; ")}.`);
+    return L.join("\n");
+  }
+
+  const Regimes = { H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
   if (typeof module !== "undefined" && module.exports) module.exports = Regimes;
   else root.Regimes = Regimes;
 })(typeof window !== "undefined" ? window : globalThis);

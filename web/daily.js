@@ -19,6 +19,9 @@
   const noIds = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,6}\d{1,5}(?:\s*,\s*[A-Z]{1,6}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
   const pc = (x, d = 1) => (isNum(x) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");
   const HZ = ["1M", "3M", "6M", "12M"];
+  const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
+  /** Calls still on the old three-level scale (bullish / neutral / bearish; high / medium / low): every one gets re-graded. */
+  const legacyCalls = (res) => HZ.some((h) => { const x = res?.horizons?.[h]; return x && (!Calls.LEVELS.includes(x.call) || !isNum(x.conviction)); });
 
   /** What we keep from the last update to compare against. rec: the saved industry run. */
   function prevState(rec) {
@@ -112,7 +115,7 @@
     return L.join("\n");
   }
   const callsText = (res) => HZ.filter((h) => res?.horizons?.[h]).map((h) => { const x = res.horizons[h];
-    return `${h}: ${x.call}, ${x.conviction || "?"} conviction, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% chance higher. Why: ${noIds(x.drivers, 500)}${(x.decisions || []).length ? ` Decisions in the window: ${x.decisions.slice(0, 6).map((c) => `${c.date || ""} ${noIds(c.event, 90)}`).join("; ")}.` : ""}`; }).join("\n");
+    return `${h}: ${x.call}, conviction ${isNum(x.conviction) ? x.conviction + "/10" : x.conviction || "?"}, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% chance higher. Why: ${noIds(x.drivers, 500)}${(x.decisions || []).length ? ` Decisions in the window: ${x.decisions.slice(0, 6).map((c) => `${c.date || ""} ${noIds(c.event, 90)}`).join("; ")}.` : ""}`; }).join("\n");
 
   /** Step 3: is anything material? A short prompt for the quick model. */
   function triagePrompt(name, res, x, today, brief = "") {
@@ -311,14 +314,15 @@ HOW TO UPDATE
 1. Go through every part in turn: headline, thesis, summary, priced_in, confidence, each driver, each debate (has one been settled? is a new one live?), change_mind, each scenario (probability, numbers, narrative, triggers, earnings, valuation, each section read), the opportunity, each investor profile, then each call. For each, ask: does anything above make this wrong, stale or incomplete? If yes, rewrite it in full, as you would from scratch, weaving the new facts in with their citations. If no, leave it out of your reply (it stays as it is).
 2. Lists (drivers, debates, change_mind, a scenario's triggers, entry_triggers): if any item changes, return the whole new list, re-ranked: drop what no longer matters, add what now does.
 3. Scenario numbers stay consistent: price_move ≈ (1 + eps_change/100) × (end P/E ÷ today's P/E) − 1, and probabilities sum to 100; if you change one probability, give all three. A scenario's "sections" object: only the section reads that change.
-4. A call: keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it. A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
+4. A call: ${legacyCalls(res) ? `your calls above are on the OLD three-level scale (bullish / neutral / bearish, conviction high / medium / low). Re-grade EVERY call on the new scale below: give each one status "revised", with its call, a 1-10 conviction, its range and its chance of a gain, starting from TIMES LIKE THIS; keep the range and probability where they still hold.` : `keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.`} A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
+${Calls.rules("the industry")}
 5. Keep it all consistent: the headline, thesis, scenarios, opportunity, profiles and calls must tell one story after your changes.
 6. Then answer honestly: if you threw this analysis away and wrote it from scratch today, with everything above, would you reach the same core thesis, the same scenario set and the same opportunity verdict? "different" if the story itself would be built differently, not merely updated. A "different" orders a full rewrite.
 - Cite what you rely on: [D#] for today's headlines and filings, [I#] for macro rows, and the IDs already in your analysis. Never invent a fact, figure or ID.
 
 Reply with ONLY this JSON:
 {"material": true or false, "headline": "one sentence: what changed today for this industry", "summary": "2-4 sentences, cited", "changes": [{"text": "one change and what it means, cited", "effect": "positive | negative | mixed"}],
- "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", "call": "bullish | neutral | bearish", "conviction": "high | medium | low", "expected_move": [-3, 4], "probability_up": 52, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
+ "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
  "analysis": {only the parts that change, in the same shape as YOUR WHOLE ANALYSIS above; {} if nothing changes},
  "rethink": {"from_scratch": "same | different", "why": "one sentence"},
  "watch": ["1-3 things to watch tomorrow"]}`;
@@ -396,8 +400,8 @@ Reply with ONLY this JSON:
     if (upd?.horizons) for (const h of HZ) { const y = upd.horizons[h], old = out.horizons?.[h]; if (!y || !old) continue;
       const revised = lc(y.status) === "revised";
       hz[h] = { status: revised ? "revised" : "unchanged", why: cite(y.why, 500) };
-      if (revised) { const to = { call: en(y.call, ["bullish", "neutral", "bearish"], old.call), conviction: en(y.conviction, ["high", "medium", "low"], old.conviction || ""), expected_move: rng(y.expected_move).length ? rng(y.expected_move) : old.expected_move, probability_up: isNum(num(y.probability_up)) ? Math.max(0, Math.min(100, Math.round(num(y.probability_up)))) : old.probability_up };
-        const from = { call: old.call, conviction: old.conviction || "", expected_move: old.expected_move, probability_up: old.probability_up };
+      if (revised) { const to = { call: Calls.norm(y.call, Calls.norm(old.call)), conviction: Calls.conviction(y.conviction) ?? Calls.conviction(old.conviction), conviction_why: cite(y.conviction_why, 300) || old.conviction_why || "", expected_move: rng(y.expected_move).length ? rng(y.expected_move) : old.expected_move, probability_up: isNum(num(y.probability_up)) ? Math.max(0, Math.min(100, Math.round(num(y.probability_up)))) : old.probability_up };
+        const from = { call: old.call, conviction: old.conviction ?? "", conviction_why: old.conviction_why || "", expected_move: old.expected_move, probability_up: old.probability_up };
         if (JSON.stringify(from) === JSON.stringify(to)) hz[h].status = "unchanged";
         else { Object.assign(old, to, { daily: { date: today, why: hz[h].why, from } }); hz[h].from = from; hz[h].to = to; } } }
     const sp = upd?.scenario_probabilities;

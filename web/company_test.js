@@ -27,5 +27,5 @@ const t = C.cleanThesis({ headline: "Strong [A1, Z9] .", thesis: "One [N7].\n\nT
 assert.strictEqual(t.headline, "Strong [A1]."); assert.strictEqual(t.thesis, "One.\n\nTwo."); assert.deepStrictEqual(t.drivers[0].evidence, ["A1"]); assert.strictEqual(t.drivers[0].effect, "stronger");
 const ck = C.checks(t, 92, 25);
 assert(Math.abs(ck.expected_return - (0.3 * (113 / 92 - 1) + 0.5 * (100 / 92 - 1) + 0.2 * (83 / 92 - 1))) < 1e-9, "expected return");
-assert(ck.issues.some((x) => /12M is bearish/.test(x)), "a bearish call centered above zero is flagged");
+assert(ck.issues.some((x) => /12M is slightly bearish/.test(x)), "a bearish call centered above zero is flagged");
 console.log("company tests passed");

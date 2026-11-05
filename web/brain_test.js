@@ -1,3 +1,4 @@
+const Calls_dir = (c) => require("./calls.js").dir(c);
 // Tests for the lead strategist: dossier from every report, prompts, review merge, critic.
 const assert = require("assert");
 const B = require("./brain.js");
@@ -142,12 +143,13 @@ console.log("brain tests passed");
       "3M": { call: "bullish", expected_move: [-10, -2], probability_up: 40, section_reads: { kpi: "k" }, decisions: [], conflicts: [] }, "12M": { call: "bullish", expected_move: [15, 25], probability_up: 60 } } };
   const c = B.critic(raw, idx, d2, [], today, cal);
   const h1 = c.horizons["1M"];
-  assert.deepStrictEqual(h1.expected_move, [-8, 2]); assert.strictEqual(h1.call, "bearish"); assert.deepStrictEqual(h1.sections, ["performance", "macro"]);
+  assert.deepStrictEqual(h1.expected_move, [-8, 2]); assert.strictEqual(h1.call, "slightly bearish"); assert.deepStrictEqual(h1.sections, ["performance", "macro"]);
   assert.deepStrictEqual(h1.decisions[0].refs, [fedId], "unknown C-IDs dropped"); assert.strictEqual(h1.decisions[0].lean, "negative");
   assert(h1.drivers.includes(`[${fedId}]`), "calendar IDs survive citation cleaning when indexed"); assert.strictEqual(Object.keys(h1.section_reads).length, 10);
   const ck = Object.fromEntries(c.horizon_checks.map((x) => [x.h, x]));
   assert.strictEqual(ck["1M"].ok, true, JSON.stringify(ck["1M"])); assert.strictEqual(ck["1M"].covered, true, JSON.stringify(ck["1M"]));
-  assert(!ck["3M"].ok && ck["3M"].missing_standing.includes(iran) && ck["3M"].missing_sections.length === 9 && ck["3M"].missing_events.includes(fedId));
+  assert(Calls_dir(c.horizons["3M"].call) < 0 && c.horizons["3M"].model_call === "slightly bullish" && /own numbers/.test(c.horizons["3M"].call_fixed), "a call against its own numbers is set by code");
+  assert(ck["3M"].missing_standing.includes(iran) && ck["3M"].missing_sections.length === 9 && ck["3M"].missing_events.includes(fedId));
   assert(ck["12M"].issues.some((i) => i.includes("scenarios imply -1.5%")), JSON.stringify(ck["12M"]));
   assert(c.gaps.includes("no 6M call") && c.gaps.some((g) => g.startsWith("3M call skips wars/conflicts/situations")) && c.gaps.some((g) => g.startsWith("3M call skips decisions/events")), JSON.stringify(c.gaps));
   const rv = B.reviewPrompt(d2, { ...ctx, dossier: dz, hchecks: c.horizon_checks, calendar: cal }, raw);

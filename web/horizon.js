@@ -16,6 +16,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
   const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 
   const HORIZONS = [["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]];
@@ -213,9 +214,10 @@ ${rules}
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
 - Start every horizon from history: where HORIZON FACTS give the past months most like today, "probability_up" starts from that hit rate and "expected_move" from that middle half; move away only for reasons this time is different (say which, in "drivers", citing the TIMES LIKE THIS episodes [HE#] that agree or disagree). A call far from history needs a stated reason.
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
+${Calls.rules("the industry")}
 
 Reply with ONLY this JSON:
-{"horizons": {${ORDER.map((h) => `"${h}": {"call": "bullish | neutral | bearish", "expected_move": [-3, 4], "probability_up": 55, "conviction": "high | medium | low", "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
+{"horizons": {${ORDER.map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
   }
 
   // ---------------------------------------------------------------- cleaning and checks
@@ -229,13 +231,30 @@ Reply with ONLY this JSON:
     for (const [h] of HORIZONS) {
       const x = raw?.[h]; if (!x || typeof x !== "object") continue;
       const pu = Number(x.probability_up);
-      hz[h] = { call: en(x.call, ["bullish", "neutral", "bearish"], "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null,
-        conviction: en(x.conviction, ["high", "medium", "low"], ""), drivers: clean(x.drivers, 1100), risk: clean(x.risk, 400), positioning: clean(x.positioning, 500),
+      hz[h] = { call: Calls.norm(x.call, "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null,
+        conviction: Calls.conviction(x.conviction), conviction_why: clean(x.conviction_why, 300), drivers: clean(x.drivers, 1100), risk: clean(x.risk, 400), positioning: clean(x.positioning, 500),
         section_reads: Object.fromEntries(keys.map((k) => [k, clean(x.section_reads?.[k], 360)]).filter(([, t]) => t)),
         decisions: arr(x.decisions, 30).map((d) => ({ refs: refs(d?.refs, cids), date: normDate(d?.date) ? String(d.date).slice(0, 10) : "", event: clean(d?.event, 200), outcomes: clean(d?.outcomes, 500), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral") })).filter((d) => d.event),
         conflicts: arr(x.conflicts, 30).map((c) => ({ refs: refs(c?.refs, sids), situation: clean(c?.situation, 200), in_window: clean(c?.in_window, 500), impact: clean(c?.impact, 500) })).filter((c) => c.situation),
         catalysts: arr(x.catalysts, 4).map((c) => ({ date: /^\d{4}-\d{2}(-\d{2})?$/.test(String(c?.date || "")) ? String(c.date) : "", event: clean(c?.event, 200), why: clean(c?.why, 260) })).filter((c) => c.event),
         sections: arr(x.sections, 4).map((y) => String(y).toLowerCase()).filter((y) => keys.includes(y)) };
+    }
+    return hz;
+  }
+  /**
+   * Hold every call to its own numbers (Calls.reconcile, against the window's one-sigma move) and to its own conviction
+   * rule: 7+ needs history on its side, so a call against the past months most like today keeps at most 6. Mutates hz;
+   * each changed call keeps what the model said in "model_call" and why it changed in "call_fixed".
+   */
+  function holdCalls(hz, facts) {
+    for (const [h, x] of Object.entries(hz || {})) {
+      if (!x || typeof x !== "object") continue;
+      x.call = Calls.norm(x.call, "neutral"); x.conviction = Calls.conviction(x.conviction);
+      const f = (facts || []).find((y) => y.h === h) || {}, r = Calls.reconcile(x, f.sigma);
+      if (r.fixed) { x.model_call = x.model_call || x.call; x.call = r.call; x.call_fixed = r.fixed; }
+      const hp = f.like?.pos ?? f.base_up, hl = isNum(hp) ? Calls.implied({ p: hp }) : null;
+      if (hl && Calls.dir(hl) && Calls.dir(x.call) && Calls.dir(hl) !== Calls.dir(x.call) && isNum(x.conviction) && x.conviction > 6) {
+        x.conviction_fixed = `conviction ${x.conviction} cut to 6: the call goes against history (up ${hp}% of the time in the past months most like today)`; x.conviction = 6; }
     }
     return hz;
   }
@@ -247,14 +266,14 @@ Reply with ONLY this JSON:
       if (!x) return { h, missing: true, ok: false, issues: ["no call"] };
       const m = mid(x.expected_move), issues = [];
       if (isNum(m)) {
-        if (x.call === "bullish" && m <= 0) issues.push(`bullish but the range's midpoint is ${m.toFixed(1)}%`);
-        if (x.call === "bearish" && m >= 0) issues.push(`bearish but the range's midpoint is +${m.toFixed(1)}%`);
+        if (Calls.dir(x.call) > 0 && m <= 0) issues.push(`${x.call} but the range's midpoint is ${m.toFixed(1)}%`);
+        if (Calls.dir(x.call) < 0 && m >= 0) issues.push(`${x.call} but the range's midpoint is +${m.toFixed(1)}%`);
         if (isNum(f.sigma) && Math.abs(m) > 2 * f.sigma) issues.push(`the ${m.toFixed(1)}% midpoint is more than two sigma (±${f.sigma}%) for this window`);
         if (h === "12M" && isNum(math?.expected_return) && Math.abs(m - math.expected_return) > 6) issues.push(`the scenarios imply ${math.expected_return}% over 12 months, not ${m.toFixed(1)}%`);
       }
       if (isNum(x.probability_up)) {
-        if (x.call === "bullish" && x.probability_up < 50) issues.push(`bullish with only a ${x.probability_up}% chance of a gain`);
-        if (x.call === "bearish" && x.probability_up > 50) issues.push(`bearish with a ${x.probability_up}% chance of a gain`);
+        if (Calls.dir(x.call) > 0 && x.probability_up < 50) issues.push(`${x.call} with only a ${x.probability_up}% chance of a gain`);
+        if (Calls.dir(x.call) < 0 && x.probability_up > 50) issues.push(`${x.call} with a ${x.probability_up}% chance of a gain`);
       }
       const out = { h, mid: isNum(m) ? Math.round(m * 10) / 10 : null, sigma: f.sigma ?? null, z: isNum(m) && f.sigma ? Math.round((m / f.sigma) * 100) / 100 : null, issues };
       if (cal) {
@@ -330,7 +349,7 @@ Reply with ONLY this JSON, with an entry for each horizon above:
     return out;
   }
 
-  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, horizonChecks, missingOf, fixPrompt, mergeFix };
+  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, holdCalls, horizonChecks, missingOf, fixPrompt, mergeFix };
   if (typeof module !== "undefined" && module.exports) module.exports = Horizon;
   else root.Horizon = Horizon;
 })(typeof window !== "undefined" ? window : globalThis);

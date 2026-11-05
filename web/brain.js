@@ -367,7 +367,7 @@ ${ctx.dossier}
 CHECK FOR
 - Every scenario must cover every section (${SCN_KEYS.join(", ")}) consistently with that section's report; every investor verdict must have a read for every section. Fill any gap listed above.
 - Scenario numbers that are inconsistent (price move vs EPS and P/E), probabilities that ignore the evidence, and an opportunity verdict that contradicts the code-computed expected return or reward-to-risk.
-- The 1M, 3M, 6M and 12M calls: each must exist, read every section for that window, cover every important decision in the window and every war, conflict and threat (by C- and S-ID), agree with its own range and probability, and the 12M call must agree with the scenarios. Fix every horizon check listed above; when revising "horizons", give the complete corrected object for each horizon you change.
+- The 1M, 3M, 6M and 12M calls: each must exist, read every section for that window, cover every important decision in the window and every war, conflict and threat (by C- and S-ID), agree with its own range and probability, and the 12M call must agree with the scenarios. Fix every horizon check listed above; when revising "horizons", give the complete corrected object for each horizon you change. Challenge every neutral: unless the chance of a gain is truly 46-54 and the range is centered on zero, the call must lean (slightly or strongly bullish or bearish). Check each 1-10 conviction against the rubric: 7+ only where history (Times like this, the base rates) and the evidence agree.
 - A major factor in the dossier that the draft misses or underweights (a high-severity rule, an adverse world situation, a supply-chain bottleneck, a restrictive macro call, a valuation extreme, weak breadth).
 - Numbers that contradict the dossier, or claims with no support in it; citations that don't fit the claim.
 - Internal contradictions (headline vs scenarios vs investor verdicts vs overlays), scenario probabilities that don't sum to 100, drivers ranked wrongly.
@@ -448,6 +448,7 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
     out.horizons = hz;
     const facts = horizonFacts(doc, String(today || doc.as_of || new Date().toISOString().slice(0, 10)));
     out.horizon_facts = facts;
+    Horizon.holdCalls(hz, facts);
     out.horizon_checks = Object.keys(hz).length ? horizonChecks(hz, facts, out.math, cal, SCN_KEYS) : [];
     const o = raw?.opportunity || {};
     const tk = (x) => { const s = String(x?.symbol || x || "").toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); return tickers.has(s) ? s : ""; };
