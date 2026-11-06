@@ -7763,6 +7763,7 @@ Rule books (top rules): ${J(lean(D.books, 220, 6))}
 - Each driver: the industry's view, then whether it hits ${ctx.sym} more, less, the same or the opposite way, and why.
 - Scenarios: "eps_change" is the change in next-twelve-month EPS from today's (a [low, high] range in %), "pe" the [low, high] P/E in 12 months, "price_target" the [low, high] price in 12 months; they must agree (price ≈ today's price x (1 + EPS change) x P/E / today's P/E ${isNum(n(ctx.row?.fwd_pe)) ? fx(n(ctx.row.fwd_pe)) : isNum(n(ctx.row?.pe)) ? fx(n(ctx.row.pe)) : "n/a"}); probabilities sum to 100.
 - Horizons: each call is your own judgment for that window; "vs_industry" says whether ${ctx.sym} should beat, match or lag the industry, given its beta ${fx(ctx.risk?.beta, 2)} and the industry calls.
+- The industry's latest calls vs the S&P 500 (Lead strategist: calls_vs_sp500) and its latest update (latest_update) are the freshest read on the industry: start from them, and say where ${ctx.sym} departs from them and why.
 - Start every call from history: ${ctx.times ? `${ctx.sym} IN TIMES LIKE THIS gives what ${ctx.sym} did after the industry's closest past months, next to the industry. "probability_up" starts from ${ctx.sym}'s own hit rate there, "expected_move" from its middle half, and "vs_industry" from how often it beat the industry in those months; move away only for a stated reason this time is different, citing the episodes [HE#] that agree or disagree.` : `use ${ctx.sym}'s own history over each span (in ${ctx.sym}'S WINDOWS) and the industry's calls.`}
 ${Calls.rules(ctx.sym)}
 - Street: compare your view with the sell-side consensus given above (ratings, average target and range, how targets moved, FY estimates, recent rating changes). Agree only if your scenarios land near the consensus target and your EPS view matches; otherwise say where you differ (estimates, margins, the multiple, catalysts, risks) and why.
@@ -8754,6 +8755,7 @@ Reply with ONLY this JSON:
     if (/slight|mild|modest|lean|weak|small/.test(t)) return "slightly " + side;
     return side;
   }
+  const ORD = Object.fromEntries(LEVELS.map((l, i) => [l, i]));
   const cls = (l) => (SIGN[l] > 0 ? "pos" : SIGN[l] < 0 ? "neg" : "neu");
   const label = (l) => (l ? l[0].toUpperCase() + l.slice(1) : "");
 
@@ -8768,8 +8770,8 @@ Reply with ONLY this JSON:
   const KEYS = INPUTS.map(([k]) => k);
   const ALIAS = { geopolitics: "world", rates: "macro", tariffs: "trade", policy: "regulation", kpis: "earnings", kpi: "earnings", estimates: "earnings", supply: "chain", suppliers: "chain", customers: "chain",
     flows: "positioning", anchor: "momentum", "times like this": "history", calendar: "catalysts", events: "catalysts", horizons: "calls", "red team": "redteam", risks: "redteam", opportunity: "verdict" };
-  const keyOf = (s) => { const t = lc(s); if (KEYS.includes(t)) return t; const hit = INPUTS.find(([, l]) => lc(l) === t); if (hit) return hit[0];
-    for (const k of KEYS) if (t.startsWith(k)) return k; for (const [a, k] of Object.entries(ALIAS)) if (t.includes(a)) return k; return null; };
+  const keyOf = (s, inputs = INPUTS, alias = ALIAS) => { const t = lc(s), keys = inputs.map(([k]) => k); if (keys.includes(t)) return t; const hit = inputs.find(([, l]) => lc(l) === t); if (hit) return hit[0];
+    for (const k of keys) if (t.startsWith(k)) return k; for (const [a, k] of Object.entries(alias)) if (t.includes(a) && keys.includes(k)) return k; return null; };
 
   /** The lead's own finished analysis, as the prompt shows it. */
   function analysisText(res) {
@@ -8856,7 +8858,8 @@ ${SCHEMA}`;
   }
 
   /** Clean the model's answer; add code's tally and checks. */
-  function cleanLean(raw, { res = null, today = "", known = null } = {}) {
+  function cleanLean(raw, { res = null, today = "", known = null, inputs = INPUTS, alias = ALIAS, ind = null } = {}) {
+    const IK = inputs.map(([k]) => k), IL = Object.fromEntries(inputs);
     if (!raw || typeof raw !== "object") return null;
     const r = raw.lean && typeof raw.lean === "object" && raw.lean.calls ? raw.lean : raw;
     const ids = known ? new Set(known) : null;
@@ -8864,34 +8867,40 @@ ${SCHEMA}`;
     const list = (a, n, k) => (Array.isArray(a) ? a : a ? [a] : []).slice(0, n).map((x) => cite(x, k)).filter(Boolean);
     const calls = {};
     for (const h of HZ) { const c = r.calls?.[h] || r.calls?.[h.toLowerCase()]; const l = level(c?.call); if (!l) continue;
-      calls[h] = { call: l, why: cite(c.why, 1400), for: list(c.for, 3, 300), against: list(c.against, 2, 300), flips_it: cite(c.flips_it, 300) }; }
+      calls[h] = { call: l, why: cite(c.why, 1400), for: list(c.for, 3, 300), against: list(c.against, 2, 300), flips_it: cite(c.flips_it, 300) };
+      const vi = lc(c.vs_industry); if (vi) calls[h].vs_industry = /beat|out|better|ahead/.test(vi) ? "beats" : /lag|under|worse|behind/.test(vi) ? "lags" : "matches"; }
     if (!Object.keys(calls).length) return null;
     const seen = new Set(), evidence = [];
     for (const e of Array.isArray(r.evidence) ? r.evidence : []) {
-      const k = keyOf(e?.input); if (!k || seen.has(k)) continue; seen.add(k);
+      const k = keyOf(e?.input, inputs, alias); if (!k || seen.has(k)) continue; seen.add(k);
       const p = lc(e?.points); const points = /bull|positive|beat|outperf/.test(p) ? "bullish" : /bear|negative|lag|underperf/.test(p) ? "bearish" : "mixed";
-      evidence.push({ input: k, label: LABEL[k], points, weight: Math.max(1, Math.min(3, Math.round(Number(e?.weight) || 1))), why: cite(e?.why, 500) });
+      evidence.push({ input: k, label: IL[k], points, weight: Math.max(1, Math.min(3, Math.round(Number(e?.weight) || 1))), why: cite(e?.why, 500) });
     }
-    evidence.sort((a, b) => KEYS.indexOf(a.input) - KEYS.indexOf(b.input));
-    const out = { v: 2, date: today, headline: cite(r.headline, 400), calls, evidence, tally: tally(evidence), missing: KEYS.filter((k) => !seen.has(k)),
+    evidence.sort((a, b) => IK.indexOf(a.input) - IK.indexOf(b.input));
+    const out = { v: 2, date: today, headline: cite(r.headline, 400), calls, evidence, tally: tally(evidence), missing: IK.filter((k) => !seen.has(k)),
       verdict: { agrees: r.verdict?.agrees !== false && lc(r.verdict?.agrees) !== "false", why: cite(r.verdict?.why, 600) } };
     out.checks = checks(out);
+    // A company's call must square with its industry's call and its own "vs the industry" (beats: at least the industry's level; lags: at most).
+    if (ind) for (const h of HZ) { const c = calls[h], ic = ind.calls?.[h]?.call; if (!c?.vs_industry || !ic) continue;
+      const a = ORD[c.call], b = ORD[ic];
+      if ((c.vs_industry === "beats" && a < b) || (c.vs_industry === "lags" && a > b) || (c.vs_industry === "matches" && Math.abs(a - b) > 1))
+        out.checks.push(`${h}: the industry is ${ic} vs the S&P 500 and this says the company ${c.vs_industry} the industry, but calls it ${c.call}.`); }
     if (HZ.some((h) => !calls[h])) out.checks.push(`No call for ${HZ.filter((h) => !calls[h]).join(", ")}.`);
-    if (out.missing.length > 3) out.checks.push(`${out.missing.length} inputs weren't weighed: ${out.missing.map((k) => LABEL[k]).join(", ")}.`);
+    if (out.missing.length > 3) out.checks.push(`${out.missing.length} inputs weren't weighed: ${out.missing.map((k) => IL[k]).join(", ")}.`);
     out.consistent = !out.checks.length;
     return out;
   }
 
   /** One focused fix when the calls contradict their evidence or each other (small prompt: no dossier). */
-  function repairPrompt(name, today, lean, issues) {
-    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. Code checked your calls vs the S&P 500 and found problems:
+  function repairPrompt(name, today, lean, issues, about = `the US-listed "${name}" industry`, schema = SCHEMA) {
+    return `You are the analyst responsible for ${about}. Today is ${today}. Code checked your calls vs the S&P 500 and found problems:
 ${issues.map((i) => "- " + i).join("\n")}
 
 YOUR CALLS AND EVIDENCE
 ${JSON.stringify({ headline: lean.headline, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), calls: lean.calls, verdict: lean.verdict })}
 
-Resolve them: fix the evidence weights if they're wrong, or change the calls (and their "why") if those are. A call that flips direction between timeframes must say what changes in between. Keep the citations. Reply with ONLY the complete corrected answer, in the same JSON shape (all four windows, all fifteen inputs):
-${SCHEMA}`;
+Resolve them: fix the evidence weights if they're wrong, or change the calls (and their "why") if those are. A call that flips direction between timeframes must say what changes in between. Keep the citations. Reply with ONLY the complete corrected answer, in the same JSON shape (all four windows, every input):
+${schema}`;
   }
 
 
@@ -8938,12 +8947,12 @@ ${SCHEMA}`;
 
   // ------------------------------------------------------------------ the challenge and the final call
   /** An independent PM, benchmarked to the S&P 500, attacks each call (small prompt: the calls, the evidence, the numbers). */
-  function challengePrompt(name, today, lean, board) {
-    return `You are an independent portfolio manager benchmarked to the S&P 500. You did NOT make the calls below on the US-listed "${name}" industry, and you are paid to find where they are wrong. Today is ${today}.
+  function challengePrompt(name, today, lean, board, about = `the US-listed "${name}" industry`) {
+    return `You are an independent portfolio manager benchmarked to the S&P 500. You did NOT make the calls below on ${about}, and you are paid to find where they are wrong. Today is ${today}.
 
 THE CALLS (vs the S&P 500) AND THE EVIDENCE BEHIND THEM
 ${JSON.stringify({ headline: lean.headline, calls: lean.calls, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })) })}
-
+${lean.checks?.length ? `\nCODE'S CHECKS FOUND: ${lean.checks.join(" ")}\n` : ""}
 THE HARD NUMBERS (code-computed; the calls must square with them)
 ${board}
 
@@ -8964,8 +8973,8 @@ Reply with ONLY this JSON:
     return Object.keys(w).length ? { windows: w, overall: trim(raw.overall, 400) } : null;
   }
   /** The lead answers the challenge and makes the final calls. */
-  function finalPrompt(name, today, lean, ch, board) {
-    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. You made the calls below vs the S&P 500; an independent portfolio manager challenged them. Make your FINAL calls.
+  function finalPrompt(name, today, lean, ch, board, about = `the US-listed "${name}" industry`, extra = "") {
+    return `You are the analyst responsible for ${about}. Today is ${today}. You made the calls below vs the S&P 500; an independent portfolio manager challenged them. Make your FINAL calls.
 
 YOUR CALLS AND EVIDENCE
 ${JSON.stringify({ headline: lean.headline, calls: lean.calls, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), verdict: lean.verdict })}
@@ -8976,10 +8985,10 @@ ${JSON.stringify(ch)}
 THE HARD NUMBERS (code-computed)
 ${board}
 
-For each window: if the challenge found a real error or made the stronger case, change the call (side or strength) and rewrite its "why"; otherwise hold it and say in one sentence why the challenge doesn't change it. Six levels (${LEVELS.join(", ")}), no neutral, all relative to the S&P 500. Keep the citations; add none that aren't already in your calls or evidence. Fix any evidence entry the challenge showed was wrong.
+${extra}For each window: if the challenge found a real error or made the stronger case, change the call (side or strength) and rewrite its "why"; otherwise hold it and say in one sentence why the challenge doesn't change it. Six levels (${LEVELS.join(", ")}), no neutral, all relative to the S&P 500. Keep the citations; add none that aren't already in your calls or evidence. Fix any evidence entry the challenge showed was wrong.
 
 Reply with ONLY this JSON:
-{"headline": "one sentence", "calls": {"1M": {"call": "...", "why": "3-5 sentences vs the S&P 500, cited", "for": ["..."], "against": ["..."], "flips_it": "...", "challenge": "one sentence: what the challenge changed, or why the call holds"}, "3M": {...}, "6M": {...}, "12M": {...}},
+{"headline": "one sentence", "calls": {"1M": {"call": "...", ${extra ? `"vs_industry": "beats | matches | lags", ` : ""}"why": "3-5 sentences vs the S&P 500, cited", "for": ["..."], "against": ["..."], "flips_it": "...", "challenge": "one sentence: what the challenge changed, or why the call holds"}, "3M": {...}, "6M": {...}, "12M": {...}},
  "evidence_fixes": [{"input": "...", "points": "bullish | bearish | mixed", "weight": 1, "why": "..."}],
  "verdict": {"agrees": true, "why": "..."}}`;
   }
@@ -8987,7 +8996,7 @@ Reply with ONLY this JSON:
   function mergeFinal(lean, raw, ch, opts = {}) {
     if (!raw || typeof raw !== "object" || !raw.calls) return lean;
     const ev = new Map(lean.evidence.map((e) => [e.input, e]));
-    for (const e of Array.isArray(raw.evidence_fixes) ? raw.evidence_fixes : []) { const k = keyOf(e?.input); if (k) ev.set(k, { input: k, points: e.points, weight: e.weight, why: e.why }); }
+    for (const e of Array.isArray(raw.evidence_fixes) ? raw.evidence_fixes : []) { const k = keyOf(e?.input, opts.inputs || INPUTS, opts.alias || ALIAS); if (k) ev.set(k, { input: k, points: e.points, weight: e.weight, why: e.why }); }
     const next = cleanLean({ headline: raw.headline || lean.headline, calls: Object.fromEntries(HZ.map((h) => [h, raw.calls[h] || lean.calls[h]])), evidence: [...ev.values()], verdict: raw.verdict || lean.verdict }, opts);
     if (!next) return lean;
     for (const h of HZ) { const a = lean.calls[h], b = next.calls[h]; if (!b) continue;
@@ -8995,6 +9004,108 @@ Reply with ONLY this JSON:
     next.challenge = { overall: ch?.overall || "" };
     return next;
   }
+
+
+  // ------------------------------------------------------------------ one company: its calls vs the S&P 500
+  /** What a company's calls weigh: its industry's calls first, then everything about the company itself. */
+  const CO_INPUTS = [
+    ["industry", "The industry's calls vs the S&P 500"], ["business", "Business mix & segments"], ["earnings", "Earnings, estimates & revisions"], ["call", "The latest earnings call"],
+    ["valuation", "Valuation vs peers & its own history"], ["quality", "Balance sheet & earnings quality"], ["street", "Wall Street consensus"], ["momentum", "Momentum & price action"],
+    ["history", "Past setups like today"], ["catalysts", "Dated catalysts ahead"], ["macro", "Macro & rates"], ["world", "World events & trade"], ["regulation", "Regulation & legal"],
+    ["competition", "Competitive position & peers"], ["risks", "Risks & red flags"], ["verdict", "The company write-up's verdict"],
+  ];
+  const CO_ALIAS = { "industry's": "industry", segments: "business", "business mix": "business", estimates: "earnings", revisions: "earnings", transcript: "call", "earnings call": "call",
+    "balance sheet": "quality", consensus: "street", analysts: "street", "price action": "momentum", "times like this": "history", "past setups": "history", calendar: "catalysts", events: "catalysts",
+    rates: "macro", trade: "world", geopolitics: "world", legal: "regulation", moat: "competition", peers: "competition", "red flags": "risks", "write-up": "verdict" };
+  const CO_KEYS = CO_INPUTS.map(([k]) => k);
+  const CO_CALL = `{"call": "${LEVELS.join(" | ")}", "vs_industry": "beats | matches | lags (this company vs its own industry over the window)", "why": "3-5 sentences: start from the industry's call vs the S&P 500 for this window, then what makes this company better or worse than its industry (its own numbers, dated events, beta) and so where it lands vs the S&P 500, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call (a price, an estimate, a date)"}`;
+  const CO_SCHEMA = `{"headline": "one sentence: the lean vs the S&P 500 and the two or three things that decide it",
+ "evidence": [{"input": "${CO_KEYS.join(" | ")}", "points": "bullish | bearish | mixed", "weight": 1, "why": "one or two sentences vs the S&P 500, with the numbers and [IDs]"}],
+ "calls": {"1M": ${CO_CALL}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "verdict": {"agrees": true, "why": "one or two sentences: do you agree with the company write-up's own verdict and calls, and if not, why"}}`;
+
+  /** The company write-up (already finished), as the calls prompt shows it: compact, no dossier. */
+  function coAnalysisText(t) {
+    if (!t) return "(no company write-up yet)";
+    const o = [], sc = t.scenarios || {};
+    o.push(`HEADLINE: ${trim(t.headline, 300)}`);
+    if (t.verdict) o.push(`VERDICT: ${t.verdict.call || "?"}: ${trim(t.verdict.summary, 600)}`);
+    if (t.thesis) o.push(`THESIS: ${trim(t.thesis, 2200)}`);
+    if (t.vs_industry) o.push(`VS ITS INDUSTRY: ${t.vs_industry.call || "?"}: ${trim(t.vs_industry.why, 500)}`);
+    if (t.valuation) o.push(`VALUATION: ${trim(t.valuation.read, 600)}${t.valuation.fair_value?.length ? ` Fair value ${t.valuation.fair_value.join("-")}.` : ""}`);
+    if (t.street) o.push(`VS THE STREET: ${t.street.stance || "?"}: ${trim(t.street.summary, 500)}`);
+    if (t.moat) o.push(`MOAT: ${t.moat.rating || "?"}; sources ${(t.moat.sources || []).slice(0, 4).map((x) => trim(x, 100)).join("; ")}; threats ${(t.moat.threats || []).slice(0, 3).map((x) => trim(x, 100)).join("; ")}`);
+    if (t.quality) o.push(`QUALITY: ${trim(t.quality, 400)}`);
+    if (t.management) o.push(`MANAGEMENT: ${trim(t.management, 400)}`);
+    const sk = ["bull", "base", "bear"].filter((k) => sc[k]);
+    if (sk.length) o.push(`SCENARIOS (12M): ${sk.map((k) => `${k} ${sc[k].probability ?? "?"}%: EPS ${(sc[k].eps_change || []).join(" to ")}%, P/E ${(sc[k].pe || []).join("-")}, target ${(sc[k].price_target || []).join("-")}. ${trim(sc[k].narrative, 250)}`).join(" | ")}`);
+    for (const h of HZ) { const x = t.horizons?.[h]; if (x) o.push(`EARLIER CALL ${h} (absolute): ${x.call}, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% up, ${x.vs_industry || "?"} vs its industry. ${trim(x.drivers, 500)}`); }
+    if ((t.drivers || []).length) o.push(`INDUSTRY DRIVERS FOR THIS COMPANY: ${t.drivers.slice(0, 6).map((d) => `${trim(d.driver, 80)}: ${d.effect || "?"} (${trim(d.why, 200)})`).join(" | ")}`);
+    if ((t.risks || []).length) o.push(`RISKS: ${t.risks.slice(0, 6).map((r) => `${trim(r.risk, 160)} (${r.likelihood}/${r.impact})`).join("; ")}`);
+    if ((t.catalysts || []).length) o.push(`CATALYSTS: ${t.catalysts.slice(0, 6).map((c) => `${c.date} ${trim(c.event, 120)}`).join("; ")}`);
+    if (t.lens?.macro?.headline) o.push(`MACRO FOR THIS COMPANY: ${t.lens.macro.regime || "?"}: ${trim(t.lens.macro.headline, 300)}`);
+    if (t.lens?.trade_overall?.summary) o.push(`TRADE FOR THIS COMPANY: ${t.lens.trade_overall.risk || "?"} risk: ${trim(t.lens.trade_overall.summary, 400)}`);
+    if (t.lens?.reg_overall?.summary) o.push(`REGULATION FOR THIS COMPANY: ${t.lens.reg_overall.stance || "?"}: ${trim(t.lens.reg_overall.summary, 400)}`);
+    if ((t.change_mind || t.lens?.change_mind || []).length) o.push(`WHAT WOULD CHANGE THE CALL: ${(t.change_mind || t.lens.change_mind).slice(0, 4).map((x) => trim(x, 160)).join("; ")}`);
+    return o.join("\n");
+  }
+  /** The industry's own calls vs the S&P 500 (made, or provisional), for the company prompt. */
+  function indCallsText(ind, name) {
+    if (!ind?.calls) return `(the ${name} industry has no calls vs the S&P 500 yet)`;
+    return `${ind.provisional ? `PROVISIONAL (read off the industry's earlier calls; weigh lightly): ` : ""}${trim(ind.headline, 300)}\n${HZ.filter((h) => ind.calls[h]).map((h) => `${h}: ${ind.calls[h].call}${ind.calls[h].why ? `: ${trim(ind.calls[h].why, 600)}` : ""}${ind.calls[h].flips_it ? ` (flips if: ${trim(ind.calls[h].flips_it, 200)})` : ""}`).join("\n")}`;
+  }
+  /**
+   * The company's scoreboard (code): per window, the stock vs the S&P 500 and vs its industry, its normal move, its
+   * own base rate, the industry's call, and who reports inside the window. w: coWindows rows (+ vs_ind).
+   */
+  function coScoreboard({ sym, windows, ind, mkt, beta, times, events }) {
+    const L = [];
+    if (mkt) L.push(`THE S&P 500 ITSELF (SPY, to ${mkt.date}): last month ${mkt.ret["1M"]}%, 3 months ${mkt.ret["3M"]}%, 6 months ${mkt.ret["6M"]}%, 12 months ${mkt.ret["12M"]}%; 20-day volatility ${mkt.vol20}% a year; ${mkt.from_high}% from its 12-month high.`);
+    if (isNum(beta)) L.push(`${sym}'s beta to the S&P 500 is ${beta.toFixed(2)}: ${beta > 1.15 ? "it amplifies the market's moves, so in a falling market it tends to lag even when its story is fine" : beta < 0.85 ? "it dampens the market's moves, so it tends to beat the S&P 500 in a falling market and lag in a strong one" : "it moves about with the market"}.`);
+    for (const w of windows || []) {
+      const ic = ind?.calls?.[w.h]?.call, ev = (events || []).filter((e) => e.date >= (w.from || "") && e.date <= w.end).slice(0, 5);
+      L.push(`${w.h} (to ${w.end}): ${sym}'s trailing ${w.h} ${w.trailing ?? "n/a"}% (${w.vs_spy ?? "n/a"}% vs the S&P 500${isNum(w.vs_ind) ? `, ${w.vs_ind}% vs its industry` : ""}); one-sigma move ±${w.sigma ?? "n/a"}%; in its own history higher ${w.base_up ?? "n/a"}% of the time over this span.`
+        + (ic ? ` The industry's call vs the S&P 500: ${ic}${ind.provisional ? " (provisional)" : ""}.` : "")
+        + (w.own ? ` ${sym} reports ${w.own}.` : ` ${sym} does not report in this window.`)
+        + (w.peers?.length ? ` Peers reporting: ${w.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}.` : "")
+        + (ev.length ? ` Also dated: ${ev.map((e) => `${e.date} ${trim(e.title, 90)}${e.id ? ` [${e.id}]` : ""}`).join("; ")}.` : ""));
+    }
+    if (times) L.push(`IN TIMES LIKE THIS (what ${sym} did after the industry's closest past months):\n${trim(times, 1800)}`);
+    return L.join("\n");
+  }
+  /** The calls prompt for one company (compact: the finished write-up, the industry's calls, the scoreboard, the facts). */
+  function coLeanPrompt(c) {
+    return `You are the analyst covering ${c.name} (${c.sym}) in the US-listed "${c.industry}" industry. Today is ${c.today}. The full write-up on the company and the industry's own calls are done. An investor asks: FOR EACH TIMEFRAME, DOES ${c.sym} BEAT OR LAG THE S&P 500, HOW STRONGLY, AND WHY?
+
+=== THE INDUSTRY'S CALLS VS THE S&P 500 (the strategist's, from the whole industry dossier) ===
+${indCallsText(c.ind, c.industry)}
+${c.indLatest ? `The industry's latest update: ${trim(c.indLatest, 700)}` : ""}
+
+=== THE COMPANY WRITE-UP (finished) ===
+${coAnalysisText(c.write)}
+
+=== THE COMPANY'S NUMBERS (code-computed) ===
+${trim(c.facts, 5000)}
+
+=== THE SCOREBOARD (code-computed, per window) ===
+${c.board}
+${(c.news || []).length ? `\n=== RECENT NEWS AND RELEASES (cite by ID) ===\n${c.news.slice(0, 20).map((x) => `[${x.id}] ${x.date ? x.date + " " : ""}${trim(x.title, 180)}`).join("\n")}` : ""}
+${(c.mentions || []).length ? `\n=== WHAT THE INDUSTRY ANALYSIS SAYS ABOUT ${c.sym} (cite by ID) ===\n${c.mentions.slice(0, 25).map((m) => `[${m.id}] ${m.section}: ${trim(m.text, 220)}`).join("\n")}` : ""}
+
+HOW TO MAKE THE CALLS
+- Every call is RELATIVE TO THE S&P 500: "bullish" means ${c.sym} beats the S&P 500 over that window, "bearish" means it lags it. Its absolute direction doesn't matter.
+- Build each call in two steps: (1) the industry's call vs the S&P 500 for the window (above); (2) does ${c.sym} beat, match or lag its own industry over the window ("vs_industry"), from its own numbers, dated events (its own report first), valuation, the street, momentum and beta. The call follows: beats the industry -> at least the industry's level; lags it -> at most; matches -> within one step. Code checks this.
+- Six levels, no neutral. "slightly": a close call. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most inputs point the same way and decisively; rare.
+- First weigh EVERY input, one entry each, in this order: ${CO_KEYS.join(", ")}. For each: which way it points vs the S&P 500 ("bullish" / "bearish" / "mixed"), how much it matters for ${c.sym} (weight 1 = minor, 2 = material, 3 = decisive), and why, with numbers and [IDs]. An input with nothing to go on is "mixed", weight 1.
+- Square every call with the scoreboard: where you go against the stock's own trailing trend, its base rate or what it did in times like this, say why; where it reports inside the window, say how the print cuts.
+- Different windows can differ, but a call that flips direction from one window to the next must say what changes in between.
+- No price targets or expected returns. Cite only IDs given above. Plain words.
+
+Reply with ONLY this JSON (all four windows):
+${CO_SCHEMA}`;
+  }
+  const coAbout = (name, sym, industry) => `${name} (${sym}), a company in the US-listed "${industry}" industry`;
+  const CO_FINAL_EXTRA = `Keep each window's "vs_industry" (beats, matches or lags its industry) consistent with the call: beats the industry -> at least the industry's level vs the S&P 500; lags -> at most; matches -> within one step.\n`;
 
   /** Until the strategist has made one: provisional calls read off the earlier calls (no Claude). */
   function provisional(res, today = "") {
@@ -9019,7 +9130,7 @@ Reply with ONLY this JSON:
   /** One line for a table or a progress note. */
   const leanLine = (l) => (l ? HZ.filter((h) => l.calls?.[h]).map((h) => `${h} ${l.calls[h].call}`).join(", ") + (l.provisional ? " (provisional)" : "") : "");
 
-  const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA, DAYS, marketFacts, statCall, windowEvents, scoreboard, challengePrompt, cleanChallenge, finalPrompt, mergeFinal };
+  const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA, DAYS, marketFacts, statCall, windowEvents, scoreboard, challengePrompt, cleanChallenge, finalPrompt, mergeFinal, CO_INPUTS, CO_ALIAS, CO_KEYS, CO_SCHEMA, coAnalysisText, indCallsText, coScoreboard, coLeanPrompt, coAbout, CO_FINAL_EXTRA, ORD };
   if (typeof module !== "undefined" && module.exports) module.exports = Lean;
   else root.Lean = Lean;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -10074,13 +10185,13 @@ Reply with ONLY this JSON:
     const enc = new TextEncoder().encode(dossier);
     if (enc.length > room) dossier = new TextDecoder().decode(enc.slice(0, Math.max(0, room))).replace(/\n[^\n]*$/, "") + "\n(The rest of the dossier was cut to fit.)";
     const known = [...new Set([...Object.keys(idx), ...(ag.sources || []).map((x) => x.id), ...(ag.calendar?.events || []).map((e) => e.id), ...(ag.calendar?.standing || []).map((e) => e.id), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean))];
-    onStage("Weighing all 15 inputs vs the S&P 500 and making the four calls");
+    onStage(LEAN_STEPS[0]);
     let lean = Lean.cleanLean(await call(Lean.leanPrompt(name, { ...args, dossier })), { res, today: today(), known });
     // An independent PM benchmarked to the S&P 500 attacks every call; the strategist answers and makes the final calls.
     if (lean) {
-      onStage("An independent portfolio manager is challenging each call");
+      onStage(LEAN_STEPS[1]);
       const ch = Lean.cleanChallenge(await call(Lean.challengePrompt(name, today(), lean, board)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; }));
-      if (ch) { onStage("The strategist answers the challenge and makes the final calls");
+      if (ch) { onStage(LEAN_STEPS[2]);
         const fin = await call(Lean.finalPrompt(name, today(), lean, ch, board)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
         lean = Lean.mergeFinal(lean, fin, ch, { res, today: today(), known }); }
     }
@@ -12306,7 +12417,48 @@ Reply with ONLY this JSON:
     </section>`;
   }
   const SRC_LABEL = { quant: "metrics", kpi: "industry KPIs", macro: "macro", world: "world events", trade: "trade", regulation: "regulation", rulebooks: "rule books", valuation: "valuation", news: "news", consensus: "sell-side" };
-  /** The lean: for each timeframe, beat or lag the S&P 500 (six levels), and why; the evidence from every input. */
+  /**
+   * The calls card, shared by an industry and a company: six-level calls vs the S&P 500 for each window, the reasons,
+   * the hard numbers beside each (o.nums), the challenge, the evidence from every input, and code's checks.
+   * o: {head, status, nums(h, x), since, history, verdict: label for the verdict line, verdictCall}
+   */
+  function callsCard(l, o) {
+    const card = (h) => { const x = l.calls?.[h]; if (!x) return `<div class="lean-h"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><span class="muted">—</span></div>`;
+      const c = Lean.cls(x.call), VI = { beats: "pos", matches: "neu", lags: "neg" };
+      return `<div class="lean-h ${c}"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><div class="lean-lvl ${c}">${Lean.SIGN[x.call] > 0 ? "▲" : "▼"} ${esc(Lean.label(x.call))}</div>
+        <div class="lean-dots" title="${esc(x.call)}">${[1, 2, 3].map((k) => `<i class="${k <= Math.abs(Lean.SIGN[x.call]) ? c : ""}"></i>`).join("")}${x.vs_industry ? `<span class="pill ${VI[x.vs_industry]}" style="margin-left:8px;font-size:11px">${esc(x.vs_industry)} its industry</span>` : ""}</div>
+        ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Read off ${esc(x.basis || "the earlier call")}.</p>`}
+        ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${x.for.map(rich).join("; ")}</div>` : ""}
+        ${x.against?.length ? `<div class="small"><b>Against:</b> ${x.against.map(rich).join("; ")}</div>` : ""}
+        ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}
+        ${o.nums ? o.nums(h, x) : ""}
+        ${x.challenge ? `<details class="small lean-ch"><summary>${x.challenge.before ? `<b>Changed after the challenge</b> (was ${esc(x.challenge.before)})` : x.challenge.recommend === "hold" ? "Challenged: <b>the call held</b>" : `Challenged (asked to ${esc(x.challenge.recommend)}): <b>the call held</b>`}</summary>
+          ${x.challenge.case ? `<div><b>The case against:</b> ${rich(x.challenge.case)}</div>` : ""}${x.challenge.errors?.length ? `<div><b>Errors it named:</b> ${x.challenge.errors.map(rich).join("; ")}</div>` : ""}${x.challenge.answer ? `<div><b>The answer:</b> ${rich(x.challenge.answer)}</div>` : ""}</details>` : ""}</div>`; };
+    const ev = l.evidence || [];
+    const bw = ev.filter((e) => e.points === "bullish").reduce((a, e) => a + e.weight, 0), rw = ev.filter((e) => e.points === "bearish").reduce((a, e) => a + e.weight, 0), mw = ev.filter((e) => e.points === "mixed").reduce((a, e) => a + e.weight, 0), tw = bw + rw + mw || 1;
+    const dots = (w) => `<span class="lean-w" title="${w === 3 ? "decisive" : w === 2 ? "material" : "minor"}">${"●".repeat(w)}${"○".repeat(3 - w)}</span>`;
+    const PT = { bullish: ["Beats the S&P 500", "pos"], bearish: ["Lags the S&P 500", "neg"], mixed: ["Mixed", "neu"] };
+    const evRows = ev.map((e) => `<tr><td><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}</td><td><span class="pill ${PT[e.points][1]}">${PT[e.points][0]}</span></td><td class="wr small">${rich(e.why)}</td></tr>`).join("");
+    const hist = (o.history || []).filter((e) => e?.calls);
+    return `<div class="callout lean-card">${o.head}${o.status || ""}
+      ${l.headline ? `<b class="headline">${rich(l.headline)}</b>` : ""}
+      ${o.since || ""}
+      ${hist.length && !l.provisional ? `<div class="small muted">Earlier calls: ${hist.slice(0, 4).map((e) => `${esc(fmtDate(e.date))}: ${Lean.HZ.filter((h) => e.calls?.[h]).map((h) => `${h} ${esc(e.calls[h])}`).join(", ")}`).join(" | ")}</div>` : ""}
+      <div class="lean-grid">${Lean.HZ.map(card).join("")}</div>
+      ${ev.length ? `<details class="small"><summary><b>What every input says vs the S&P 500</b>: ${ev.filter((e) => e.points === "bullish").length} beat, ${ev.filter((e) => e.points === "bearish").length} lag, ${ev.filter((e) => e.points === "mixed").length} mixed <span class="lean-bal" style="display:inline-flex;width:120px;vertical-align:middle;margin-left:6px"><i class="pos" style="width:${(bw / tw) * 100}%"></i><i class="mix" style="width:${(mw / tw) * 100}%"></i><i class="neg" style="width:${(rw / tw) * 100}%"></i></span></summary>
+        <div class="tbl-wrap"><table class="lean-ev"><tbody>${evRows}</tbody></table></div></details>` : ""}
+      ${l.verdict?.why ? `<div class="small"><b>${l.verdict.agrees ? "Agrees with" : "Goes against"} ${esc(o.verdict || "the verdict")}${o.verdictCall ? ` (${esc(o.verdictCall)})` : ""}:</b> ${rich(l.verdict.why)}</div>` : ""}
+      ${(l.checks || []).length ? `<div class="notice warn small">Code's check: ${l.checks.map(esc).join(" ")}</div>` : ""}
+      ${l.repaired?.length ? `<div class="small muted">The first draft had contradictions and was sent back once: ${l.repaired.map(esc).join(" ")}</div>` : ""}</div>`;
+  }
+  const sgP = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${x}%` : "—");
+  /** The working steps, shown while the calls are made. */
+  const LEAN_STEPS = ["Weighing every input vs the S&P 500 and making the four calls", "An independent portfolio manager is challenging each call", "Answering the challenge and making the final calls"];
+  function leanSteps(stage) {
+    const stIdx = Math.max(0, LEAN_STEPS.indexOf(stage || LEAN_STEPS[0]));
+    return `<div class="notice info small" style="display:grid;gap:4px"><b>Working on it: three steps, about 2-5 minutes in all.</b>${LEAN_STEPS.map((t, i) => `<span>${i < stIdx ? "✓" : i === stIdx ? "▶" : "○"} ${esc(t)}</span>`).join("")}${stage && !LEAN_STEPS.includes(stage) ? `<span>▶ ${esc(stage)}</span>` : ""}</div>`;
+  }
+  /** The industry's calls vs the S&P 500 (the lean). */
   function leanBlock(r, name = S.selected, d = null) {
     const l = Lean.leanOf(r, today());
     // The hard numbers beside each call (code): trailing vs the S&P 500, the statistical anchor's own call, dated events.
@@ -12315,8 +12467,6 @@ Reply with ONLY this JSON:
     const fOf = (h) => (facts || []).find((f) => f.h === h);
     const cal = S.agents[slug(name || "")]?.calendar;
     const spy = S.bench?.spy, mk = spy?.closes?.length ? Lean.marketFacts(spy.dates, spy.closes) : null;
-    const sg = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${x}%` : "—");
-    // How the calls have done since they were made (industry vs the S&P 500, from the levels marked then).
     let since = null;
     if (l && !l.provisional && l.mark && d?.index?.levels?.length && spy?.closes?.length) {
       const li = d.index.levels[d.index.levels.length - 1], ls = spy.closes[spy.closes.length - 1];
@@ -12324,47 +12474,47 @@ Reply with ONLY this JSON:
       if (d.index.dates?.[d.index.levels.length - 1] > (l.mark.ind_date || "")) since = { ind: Math.round(ri * 10) / 10, spy: Math.round(rs * 10) / 10, ex: Math.round((ri - rs) * 10) / 10 };
     }
     const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
-    const btn = `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call: the lead strategist weighs every input and its own analysis vs the S&P 500 (about 1-3 minutes)">${working ? "Making the calls…" : l && !l.provisional ? "Redo the calls" : "Make the calls now"}</button>`;
-    const STG = ["Weighing all 15 inputs vs the S&P 500 and making the four calls", "An independent portfolio manager is challenging each call", "The strategist answers the challenge and makes the final calls"];
-    const stIdx = STG.indexOf(S.leanStage || STG[0]);
-    const status = working ? `<div class="notice info small" style="display:grid;gap:4px"><b>Working on it: three steps, about 2-5 minutes in all.</b>${STG.map((t, i) => `<span>${i < stIdx ? "✓" : i === stIdx ? "▶" : "○"} ${esc(t)}</span>`).join("")}${S.leanStage && !STG.includes(S.leanStage) ? `<span>▶ ${esc(S.leanStage)}</span>` : ""}</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
+    const btn = `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="Three Claude calls: the strategist weighs every input vs the S&P 500, an independent PM challenges each call, the strategist makes the final calls">${working ? "Making the calls…" : l && !l.provisional ? "Redo the calls" : "Make the calls now"}</button>`;
+    const status = working ? leanSteps(S.leanStage) : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Vs the S&P 500${l?.provisional ? " (provisional)" : ""}</span>${l?.date && !l.provisional ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     if (!l) return name ? `<div class="callout lean-card">${head}${status}<div class="small muted">No calls yet.</div></div>` : "";
-    const card = (h) => { const x = l.calls?.[h]; if (!x) return `<div class="lean-h"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><span class="muted">—</span></div>`;
-      const c = Lean.cls(x.call);
-      return `<div class="lean-h ${c}"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><div class="lean-lvl ${c}">${Lean.SIGN[x.call] > 0 ? "▲" : "▼"} ${esc(Lean.label(x.call))}</div>
-        <div class="lean-dots" title="${esc(x.call)}">${[1, 2, 3].map((k) => `<i class="${k <= Math.abs(Lean.SIGN[x.call]) ? c : ""}"></i>`).join("")}</div>
-        ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Read off ${esc(x.basis || "the earlier call")}.</p>`}
-        ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${x.for.map(rich).join("; ")}</div>` : ""}
-        ${x.against?.length ? `<div class="small"><b>Against:</b> ${x.against.map(rich).join("; ")}</div>` : ""}
-        ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}
-        ${hardNums(h, x)}
-        ${x.challenge ? `<details class="small lean-ch"><summary>${x.challenge.before ? `<b>Changed after the challenge</b> (was ${esc(x.challenge.before)})` : x.challenge.recommend === "hold" ? "Challenged: <b>the call held</b>" : `Challenged (asked to ${esc(x.challenge.recommend)}): <b>the call held</b>`}</summary>
-          ${x.challenge.case ? `<div><b>The case against:</b> ${rich(x.challenge.case)}</div>` : ""}${x.challenge.errors?.length ? `<div><b>Errors it named:</b> ${x.challenge.errors.map(rich).join("; ")}</div>` : ""}${x.challenge.answer ? `<div><b>The answer:</b> ${rich(x.challenge.answer)}</div>` : ""}</details>` : ""}</div>`; };
-    const hardNums = (h, x) => { const f = fOf(h); if (!f && !mk) return "";
+    const nums = (h, x) => { const f = fOf(h); if (!f && !mk) return "";
       const sc = f?.anchor ? Lean.statCall(f.anchor) : null, agree = sc && x?.call && Math.abs(f.anchor.rel.prob_beat - 50) > 1 ? Math.sign(Lean.SIGN[sc]) === Math.sign(Lean.SIGN[x.call]) : null;
       const ev = f ? Lean.windowEvents(cal, f, today()).slice(0, 4) : [];
       return `<div class="lean-nums small">
-        ${f ? `<div><span class="muted">Last ${esc(h)}:</span> industry ${sg(f.trailing)}, S&P 500 ${sg(mk?.ret?.[h])} → <b class="${f.vs_spy > 0 ? "pos-t" : f.vs_spy < 0 ? "neg-t" : ""}">${sg(f.vs_spy)} vs S&P</b></div>` : ""}
+        ${f ? `<div><span class="muted">Last ${esc(h)}:</span> industry ${sgP(f.trailing)}, S&P 500 ${sgP(mk?.ret?.[h])} → <b class="${f.vs_spy > 0 ? "pos-t" : f.vs_spy < 0 ? "neg-t" : ""}">${sgP(f.vs_spy)} vs S&P</b></div>` : ""}
         ${sc ? `<div title="The statistical anchor: momentum, the trend and valuation; out of sample since ${esc(String(f.anchor.test?.from || ""))} it called the direction vs the S&P 500 right ${f.anchor.test?.hit_rate ?? "?"}% of the time (the average alone ${f.anchor.test?.base_hit_rate ?? "?"}%)"><span class="muted">Stats model:</span> ${Math.abs(f.anchor.rel.prob_beat - 50) <= 1 ? `<span>a coin flip</span>` : `<span class="${Lean.cls(sc)}-t">${esc(Lean.label(sc))}</span>`} (${f.anchor.rel.prob_beat}% to beat)${agree === null ? "" : agree ? ` <span class="muted">· agrees</span>` : ` <span class="warn-t">· differs</span>`}</div>` : ""}
         ${f?.like ? `<div><span class="muted">Past setups like today:</span> ${f.like.pos}% higher ${esc(h)} later (n=${f.like.n})</div>` : ""}
         ${ev.length ? `<div><span class="muted">In this window:</span> ${ev.map((e) => `${esc(fmtDate(e.date))} ${esc(e.title)}`).join(" · ")}</div>` : ""}</div>`; };
-    const ev = l.evidence || [];
-    const bw = ev.filter((e) => e.points === "bullish").reduce((a, e) => a + e.weight, 0), rw = ev.filter((e) => e.points === "bearish").reduce((a, e) => a + e.weight, 0), mw = ev.filter((e) => e.points === "mixed").reduce((a, e) => a + e.weight, 0), tw = bw + rw + mw || 1;
-    const dots = (w) => `<span class="lean-w" title="${w === 3 ? "decisive" : w === 2 ? "material" : "minor"}">${"●".repeat(w)}${"○".repeat(3 - w)}</span>`;
-    const PT = { bullish: ["Beats the S&P 500", "pos"], bearish: ["Lags the S&P 500", "neg"], mixed: ["Mixed", "neu"] };
-    const evRows = ev.map((e) => `<tr><td><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}</td><td><span class="pill ${PT[e.points][1]}">${PT[e.points][0]}</span></td><td class="wr small">${rich(e.why)}</td></tr>`).join("");
-    return `<div class="callout lean-card">${head}${status}
-      ${l.headline ? `<b class="headline">${rich(l.headline)}</b>` : ""}
-      ${since ? `<div class="small">Since these calls (${esc(fmtDate(l.date))}): industry ${sg(since.ind)}, S&P 500 ${sg(since.spy)} → <b class="${since.ex >= 0 ? "pos-t" : "neg-t"}">${sg(since.ex)} vs the S&P 500</b> so far</div>` : ""}
-      ${(r.lean_history || []).length && !l.provisional ? `<div class="small muted">Earlier calls: ${(r.lean_history || []).slice(0, 4).map((e) => `${esc(fmtDate(e.date))}: ${Lean.HZ.filter((h) => e.calls?.[h]).map((h) => `${h} ${esc(e.calls[h])}`).join(", ")}`).join(" | ")}</div>` : ""}
-      <div class="lean-grid">${Lean.HZ.map(card).join("")}</div>
-      ${ev.length ? `<details class="small"><summary><b>What every input says vs the S&P 500</b>: ${ev.filter((e) => e.points === "bullish").length} beat, ${ev.filter((e) => e.points === "bearish").length} lag, ${ev.filter((e) => e.points === "mixed").length} mixed <span class="lean-bal" style="display:inline-flex;width:120px;vertical-align:middle;margin-left:6px"><i class="pos" style="width:${(bw / tw) * 100}%"></i><i class="mix" style="width:${(mw / tw) * 100}%"></i><i class="neg" style="width:${(rw / tw) * 100}%"></i></span></summary>
-        <div class="tbl-wrap"><table class="lean-ev"><tbody>${evRows}</tbody></table></div></details>` : ""}
-      ${l.verdict?.why ? `<div class="small"><b>${l.verdict.agrees ? "Agrees with" : "Goes against"} the lead's opportunity verdict${r.opportunity?.verdict ? ` (${esc(r.opportunity.verdict)})` : ""}:</b> ${rich(l.verdict.why)}</div>` : ""}
-      ${(l.checks || []).length ? `<div class="notice warn small">Code's check: ${l.checks.map(esc).join(" ")}</div>` : ""}
-      ${l.repaired?.length ? `<div class="small muted">The first draft had contradictions and was sent back once: ${l.repaired.map(esc).join(" ")}</div>` : ""}</div>`;
+    return callsCard(l, { head, status, nums, history: r.lean_history, verdict: "the lead's opportunity verdict", verdictCall: r.opportunity?.verdict,
+      since: since ? `<div class="small">Since these calls (${esc(fmtDate(l.date))}): industry ${sgP(since.ind)}, S&P 500 ${sgP(since.spy)} → <b class="${since.ex >= 0 ? "pos-t" : "neg-t"}">${sgP(since.ex)} vs the S&P 500</b> so far</div>` : "" });
   }
+  /** A company's calls vs the S&P 500, built on its industry's calls and its own write-up. */
+  function coLeanBlock(co) {
+    const rec = co.thesis, l = rec?.lean, ind = co.run?.lead ? Lean.leanOf(co.run.lead, today()) : null;
+    const working = co.leanBusy;
+    const can = S.sample && !co.writing && !working && rec?.thesis;
+    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="Three Claude calls on the finished write-up: the calls vs the S&P 500 from every input, an independent PM's challenge, the final calls">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
+    const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
+    const head = `<div class="callout-head"><span class="eyebrow">${esc(co.sym)} vs the S&P 500</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
+    if (!l) return sec("co-lean", `${co.sym} vs the S&P 500`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${rec?.thesis ? `No calls yet. They're made from the finished write-up${ind && !ind.provisional ? " and the industry's own calls" : ""}.` : co.writing ? "The calls are made right after the write-up finishes." : "Write the analysis first; the calls are made from it."}</div>
+      ${ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Lean.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Lean.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : ""}</div>`);
+    const W = (() => { try { return coWindowsPlus(co); } catch { return []; } })(), mk = co.spy?.closes?.length ? Lean.marketFacts(co.spy.dates, co.spy.closes) : null;
+    const nums = (h, x) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call;
+      return `<div class="lean-nums small">
+        ${ic ? `<div><span class="muted">Industry:</span> <span class="${Lean.cls(ic)}-t">${esc(Lean.label(ic))}</span>${ind.provisional ? " <span class='muted'>(provisional)</span>" : ""}</div>` : ""}
+        ${w ? `<div><span class="muted">Last ${esc(h)}:</span> ${esc(co.sym)} ${sgP(w.trailing)}, S&P 500 ${sgP(mk?.ret?.[h])} → <b class="${w.vs_spy > 0 ? "pos-t" : w.vs_spy < 0 ? "neg-t" : ""}">${sgP(w.vs_spy)} vs S&P</b>${isNum(num(w.vs_ind)) ? ` · ${sgP(w.vs_ind)} vs industry` : ""}</div>` : ""}
+        ${isNum(num(w?.base_up)) ? `<div><span class="muted">Its own history:</span> higher ${w.base_up}% of the time over ${esc(h)}</div>` : ""}
+        ${w ? `<div><span class="muted">In this window:</span> ${w.own ? `<b>${esc(co.sym)} reports ${esc(fmtDate(w.own))}</b>` : `${esc(co.sym)} doesn't report`}${w.peers?.length ? ` · ${w.peers.slice(0, 3).map((p) => `${esc(p.symbol)} ${esc(fmtDate(p.date))}`).join(", ")}` : ""}</div>` : ""}</div>`; };
+    let since = "";
+    const ser = co.data?.ser;
+    if (l.mark?.px > 0 && ser?.closes?.length && co.spy?.closes?.length && ser.dates[ser.dates.length - 1] > (l.mark.date || "")) {
+      const ri = (ser.closes[ser.closes.length - 1] / l.mark.px - 1) * 100, rs = (co.spy.closes[co.spy.closes.length - 1] / l.mark.spy - 1) * 100, ex = Math.round((ri - rs) * 10) / 10;
+      since = `<div class="small">Since these calls (${esc(fmtDate(l.date))}): ${esc(co.sym)} ${sgP(Math.round(ri * 10) / 10)}, S&P 500 ${sgP(Math.round(rs * 10) / 10)} → <b class="${ex >= 0 ? "pos-t" : "neg-t"}">${sgP(ex)} vs the S&P 500</b> so far</div>`;
+    }
+    return sec("co-lean", `${co.sym} vs the S&P 500`, "", callsCard(l, { head, status, nums, since, history: rec.lean_history, verdict: "the write-up's verdict", verdictCall: rec.thesis?.verdict?.call }));
+  }
+
   /** The lead strategist's synthesis: thesis, ranked drivers, debates, scenarios, what's priced in, tensions. */
   function leadBlock(d, ag) {
     const r = ag.result;
@@ -13233,7 +13383,9 @@ Reply with ONLY this JSON:
     return {
       lead: { headline: L.headline, thesis: L.thesis, drivers: L.drivers, debates: L.debates, priced_in: L.priced_in, opportunity: L.opportunity, risks: L.risks, catalysts: L.catalysts, watch: L.watch,
         scenarios: L.scenarios && Object.fromEntries(Object.entries(L.scenarios).map(([k, s]) => [k, { probability: s?.probability, narrative: s?.narrative, price_move: s?.price_move, eps_change: s?.eps_change }])),
-        horizons: L.horizons && Object.fromEntries(Object.entries(L.horizons).map(([h, x]) => [h, { call: x?.call, expected_move: x?.expected_move, probability_up: x?.probability_up, drivers: x?.drivers }])) },
+        horizons: L.horizons && Object.fromEntries(Object.entries(L.horizons).map(([h, x]) => [h, { call: x?.call, expected_move: x?.expected_move, probability_up: x?.probability_up, drivers: x?.drivers }])),
+        calls_vs_sp500: (() => { const ln = Lean.leanOf(L, today()); return ln ? { provisional: !!ln.provisional, headline: ln.headline, ...Object.fromEntries(Object.entries(ln.calls || {}).map(([h, x]) => [h, { call: x.call, why: x.why || "" }])) } : null; })(),
+        latest_update: L.daily?.date ? { date: L.daily.date, headline: L.daily.headline, summary: L.daily.summary, changes: (L.daily.changes || []).slice(0, 5) } : null },
       kpi: R.kpi && { summary: R.kpi.summary, cycle_position: R.kpi.cycle_position, pricing_power: R.kpi.pricing_power, demand_drivers: R.kpi.demand_drivers, hot_segments: R.kpi.hot_segments, cool_segments: R.kpi.cool_segments },
       macro: R.macro && { regime: R.macro.regime, headline: R.macro.headline, horizons: R.macro.horizons, drivers: R.macro.drivers },
       world: R.world && { dives: (R.world.dives || []).map((x) => ({ title: x.title, status: x.status, stance: x.stance, summary: x.summary, first_order: x.first_order })) },
@@ -13501,6 +13653,53 @@ Reply with ONLY this JSON:
       await coLogCalls(co, rec).catch(() => {});
     } catch (e) { co.thesisErr = e?.code === "cancelled" ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
+    // Then the calls vs the S&P 500, from the finished write-up (three small calls, no dossier).
+    if (co.thesis?.thesis && !co.thesisErr && S.co === co) coLean(co);
+  }
+  /** Each window for the company, with its trailing return vs its industry too. */
+  function coWindowsPlus(co) {
+    const P = co.perf || {}, TW = { "1M": "1M", "3M": "3M", "6M": "6M", "12M": "1Y" };
+    return coWindows(co).map((w) => ({ ...w, from: today(), vs_ind: isNum(num(P[TW[w.h]]?.vs_ind)) ? Math.round(P[TW[w.h]].vs_ind * 1000) / 10 : null }));
+  }
+  /**
+   * The company's calls vs the S&P 500 (six levels per window, with the reasons), made from its finished write-up, its
+   * industry's own calls, a code scoreboard and the facts: one call, an independent PM's challenge, the final calls, and
+   * one fix round if code still finds contradictions. Saved with the write-up; the earlier calls are kept.
+   */
+  async function coLean(co) {
+    const rec = co.thesis; if (!rec?.thesis || co.leanBusy || !S.sample) return;
+    co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; if (S.co === co) renderCompany();
+    const stage = (t) => { co.leanStage = t; if (S.co === co) renderCompany(); };
+    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false });
+    const soft = (e) => { if (FATAL.has(e?.code) || e?.code === "cancelled") throw e; return null; };
+    try {
+      const run = co.run, ind = run?.lead ? Lean.leanOf(run.lead, today()) : null;
+      const W = coWindowsPlus(co), mkt = co.spy?.closes?.length ? Lean.marketFacts(co.spy.dates, co.spy.closes) : null;
+      const events = (co.lensIn?.calendar || []).filter((e) => e.importance === "high" && e.date).map((e) => ({ date: e.date, title: e.title, id: e.id }));
+      const board = Lean.coScoreboard({ sym: co.sym, windows: W, ind, mkt, beta: num(co.g1?.beta ?? co.risk?.beta ?? co.row?.beta), times: co.times ? Regimes.companyText(co.sym, co.times) : "", events });
+      const opts = { today: today(), known: Object.keys(co.idx || {}), inputs: Lean.CO_INPUTS, alias: Lean.CO_ALIAS, ind };
+      const about = Lean.coAbout(co.name, co.sym, run.name);
+      const latest = run.lead?.daily?.date ? `${run.lead.daily.date}: ${run.lead.daily.headline || ""} ${run.lead.daily.summary || ""}` : "";
+      let l = Lean.cleanLean(await call(Lean.coLeanPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest, write: rec.thesis, facts: coFactsText(co), board, news: co.news, mentions: co.mentions })), opts);
+      if (!l) throw new Error("no usable calls came back; try again");
+      stage(LEAN_STEPS[1]);
+      const ch = Lean.cleanChallenge(await call(Lean.challengePrompt(co.name, today(), l, board, about)).catch(soft));
+      if (ch) { stage(LEAN_STEPS[2]); l = Lean.mergeFinal(l, await call(Lean.finalPrompt(co.name, today(), l, ch, board, about, Lean.CO_FINAL_EXTRA)).catch(soft), ch, opts); }
+      if (!l.consistent) {
+        stage("Code found contradictions: one fix round");
+        const l2 = Lean.cleanLean(await call(Lean.repairPrompt(co.name, today(), l, l.checks, about, Lean.CO_SCHEMA)).catch(soft), opts);
+        if (l2) { l2.repaired = l.checks; for (const h of Lean.HZ) if (l2.calls[h] && l.calls[h]?.challenge) l2.calls[h].challenge = l.calls[h].challenge; l = l2; }
+      }
+      const ser = co.data?.ser;
+      if (ser?.closes?.length && co.spy?.closes?.length) l.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1], spy: co.spy.closes[co.spy.closes.length - 1] };
+      l.market = mkt; l.ind = ind ? { provisional: !!ind.provisional, date: ind.date || null, calls: Object.fromEntries(Object.entries(ind.calls || {}).map(([h, x]) => [h, x.call])) } : null;
+      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || rec, prev = cur.lean;
+      const hist = [...(prev?.calls ? [{ date: prev.date, calls: Object.fromEntries(Object.entries(prev.calls).map(([h, x]) => [h, x.call])) }] : []), ...(cur.lean_history || [])].slice(0, 12);
+      const nrec = jsonSafe({ ...cur, lean: l, lean_history: hist });
+      await idbPut("co:" + co.sym, nrec).catch(() => {});
+      if (co.thesis?.at === rec.at) co.thesis = nrec;
+    } catch (e) { co.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
+    finally { co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); }
   }
   /** The company's own 1M-12M calls go into its track record, scored like the industry's. */
   async function coLogCalls(co, rec) {
@@ -13769,7 +13968,7 @@ Reply with ONLY this JSON:
       return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [coReturns(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coTimes(co) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
+    const secs = [run ? coLeanBlock(co) : "", coReturns(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coTimes(co) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
       coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
@@ -14211,7 +14410,7 @@ Reply with ONLY this JSON:
     const it = (ok, id, l) => (ok ? [id, l] : null);
     return [
       { label: "Performance", items: [["co-returns", "Performance"]] },
-      { label: "Snapshot", items: [["co-snap", "Snapshot"], it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
+      { label: "Snapshot", items: [it(run, "co-lean", "Vs the S&P 500"), ["co-snap", "Snapshot"], it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
       { label: "Returns & Risk", items: [it(co.perf, "co-perf", "Returns vs SPY"), it(co.g1, "co-risk", "Risk & Greeks")] },
       { label: "Analyst Consensus", items: [["co-street", "Wall Street"]] },
       { label: "Stress Test", items: [it(co.ep?.length, "co-stress", "Crises & booms")] },
@@ -14683,6 +14882,7 @@ Reply with ONLY this JSON:
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }
     if (t.dataset.coRewrite) { if (S.co) { S.co.thesis = null; writeThesis(S.co); } return; }
+    if (t.dataset.coLean) { if (S.co) coLean(S.co); return; }
     if (t.dataset.coStop) { S.co?.ctl?.abort(); return; }
     if (t.dataset.coRange) { S.coRange = t.dataset.coRange; renderCompany(); return; }
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }

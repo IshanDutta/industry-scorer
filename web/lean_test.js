@@ -48,4 +48,17 @@ const fin = L.mergeFinal(a, { headline: "h2", calls: { "12M": { call: "slightly 
 ok(fin.calls["12M"].call === "slightly bullish" && fin.calls["12M"].challenge.before === "bullish" && fin.calls["12M"].challenge.recommend === "soften" && fin.calls["1M"].call === "slightly bearish" && fin.calls["1M"].challenge.before === null, "final: changed windows record what they were, the rest held");
 ok(fin.evidence.find((e) => e.input === "macro").points === "bearish" && fin.evidence.length === 15, "evidence fixes applied");
 ok(L.mergeFinal(a, null, ch) === a, "no final answer: the first calls stand");
+
+// One company
+const ind = { calls: { "1M": { call: "slightly bearish", why: "w1" }, "3M": { call: "slightly bullish" }, "6M": { call: "bullish" }, "12M": { call: "bullish", why: "w12" } }, headline: "ind" };
+const win = [{ h: "1M", end: "2026-12-06", trailing: -5, vs_spy: -6, vs_ind: 2, sigma: 9, base_up: 55, own: null, peers: [{ symbol: "AMD", date: "2026-11-20" }] }, { h: "3M", end: "2027-02-06", trailing: 3, vs_spy: 1, sigma: 16, base_up: 58, own: "2027-01-28", peers: [] }];
+const cb = L.coScoreboard({ sym: "INTC", windows: win, ind, mkt: mk, beta: 1.4, times: "times text", events: [{ date: "2026-12-09", title: "FOMC", id: "C9" }] });
+ok(/beta to the S&P 500 is 1.40: it amplifies/.test(cb) && /industry's call vs the S&P 500: slightly bearish/.test(cb) && /INTC reports 2027-01-28/.test(cb) && /2026-12-09 FOMC \[C9\]/.test(cb) && /IN TIMES LIKE THIS/.test(cb), "company scoreboard: beta, the industry's call, its own report, dated events, times like this");
+const cp = L.coLeanPrompt({ today: "2026-11-06", sym: "INTC", name: "Intel", industry: "Semiconductors", ind, write: { headline: "h", verdict: { call: "no", summary: "s" }, horizons: { "12M": { call: "slightly bearish", expected_move: [-10, 5] } } }, facts: "facts", board: cb, news: [{ id: "N1", title: "Intel news" }] });
+ok(/DOES INTC BEAT OR LAG THE S&P 500/.test(cp) && /12M: bullish: w12/.test(cp) && /\[N1\] Intel news/.test(cp) && L.CO_KEYS.every((k) => cp.includes(k)), "company prompt: the industry's calls, the write-up, every input");
+const CC = (call, vs) => ({ call, vs_industry: vs, why: "then it turns [N1]", for: ["a"], against: ["b"], flips_it: "c" });
+const co = L.cleanLean({ headline: "x", evidence: L.CO_KEYS.map((k) => ({ input: L.CO_INPUTS.find(([kk]) => kk === k)[1], points: "bullish", weight: 2, why: "y [N1]" })), calls: { "1M": CC("slightly bullish", "beats"), "3M": CC("bullish", "beats"), "6M": CC("slightly bearish", "lags"), "12M": CC("bearish", "matches") } }, { inputs: L.CO_INPUTS, alias: L.CO_ALIAS, ind, known: ["N1"] });
+ok(co.evidence.length === 16 && !co.missing.length && co.calls["1M"].vs_industry === "beats", "company inputs matched by label");
+ok(co.checks.some((c) => /12M: the industry is bullish .* matches the industry, but calls it bearish/.test(c)) && !co.checks.some((c) => /^1M:|^3M:|^6M:/.test(c)), "a call that contradicts the industry's call and its own vs-industry is flagged; consistent ones aren't: " + JSON.stringify(co.checks));
+ok(/analyst responsible for Intel \(INTC\)/.test(L.finalPrompt("Intel", "2026-11-06", co, ch, cb, L.coAbout("Intel", "INTC", "Semiconductors"), L.CO_FINAL_EXTRA)) && /"vs_industry"/.test(L.finalPrompt("Intel", "2026-11-06", co, ch, cb, "x", L.CO_FINAL_EXTRA)), "final prompt for a company keeps vs_industry");
 console.log(fails ? fails + " FAILED" : "lean tests passed"); process.exit(fails ? 1 : 0);
