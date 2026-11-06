@@ -1134,7 +1134,8 @@ a.btnlink:hover { border-color: var(--accent); }
     // The statistical anchor: the tested model's forecast for this industry today, vs the S&P 500 and absolute.
     if (history && window.ANCHOR_MODEL) try {
       const mk = await regimeData(), ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
-      if (mk?.spy?.dates?.length) history.anchor = Anchor.predict(window.ANCHOR_MODEL, Anchor.align({ dates: ls.dates, levels: ls.levels }, { dates: mk.spy.dates, closes: mk.spy.closes || mk.spy.values }, pes?.dates?.length ? pes : null), { market: (isNum(bench.rf_latest) ? bench.rf_latest : 0.04) + (isNum(bench.erp) ? bench.erp : 0.045) });
+      if (mk?.spy?.dates?.length) history.anchor = Anchor.predict(window.ANCHOR_MODEL, Anchor.align({ dates: ls.dates, levels: ls.levels }, { dates: mk.spy.dates, closes: mk.spy.closes || mk.spy.values }, pes?.dates?.length ? pes : null), { market: (isNum(bench.rf_latest) ? bench.rf_latest : 0.04) + (isNum(bench.erp) ? bench.erp : 0.045),
+        ...(() => { const o = Anchor.ownScale({ dates: res.index.dates, levels: res.index.levels }, bench.spy); return o ? { scale: o.rel, absScale: o.abs } : {}; })() });
     } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("anchor", e); }
     const pe = fallback ? { table: null, etf: null } : await fetchPeers(name, sector, org, bench);
     if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = res.summary.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }

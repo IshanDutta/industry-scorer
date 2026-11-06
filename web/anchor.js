@@ -141,7 +141,7 @@
    * {rel: {median, p25, p75, prob_beat}, abs: {median, p25, p75, prob_up}, drivers: [{feature, label, value, push}]} in %,
    * or null when there isn't enough history.
    */
-  function predict(model, A, { market = 0.07 } = {}) {
+  function predict(model, A, { market = 0.07, scale = null, absScale = null } = {}) {
     if (!model?.horizons || !A?.months?.length) return null;
     const R = rows({ ...A, months: [...A.months, "9999-99"], ind: [...A.ind, NaN], spy: [...A.spy, NaN], pe: [...A.pe, NaN] }).filter((r) => r.month === A.months[A.months.length - 1]);
     const r = R[0]; if (!r) return null;
@@ -149,7 +149,9 @@
     const pct = (v) => Math.round((Math.exp(v) - 1) * 1000) / 10;
     for (const [h, k] of Object.entries(H)) {
       const M = model.horizons[h]; if (!M) continue;
-      const s = r.scale * Math.sqrt(k / 12), sa = r.abs_scale * Math.sqrt(k / 12);
+      // The model works in units of volatility; the call is about the run's own cap-weighted index, so its own
+      // volatility (vs the S&P 500, and absolute) sets the size when known (the long equal-weighted series is noisier).
+      const s = (isNum(scale) && scale > 0 ? scale : r.scale) * Math.sqrt(k / 12), sa = (isNum(absScale) && absScale > 0 ? absScale : r.abs_scale) * Math.sqrt(k / 12);
       // A model fitted before targets were taken against the average industry: drop its intercept (that drift).
       const zr = apply1(M.rel, xi) - (model.demeaned ? 0 : M.rel.b0), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
       const drivers = FEATS.map((f, j) => ({ feature: f, label: LABEL[f], value: Math.round((f === "pe" ? r.pe : r[f]) * 1000) / 10, push: Math.round(((xi[j] - M.rel.mu[j]) / M.rel.sdv[j]) * M.rel.w[j] * s * 1000) / 10 }))
@@ -168,7 +170,20 @@
     return Object.entries(an.horizons).map(([h, a]) => `${h}: vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%), ${a.rel.prob_beat}% chance of beating it; absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%), ${a.abs.prob_up}% chance of a gain; what moves it: ${a.drivers.slice(0, 3).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; tested out of sample since ${a.test.from}: right on which side of the average industry it lands ${a.test.hit_rate}% of the time (a coin flip is 50%), rank correlation with what happened ${a.test.rank_ic}, ${a.test.in_likely_range}% of outcomes inside its likely range` : ""}`).join("\n");
   }
 
-  const Anchor = { H, FEATS, LABEL, monthly, align, rows, ridge, fit, predict, text, Phi };
+  /**
+   * Annualized volatility of an index vs the S&P 500 and on its own, from daily closes over the last year.
+   * ind: {dates, levels}; spy: {dates, closes}. Returns {rel, abs} or null.
+   */
+  function ownScale(ind, spy) {
+    const sm = new Map((spy?.dates || []).map((d, i) => [d, (spy.closes || spy.values)[i]]));
+    const ds = (ind?.dates || []).slice(-253), lv = (ind?.levels || []).slice(-253), rel = [], abs = [];
+    for (let i = 1; i < ds.length; i++) { const a = lv[i - 1], b = lv[i], x = sm.get(ds[i - 1]), y = sm.get(ds[i]);
+      if (a > 0 && b > 0) { abs.push(Math.log(b / a)); if (x > 0 && y > 0) rel.push(Math.log(b / a) - Math.log(y / x)); } }
+    if (rel.length < 120) return null;
+    return { rel: clamp(sd(rel) * Math.sqrt(252), 0.03, 1.2), abs: clamp(sd(abs) * Math.sqrt(252), 0.05, 1.5) };
+  }
+
+  const Anchor = { H, FEATS, LABEL, monthly, align, rows, ridge, fit, predict, text, Phi, ownScale };
   if (typeof module !== "undefined" && module.exports) module.exports = Anchor;
   else root.Anchor = Anchor;
 })(typeof window !== "undefined" ? window : globalThis);
