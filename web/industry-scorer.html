@@ -7916,6 +7916,7 @@ ${schemaFor(part)}`;
       cons: Object.fromEntries((d.constituents || []).filter((c) => isNum(num(c.px))).map((c) => [c.symbol, num(c.px)])),
       items: (rec?.research?.items || []).map((i) => lc(i.title).slice(0, 90)),
       filings: res.daily?.filings || [],
+      landed: res.landed || {},
       world: (rec?.world?.items || []).map((i) => lc(i.title).slice(0, 90)),
       macro: Object.fromEntries((rec?.macro?.rows || []).filter((r) => r.id || r.key).map((r) => [r.id || r.key, { value: num(r.value), id: r.id }])),
       rev30: num(d.forward?.rev30), breadth: num(d.forward?.breadth), sent7: num(rec?.research?.sentiment?.last_7d), rsi: num(d.positioning?.price?.rsi14),
@@ -7958,8 +7959,28 @@ ${schemaFor(part)}`;
       const big = isNum(ch) && (pctUnit ? Math.abs(ch) >= 0.1 : Math.abs(rel) >= 0.02);
       return { id: r.id, key: r.key, label: r.label, value: v, unit: r.unit || "", prev: pv, change: ch, rel, big, relevance: cur.relevance?.[r.id] || "" }; })
       .filter((m) => m.big).sort((a, b) => Math.abs(b.rel || 0) - Math.abs(a.rel || 0)).slice(0, 12);
-    const evs = (cur.calendar?.events || []).map((e) => ({ id: e.id, date: (e.dates || [])[0] || "", title: trim(e.title, 160), importance: e.importance || "", kind: e.kind || "", tickers: e.tickers || [], detail: noIds(e.detail, 220) })).filter((e) => e.date);
-    const passed = evs.filter((e) => e.date > since && e.date <= today), ahead = evs.filter((e) => e.date > today && e.date <= addDays(today, 7));
+    const evs = (cur.calendar?.events || []).map((e) => ({ id: e.id, date: (e.dates || [])[0] || "", title: trim(e.title, 160), importance: e.importance || "", kind: e.kind || "", section: e.section || "", tickers: e.tickers || [], detail: noIds(e.detail, 220) })).filter((e) => e.date);
+    // Passed events: anything dated since the last update, and any important one from the last three weeks whose
+    // outcome hasn't been recorded yet (an election, a rate decision, a ruling): it stays on the table until it has.
+    const landed = prev.landed || {};
+    const passed = evs.filter((e) => e.date <= today && (e.date > since || (e.importance === "high" && e.kind !== "earnings" && !landed[e.id]?.text && e.date >= addDays(today, -21)))), ahead = evs.filter((e) => e.date > today && e.date <= addDays(today, 7));
+    // How each passed event landed: the headlines that name it (from the whole wire and the industry's news, not just
+    // the newest), so the outcome reaches the strategist even on a day other news crowds the feed.
+    const STOP = new Set(["united", "states", "federal", "meeting", "decision", "release", "report", "annual", "quarter", "update", "results", "policy", "deadline", "expected", "first", "global", "national", "final"]);
+    const pool = [...(cur.world?.items || []).map((i) => ({ ...i, kind: "W" })), ...(cur.pack?.items || []).filter((i) => ["N", "P", "M"].includes(i.kind))];
+    const used = new Map([...fresh, ...world].map((i) => [lc(i.title).slice(0, 90), i.id])), outcome = [];
+    for (const e of passed) {
+      if (e.kind === "earnings") continue;
+      const words = lc(e.title).split(/[^a-z0-9-]+/).filter((w) => w.length >= 5 && !STOP.has(w));
+      if (/midterm|election/.test(lc(e.title))) words.push("midterm", "election", "sweep", "house", "senate");
+      if (!words.length) continue;
+      const hits = pool.filter((i) => i.title && (!i.date || i.date >= addDays(e.date, -1)) && words.some((w) => lc(i.title).includes(w)))
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 4);
+      e.outcome_ids = [];
+      for (const i of hits) { const key = lc(i.title).slice(0, 90); let id = used.get(key);
+        if (!id) { id = "D" + ++k; used.set(key, id); outcome.push({ id, kind: i.kind || "W", date: i.date || "", source: i.source || "", title: trim(i.title, 200), summary: trim(i.summary, 200), symbol: i.symbol || "", url: i.url || "", event: e.id }); }
+        e.outcome_ids.push(id); }
+    }
     const revisions = { rev30: num(d.forward?.rev30), was: prev.rev30, breadth: num(d.forward?.breadth), breadth_was: prev.breadth };
     const sentiment = { now: num(cur.pack?.sentiment?.last_7d), was: prev.sent7 };
     const rsi = { now: num(d.positioning?.price?.rsi14), was: prev.rsi };
@@ -7976,7 +7997,7 @@ ${schemaFor(part)}`;
     for (const f of filings) if (f.fin && top10.has(f.symbol)) triggers.push(`${f.symbol} filed an 8-K with financial statements (${f.date})`);
     if (cur.shock) triggers.unshift(String(cur.shock));
     void wOf;
-    return { since, to, days, move, spy, z, sigma, movers, news: fresh, world, filings, shock: cur.shock || "", macro, passed, ahead, revisions, sentiment, rsi, triggers: [...new Set(triggers)].slice(0, 10) };
+    return { since, to, days, move, spy, z, sigma, movers, news: fresh, world, outcome, filings, shock: cur.shock || "", macro, passed, ahead, revisions, sentiment, rsi, triggers: [...new Set(triggers)].slice(0, 10) };
   }
   function addDays(d, k) { const t = new Date(String(d).slice(0, 10) + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
 
@@ -7985,7 +8006,8 @@ ${schemaFor(part)}`;
     const L = [];
     L.push(`Since ${x.since} (${x.days} trading day${x.days === 1 ? "" : "s"}): industry ${pc(x.move)} vs SPY ${pc(x.spy)}${isNum(x.z) ? `; that is ${x.z.toFixed(1)} times a normal move of ±${(x.sigma * 100).toFixed(1)}%` : ""}.`);
     if (x.movers.length) L.push(`Biggest contributors: ${x.movers.map((m) => `${m.symbol} ${pc(m.ret)} (${isNum(m.weight) ? (m.weight * 100).toFixed(1) : "?"}% weight)`).join(", ")}.`);
-    if (x.passed.length) L.push(`Events that have now passed: ${x.passed.map((e) => `${e.date} ${e.title}${e.tickers.length ? ` (${e.tickers.join(", ")})` : ""}`).join("; ")}.`);
+    if (x.passed.length) L.push(`Events that have now passed (say how each landed):\n${x.passed.map((e) => `[${e.id}] ${e.date} ${e.title}${e.tickers.length ? ` (${e.tickers.join(", ")})` : ""}${e.kind === "earnings" ? "" : (e.outcome_ids || []).length ? `; headlines on how it landed: ${e.outcome_ids.map((i) => `[${i}]`).join(" ")}` : "; no headline on how it landed yet"}`).join("\n")}`);
+    if ((x.outcome || []).length) L.push(`Headlines on how those events landed:\n${x.outcome.map((n) => `[${n.id}] ${n.date} ${n.source}: ${n.title}${n.summary ? ". " + n.summary : ""}`).join("\n")}`);
     if (x.ahead.length) L.push(`Coming in the next 7 days: ${x.ahead.map((e) => `${e.date} ${e.title}`).join("; ")}.`);
     if (x.macro.length) L.push(`Macro moves: ${x.macro.map((m) => `[${m.id}] ${m.label} ${m.prev}${m.unit} -> ${m.value}${m.unit}${m.relevance ? ` (${m.relevance} relevance)` : ""}`).join("; ")}.`);
     if (isNum(x.revisions.rev30)) L.push(`EPS revisions over 30 days: ${pc(x.revisions.rev30)} (was ${pc(x.revisions.was)}); breadth ${isNum(x.revisions.breadth) ? x.revisions.breadth.toFixed(2) : "n/a"} (was ${isNum(x.revisions.breadth_was) ? x.revisions.breadth_was.toFixed(2) : "n/a"}).`);
@@ -8079,6 +8101,8 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
       if (have) { if (!have.why.includes(trim(why, 60))) have.why = trim(`${have.why}; ${why}`, 300); if (code && have.by !== "code") have.by = "code"; if (regulators.length) have.regulators = [...new Set([...(have.regulators || []), ...regulators])]; if (IMP[imp] > IMP[have.importance]) have.importance = imp; return; }
       out.push({ key, label: SECTIONS[key].label, why: trim(why, 300), by: code ? "code" : "news", importance: imp, ...(regulators.length ? { regulators } : {}) });
     };
+    // An important event (an election, a rate decision, a ruling) has happened: the section it belongs to is rewritten.
+    for (const e of x.passed || []) if (e.importance === "high" && e.kind !== "earnings") add(SECTIONS[e.section] ? e.section : "macro", `${e.title} happened on ${e.date}${(e.outcome_ids || []).length ? ` [${e.outcome_ids.join(", ")}]` : ""}`, { code: true });
     for (const e of x.passed || []) if (e.kind === "earnings" && (x.triggers || []).some((t) => t.includes(`(${e.date})`) && e.tickers.some((tk) => t.includes(tk)))) add("kpi", `${e.tickers.join(", ")} reported on ${e.date}`, { code: true });
     const bigMacro = (x.macro || []).filter((m) => m.relevance === "high");
     if (bigMacro.length) add("macro", `${bigMacro.slice(0, 3).map((m) => `${m.label} ${m.prev}${m.unit} → ${m.value}${m.unit} [${m.id}]`).join("; ")}`, { code: true });
@@ -8199,6 +8223,7 @@ HOW TO UPDATE
 3. Scenario numbers stay consistent: price_move ≈ (1 + eps_change/100) × (end P/E ÷ today's P/E) − 1, and probabilities sum to 100; if you change one probability, give all three. A scenario's "sections" object: only the section reads that change.
 4. A call: ${legacyCalls(res) ? `your calls above are on the OLD three-level scale (bullish / neutral / bearish, conviction high / medium / low). Re-grade EVERY call on the new scale below: give each one status "revised", with its call, a 1-10 conviction, its range and its chance of a gain, starting from TIMES LIKE THIS; keep the range and probability where they still hold.` : `keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.`} A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
 ${Calls.rules("the industry")}
+4b. For each event that has passed (listed above with its ID): say how it landed, from its headlines, and rewrite every part of the analysis that assumed an outcome: a scenario that hinged on it (the outcome may make one scenario the base case), a debate it settles, a driver, a call it was the catalyst for, the opportunity. If no headline says how it landed, say "unknown" (it stays on the list until one does).
 5. Keep it all consistent: the headline, thesis, scenarios, opportunity, profiles and calls must tell one story after your changes.
 6. Then answer honestly: if you threw this analysis away and wrote it from scratch today, with everything above, would you reach the same core thesis, the same scenario set and the same opportunity verdict? "different" if the story itself would be built differently, not merely updated. A "different" orders a full rewrite.
 - Cite what you rely on: [D#] for today's headlines and filings, [I#] for macro rows, and the IDs already in your analysis. Never invent a fact, figure or ID.
@@ -8208,6 +8233,7 @@ Reply with ONLY this JSON:
  "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
  "analysis": {only the parts that change, in the same shape as YOUR WHOLE ANALYSIS above; {} if nothing changes},
  "rethink": {"from_scratch": "same | different", "why": "one sentence"},
+ "events": [{"id": "C7", "landed": "one or two sentences: what happened and what it means for this industry, cited | unknown"}],
  "watch": ["1-3 things to watch tomorrow"]}`;
   }
 
@@ -8303,11 +8329,16 @@ Reply with ONLY this JSON:
     if (parts.length) out.ref_n = refN;
     if (parts.some((p) => CORE.test(p))) out.rewrites_since_full = (num(out.rewrites_since_full) || 0) + 1;
     if (refs.length) out.daily_refs = [...(out.daily_refs || []), ...refs].slice(-200);
+    // How each passed event landed, kept with the analysis (the calendar shows it; the event leaves the open list).
+    const evIds = new Set((x.passed || []).map((e) => e.id)), landedNow = [];
+    for (const ev of Array.isArray(upd?.events) ? upd.events : []) { const id = String(ev?.id || ""); const t = cite(ev?.landed, 400);
+      if (!evIds.has(id) || !t) continue; landedNow.push({ id, text: /^unknown\.?$/i.test(t.trim()) ? "" : t });
+      if (!/^unknown\.?$/i.test(t.trim())) out.landed = { ...(out.landed || {}), [id]: { date: today, text: t, sources: sources.filter((s) => t.includes(`[${s.id}]`)).map(({ id: i, title, url, source, date }) => ({ id: i, title, url, source, date })) } }; }
     const changed = Object.values(hz).some((v) => v.status === "revised") || !!hz._scenarios || parts.length > 0;
     const entry = { date: today, as_of: x.to, since: x.since, via, material: !!(upd ? upd.material !== false && (changed || (upd.changes || []).length) : false),
       headline: upd ? cite(upd.headline, 300) : trim(tri?.why || "Nothing material since the last update; the calls stand.", 300), summary: upd ? cite(upd.summary, 900) : "",
       changes: upd ? (Array.isArray(upd.changes) ? upd.changes : []).slice(0, 6).map((c) => ({ text: cite(c?.text, 400), effect: en(c?.effect, ["positive", "negative", "mixed"], "mixed") })).filter((c) => c.text) : [],
-      horizons: hz, revised: changed, analysis: parts, ...(rt ? { rethink: rt } : {}), filings: [...(prev_filings(res)), ...(x.filings || []).map((f) => f.url).filter(Boolean)].slice(-60), watch: upd ? (Array.isArray(upd.watch) ? upd.watch : []).slice(0, 3).map((w) => cite(w, 200)).filter(Boolean) : [], triggers: x.triggers || [],
+      horizons: hz, revised: changed, analysis: parts, events: landedNow, ...(rt ? { rethink: rt } : {}), filings: [...(prev_filings(res)), ...(x.filings || []).map((f) => f.url).filter(Boolean)].slice(-60), watch: upd ? (Array.isArray(upd.watch) ? upd.watch : []).slice(0, 3).map((w) => cite(w, 200)).filter(Boolean) : [], triggers: x.triggers || [],
       move: isNum(x.move) ? Math.round(x.move * 1000) / 10 : null, spy: isNum(x.spy) ? Math.round(x.spy * 1000) / 10 : null, z: isNum(x.z) ? Math.round(x.z * 10) / 10 : null,
       movers: (x.movers || []).slice(0, 5).map((m) => ({ symbol: m.symbol, ret: Math.round(m.ret * 1000) / 10 })),
       sections: sections.map((s) => ({ key: s.key, label: s.label, why: cite(s.why, 300), by: s.by, ok: s.ok !== false, ...(s.regulators ? { regulators: s.regulators } : {}), ...(s.error ? { error: trim(s.error, 200) } : {}) })),
@@ -9925,7 +9956,7 @@ Reply with ONLY this JSON:
           if (whole) {
             // The lead strategist rewrote the whole analysis (and logged its new calls): keep the daily history and stamp it.
             const ag2 = S.agents[sl], r = { ...ag2.result, daily_history: res.daily_history || [] };
-            const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world, ...(x.filings || [])], sections });
+            const a2 = Daily.apply(r, null, x, { today: today(), via: "rewrite", tri: { why: `The whole analysis was rewritten: ${whole.why}` }, sources: [...x.news, ...x.world, ...(x.outcome || []), ...(x.filings || [])], sections });
             r2 = a2.result; r2.daily.revised = true; changed = true;
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             S.agents[sl] = jsonSafe({ ...ag2, result: r2, daily_at: new Date().toISOString() });
@@ -9940,7 +9971,7 @@ Reply with ONLY this JSON:
               upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten, { pe: bp?.pe, drift: v.drift }), leadTier, `Daily update: ${name}`); }
             const known = [...(ag.sources || []).map((s) => s.id), ...(ag.calendar?.events || []).map((e) => e.id), ...(ag.calendar?.standing || []).map((e) => e.id),
               ...(d.history?.times?.episodes || []).map((e, i) => "HE" + (i + 1)), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean);
-            const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world, ...(x.filings || [])], sections, known });
+            const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world, ...(x.outcome || []), ...(x.filings || [])], sections, known });
             r2 = a.result; changed = a.changed;
             if (a.refs?.length) ag.sources = [...(ag.sources || []).filter((s) => !/^DU\d+$/.test(s.id) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id}]`) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id},`)), ...a.refs];
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
@@ -11496,8 +11527,11 @@ Reply with ONLY this JSON:
     const cal = ag.calendar;
     const usedBy = (id) => Brain.HORIZONS.map(([h]) => h).filter((h) => [...(r.horizons?.[h]?.decisions || []), ...(r.horizons?.[h]?.conflicts || [])].some((x) => (x.refs || []).includes(id)));
     const WL = { "1M": "Within 1 month", "3M": "1–3 months", "6M": "3–6 months", "12M": "6–12 months" };
-    const calBlock = cal ? `<details><summary class="small">The calendar the calls were built on: ${cal.events.length} dated events and ${cal.standing.length} standing situations, from every section</summary>
-      <div class="two" style="margin-top:6px"><div>${Horizon.ORDER.map((h) => { const xs = cal.events.filter((e) => e.window === h); return xs.length ? `<span class="eyebrow">${WL[h]}</span><ul class="dlist small">${xs.map((e) => `<li id="cal-${esc(e.id)}"><b class="mono">${esc(e.id)}</b> <b class="mono">${esc(e.dates.slice(0, 4).map(fmtShort).join(", "))}${e.dates.length > 4 ? ` +${e.dates.length - 4}` : ""}</b> ${esc(e.title)} <span class="pill ${e.importance === "high" ? "warn" : "neu"}">${esc(e.importance)}</span> <span class="muted">${esc(e.section)}${usedBy(e.id).length ? ` · used in ${usedBy(e.id).join(", ")}` : ""}</span></li>`).join("")}</ul>` : ""; }).join("")}</div>
+    // Events whose last date has gone by: shown apart, with how they landed once a daily update has recorded it.
+    const pastEv = cal ? cal.events.filter((e) => (e.dates || []).length && e.dates[e.dates.length - 1] < today()) : [];
+    const calBlock = cal ? `<details${pastEv.some((e) => e.importance === "high" && !r.landed?.[e.id]) ? " open" : ""}><summary class="small">The calendar the calls were built on: ${cal.events.length} dated events and ${cal.standing.length} standing situations, from every section${pastEv.length ? ` · ${pastEv.length} ha${pastEv.length === 1 ? "s" : "ve"} happened` : ""}</summary>
+      ${pastEv.length ? `<span class="eyebrow">Has happened</span><ul class="dlist small">${pastEv.map((e) => { const l = r.landed?.[e.id]; return `<li id="cal-${esc(e.id)}"><b class="mono">${esc(e.id)}</b> <b class="mono">${esc(e.dates.slice(0, 4).map(fmtShort).join(", "))}</b> ${esc(e.title)} <span class="pill ${l ? "pos" : "warn"}">${l ? "landed" : "outcome not in yet"}</span><div class="${l ? "" : "muted"}">${l ? `${dailyRich(l.text, l.sources || [])} <span class="muted">(recorded ${esc(fmtDate(l.date))})</span>` : "How it landed isn't in the analysis yet: the next daily update reads the news on it and rewrites what depended on it."}</div></li>`; }).join("")}</ul>` : ""}
+      <div class="two" style="margin-top:6px"><div>${Horizon.ORDER.map((h) => { const xs = cal.events.filter((e) => e.window === h && !pastEv.includes(e)); return xs.length ? `<span class="eyebrow">${WL[h]}</span><ul class="dlist small">${xs.map((e) => `<li id="cal-${esc(e.id)}"><b class="mono">${esc(e.id)}</b> <b class="mono">${esc(e.dates.slice(0, 4).map(fmtShort).join(", "))}${e.dates.length > 4 ? ` +${e.dates.length - 4}` : ""}</b> ${esc(e.title)} <span class="pill ${e.importance === "high" ? "warn" : "neu"}">${esc(e.importance)}</span> <span class="muted">${esc(e.section)}${usedBy(e.id).length ? ` · used in ${usedBy(e.id).join(", ")}` : ""}</span></li>`).join("")}</ul>` : ""; }).join("")}</div>
       <div><span class="eyebrow">Standing situations</span><ul class="dlist small">${cal.standing.map((x) => `<li id="cal-${esc(x.id)}"><b class="mono">${esc(x.id)}</b> <b>${esc(x.title)}</b> <span class="pill ${x.importance === "high" ? "warn" : "neu"}">${esc(x.kind)}</span> <span class="muted">${esc(x.status)}${usedBy(x.id).length ? ` · used in ${usedBy(x.id).join(", ")}` : ""}</span></li>`).join("")}</ul></div></div></details>` : "";
     const hzBlock = r.horizons && Object.keys(r.horizons).length ? `<div><h3 style="margin:0 0 6px">Calls by horizon</h3><div class="hz-grid">${Brain.HORIZONS.map(([h]) => hzCard(h)).join("")}</div>
       ${hasReads ? `<details style="margin-top:6px"><summary class="small">Every section in each window</summary><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Section</th>${Brain.HORIZONS.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${hzRows}</tbody></table></div></details>` : ""}
