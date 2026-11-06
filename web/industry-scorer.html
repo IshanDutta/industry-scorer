@@ -1706,7 +1706,10 @@ a.btnlink:hover { border-color: var(--accent); }
   /** What gets logged from a finished lead verdict. doc: the industry doc (constituents carry weight and px). */
   function snapshot(result, doc, run_at, extra = {}) {
     if (!result || !doc?.as_of) return null;
-    const hz = Object.fromEntries(ORDER.filter((h) => result.horizons?.[h]).map((h) => { const x = result.horizons[h]; return [h, { call: x.call, expected_move: x.expected_move, probability_up: x.probability_up, conviction: x.conviction || null }]; }));
+    const hz = Object.fromEntries(ORDER.filter((h) => result.horizons?.[h]).map((h) => { const x = result.horizons[h]; return [h, { call: x.call, expected_move: x.expected_move, probability_up: x.probability_up, conviction: x.conviction || null,
+      ...(x.vs_spy ? { vs_spy: { call: x.vs_spy.call, expected_excess: x.vs_spy.expected_excess, probability_beat: x.vs_spy.probability_beat } } : {}),
+      ...(x.anchor ? { anchor: { rel: x.anchor.rel?.median ?? null, rel_p: x.anchor.rel?.prob_beat ?? null, abs: x.anchor.abs?.median ?? null, abs_p: x.anchor.abs?.prob_up ?? null } } : {}),
+      ...(x.model?.expected_move ? { model_move: x.model.expected_move } : {}) }]; }));
     const scn = Object.fromEntries(["bull", "base", "bear"].filter((k) => result.scenarios?.[k]).map((k) => [k, { probability: result.scenarios[k].probability, price_move: result.scenarios[k].price_move }]));
     const cons = (doc.constituents || []).filter((c) => isNum(c.px) && c.px > 0 && isNum(c.weight)).map((c) => ({ symbol: c.symbol, weight: Math.round(c.weight * 1e5) / 1e5, px: c.px }));
     if (!cons.length || (!Object.keys(hz).length && !Object.keys(scn).length)) return null;
@@ -1769,6 +1772,12 @@ a.btnlink:hover { border-color: var(--accent); }
           e.hit = sign(x.call) > 0 ? pct > 0 : sign(x.call) < 0 ? pct < 0 : e.inside;
           e.brier = isNum(x.probability_up) ? Math.round(((x.probability_up / 100 - (pct > 0 ? 1 : 0)) ** 2) * 1000) / 1000 : null;
           e.error = isNum(mid(x.expected_move)) ? Math.round((pct - mid(x.expected_move)) * 10) / 10 : null;
+          // Against the S&P 500: the view vs the market, and the statistical anchor on its own (scored the same way).
+          const ex = isNum(spy) ? pct - spy * 100 : NaN;
+          if (isNum(ex) && x.vs_spy) { const [l2, h2] = x.vs_spy.expected_excess?.length === 2 ? x.vs_spy.expected_excess : [NaN, NaN];
+            e.beat_hit = sign(x.vs_spy.call) ? sign(x.vs_spy.call) * ex > 0 : null; e.rel_inside = isNum(l2) ? ex >= l2 && ex <= h2 : null; }
+          if (isNum(ex) && isNum(x.anchor?.rel)) e.anchor_hit = x.anchor.rel === 0 ? null : Math.sign(x.anchor.rel) * ex > 0;
+          if (isNum(pct) && isNum(x.anchor?.abs)) e.anchor_abs_hit = x.anchor.abs === 0 ? null : Math.sign(x.anchor.abs) * pct > 0;
           e.scored = !entry.etf || !!etfSer; // kept for good once the sector ETF's move is in too
         } else {
           // So far: on the called side of zero, and inside the range scaled to the time elapsed.
@@ -1838,6 +1847,25 @@ a.btnlink:hover { border-color: var(--accent); }
       calibration: bins, pending: open.length, calls: (entries || []).length, rows: done, open_rows: open };
   }
 
+  /**
+   * The scorecard across every industry's matured calls, per horizon: how often the direction was right (absolute and vs
+   * the S&P 500), the anchor's record on the same calls, how often outcomes fell inside the likely range, and the weight
+   * the strategist's view earns against the anchor: 0.5 until 30 calls have matured, then moved by the difference in
+   * hit rates vs the S&P 500 (each 5 points = 0.1), between 0.2 and 0.8.
+   */
+  function scorecard(entries) {
+    const by = {}, blend = {};
+    for (const h of ORDER) {
+      const rows = []; for (const e of entries || []) { const v = e.eval?.horizons?.[h]; if (v?.matured && typeof v.hit === "boolean") rows.push(v); }
+      const rate = (k) => { const xs = rows.filter((v) => typeof v[k] === "boolean"); return xs.length ? Math.round((100 * xs.filter((v) => v[k]).length) / xs.length) : null; };
+      const ins = rows.filter((v) => typeof v.inside === "boolean");
+      by[h] = { n: rows.length, hit: rate("hit"), beat_hit: rate("beat_hit"), anchor_hit: rate("anchor_hit"), in_range: ins.length ? Math.round((100 * ins.filter((v) => v.inside).length) / ins.length) : null,
+        beat_n: rows.filter((v) => typeof v.beat_hit === "boolean" && typeof v.anchor_hit === "boolean").length };
+      const b = by[h];
+      blend[h] = b.beat_n >= 30 && isNum(b.beat_hit) && isNum(b.anchor_hit) ? Math.max(0.2, Math.min(0.8, 0.5 + (b.beat_hit - b.anchor_hit) / 50)) : 0.5;
+    }
+    return { by, blend, n: Object.values(by).reduce((a, b) => a + b.n, 0) };
+  }
   /** Feedback for the lead strategist. */
   function digest(entries) {
     const s = summarize(entries);
@@ -1861,7 +1889,7 @@ a.btnlink:hover { border-color: var(--accent); }
     return L.join("\n");
   }
 
-  const Track = { DAYS, ORDER, snapshot, priceAt, evaluate, needsPrices, summarize, digest };
+  const Track = { scorecard, DAYS, ORDER, snapshot, priceAt, evaluate, needsPrices, summarize, digest };
   if (typeof module !== "undefined" && module.exports) module.exports = Track;
   else root.Track = Track;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -5329,8 +5357,12 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
  *   - m3:  the last 3 months vs the S&P 500;
  *   - pe:  its P/E against its own 5-year median (log ratio; cheap vs expensive).
  * The model is fitted once on all industries pooled (runner/fit-anchor.mjs, a GitHub job, refitted monthly) with
- * every forward return measured in units of the industry's own volatility vs the market, so one set of weights
- * fits quiet and wild industries alike. It is tested out of sample (fitted on the years before, tested on the next
+ * every forward return measured against the average industry that month (FMP's long industry series are equal-weighted
+ * and rebalanced daily, which drifts away from the S&P 500 for reasons that have nothing to do with the industry, so
+ * only the difference between industries is learned) and in units of the industry's own volatility vs the market, so
+ * one set of weights fits quiet and wild industries alike. The industry's expected return vs the S&P 500 is that
+ * difference; its absolute expected return adds the market's expected return (the risk-free rate plus the equity
+ * risk premium, passed in at prediction time) and its range comes from its own volatility. It is tested out of sample (fitted on the years before, tested on the next
  * year, walking forward), and those test results travel with the model: how often it got the direction vs the
  * S&P 500 right, and how well the predicted order of industries matched what happened.
  *
@@ -5410,8 +5442,6 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
   }
   const apply1 = (m, xi) => m.b0 + xi.reduce((a, v, j) => a + ((v - m.mu[j]) / m.sdv[j]) * m.w[j], 0);
 
-  /** Targets in volatility units: the forward return vs the market / (scale * sqrt(h/12)), clipped at +-4. */
-  const yOf = (r, h, abs = false) => { const v = abs ? r.fwd_abs[h] : r.fwd[h], s = (abs ? r.abs_scale : r.scale) * Math.sqrt(H[h] / 12); return isNum(v) && s > 0 ? clamp(v / s, -4, 4) : NaN; };
 
   /**
    * Fit on every industry's rows. data: [{industry, rows}]. Months used for horizon h are spaced h months apart per
@@ -5422,9 +5452,12 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
     const model = { v: 1, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
     for (const h of Object.keys(H)) {
       const k = H[h], all = [];
-      for (const d of data) for (let i = 0; i < d.rows.length; i += Math.min(k, 3)) { const r = d.rows[i], y = yOf(r, h), ya = yOf(r, h, true); if (isNum(y)) all.push({ ind: d.industry, month: r.month, x: x(r), y, ya, r }); }
+      // The average industry's forward return each month (raw log returns vs the S&P 500), taken out of every target.
+      const avg = new Map(); for (const d of data) for (const r of d.rows) if (isNum(r.fwd[h])) { const a = avg.get(r.month) || avg.set(r.month, [0, 0]).get(r.month); a[0] += r.fwd[h]; a[1]++; }
+      for (const d of data) for (let i = 0; i < d.rows.length; i += Math.min(k, 3)) { const r = d.rows[i], a = avg.get(r.month); if (!a || a[1] < 10) continue;
+        const s = r.scale * Math.sqrt(k / 12), y = isNum(r.fwd[h]) && s > 0 ? clamp((r.fwd[h] - a[0] / a[1]) / s, -4, 4) : NaN; if (isNum(y)) all.push({ ind: d.industry, month: r.month, x: x(r), y, r }); }
       if (all.length < 200) continue;
-      const m = ridge(all.map((a) => a.x), all.map((a) => a.y), lambda), ma = ridge(all.map((a) => a.x), all.map((a) => a.ya), lambda);
+      const m = ridge(all.map((a) => a.x), all.map((a) => a.y), lambda);
       // Walk forward.
       const test = { n: 0, hits: 0, inband: 0, ics: [], base_hits: 0, spread: [] };
       const years = [...new Set(all.map((a) => Number(a.month.slice(0, 4))))].filter((y) => y >= testFrom).sort();
@@ -5435,7 +5468,7 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
         const mm = ridge(tr.map((a) => a.x), tr.map((a) => a.y), lambda);
         const byMonth = new Map();
         for (const a of te) { const p = apply1(mm, a.x); test.n++; if (Math.sign(p) === Math.sign(a.y) && a.y !== 0) test.hits++; if (Math.abs(a.y - p) <= 0.674 * mm.resid) test.inband++;
-          if (a.y > 0 === mm.b0 > 0) test.base_hits++; (byMonth.get(a.month) || byMonth.set(a.month, []).get(a.month)).push([p, a.y]); }
+          if (a.y !== 0 && (a.y > 0) === (mm.b0 > 0)) test.base_hits++; (byMonth.get(a.month) || byMonth.set(a.month, []).get(a.month)).push([p, a.y]); }
         // Cross-section each month: rank correlation, and the top fifth minus the bottom fifth (in vol units).
         for (const xs of byMonth.values()) { if (xs.length < 15) continue;
           const rk = (v) => { const o = v.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]); const r = Array(v.length); o.forEach(([, i], j) => (r[i] = j)); return r; };
@@ -5445,7 +5478,7 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
           test.spread.push(o.slice(0, q).reduce((t, u) => t + u[1], 0) / q - o.slice(-q).reduce((t, u) => t + u[1], 0) / q); }
       }
       const mean = (a) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN);
-      model.horizons[h] = { rel: m, abs: ma, n: all.length,
+      model.horizons[h] = { rel: m, n: all.length,
         test: { n: test.n, hit_rate: test.n ? Math.round((test.hits / test.n) * 1000) / 10 : null, base_hit_rate: test.n ? Math.round((test.base_hits / test.n) * 1000) / 10 : null,
           in_likely_range: test.n ? Math.round((test.inband / test.n) * 1000) / 10 : null, rank_ic: Math.round(mean(test.ics) * 1000) / 1000, months: test.ics.length,
           top_minus_bottom: Math.round(mean(test.spread) * 1000) / 1000, from: testFrom } };
@@ -5458,7 +5491,7 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
    * {rel: {median, p25, p75, prob_beat}, abs: {median, p25, p75, prob_up}, drivers: [{feature, label, value, push}]} in %,
    * or null when there isn't enough history.
    */
-  function predict(model, A) {
+  function predict(model, A, { market = 0.07 } = {}) {
     if (!model?.horizons || !A?.months?.length) return null;
     const R = rows({ ...A, months: [...A.months, "9999-99"], ind: [...A.ind, NaN], spy: [...A.spy, NaN], pe: [...A.pe, NaN] }).filter((r) => r.month === A.months[A.months.length - 1]);
     const r = R[0]; if (!r) return null;
@@ -5467,12 +5500,12 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
     for (const [h, k] of Object.entries(H)) {
       const M = model.horizons[h]; if (!M) continue;
       const s = r.scale * Math.sqrt(k / 12), sa = r.abs_scale * Math.sqrt(k / 12);
-      const zr = apply1(M.rel, xi), za = apply1(M.abs, xi);
+      const zr = apply1(M.rel, xi), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
       const drivers = FEATS.map((f, j) => ({ feature: f, label: LABEL[f], value: Math.round((f === "pe" ? r.pe : r[f]) * 1000) / 10, push: Math.round(((xi[j] - M.rel.mu[j]) / M.rel.sdv[j]) * M.rel.w[j] * s * 1000) / 10 }))
         .sort((a, b) => Math.abs(b.push) - Math.abs(a.push));
       out.horizons[h] = {
         rel: { median: pct(zr * s), p25: pct((zr - 0.674 * M.rel.resid) * s), p75: pct((zr + 0.674 * M.rel.resid) * s), prob_beat: Math.round(Phi(zr / M.rel.resid) * 100) },
-        abs: { median: pct(za * sa), p25: pct((za - 0.674 * M.abs.resid) * sa), p75: pct((za + 0.674 * M.abs.resid) * sa), prob_up: Math.round(Phi(za / M.abs.resid) * 100) },
+        abs: { median: pct(za * sa), p25: pct((za - 0.674 * residA) * sa), p75: pct((za + 0.674 * residA) * sa), prob_up: Math.round(Phi(za / residA) * 100) }, market: Math.round((Math.exp(mk) - 1) * 1000) / 10,
         rel_sigma: Math.round(s * 1000) / 10, drivers, test: M.test };
     }
     return out;
@@ -5481,7 +5514,7 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
   /** One line per horizon for the prompts. */
   function text(an) {
     if (!an?.horizons) return "";
-    return Object.entries(an.horizons).map(([h, a]) => `${h}: vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%), ${a.rel.prob_beat}% chance of beating it; absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%), ${a.abs.prob_up}% chance of a gain; what moves it: ${a.drivers.slice(0, 3).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; tested out of sample since ${a.test.from}: right on direction vs the S&P 500 ${a.test.hit_rate}% of the time (always calling the average ${a.test.base_hit_rate}%), ${a.test.in_likely_range}% of outcomes inside its likely range` : ""}`).join("\n");
+    return Object.entries(an.horizons).map(([h, a]) => `${h}: vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%), ${a.rel.prob_beat}% chance of beating it; absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%), ${a.abs.prob_up}% chance of a gain; what moves it: ${a.drivers.slice(0, 3).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; tested out of sample since ${a.test.from}: right on which side of the average industry it lands ${a.test.hit_rate}% of the time (a coin flip is 50%), rank correlation with what happened ${a.test.rank_ic}, ${a.test.in_likely_range}% of outcomes inside its likely range` : ""}`).join("\n");
   }
 
   const Anchor = { H, FEATS, LABEL, monthly, align, rows, ridge, fit, predict, text, Phi };
@@ -5514,6 +5547,11 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
   const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 
   const HORIZONS = [["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]];
+  /** The rules for the statistical anchor and the view vs the S&P 500 (the horizon step and the daily update share them). */
+  const ANCHOR_RULES = `- Start every window from the STATISTICAL ANCHOR in the HORIZON FACTS (a tested model: momentum, the latest month, the 3-month trend and valuation, fitted on every US industry since 2008). Your midpoints start at its medians, your probabilities at its probabilities. Move away only for evidence the anchor can't see (an event in the window, a change in earnings power, a ruling, a war), named in "away_from_anchor". Code blends your numbers with the anchor (half and half until your scorecard earns more weight) and keeps every likely range close to the width the anchor's test years actually saw: a wide range is the honest size of the uncertainty, not a failure.
+- "vs_spy" is the call that matters most: how the industry does against the S&P 500 over the window, which takes out the market's own swings. "expected_excess" = the LIKELY range (middle half) of the industry's return minus the S&P 500's, "probability_beat" = chance it beats the S&P 500 (0-100), "call" on the same five-level scale read as outperform / underperform (bullish = outperform). It must agree with "expected_move" through a sane market move (code checks).
+- Keep the windows one story: a direction that flips between neighbouring windows needs its reason in "drivers" (a near-term bounce inside a longer decline, a catalyst that lands later).`;
+  const VS_SCHEMA = `"vs_spy": {"call": "${Calls.ENUM}", "conviction": 6, "expected_excess": [-2, 3], "probability_beat": 55}, "away_from_anchor": "where and why you moved from the anchor, or 'none'"`;
   const DAYS = { "1M": 30, "3M": 91, "6M": 182, "12M": 365 };
   const ORDER = ["1M", "3M", "6M", "12M"];
   const addDays = (iso, n) => { const t = new Date(String(iso).slice(0, 10) + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
@@ -5553,11 +5591,17 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
         reporting_weight: Math.round(rep.reduce((a, c) => a + (c.weight || 0), 0) * 100),
         base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null,
         // Times like this: the 20 past months most like today (macro and the industry's setup), and the 5 closest episodes.
-        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })() };
+        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })(),
+        // The statistical anchor (anchor.js): a tested forecast vs the S&P 500 and absolute, with its out-of-sample record.
+        anchor: (() => { const a = doc.history?.anchor?.horizons?.[h]; return a ? { rel: a.rel, abs: a.abs, rel_sigma: a.rel_sigma, drivers: (a.drivers || []).slice(0, 3), test: a.test ? { hit_rate: a.test.hit_rate, base_hit_rate: a.test.base_hit_rate, in_likely_range: a.test.in_likely_range, rank_ic: a.test.rank_ic, from: a.test.from } : null } : null; })(),
+        // How much weight the strategist's own view gets against the anchor (from the scorecard; 0.5 until there is one).
+        blend: isNum(doc.scorecard?.blend?.[h]) ? doc.scorecard.blend[h] : 0.5,
+        score: (() => { const b = doc.scorecard?.by?.[h]; return b && b.n ? { n: b.n, hit: b.beat_hit ?? b.hit, anchor_hit: b.anchor_hit, in_range: b.in_range } : null; })() };
     });
   }
   const likeText = (l) => (l ? `in the ${l.n} past months most like today (macro backdrop and industry setup) the industry was higher ${l.pos}% of the time (all months ${l.all_pos}%), median ${l.median > 0 ? "+" : ""}${l.median}%, middle half ${l.p25}% to ${l.p75}%; in the 5 closest episodes up ${l.top_up} of ${l.top_n}, median ${l.top_median}%; ` : "");
-  const factsLine = (f) => `${f.h} (to ${f.end}): ${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
+  const anchorText = (a) => (a ? `STATISTICAL ANCHOR (tested): vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%, ${a.rel.prob_beat}% chance of beating it); absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%, ${a.abs.prob_up}% chance of a gain); moved by ${(a.drivers || []).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; out of sample since ${a.test.from} it called the direction vs the S&P 500 right ${a.test.hit_rate}% of the time (the average alone ${a.test.base_hit_rate}%) and ${a.test.in_likely_range}% of outcomes fell inside its likely range` : ""}; ` : "");
+  const factsLine = (f) => `${f.h} (to ${f.end}): ${anchorText(f.anchor)}${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
 
   // ---------------------------------------------------------------- economic calendar
   // Countries pulled from the forward economic calendar: the US, the big blocs, and the industry's top trade partners.
@@ -5708,10 +5752,11 @@ ${rules}
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
 - Start every horizon from history: where HORIZON FACTS give the past months most like today, "probability_up" starts from that hit rate and "expected_move" from that middle half; move away only for reasons this time is different (say which, in "drivers", citing the TIMES LIKE THIS episodes [HE#] that agree or disagree). A call far from history needs a stated reason.
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
+${ANCHOR_RULES}
 ${Calls.rules("the industry")}
 
 Reply with ONLY this JSON:
-{"horizons": {${ORDER.map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
+{"horizons": {${ORDER.map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${VS_SCHEMA}, "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
   }
 
   // ---------------------------------------------------------------- cleaning and checks
@@ -5725,7 +5770,8 @@ Reply with ONLY this JSON:
     for (const [h] of HORIZONS) {
       const x = raw?.[h]; if (!x || typeof x !== "object") continue;
       const pu = Number(x.probability_up);
-      hz[h] = { call: Calls.norm(x.call, "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null,
+      hz[h] = { call: Calls.norm(x.call, "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_spy: cleanVs(x.vs_spy),
+        away_from_anchor: clean(x.away_from_anchor, 400),
         conviction: Calls.conviction(x.conviction), conviction_why: clean(x.conviction_why, 300), drivers: clean(x.drivers, 1100), risk: clean(x.risk, 400), positioning: clean(x.positioning, 500),
         section_reads: Object.fromEntries(keys.map((k) => [k, clean(x.section_reads?.[k], 360)]).filter(([, t]) => t)),
         decisions: arr(x.decisions, 30).map((d) => ({ refs: refs(d?.refs, cids), date: normDate(d?.date) ? String(d.date).slice(0, 10) : "", event: clean(d?.event, 200), outcomes: clean(d?.outcomes, 500), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral") })).filter((d) => d.event),
@@ -5734,6 +5780,44 @@ Reply with ONLY this JSON:
         sections: arr(x.sections, 4).map((y) => String(y).toLowerCase()).filter((y) => keys.includes(y)) };
     }
     return hz;
+  }
+  /** The strategist's view vs the S&P 500: {expected_excess [lo, hi], probability_beat, call, conviction} or null. */
+  function cleanVs(v) {
+    if (!v || typeof v !== "object") return null;
+    const r = (Array.isArray(v.expected_excess) ? v.expected_excess : []).map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b), p = Number(v.probability_beat);
+    if (!r.length && !isNum(p)) return null;
+    return { expected_excess: r, probability_beat: isNum(p) ? Math.max(0, Math.min(100, Math.round(p))) : null, call: Calls.norm(v.call, "neutral"), conviction: Calls.conviction(v.conviction) };
+  }
+  const r1 = (v) => Math.round(v * 10) / 10;
+  /**
+   * Blend one window's numbers with the statistical anchor: the center moves from the anchor toward the strategist's by
+   * weight w (0.5 until the scorecard says otherwise) and never further than the anchor's likely range; the range's
+   * width stays at what the anchor's test years actually saw (0.85x to 1x: wider overstates the uncertainty, narrower
+   * pretends to a precision no one has). The same for the view vs the
+   * S&P 500, which code fills from the absolute view and the anchor's market expectation when the strategist gave none.
+   * The strategist's own numbers are kept in "model". Mutates x.
+   */
+  function blendWithAnchor(x, a, w = 0.5) {
+    const one = (r, p, A, pKey) => {
+      const half = Math.max(0.5, (A.p75 - A.p25) / 2), mid0 = r?.length ? (r[0] + r[r.length - 1]) / 2 : A.median, hw0 = r?.length === 2 ? (r[1] - r[0]) / 2 : half;
+      const mid = A.median + Math.max(-half, Math.min(half, w * (mid0 - A.median)));
+      const hw = Math.max(0.85 * half, Math.min(half, hw0));
+      const pa = A[pKey], pm = isNum(p) ? p : pa, prob = Math.round(Math.max(pa - 15, Math.min(pa + 15, pa + w * (pm - pa))));
+      return { range: [r1(mid - hw), r1(mid + hw)], prob: Math.max(1, Math.min(99, prob)), moved: r1(mid - A.median) };
+    };
+    x.model = x.model || { expected_move: x.expected_move, probability_up: x.probability_up, vs_spy: x.vs_spy ? { ...x.vs_spy } : null };
+    const ab = one(x.model.expected_move, x.model.probability_up, a.abs, "prob_up");
+    x.expected_move = ab.range; x.probability_up = ab.prob;
+    const mkt = a.abs.median - a.rel.median, mv = x.model.vs_spy;
+    // No view vs the market given: the absolute view less the anchor's market expectation.
+    const vsR = mv?.expected_excess?.length ? mv.expected_excess : (x.model.expected_move?.length ? x.model.expected_move.map((v) => v - mkt) : null);
+    const vsP = isNum(mv?.probability_beat) ? mv.probability_beat : isNum(x.model.probability_up) ? a.rel.prob_beat + (x.model.probability_up - a.abs.prob_up) : null;
+    const rl = one(vsR, vsP, a.rel, "prob_beat");
+    x.vs_spy = { expected_excess: rl.range, probability_beat: rl.prob, conviction: mv?.conviction ?? x.conviction ?? null, call: "neutral" };
+    const rc = Calls.reconcile({ call: mv?.call || "neutral", probability_up: rl.prob, expected_move: rl.range }, a.rel_sigma);
+    x.vs_spy.call = rc.call; if (rc.fixed && mv?.call) x.vs_spy.call_fixed = rc.fixed.replace("chance of a gain", "chance of beating the S&P 500");
+    x.anchor = { abs: a.abs, rel: a.rel, test: a.test || null, weight: w, moved_abs: ab.moved, moved_rel: rl.moved };
+    return x;
   }
   /**
    * Hold every call to its own numbers (Calls.reconcile, against the window's one-sigma move) and to its own conviction
@@ -5744,7 +5828,9 @@ Reply with ONLY this JSON:
     for (const [h, x] of Object.entries(hz || {})) {
       if (!x || typeof x !== "object") continue;
       x.call = Calls.norm(x.call, "neutral"); x.conviction = Calls.conviction(x.conviction);
-      const f = (facts || []).find((y) => y.h === h) || {}, r = Calls.reconcile(x, f.sigma);
+      const f = (facts || []).find((y) => y.h === h) || {};
+      if (f.anchor) blendWithAnchor(x, f.anchor, isNum(f.blend) ? f.blend : 0.5);
+      const r = Calls.reconcile(x, f.sigma);
       if (r.fixed) { x.model_call = x.model_call || x.call; x.call = r.call; x.call_fixed = r.fixed; }
       const hp = f.like?.pos ?? f.base_up, hl = isNum(hp) ? Calls.implied({ p: hp }) : null;
       if (hl && Calls.dir(hl) && Calls.dir(x.call) && Calls.dir(hl) !== Calls.dir(x.call) && isNum(x.conviction) && x.conviction > 6) {
@@ -5784,6 +5870,16 @@ Reply with ONLY this JSON:
       // How far the call sits from history (a note for the reader, not an error).
       if (f.like && isNum(x.probability_up)) { out.history = { pos: f.like.pos, gap: x.probability_up - f.like.pos, median: f.like.median, top_up: f.like.top_up, top_n: f.like.top_n };
         if (Math.abs(out.history.gap) >= 25) out.history.note = `${x.probability_up}% chance of a gain vs ${f.like.pos}% in the past months most like today`; }
+      // Consistent across windows: a direction that flips between neighbouring windows needs its reason in "drivers".
+      const prev = ORDER.indexOf(h) > 0 ? hz?.[ORDER[ORDER.indexOf(h) - 1]] : null;
+      if (prev && Calls.dir(prev.call) && Calls.dir(x.call) && Calls.dir(prev.call) !== Calls.dir(x.call) && (Calls.conviction(x.conviction) ?? 5) >= 4 && (Calls.conviction(prev.conviction) ?? 5) >= 4 && !/revers|flip|turn|bounce|rebound|first .* then|near[- ]term .* (but|then)|short[- ]term/i.test(String(x.drivers || "") + String(prev.drivers || "")))
+        issues.push(`${ORDER[ORDER.indexOf(h) - 1]} is ${prev.call} but ${h} is ${x.call}: say why the direction flips, or align them`);
+      // The view vs the S&P 500 and the absolute view must imply a sane market move.
+      if (x.vs_spy?.expected_excess?.length && x.expected_move?.length && f.anchor) {
+        const mk = mid(x.expected_move) - mid(x.vs_spy.expected_excess), am = f.anchor.abs.median - f.anchor.rel.median, sw = Math.max(3, (f.anchor.abs.p75 - f.anchor.abs.p25) / 2);
+        if (Math.abs(mk - am) > sw) issues.push(`the absolute and vs-S&P views imply the S&P 500 moves ${mk > 0 ? "+" : ""}${mk.toFixed(1)}% over ${h}, against an expected ${am > 0 ? "+" : ""}${am.toFixed(1)}%`);
+      }
+      if (x.vs_spy) out.vs_spy = { mid: x.vs_spy.expected_excess?.length ? Math.round(mid(x.vs_spy.expected_excess) * 10) / 10 : null, p: x.vs_spy.probability_beat };
       out.ok = !issues.length;
       out.covered = cal ? !out.missing_events.length && !out.missing_standing.length && !out.missing_sections.length : null;
       return out;
@@ -5829,6 +5925,46 @@ ${rules}
 Reply with ONLY this JSON, with an entry for each horizon above:
 {"horizons": {${Object.keys(miss).map((h) => `"${h}": {"conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "...", "impact": "..."}], "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "...", "lean": "positive | negative | binary | neutral"}], "section_reads": {"key": "..."}}`).join(", ")}}}`;
   }
+  /** The contradictions code found (not coverage): ["3M: ...", ...]. */
+  const issuesOf = (checks) => (checks || []).flatMap((c) => (c.issues || []).filter((t) => t !== "no call").map((t) => `${c.h}: ${t}`));
+  /**
+   * A focused follow-up when the calls contradict each other or their own numbers: fix each, or (for a direction that
+   * flips between windows) say why in "drivers". Only the windows that change come back.
+   */
+  function repairPrompt(name, today, hz, issues, facts) {
+    const calls = Object.fromEntries(ORDER.filter((h) => hz?.[h]).map((h) => { const x = hz[h]; return [h, { call: x.call, conviction: x.conviction, expected_move: x.expected_move, probability_up: x.probability_up, vs_spy: x.vs_spy || null, drivers: trim(String(x.drivers || "").replace(/\s*\[[^\]]*\]/g, ""), 500) }]; }));
+    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. Code checked your 1M, 3M, 6M and 12M calls and found these contradictions:
+${issues.map((t) => `- ${t}`).join("\n")}
+
+THE CALLS AS THEY STAND
+${JSON.stringify(calls)}
+
+THE NUMBERS THEY MUST RESPECT
+${(facts || []).map((f) => `${f.h}: one sigma ±${f.sigma ?? "n/a"}%; ${anchorText(f.anchor)}`).join("\n")}
+
+Resolve every contradiction: change the call, its numbers or its view vs the S&P 500 so they agree, or, where a direction really does flip between windows (a near-term bounce inside a longer decline), keep it and say why in that window's "drivers". The 12-month view must agree with your scenarios' probability-weighted return. Return ONLY the windows you change, each in full.
+${Calls.rules("the industry")}
+
+Reply with ONLY this JSON:
+{"horizons": {"3M": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${VS_SCHEMA}, "drivers": "3-4 sentences, keeping the citations you had"}}}`;
+  }
+  /** Merge the follow-up's windows into the calls; each changed window is blended with the anchor again. */
+  function mergeRepair(hz, fix, clean = (t, n) => trim(t, n)) {
+    const out = { ...(hz || {}) };
+    for (const [h, f] of Object.entries(fix || {})) {
+      if (!out[h] || !f || typeof f !== "object") continue;
+      const x = { ...out[h] }, r = (Array.isArray(f.expected_move) ? f.expected_move : []).map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b), pu = Number(f.probability_up);
+      if (f.call) x.call = Calls.norm(f.call, x.call);
+      if (Calls.conviction(f.conviction)) x.conviction = Calls.conviction(f.conviction);
+      if (r.length === 2) x.expected_move = r;
+      if (isNum(pu)) x.probability_up = Math.max(0, Math.min(100, Math.round(pu)));
+      const v = cleanVs(f.vs_spy); if (v) x.vs_spy = v;
+      const d = clean(f.drivers, 1100); if (d) x.drivers = d;
+      x.model = null; x.repaired = true;
+      out[h] = x;
+    }
+    return out;
+  }
   /** Add the follow-up's pieces to the raw calls (new entries appended; missing section reads filled). */
   function mergeFix(hz, fix) {
     const out = { ...(hz || {}) };
@@ -5843,7 +5979,7 @@ Reply with ONLY this JSON, with an entry for each horizon above:
     return out;
   }
 
-  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, holdCalls, horizonChecks, missingOf, fixPrompt, mergeFix };
+  const Horizon = { issuesOf, repairPrompt, mergeRepair, ANCHOR_RULES, VS_SCHEMA, blendWithAnchor, cleanVs, anchorText, HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, holdCalls, horizonChecks, missingOf, fixPrompt, mergeFix };
   if (typeof module !== "undefined" && module.exports) module.exports = Horizon;
   else root.Horizon = Horizon;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -8075,6 +8211,7 @@ ${schemaFor(part)}`;
   const pc = (x, d = 1) => (isNum(x) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");
   const HZ = ["1M", "3M", "6M", "12M"];
   const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
+  const Horizon = typeof module !== "undefined" && module.exports ? require("./horizon.js") : root.Horizon;
   /** Calls still on the old three-level scale (bullish / neutral / bearish; high / medium / low): every one gets re-graded. */
   const legacyCalls = (res) => HZ.some((h) => { const x = res?.horizons?.[h]; return x && (!Calls.LEVELS.includes(x.call) || !isNum(x.conviction)); });
 
@@ -8190,6 +8327,11 @@ ${schemaFor(part)}`;
     if ((x.filings || []).length) L.push(`New SEC 8-K filings by the industry's largest companies:\n${x.filings.map((f) => `[${f.id}] ${f.date} ${f.title}`).join("\n")}`);
     L.push(`New world headlines:\n${x.world.map((n) => `[${n.id}] ${n.date} ${n.source}: ${n.title}`).join("\n") || "(none)"}`);
     return L.join("\n");
+  }
+  /** The strategist's record on matured calls (from the scorecard), one line, for the prompts. */
+  function scorecardText(facts) {
+    const sc = (facts || []).map((f) => f.score && f.score.n ? `${f.h}: ${f.score.n} matured calls, direction right ${f.score.hit}% (the anchor ${f.score.anchor_hit ?? "n/a"}%), ${f.score.in_range}% inside their likely range (50% is calibrated)` : "").filter(Boolean);
+    return sc.length ? `YOUR SCORECARD (calls that have run their course, across every industry): ${sc.join("; ")}. Code weighs your view against the anchor by this record.` : "";
   }
   const callsText = (res) => HZ.filter((h) => res?.horizons?.[h]).map((h) => { const x = res.horizons[h];
     return `${h}: ${x.call}, conviction ${isNum(x.conviction) ? x.conviction + "/10" : x.conviction || "?"}, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% chance higher. Why: ${noIds(x.drivers, 500)}${(x.decisions || []).length ? ` Decisions in the window: ${x.decisions.slice(0, 6).map((c) => `${c.date || ""} ${noIds(c.event, 90)}`).join("; ")}.` : ""}`; }).join("\n");
@@ -8381,6 +8523,9 @@ YOUR CURRENT 1M, 3M, 6M AND 12M CALLS
 ${callsText(res)}
 
 NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`).join(", ") || "n/a"}
+${(facts || []).some((f) => f.anchor) ? `STATISTICAL ANCHOR, TODAY (refreshed with today's prices; your calls start here):
+${facts.filter((f) => f.anchor).map((f) => `${f.h}: ${Horizon.anchorText(f.anchor)}`).join("\n")}` : ""}
+${scorecardText(facts)}
 ${(facts || []).some((f) => f.like) ? `TIMES LIKE THIS (the past months most like today, macro and industry setup; start from these and move away only for a stated reason): ${(facts || []).filter((f) => f.like).map((f) => `${f.h} up ${f.like.pos}% of the time, median ${f.like.median}% (middle half ${f.like.p25}% to ${f.like.p75}%), 5 closest episodes up ${f.like.top_up} of ${f.like.top_n}`).join("; ")}` : ""}
 ${isNum(num(pe)) ? `TODAY'S P/E FOR THE SCENARIO MATH: ${num(pe)}` : ""}
 ${dg && isNum(dg.move) ? `SINCE YOUR LAST FULL REWRITE (${dg.since}): the industry moved ${pc(dg.move)}${isNum(dg.z) ? `, ${Math.abs(dg.z).toFixed(1)} times a normal move for that time` : ""}; ${dg.updates || 0} daily update${dg.updates === 1 ? "" : "s"} since.` : ""}
@@ -8395,6 +8540,7 @@ HOW TO UPDATE
 3. Scenario numbers stay consistent: price_move ≈ (1 + eps_change/100) × (end P/E ÷ today's P/E) − 1, and probabilities sum to 100; if you change one probability, give all three. A scenario's "sections" object: only the section reads that change.
 4. A call: ${legacyCalls(res) ? `your calls above are on the OLD three-level scale (bullish / neutral / bearish, conviction high / medium / low). Re-grade EVERY call on the new scale below: give each one status "revised", with its call, a 1-10 conviction, its range and its chance of a gain, starting from TIMES LIKE THIS; keep the range and probability where they still hold.` : `keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.`} A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
 ${Calls.rules("the industry")}
+${Horizon.ANCHOR_RULES}
 4b. For each event that has passed (listed above with its ID): say how it landed, from its headlines, and rewrite every part of the analysis that assumed an outcome: a scenario that hinged on it (the outcome may make one scenario the base case), a debate it settles, a driver, a call it was the catalyst for, the opportunity. If no headline says how it landed, say "unknown" (it stays on the list until one does).
 5. Keep it all consistent: the headline, thesis, scenarios, opportunity, profiles and calls must tell one story after your changes.
 6. Then answer honestly: if you threw this analysis away and wrote it from scratch today, with everything above, would you reach the same core thesis, the same scenario set and the same opportunity verdict? "different" if the story itself would be built differently, not merely updated. A "different" orders a full rewrite.
@@ -8402,7 +8548,7 @@ ${Calls.rules("the industry")}
 
 Reply with ONLY this JSON:
 {"material": true or false, "headline": "one sentence: what changed today for this industry", "summary": "2-4 sentences, cited", "changes": [{"text": "one change and what it means, cited", "effect": "positive | negative | mixed"}],
- "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
+ "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${Horizon.VS_SCHEMA}, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
  "analysis": {only the parts that change, in the same shape as YOUR WHOLE ANALYSIS above; {} if nothing changes},
  "rethink": {"from_scratch": "same | different", "why": "one sentence"},
  "events": [{"id": "C7", "landed": "one or two sentences: what happened and what it means for this industry, cited | unknown"}],
@@ -8482,9 +8628,12 @@ Reply with ONLY this JSON:
       const revised = lc(y.status) === "revised";
       hz[h] = { status: revised ? "revised" : "unchanged", why: cite(y.why, 500) };
       if (revised) { const to = { call: Calls.norm(y.call, Calls.norm(old.call)), conviction: Calls.conviction(y.conviction) ?? Calls.conviction(old.conviction), conviction_why: cite(y.conviction_why, 300) || old.conviction_why || "", expected_move: rng(y.expected_move).length ? rng(y.expected_move) : old.expected_move, probability_up: isNum(num(y.probability_up)) ? Math.max(0, Math.min(100, Math.round(num(y.probability_up)))) : old.probability_up };
+        to.vs_spy = Horizon.cleanVs(y.vs_spy) || null; to.away_from_anchor = cite(y.away_from_anchor, 400) || "";
         const from = { call: old.call, conviction: old.conviction ?? "", conviction_why: old.conviction_why || "", expected_move: old.expected_move, probability_up: old.probability_up };
-        if (JSON.stringify(from) === JSON.stringify(to)) hz[h].status = "unchanged";
-        else { Object.assign(old, to, { daily: { date: today, why: hz[h].why, from } }); hz[h].from = from; hz[h].to = to; } } }
+        const same = ["call", "conviction", "expected_move", "probability_up"].every((k) => JSON.stringify(from[k]) === JSON.stringify(to[k])) && !to.vs_spy;
+        // A revised call is the strategist's new view: code blends it with the anchor again (holdCalls), so drop the old blend's input.
+        if (same) hz[h].status = "unchanged";
+        else { Object.assign(old, to, { model: null, daily: { date: today, why: hz[h].why, from } }); hz[h].from = from; hz[h].to = to; } } }
     const sp = upd?.scenario_probabilities;
     if (sp && typeof sp === "object" && out.scenarios) { const ks = ["bull", "base", "bear"].filter((k) => out.scenarios[k] && isNum(num(sp[k])));
       const tot = ks.reduce((a, k) => a + num(sp[k]), 0);
@@ -9051,6 +9200,13 @@ Reply with ONLY this JSON:
    * Open calls only need today's price, so those come from batch quotes (100 symbols a call); full histories are
    * fetched only for calls with a horizon that has just come due.
    */
+  /** The scorecard across every industry's logged calls in this browser (refreshed at most every 10 minutes). */
+  async function scorecardNow() {
+    if (S.scorecard && Date.now() - S.scorecard.t < 600e3) return S.scorecard.v;
+    const keys = ((await idbKeys()) || []).map(String).filter((k) => /^calls:/.test(k));
+    const all = []; for (const k of keys) all.push(...((await idbGet(k).catch(() => null)) || []));
+    const v = Track.scorecard(all); S.scorecard = { t: Date.now(), v }; return v;
+  }
   async function sweepTracks({ force = false } = {}) {
     if (JOB || !S.mcp) return;
     if (S.sweep?.busy) { if (force) S.sweep.again = true; return; }
@@ -9212,6 +9368,11 @@ Reply with ONLY this JSON:
       const ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
       history.times = Regimes.episodes({ ind: { dates: ls.dates, values: ls.levels }, pe: pes?.dates?.length ? pes : null, mk: await regimeData(), today: today() });
     } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("times like this", e); }
+    // The statistical anchor: the tested model's forecast for this industry today, vs the S&P 500 and absolute.
+    if (history && window.ANCHOR_MODEL) try {
+      const mk = await regimeData(), ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
+      if (mk?.spy?.dates?.length) history.anchor = Anchor.predict(window.ANCHOR_MODEL, Anchor.align({ dates: ls.dates, levels: ls.levels }, { dates: mk.spy.dates, closes: mk.spy.closes || mk.spy.values }, pes?.dates?.length ? pes : null), { market: (isNum(bench.rf_latest) ? bench.rf_latest : 0.04) + (isNum(bench.erp) ? bench.erp : 0.045) });
+    } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("anchor", e); }
     const pe = fallback ? { table: null, etf: null } : await fetchPeers(name, sector, org, bench);
     if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = res.summary.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }
     const cmdi = S.eod ? await cached("cmdi", () => optionalEod(async () => { const a = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100 }); const b = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100, offset: 100 }).catch(() => null); return [...(a?.data || []), ...(b?.data || [])]; }, [])) : [];
@@ -9232,8 +9393,9 @@ Reply with ONLY this JSON:
       top_levels: [...doc.constituents].sort((a, b) => b.weight - a.weight).slice(0, 8).map((c) => ({ symbol: c.symbol, ...(Plan.levels(prices[c.symbol]) || {}) })) });
     doc.credit = jsonSafe(Plan.credit({ cmdi, hyg: bench.factors?.credit ? { closes: bench.factors.credit.values } : null, ief: hraw.ief, companies: doc.constituents }));
     S.industries[slug(name)] = doc;
-    // Score earlier calls on this industry with the prices just fetched.
+    // Score earlier calls on this industry with the prices just fetched, then the scorecard across every industry.
     await evaluateTrack(name, (sym) => prices[sym] || null, bench).catch(() => {});
+    doc.scorecard = await scorecardNow().catch(() => null);
   }
 
   async function runResearchStep(name, { shared = true, run = S.run } = {}) {
@@ -9634,6 +9796,13 @@ Reply with ONLY this JSON:
       };
       horizons = await fillGaps(horizons, "");
       if (R.cancel) return;
+      // Calls that contradict each other or their own numbers (code checks): one focused fix.
+      { const iss = Horizon.issuesOf(pre({ ...syn, ...scen, horizons }).horizon_checks);
+        if (iss.length) await step(`Lead strategist: making the calls agree (${iss.length} contradiction${iss.length === 1 ? "" : "s"})`, async (en) => {
+          try { const fix = await call(Horizon.repairPrompt(d.name, today(), horizons, iss, Brain.horizonFacts(d, today())), en); horizons = Horizon.mergeRepair(horizons, fix?.horizons || fix); }
+          catch (e) { if (STOP_CODES.has(e?.code)) throw e; en.note = "the fix didn't come back"; return; }
+          const left = Horizon.issuesOf(pre({ ...syn, ...scen, horizons }).horizon_checks); en.note = left.length ? `${left.length} still to resolve` : "every call now agrees with the others and its numbers"; });
+        if (R.cancel) return; }
       await step("Lead strategist: verdict for each investor type, section by section, and the scorecard", async (en) => { ver = await call(Brain.verdictsPrompt(d, { ...ctx, math: m0, calendar: cal }, { ...syn, ...scen, horizons }), en); });
       if (R.cancel) return;
       let draft = { ...syn, ...scen, horizons, ...ver };
@@ -10149,6 +10318,10 @@ Reply with ONLY this JSON:
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             r2.horizon_facts = Brain.horizonFacts(d, today());
             if (r2.horizons) Horizon.holdCalls(r2.horizons, r2.horizon_facts);
+            // Calls that contradict each other or their numbers go back to the strategist once.
+            if (r2.horizons && upd) { const iss = Horizon.issuesOf(Brain.horizonChecks(r2.horizons, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS));
+              if (iss.length) { const fix = await call(Horizon.repairPrompt(name, today(), r2.horizons, iss, r2.horizon_facts), leadTier, `Daily update, making the calls agree: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+                if (fix?.horizons) { r2.horizons = Horizon.mergeRepair(r2.horizons, fix.horizons); Horizon.holdCalls(r2.horizons, r2.horizon_facts); r2.daily = { ...(r2.daily || {}), repaired: iss.slice(0, 8) }; } } }
             if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
             // Code's checks, as after a full run: does the opportunity verdict still match its own numbers?
             if (r2.opportunity && r2.math) { const m = r2.math, ov = r2.opportunity.verdict; r2.opportunity.consistent = !((ov === "yes" && (m.expected_return < 4 || (m.reward_risk !== null && m.reward_risk < 1.2))) || (ov === "no" && m.expected_return >= 10)); }
@@ -11677,9 +11850,14 @@ Reply with ONLY this JSON:
     const hzCard = (h) => { const x = r.horizons?.[h]; const f = (r.horizon_facts || []).find((y) => y.h === h); const ck = (r.horizon_checks || []).find((y) => y.h === h);
       if (!x) return `<div class="box hz"><div class="dim-head"><b>${h}</b></div><div class="small muted">No ${h} call came back. Run the lead strategist again.</div></div>`;
       const dv = x.daily, dvL = dv ? `<div class="small daily-rev"><span class="pill warn">revised ${esc(fmtShort(dv.date))}</span> from ${esc(dv.from?.call || "")} ${esc(rangeTxt(dv.from?.expected_move))}${isNum(num(dv.from?.probability_up)) ? `, ${dv.from.probability_up}% up` : ""}. ${dailyRich(dv.why, r.daily?.sources)}</div>` : "";
-      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${callPill(x.call)}${convTag(x)}</div>${dvL}
-        <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
-        <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>
+      const vs = x.vs_spy, an = x.anchor, vsMid = vs?.expected_excess?.length ? vs.expected_excess.reduce((a, v) => a + v, 0) / vs.expected_excess.length : null;
+      const relWord = (c) => ({ "strongly bullish": "Outperform", "slightly bullish": "Slightly outperform", neutral: "In line", "slightly bearish": "Slightly underperform", "strongly bearish": "Underperform" })[Calls.norm(c)] || "—";
+      const vsL = vs ? `<div class="hz-vs"><span class="eyebrow">vs the S&amp;P 500</span> <span class="pill ${Calls.cls(vs.call)}">${esc(relWord(vs.call))}</span>
+        <div class="hz-num"><span class="v" style="color:${(vsMid ?? 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${vsMid !== null ? `${vsMid > 0 ? "+" : ""}${Math.round(vsMid * 10) / 10}%` : "—"}</span><span class="small muted">likely ${esc(rangeTxt(vs.expected_excess))} vs the market${isNum(num(vs.probability_beat)) ? ` · <b>${vs.probability_beat}%</b> chance it beats it` : ""}</span></div></div>` : "";
+      const anL = an ? `<div class="small muted hz-anchor">Tested anchor: ${an.rel?.median > 0 ? "+" : ""}${an.rel?.median ?? "—"}% vs the S&amp;P 500, ${an.abs?.median > 0 ? "+" : ""}${an.abs?.median ?? "—"}% absolute${an.test?.hit_rate ? ` (right on direction vs the S&amp;P ${an.test.hit_rate}% of the time out of sample)` : ""}; ${Math.abs(an.moved_rel ?? 0) >= 0.5 || Math.abs(an.moved_abs ?? 0) >= 0.5 ? `the strategist moved it ${an.moved_abs > 0 ? "+" : ""}${an.moved_abs} pts${x.away_from_anchor && !/^none/i.test(x.away_from_anchor) ? `: ${rich(x.away_from_anchor)}` : ""}` : "the call sits on it"}${x.model?.expected_move?.length ? ` <span title="The strategist's own range before blending with the anchor">(strategist alone: ${esc(rangeTxt(x.model.expected_move))})</span>` : ""}</div>` : "";
+      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${callPill(x.call)}${convTag(x)}</div>${dvL}${vsL}
+        <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">${vs ? "absolute, " : ""}expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
+        <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>${anL}
         ${(() => { const b = d.history?.times?.base?.[h]; if (!b || !isNum(num(b.pos))) return ""; const gap = isNum(num(x.probability_up)) ? x.probability_up - b.pos : null;
           return `<div class="small hz-hist"><a href="#times">Times like this</a>: up in <b>${b.top_up} of ${b.top_n}</b> closest episodes (median ${b.top_median > 0 ? "+" : ""}${b.top_median ?? "—"}%); ${b.pos}% of the ${b.n} closest months${isNum(gap) && Math.abs(gap) >= 25 ? ` <span class="pill warn" title="The call's chance of a gain is far from what followed the past months most like today">${gap > 0 ? "+" : ""}${gap} pts vs history</span>` : ""}</div>`; })()}
         ${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}

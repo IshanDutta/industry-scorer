@@ -20,6 +20,7 @@
   const pc = (x, d = 1) => (isNum(x) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");
   const HZ = ["1M", "3M", "6M", "12M"];
   const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
+  const Horizon = typeof module !== "undefined" && module.exports ? require("./horizon.js") : root.Horizon;
   /** Calls still on the old three-level scale (bullish / neutral / bearish; high / medium / low): every one gets re-graded. */
   const legacyCalls = (res) => HZ.some((h) => { const x = res?.horizons?.[h]; return x && (!Calls.LEVELS.includes(x.call) || !isNum(x.conviction)); });
 
@@ -135,6 +136,11 @@
     if ((x.filings || []).length) L.push(`New SEC 8-K filings by the industry's largest companies:\n${x.filings.map((f) => `[${f.id}] ${f.date} ${f.title}`).join("\n")}`);
     L.push(`New world headlines:\n${x.world.map((n) => `[${n.id}] ${n.date} ${n.source}: ${n.title}`).join("\n") || "(none)"}`);
     return L.join("\n");
+  }
+  /** The strategist's record on matured calls (from the scorecard), one line, for the prompts. */
+  function scorecardText(facts) {
+    const sc = (facts || []).map((f) => f.score && f.score.n ? `${f.h}: ${f.score.n} matured calls, direction right ${f.score.hit}% (the anchor ${f.score.anchor_hit ?? "n/a"}%), ${f.score.in_range}% inside their likely range (50% is calibrated)` : "").filter(Boolean);
+    return sc.length ? `YOUR SCORECARD (calls that have run their course, across every industry): ${sc.join("; ")}. Code weighs your view against the anchor by this record.` : "";
   }
   const callsText = (res) => HZ.filter((h) => res?.horizons?.[h]).map((h) => { const x = res.horizons[h];
     return `${h}: ${x.call}, conviction ${isNum(x.conviction) ? x.conviction + "/10" : x.conviction || "?"}, ${(x.expected_move || []).join(" to ")}%, ${x.probability_up ?? "?"}% chance higher. Why: ${noIds(x.drivers, 500)}${(x.decisions || []).length ? ` Decisions in the window: ${x.decisions.slice(0, 6).map((c) => `${c.date || ""} ${noIds(c.event, 90)}`).join("; ")}.` : ""}`; }).join("\n");
@@ -326,6 +332,9 @@ YOUR CURRENT 1M, 3M, 6M AND 12M CALLS
 ${callsText(res)}
 
 NORMAL MOVES NOW (one sigma): ${(facts || []).map((f) => `${f.h} ±${f.sigma}%`).join(", ") || "n/a"}
+${(facts || []).some((f) => f.anchor) ? `STATISTICAL ANCHOR, TODAY (refreshed with today's prices; your calls start here):
+${facts.filter((f) => f.anchor).map((f) => `${f.h}: ${Horizon.anchorText(f.anchor)}`).join("\n")}` : ""}
+${scorecardText(facts)}
 ${(facts || []).some((f) => f.like) ? `TIMES LIKE THIS (the past months most like today, macro and industry setup; start from these and move away only for a stated reason): ${(facts || []).filter((f) => f.like).map((f) => `${f.h} up ${f.like.pos}% of the time, median ${f.like.median}% (middle half ${f.like.p25}% to ${f.like.p75}%), 5 closest episodes up ${f.like.top_up} of ${f.like.top_n}`).join("; ")}` : ""}
 ${isNum(num(pe)) ? `TODAY'S P/E FOR THE SCENARIO MATH: ${num(pe)}` : ""}
 ${dg && isNum(dg.move) ? `SINCE YOUR LAST FULL REWRITE (${dg.since}): the industry moved ${pc(dg.move)}${isNum(dg.z) ? `, ${Math.abs(dg.z).toFixed(1)} times a normal move for that time` : ""}; ${dg.updates || 0} daily update${dg.updates === 1 ? "" : "s"} since.` : ""}
@@ -340,6 +349,7 @@ HOW TO UPDATE
 3. Scenario numbers stay consistent: price_move ≈ (1 + eps_change/100) × (end P/E ÷ today's P/E) − 1, and probabilities sum to 100; if you change one probability, give all three. A scenario's "sections" object: only the section reads that change.
 4. A call: ${legacyCalls(res) ? `your calls above are on the OLD three-level scale (bullish / neutral / bearish, conviction high / medium / low). Re-grade EVERY call on the new scale below: give each one status "revised", with its call, a 1-10 conviction, its range and its chance of a gain, starting from TIMES LIKE THIS; keep the range and probability where they still hold.` : `keep one that still holds exactly as it is (status "unchanged"); revise it only for a real change in what drives it.`} A revised range is the LIKELY range (the middle half of outcomes): its half-width about two-thirds of the one-sigma move for that window, never more. Events that have passed: say how they landed.
 ${Calls.rules("the industry")}
+${Horizon.ANCHOR_RULES}
 4b. For each event that has passed (listed above with its ID): say how it landed, from its headlines, and rewrite every part of the analysis that assumed an outcome: a scenario that hinged on it (the outcome may make one scenario the base case), a debate it settles, a driver, a call it was the catalyst for, the opportunity. If no headline says how it landed, say "unknown" (it stays on the list until one does).
 5. Keep it all consistent: the headline, thesis, scenarios, opportunity, profiles and calls must tell one story after your changes.
 6. Then answer honestly: if you threw this analysis away and wrote it from scratch today, with everything above, would you reach the same core thesis, the same scenario set and the same opportunity verdict? "different" if the story itself would be built differently, not merely updated. A "different" orders a full rewrite.
@@ -347,7 +357,7 @@ ${Calls.rules("the industry")}
 
 Reply with ONLY this JSON:
 {"material": true or false, "headline": "one sentence: what changed today for this industry", "summary": "2-4 sentences, cited", "changes": [{"text": "one change and what it means, cited", "effect": "positive | negative | mixed"}],
- "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
+ "horizons": {${HZ.map((h) => `"${h}": {"status": "unchanged | revised", ${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${Horizon.VS_SCHEMA}, "why": "1-2 sentences: why it stands or what changed, cited"}`).join(", ")}},
  "analysis": {only the parts that change, in the same shape as YOUR WHOLE ANALYSIS above; {} if nothing changes},
  "rethink": {"from_scratch": "same | different", "why": "one sentence"},
  "events": [{"id": "C7", "landed": "one or two sentences: what happened and what it means for this industry, cited | unknown"}],
@@ -427,9 +437,12 @@ Reply with ONLY this JSON:
       const revised = lc(y.status) === "revised";
       hz[h] = { status: revised ? "revised" : "unchanged", why: cite(y.why, 500) };
       if (revised) { const to = { call: Calls.norm(y.call, Calls.norm(old.call)), conviction: Calls.conviction(y.conviction) ?? Calls.conviction(old.conviction), conviction_why: cite(y.conviction_why, 300) || old.conviction_why || "", expected_move: rng(y.expected_move).length ? rng(y.expected_move) : old.expected_move, probability_up: isNum(num(y.probability_up)) ? Math.max(0, Math.min(100, Math.round(num(y.probability_up)))) : old.probability_up };
+        to.vs_spy = Horizon.cleanVs(y.vs_spy) || null; to.away_from_anchor = cite(y.away_from_anchor, 400) || "";
         const from = { call: old.call, conviction: old.conviction ?? "", conviction_why: old.conviction_why || "", expected_move: old.expected_move, probability_up: old.probability_up };
-        if (JSON.stringify(from) === JSON.stringify(to)) hz[h].status = "unchanged";
-        else { Object.assign(old, to, { daily: { date: today, why: hz[h].why, from } }); hz[h].from = from; hz[h].to = to; } } }
+        const same = ["call", "conviction", "expected_move", "probability_up"].every((k) => JSON.stringify(from[k]) === JSON.stringify(to[k])) && !to.vs_spy;
+        // A revised call is the strategist's new view: code blends it with the anchor again (holdCalls), so drop the old blend's input.
+        if (same) hz[h].status = "unchanged";
+        else { Object.assign(old, to, { model: null, daily: { date: today, why: hz[h].why, from } }); hz[h].from = from; hz[h].to = to; } } }
     const sp = upd?.scenario_probabilities;
     if (sp && typeof sp === "object" && out.scenarios) { const ks = ["bull", "base", "bear"].filter((k) => out.scenarios[k] && isNum(num(sp[k])));
       const tot = ks.reduce((a, k) => a + num(sp[k]), 0);

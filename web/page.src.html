@@ -963,6 +963,13 @@ a.btnlink:hover { border-color: var(--accent); }
    * Open calls only need today's price, so those come from batch quotes (100 symbols a call); full histories are
    * fetched only for calls with a horizon that has just come due.
    */
+  /** The scorecard across every industry's logged calls in this browser (refreshed at most every 10 minutes). */
+  async function scorecardNow() {
+    if (S.scorecard && Date.now() - S.scorecard.t < 600e3) return S.scorecard.v;
+    const keys = ((await idbKeys()) || []).map(String).filter((k) => /^calls:/.test(k));
+    const all = []; for (const k of keys) all.push(...((await idbGet(k).catch(() => null)) || []));
+    const v = Track.scorecard(all); S.scorecard = { t: Date.now(), v }; return v;
+  }
   async function sweepTracks({ force = false } = {}) {
     if (JOB || !S.mcp) return;
     if (S.sweep?.busy) { if (force) S.sweep.again = true; return; }
@@ -1124,6 +1131,11 @@ a.btnlink:hover { border-color: var(--accent); }
       const ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
       history.times = Regimes.episodes({ ind: { dates: ls.dates, values: ls.levels }, pe: pes?.dates?.length ? pes : null, mk: await regimeData(), today: today() });
     } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("times like this", e); }
+    // The statistical anchor: the tested model's forecast for this industry today, vs the S&P 500 and absolute.
+    if (history && window.ANCHOR_MODEL) try {
+      const mk = await regimeData(), ls = History.levelSeries(hraw.perfRows, weights), pes = History.peSeries(hraw.peRows, hraw.primary);
+      if (mk?.spy?.dates?.length) history.anchor = Anchor.predict(window.ANCHOR_MODEL, Anchor.align({ dates: ls.dates, levels: ls.levels }, { dates: mk.spy.dates, closes: mk.spy.closes || mk.spy.values }, pes?.dates?.length ? pes : null), { market: (isNum(bench.rf_latest) ? bench.rf_latest : 0.04) + (isNum(bench.erp) ? bench.erp : 0.045) });
+    } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("anchor", e); }
     const pe = fallback ? { table: null, etf: null } : await fetchPeers(name, sector, org, bench);
     if (pe.etf) { pe.etf.vs_r3m = res.summary.ret_cw_3M - pe.etf.r3m; pe.etf.vs_r6m = res.summary.ret_cw_6M - pe.etf.r6m; pe.etf.vs_r1y = res.summary.ret_cw_1Y - pe.etf.r1y; }
     const cmdi = S.eod ? await cached("cmdi", () => optionalEod(async () => { const a = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100 }); const b = await eodCall("get_credit_corporate_cmdi", { date_from: E.addDays(today(), -730), limit: 100, offset: 100 }).catch(() => null); return [...(a?.data || []), ...(b?.data || [])]; }, [])) : [];
@@ -1144,8 +1156,9 @@ a.btnlink:hover { border-color: var(--accent); }
       top_levels: [...doc.constituents].sort((a, b) => b.weight - a.weight).slice(0, 8).map((c) => ({ symbol: c.symbol, ...(Plan.levels(prices[c.symbol]) || {}) })) });
     doc.credit = jsonSafe(Plan.credit({ cmdi, hyg: bench.factors?.credit ? { closes: bench.factors.credit.values } : null, ief: hraw.ief, companies: doc.constituents }));
     S.industries[slug(name)] = doc;
-    // Score earlier calls on this industry with the prices just fetched.
+    // Score earlier calls on this industry with the prices just fetched, then the scorecard across every industry.
     await evaluateTrack(name, (sym) => prices[sym] || null, bench).catch(() => {});
+    doc.scorecard = await scorecardNow().catch(() => null);
   }
 
   async function runResearchStep(name, { shared = true, run = S.run } = {}) {
@@ -1546,6 +1559,13 @@ a.btnlink:hover { border-color: var(--accent); }
       };
       horizons = await fillGaps(horizons, "");
       if (R.cancel) return;
+      // Calls that contradict each other or their own numbers (code checks): one focused fix.
+      { const iss = Horizon.issuesOf(pre({ ...syn, ...scen, horizons }).horizon_checks);
+        if (iss.length) await step(`Lead strategist: making the calls agree (${iss.length} contradiction${iss.length === 1 ? "" : "s"})`, async (en) => {
+          try { const fix = await call(Horizon.repairPrompt(d.name, today(), horizons, iss, Brain.horizonFacts(d, today())), en); horizons = Horizon.mergeRepair(horizons, fix?.horizons || fix); }
+          catch (e) { if (STOP_CODES.has(e?.code)) throw e; en.note = "the fix didn't come back"; return; }
+          const left = Horizon.issuesOf(pre({ ...syn, ...scen, horizons }).horizon_checks); en.note = left.length ? `${left.length} still to resolve` : "every call now agrees with the others and its numbers"; });
+        if (R.cancel) return; }
       await step("Lead strategist: verdict for each investor type, section by section, and the scorecard", async (en) => { ver = await call(Brain.verdictsPrompt(d, { ...ctx, math: m0, calendar: cal }, { ...syn, ...scen, horizons }), en); });
       if (R.cancel) return;
       let draft = { ...syn, ...scen, horizons, ...ver };
@@ -2061,6 +2081,10 @@ a.btnlink:hover { border-color: var(--accent); }
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             r2.horizon_facts = Brain.horizonFacts(d, today());
             if (r2.horizons) Horizon.holdCalls(r2.horizons, r2.horizon_facts);
+            // Calls that contradict each other or their numbers go back to the strategist once.
+            if (r2.horizons && upd) { const iss = Horizon.issuesOf(Brain.horizonChecks(r2.horizons, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS));
+              if (iss.length) { const fix = await call(Horizon.repairPrompt(name, today(), r2.horizons, iss, r2.horizon_facts), leadTier, `Daily update, making the calls agree: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+                if (fix?.horizons) { r2.horizons = Horizon.mergeRepair(r2.horizons, fix.horizons); Horizon.holdCalls(r2.horizons, r2.horizon_facts); r2.daily = { ...(r2.daily || {}), repaired: iss.slice(0, 8) }; } } }
             if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
             // Code's checks, as after a full run: does the opportunity verdict still match its own numbers?
             if (r2.opportunity && r2.math) { const m = r2.math, ov = r2.opportunity.verdict; r2.opportunity.consistent = !((ov === "yes" && (m.expected_return < 4 || (m.reward_risk !== null && m.reward_risk < 1.2))) || (ov === "no" && m.expected_return >= 10)); }
@@ -3589,9 +3613,14 @@ a.btnlink:hover { border-color: var(--accent); }
     const hzCard = (h) => { const x = r.horizons?.[h]; const f = (r.horizon_facts || []).find((y) => y.h === h); const ck = (r.horizon_checks || []).find((y) => y.h === h);
       if (!x) return `<div class="box hz"><div class="dim-head"><b>${h}</b></div><div class="small muted">No ${h} call came back. Run the lead strategist again.</div></div>`;
       const dv = x.daily, dvL = dv ? `<div class="small daily-rev"><span class="pill warn">revised ${esc(fmtShort(dv.date))}</span> from ${esc(dv.from?.call || "")} ${esc(rangeTxt(dv.from?.expected_move))}${isNum(num(dv.from?.probability_up)) ? `, ${dv.from.probability_up}% up` : ""}. ${dailyRich(dv.why, r.daily?.sources)}</div>` : "";
-      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${callPill(x.call)}${convTag(x)}</div>${dvL}
-        <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
-        <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>
+      const vs = x.vs_spy, an = x.anchor, vsMid = vs?.expected_excess?.length ? vs.expected_excess.reduce((a, v) => a + v, 0) / vs.expected_excess.length : null;
+      const relWord = (c) => ({ "strongly bullish": "Outperform", "slightly bullish": "Slightly outperform", neutral: "In line", "slightly bearish": "Slightly underperform", "strongly bearish": "Underperform" })[Calls.norm(c)] || "—";
+      const vsL = vs ? `<div class="hz-vs"><span class="eyebrow">vs the S&amp;P 500</span> <span class="pill ${Calls.cls(vs.call)}">${esc(relWord(vs.call))}</span>
+        <div class="hz-num"><span class="v" style="color:${(vsMid ?? 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${vsMid !== null ? `${vsMid > 0 ? "+" : ""}${Math.round(vsMid * 10) / 10}%` : "—"}</span><span class="small muted">likely ${esc(rangeTxt(vs.expected_excess))} vs the market${isNum(num(vs.probability_beat)) ? ` · <b>${vs.probability_beat}%</b> chance it beats it` : ""}</span></div></div>` : "";
+      const anL = an ? `<div class="small muted hz-anchor">Tested anchor: ${an.rel?.median > 0 ? "+" : ""}${an.rel?.median ?? "—"}% vs the S&amp;P 500, ${an.abs?.median > 0 ? "+" : ""}${an.abs?.median ?? "—"}% absolute${an.test?.hit_rate ? ` (right on direction vs the S&amp;P ${an.test.hit_rate}% of the time out of sample)` : ""}; ${Math.abs(an.moved_rel ?? 0) >= 0.5 || Math.abs(an.moved_abs ?? 0) >= 0.5 ? `the strategist moved it ${an.moved_abs > 0 ? "+" : ""}${an.moved_abs} pts${x.away_from_anchor && !/^none/i.test(x.away_from_anchor) ? `: ${rich(x.away_from_anchor)}` : ""}` : "the call sits on it"}${x.model?.expected_move?.length ? ` <span title="The strategist's own range before blending with the anchor">(strategist alone: ${esc(rangeTxt(x.model.expected_move))})</span>` : ""}</div>` : "";
+      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${callPill(x.call)}${convTag(x)}</div>${dvL}${vsL}
+        <div class="hz-num"><span class="v" style="color:${(x.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : 0) >= 0 ? "var(--pos)" : "var(--neg)"}">${rangeTxt(x.expected_move)}</span><span class="small muted">${vs ? "absolute, " : ""}expected move${f?.end ? ` to ${esc(fmtShort(f.end))}` : ""}</span></div>
+        <div class="small">${x.probability_up !== null ? `<b>${x.probability_up}%</b> chance it's higher` : ""}${f?.sigma ? `${x.probability_up !== null ? " · " : ""}a normal move is ±${f.sigma}%` : ""}</div>${anL}
         ${(() => { const b = d.history?.times?.base?.[h]; if (!b || !isNum(num(b.pos))) return ""; const gap = isNum(num(x.probability_up)) ? x.probability_up - b.pos : null;
           return `<div class="small hz-hist"><a href="#times">Times like this</a>: up in <b>${b.top_up} of ${b.top_n}</b> closest episodes (median ${b.top_median > 0 ? "+" : ""}${b.top_median ?? "—"}%); ${b.pos}% of the ${b.n} closest months${isNum(gap) && Math.abs(gap) >= 25 ? ` <span class="pill warn" title="The call's chance of a gain is far from what followed the past months most like today">${gap > 0 ? "+" : ""}${gap} pts vs history</span>` : ""}</div>`; })()}
         ${x.drivers ? `<p class="small" style="margin:0">${rich(x.drivers)}</p>` : ""}

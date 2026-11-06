@@ -20,6 +20,11 @@
   const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 
   const HORIZONS = [["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]];
+  /** The rules for the statistical anchor and the view vs the S&P 500 (the horizon step and the daily update share them). */
+  const ANCHOR_RULES = `- Start every window from the STATISTICAL ANCHOR in the HORIZON FACTS (a tested model: momentum, the latest month, the 3-month trend and valuation, fitted on every US industry since 2008). Your midpoints start at its medians, your probabilities at its probabilities. Move away only for evidence the anchor can't see (an event in the window, a change in earnings power, a ruling, a war), named in "away_from_anchor". Code blends your numbers with the anchor (half and half until your scorecard earns more weight) and keeps every likely range close to the width the anchor's test years actually saw: a wide range is the honest size of the uncertainty, not a failure.
+- "vs_spy" is the call that matters most: how the industry does against the S&P 500 over the window, which takes out the market's own swings. "expected_excess" = the LIKELY range (middle half) of the industry's return minus the S&P 500's, "probability_beat" = chance it beats the S&P 500 (0-100), "call" on the same five-level scale read as outperform / underperform (bullish = outperform). It must agree with "expected_move" through a sane market move (code checks).
+- Keep the windows one story: a direction that flips between neighbouring windows needs its reason in "drivers" (a near-term bounce inside a longer decline, a catalyst that lands later).`;
+  const VS_SCHEMA = `"vs_spy": {"call": "${Calls.ENUM}", "conviction": 6, "expected_excess": [-2, 3], "probability_beat": 55}, "away_from_anchor": "where and why you moved from the anchor, or 'none'"`;
   const DAYS = { "1M": 30, "3M": 91, "6M": 182, "12M": 365 };
   const ORDER = ["1M", "3M", "6M", "12M"];
   const addDays = (iso, n) => { const t = new Date(String(iso).slice(0, 10) + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
@@ -59,11 +64,17 @@
         reporting_weight: Math.round(rep.reduce((a, c) => a + (c.weight || 0), 0) * 100),
         base_up: isNum(doc.history?.base_prob_up?.[h]) ? Math.round(doc.history.base_prob_up[h] * 100) : null,
         // Times like this: the 20 past months most like today (macro and the industry's setup), and the 5 closest episodes.
-        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })() };
+        like: (() => { const b = doc.history?.times?.base?.[h]; return b && b.n >= 8 ? { pos: b.pos, median: b.median, p25: b.p25, p75: b.p75, n: b.n, top_up: b.top_up, top_n: b.top_n, top_median: b.top_median, all_pos: b.all_pos } : null; })(),
+        // The statistical anchor (anchor.js): a tested forecast vs the S&P 500 and absolute, with its out-of-sample record.
+        anchor: (() => { const a = doc.history?.anchor?.horizons?.[h]; return a ? { rel: a.rel, abs: a.abs, rel_sigma: a.rel_sigma, drivers: (a.drivers || []).slice(0, 3), test: a.test ? { hit_rate: a.test.hit_rate, base_hit_rate: a.test.base_hit_rate, in_likely_range: a.test.in_likely_range, rank_ic: a.test.rank_ic, from: a.test.from } : null } : null; })(),
+        // How much weight the strategist's own view gets against the anchor (from the scorecard; 0.5 until there is one).
+        blend: isNum(doc.scorecard?.blend?.[h]) ? doc.scorecard.blend[h] : 0.5,
+        score: (() => { const b = doc.scorecard?.by?.[h]; return b && b.n ? { n: b.n, hit: b.beat_hit ?? b.hit, anchor_hit: b.anchor_hit, in_range: b.in_range } : null; })() };
     });
   }
   const likeText = (l) => (l ? `in the ${l.n} past months most like today (macro backdrop and industry setup) the industry was higher ${l.pos}% of the time (all months ${l.all_pos}%), median ${l.median > 0 ? "+" : ""}${l.median}%, middle half ${l.p25}% to ${l.p75}%; in the 5 closest episodes up ${l.top_up} of ${l.top_n}, median ${l.top_median}%; ` : "");
-  const factsLine = (f) => `${f.h} (to ${f.end}): ${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
+  const anchorText = (a) => (a ? `STATISTICAL ANCHOR (tested): vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%, ${a.rel.prob_beat}% chance of beating it); absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%, ${a.abs.prob_up}% chance of a gain); moved by ${(a.drivers || []).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; out of sample since ${a.test.from} it called the direction vs the S&P 500 right ${a.test.hit_rate}% of the time (the average alone ${a.test.base_hit_rate}%) and ${a.test.in_likely_range}% of outcomes fell inside its likely range` : ""}; ` : "");
+  const factsLine = (f) => `${f.h} (to ${f.end}): ${anchorText(f.anchor)}${likeText(f.like)}one-sigma move ±${f.sigma ?? "n/a"}% from the index's own volatility; trailing ${f.h} return ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs SPY, ${f.breadth ?? "n/a"}% of companies beat SPY); ${f.base_up !== null && f.base_up !== undefined ? `base-rate chance the industry is higher at the end of this window, from the most similar past setups: ${f.base_up}%; ` : ""}reporting earnings in the window: ${f.reporting.length ? f.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}% weight)`).join(", ") + ` = ${f.reporting_weight}% of the industry` : "none of the largest"}.`;
 
   // ---------------------------------------------------------------- economic calendar
   // Countries pulled from the forward economic calendar: the US, the big blocs, and the industry's top trade partners.
@@ -214,10 +225,11 @@ ${rules}
 - Also weigh the other standing situations (rules in force, pending policy, litigation, deals, bottlenecks, the macro regime) inside "section_reads" and "drivers".
 - Start every horizon from history: where HORIZON FACTS give the past months most like today, "probability_up" starts from that hit rate and "expected_move" from that middle half; move away only for reasons this time is different (say which, in "drivers", citing the TIMES LIKE THIS episodes [HE#] that agree or disagree). A call far from history needs a stated reason.
 - "expected_move" = the industry's price change over the window in %, as [low, high], judged against the one-sigma move; "probability_up" = chance it is higher at the end of the window (0-100); "call" must agree with both (code checks). Cite IDs for every factual claim.
+${ANCHOR_RULES}
 ${Calls.rules("the industry")}
 
 Reply with ONLY this JSON:
-{"horizons": {${ORDER.map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
+{"horizons": {${ORDER.map((h) => `"${h}": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${VS_SCHEMA}, "drivers": "3-4 sentences: what dominates this window, weighing the decisions, the conflicts and the sections, cited", "section_reads": {${keys.map((k) => `"${k}": "..."`).join(", ")}}, "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "what each plausible outcome does to the industry", "lean": "positive | negative | binary | neutral"}], "conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "what likely happens in this window, with a probability", "impact": "what it does to prices and earnings in this window"}], "risk": "the main thing that would make this call wrong", "positioning": "what to do over this window, naming tickers", "sections": ["the 1-4 section keys that dominate"]}`).join(",\n ")}}}`;
   }
 
   // ---------------------------------------------------------------- cleaning and checks
@@ -231,7 +243,8 @@ Reply with ONLY this JSON:
     for (const [h] of HORIZONS) {
       const x = raw?.[h]; if (!x || typeof x !== "object") continue;
       const pu = Number(x.probability_up);
-      hz[h] = { call: Calls.norm(x.call, "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null,
+      hz[h] = { call: Calls.norm(x.call, "neutral"), expected_move: rng(x.expected_move), probability_up: isNum(pu) ? Math.max(0, Math.min(100, Math.round(pu))) : null, vs_spy: cleanVs(x.vs_spy),
+        away_from_anchor: clean(x.away_from_anchor, 400),
         conviction: Calls.conviction(x.conviction), conviction_why: clean(x.conviction_why, 300), drivers: clean(x.drivers, 1100), risk: clean(x.risk, 400), positioning: clean(x.positioning, 500),
         section_reads: Object.fromEntries(keys.map((k) => [k, clean(x.section_reads?.[k], 360)]).filter(([, t]) => t)),
         decisions: arr(x.decisions, 30).map((d) => ({ refs: refs(d?.refs, cids), date: normDate(d?.date) ? String(d.date).slice(0, 10) : "", event: clean(d?.event, 200), outcomes: clean(d?.outcomes, 500), lean: en(d?.lean, ["positive", "negative", "binary", "neutral"], "neutral") })).filter((d) => d.event),
@@ -240,6 +253,44 @@ Reply with ONLY this JSON:
         sections: arr(x.sections, 4).map((y) => String(y).toLowerCase()).filter((y) => keys.includes(y)) };
     }
     return hz;
+  }
+  /** The strategist's view vs the S&P 500: {expected_excess [lo, hi], probability_beat, call, conviction} or null. */
+  function cleanVs(v) {
+    if (!v || typeof v !== "object") return null;
+    const r = (Array.isArray(v.expected_excess) ? v.expected_excess : []).map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b), p = Number(v.probability_beat);
+    if (!r.length && !isNum(p)) return null;
+    return { expected_excess: r, probability_beat: isNum(p) ? Math.max(0, Math.min(100, Math.round(p))) : null, call: Calls.norm(v.call, "neutral"), conviction: Calls.conviction(v.conviction) };
+  }
+  const r1 = (v) => Math.round(v * 10) / 10;
+  /**
+   * Blend one window's numbers with the statistical anchor: the center moves from the anchor toward the strategist's by
+   * weight w (0.5 until the scorecard says otherwise) and never further than the anchor's likely range; the range's
+   * width stays at what the anchor's test years actually saw (0.85x to 1x: wider overstates the uncertainty, narrower
+   * pretends to a precision no one has). The same for the view vs the
+   * S&P 500, which code fills from the absolute view and the anchor's market expectation when the strategist gave none.
+   * The strategist's own numbers are kept in "model". Mutates x.
+   */
+  function blendWithAnchor(x, a, w = 0.5) {
+    const one = (r, p, A, pKey) => {
+      const half = Math.max(0.5, (A.p75 - A.p25) / 2), mid0 = r?.length ? (r[0] + r[r.length - 1]) / 2 : A.median, hw0 = r?.length === 2 ? (r[1] - r[0]) / 2 : half;
+      const mid = A.median + Math.max(-half, Math.min(half, w * (mid0 - A.median)));
+      const hw = Math.max(0.85 * half, Math.min(half, hw0));
+      const pa = A[pKey], pm = isNum(p) ? p : pa, prob = Math.round(Math.max(pa - 15, Math.min(pa + 15, pa + w * (pm - pa))));
+      return { range: [r1(mid - hw), r1(mid + hw)], prob: Math.max(1, Math.min(99, prob)), moved: r1(mid - A.median) };
+    };
+    x.model = x.model || { expected_move: x.expected_move, probability_up: x.probability_up, vs_spy: x.vs_spy ? { ...x.vs_spy } : null };
+    const ab = one(x.model.expected_move, x.model.probability_up, a.abs, "prob_up");
+    x.expected_move = ab.range; x.probability_up = ab.prob;
+    const mkt = a.abs.median - a.rel.median, mv = x.model.vs_spy;
+    // No view vs the market given: the absolute view less the anchor's market expectation.
+    const vsR = mv?.expected_excess?.length ? mv.expected_excess : (x.model.expected_move?.length ? x.model.expected_move.map((v) => v - mkt) : null);
+    const vsP = isNum(mv?.probability_beat) ? mv.probability_beat : isNum(x.model.probability_up) ? a.rel.prob_beat + (x.model.probability_up - a.abs.prob_up) : null;
+    const rl = one(vsR, vsP, a.rel, "prob_beat");
+    x.vs_spy = { expected_excess: rl.range, probability_beat: rl.prob, conviction: mv?.conviction ?? x.conviction ?? null, call: "neutral" };
+    const rc = Calls.reconcile({ call: mv?.call || "neutral", probability_up: rl.prob, expected_move: rl.range }, a.rel_sigma);
+    x.vs_spy.call = rc.call; if (rc.fixed && mv?.call) x.vs_spy.call_fixed = rc.fixed.replace("chance of a gain", "chance of beating the S&P 500");
+    x.anchor = { abs: a.abs, rel: a.rel, test: a.test || null, weight: w, moved_abs: ab.moved, moved_rel: rl.moved };
+    return x;
   }
   /**
    * Hold every call to its own numbers (Calls.reconcile, against the window's one-sigma move) and to its own conviction
@@ -250,7 +301,9 @@ Reply with ONLY this JSON:
     for (const [h, x] of Object.entries(hz || {})) {
       if (!x || typeof x !== "object") continue;
       x.call = Calls.norm(x.call, "neutral"); x.conviction = Calls.conviction(x.conviction);
-      const f = (facts || []).find((y) => y.h === h) || {}, r = Calls.reconcile(x, f.sigma);
+      const f = (facts || []).find((y) => y.h === h) || {};
+      if (f.anchor) blendWithAnchor(x, f.anchor, isNum(f.blend) ? f.blend : 0.5);
+      const r = Calls.reconcile(x, f.sigma);
       if (r.fixed) { x.model_call = x.model_call || x.call; x.call = r.call; x.call_fixed = r.fixed; }
       const hp = f.like?.pos ?? f.base_up, hl = isNum(hp) ? Calls.implied({ p: hp }) : null;
       if (hl && Calls.dir(hl) && Calls.dir(x.call) && Calls.dir(hl) !== Calls.dir(x.call) && isNum(x.conviction) && x.conviction > 6) {
@@ -290,6 +343,16 @@ Reply with ONLY this JSON:
       // How far the call sits from history (a note for the reader, not an error).
       if (f.like && isNum(x.probability_up)) { out.history = { pos: f.like.pos, gap: x.probability_up - f.like.pos, median: f.like.median, top_up: f.like.top_up, top_n: f.like.top_n };
         if (Math.abs(out.history.gap) >= 25) out.history.note = `${x.probability_up}% chance of a gain vs ${f.like.pos}% in the past months most like today`; }
+      // Consistent across windows: a direction that flips between neighbouring windows needs its reason in "drivers".
+      const prev = ORDER.indexOf(h) > 0 ? hz?.[ORDER[ORDER.indexOf(h) - 1]] : null;
+      if (prev && Calls.dir(prev.call) && Calls.dir(x.call) && Calls.dir(prev.call) !== Calls.dir(x.call) && (Calls.conviction(x.conviction) ?? 5) >= 4 && (Calls.conviction(prev.conviction) ?? 5) >= 4 && !/revers|flip|turn|bounce|rebound|first .* then|near[- ]term .* (but|then)|short[- ]term/i.test(String(x.drivers || "") + String(prev.drivers || "")))
+        issues.push(`${ORDER[ORDER.indexOf(h) - 1]} is ${prev.call} but ${h} is ${x.call}: say why the direction flips, or align them`);
+      // The view vs the S&P 500 and the absolute view must imply a sane market move.
+      if (x.vs_spy?.expected_excess?.length && x.expected_move?.length && f.anchor) {
+        const mk = mid(x.expected_move) - mid(x.vs_spy.expected_excess), am = f.anchor.abs.median - f.anchor.rel.median, sw = Math.max(3, (f.anchor.abs.p75 - f.anchor.abs.p25) / 2);
+        if (Math.abs(mk - am) > sw) issues.push(`the absolute and vs-S&P views imply the S&P 500 moves ${mk > 0 ? "+" : ""}${mk.toFixed(1)}% over ${h}, against an expected ${am > 0 ? "+" : ""}${am.toFixed(1)}%`);
+      }
+      if (x.vs_spy) out.vs_spy = { mid: x.vs_spy.expected_excess?.length ? Math.round(mid(x.vs_spy.expected_excess) * 10) / 10 : null, p: x.vs_spy.probability_beat };
       out.ok = !issues.length;
       out.covered = cal ? !out.missing_events.length && !out.missing_standing.length && !out.missing_sections.length : null;
       return out;
@@ -335,6 +398,46 @@ ${rules}
 Reply with ONLY this JSON, with an entry for each horizon above:
 {"horizons": {${Object.keys(miss).map((h) => `"${h}": {"conflicts": [{"refs": ["S1"], "situation": "...", "in_window": "...", "impact": "..."}], "decisions": [{"refs": ["C1"], "date": "YYYY-MM-DD", "event": "...", "outcomes": "...", "lean": "positive | negative | binary | neutral"}], "section_reads": {"key": "..."}}`).join(", ")}}}`;
   }
+  /** The contradictions code found (not coverage): ["3M: ...", ...]. */
+  const issuesOf = (checks) => (checks || []).flatMap((c) => (c.issues || []).filter((t) => t !== "no call").map((t) => `${c.h}: ${t}`));
+  /**
+   * A focused follow-up when the calls contradict each other or their own numbers: fix each, or (for a direction that
+   * flips between windows) say why in "drivers". Only the windows that change come back.
+   */
+  function repairPrompt(name, today, hz, issues, facts) {
+    const calls = Object.fromEntries(ORDER.filter((h) => hz?.[h]).map((h) => { const x = hz[h]; return [h, { call: x.call, conviction: x.conviction, expected_move: x.expected_move, probability_up: x.probability_up, vs_spy: x.vs_spy || null, drivers: trim(String(x.drivers || "").replace(/\s*\[[^\]]*\]/g, ""), 500) }]; }));
+    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. Code checked your 1M, 3M, 6M and 12M calls and found these contradictions:
+${issues.map((t) => `- ${t}`).join("\n")}
+
+THE CALLS AS THEY STAND
+${JSON.stringify(calls)}
+
+THE NUMBERS THEY MUST RESPECT
+${(facts || []).map((f) => `${f.h}: one sigma ±${f.sigma ?? "n/a"}%; ${anchorText(f.anchor)}`).join("\n")}
+
+Resolve every contradiction: change the call, its numbers or its view vs the S&P 500 so they agree, or, where a direction really does flip between windows (a near-term bounce inside a longer decline), keep it and say why in that window's "drivers". The 12-month view must agree with your scenarios' probability-weighted return. Return ONLY the windows you change, each in full.
+${Calls.rules("the industry")}
+
+Reply with ONLY this JSON:
+{"horizons": {"3M": {${Calls.schema}, "expected_move": [-3, 4], "probability_up": 58, ${VS_SCHEMA}, "drivers": "3-4 sentences, keeping the citations you had"}}}`;
+  }
+  /** Merge the follow-up's windows into the calls; each changed window is blended with the anchor again. */
+  function mergeRepair(hz, fix, clean = (t, n) => trim(t, n)) {
+    const out = { ...(hz || {}) };
+    for (const [h, f] of Object.entries(fix || {})) {
+      if (!out[h] || !f || typeof f !== "object") continue;
+      const x = { ...out[h] }, r = (Array.isArray(f.expected_move) ? f.expected_move : []).map(Number).filter(isNum).slice(0, 2).sort((a, b) => a - b), pu = Number(f.probability_up);
+      if (f.call) x.call = Calls.norm(f.call, x.call);
+      if (Calls.conviction(f.conviction)) x.conviction = Calls.conviction(f.conviction);
+      if (r.length === 2) x.expected_move = r;
+      if (isNum(pu)) x.probability_up = Math.max(0, Math.min(100, Math.round(pu)));
+      const v = cleanVs(f.vs_spy); if (v) x.vs_spy = v;
+      const d = clean(f.drivers, 1100); if (d) x.drivers = d;
+      x.model = null; x.repaired = true;
+      out[h] = x;
+    }
+    return out;
+  }
   /** Add the follow-up's pieces to the raw calls (new entries appended; missing section reads filled). */
   function mergeFix(hz, fix) {
     const out = { ...(hz || {}) };
@@ -349,7 +452,7 @@ Reply with ONLY this JSON, with an entry for each horizon above:
     return out;
   }
 
-  const Horizon = { HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, holdCalls, horizonChecks, missingOf, fixPrompt, mergeFix };
+  const Horizon = { issuesOf, repairPrompt, mergeRepair, ANCHOR_RULES, VS_SCHEMA, blendWithAnchor, cleanVs, anchorText, HORIZONS, ORDER, DAYS, addDays, normDate, windowOf, inWindow, indexVol, horizonFacts, factsLine, CAL_CODES, calendarCountries, econEvents, buildCalendar, required, calendarText, horizonPrompt, cleanHorizons, holdCalls, horizonChecks, missingOf, fixPrompt, mergeFix };
   if (typeof module !== "undefined" && module.exports) module.exports = Horizon;
   else root.Horizon = Horizon;
 })(typeof window !== "undefined" ? window : globalThis);

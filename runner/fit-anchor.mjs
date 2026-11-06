@@ -38,7 +38,17 @@ log(`${inds.length} industries`);
 let headers = {}; try { headers = env.FMP_MCP_HEADERS ? JSON.parse(env.FMP_MCP_HEADERS) : {}; } catch {}
 const mcp = new McpBridge({ FMP: { url: env.FMP_MCP_URL, headers } }, { log: () => {} });
 await mcp.connect("FMP");
-const fmp = async (tool, input) => { try { const r = await mcp.callTool("FMP", tool, input); const p = r.payload; return Array.isArray(p) ? p : Array.isArray(p?.data) ? p.data : []; } catch (e) { return []; } };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let failed = 0;
+// An empty answer or an error is retried (the data provider limits calls per minute); a real gap stays empty.
+const fmp = async (tool, input, { tries = 4 } = {}) => {
+  for (let t = 1; t <= tries; t++) {
+    try { const r = await mcp.callTool("FMP", tool, input); const p = r.payload; const rows = Array.isArray(p) ? p : Array.isArray(p?.data) ? p.data : []; if (rows.length || t === tries) return rows; }
+    catch (e) { if (t === tries) { failed++; return []; } }
+    await sleep(3000 * t);
+  }
+  return [];
+};
 
 const end = new Date().toISOString().slice(0, 10), Y1 = Number(end.slice(0, 4));
 const spyRows = await fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: "SPY", from_date: "2007-06-01", to_date: end });
@@ -57,22 +67,22 @@ async function one(ind) {
     pe.push(...(await fmp("marketPerformance", { endpoint: "historical-industry-pe", industry: ind.name, exchange: ind.primary, from_date: from, to_date: to })).map((x) => ({ ...x, exchange: x.exchange || ind.primary })));
   }
   const ls = History.levelSeries(perf, ind.weights), ps = History.peSeries(pe, ind.primary);
-  if (ls.dates.length < 1500) { log(`  ${ind.name}: too little history (${ls.dates.length} days)`); return; }
+  if (ls.dates.length < 1500) { log(`  ${ind.name}: too little history (${ls.dates.length} days; ${perf.length} rows from ${exs.join("/") || ind.primary})`); return; }
   const A = Anchor.align({ dates: ls.dates, levels: ls.levels }, spy, ps.dates.length ? ps : null);
   const rows = Anchor.rows(A);
   data.push({ industry: ind.name, sector: ind.sector, rows });
   log(`  ${ind.name}: ${rows.length} months`);
 }
-const queue = [...inds], N = Math.max(1, Number(env.ANCHOR_CONCURRENCY) || 4);
+const queue = [...inds], N = Math.max(1, Number(env.ANCHOR_CONCURRENCY) || 2);
 await Promise.all(Array.from({ length: N }, async () => { while (queue.length) await one(queue.shift()); }));
 await mcp.close?.();
 if (data.length < 20) { console.error(`Only ${data.length} industries had enough history; not writing a model.`); process.exit(1); }
 
 const model = Anchor.fit(data, { asOf: end });
 // Keep only what predicting needs.
-for (const h of Object.keys(model.horizons)) for (const k of ["rel", "abs"]) { const m = model.horizons[h][k]; model.horizons[h][k] = { w: m.w.map((v) => +v.toFixed(5)), mu: m.mu.map((v) => +v.toFixed(5)), sdv: m.sdv.map((v) => +v.toFixed(5)), b0: +m.b0.toFixed(5), resid: +m.resid.toFixed(5) }; }
+for (const h of Object.keys(model.horizons)) for (const k of ["rel"]) { const m = model.horizons[h][k]; model.horizons[h][k] = { w: m.w.map((v) => +v.toFixed(5)), mu: m.mu.map((v) => +v.toFixed(5)), sdv: m.sdv.map((v) => +v.toFixed(5)), b0: +m.b0.toFixed(5), resid: +m.resid.toFixed(5) }; }
 model.industries = data.length;
 fs.writeFileSync(outFile, `/* Industry Scorer: the fitted statistical anchor (written by runner/fit-anchor.mjs; don't edit by hand). */\n(function (root) { root.ANCHOR_MODEL = ${JSON.stringify(model)}; if (typeof module !== "undefined" && module.exports) module.exports = root.ANCHOR_MODEL; })(typeof window !== "undefined" ? window : globalThis);\n`);
-log(`Model written to ${outFile} from ${data.length} industries.`);
-for (const [h, m] of Object.entries(model.horizons)) log(`${h}: weights ${m.rel.w.join(", ")}; out of sample: direction vs S&P ${m.test.hit_rate}% (average-only ${m.test.base_hit_rate}%), in likely range ${m.test.in_likely_range}%, rank IC ${m.test.rank_ic}, top-minus-bottom fifth ${m.test.top_minus_bottom} sigma, ${m.test.months} months`);
-if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `## Statistical anchor\n\nFitted on ${data.length} industries, ${end}.\n\n| Horizon | Direction vs S&P right (out of sample) | Always the average | In likely range | Rank IC | Top − bottom fifth (σ) |\n|---|---|---|---|---|---|\n${Object.entries(model.horizons).map(([h, m]) => `| ${h} | ${m.test.hit_rate}% | ${m.test.base_hit_rate}% | ${m.test.in_likely_range}% | ${m.test.rank_ic} | ${m.test.top_minus_bottom} |`).join("\n")}\n`);
+log(`Model written to ${outFile} from ${data.length} of ${inds.length} industries (${failed} calls failed after retries).`);
+for (const [h, m] of Object.entries(model.horizons)) log(`${h}: weights ${m.rel.w.join(", ")}; out of sample: right side of the average industry ${m.test.hit_rate}% (coin flip 50%; intercept alone ${m.test.base_hit_rate}%), in likely range ${m.test.in_likely_range}%, rank IC ${m.test.rank_ic}, top-minus-bottom fifth ${m.test.top_minus_bottom} sigma, ${m.test.months} months`);
+if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `## Statistical anchor\n\nFitted on ${data.length} industries, ${end}.\n\n| Horizon | Right side of the average industry (out of sample) | Intercept alone | In likely range | Rank IC | Top − bottom fifth (σ) |\n|---|---|---|---|---|---|\n${Object.entries(model.horizons).map(([h, m]) => `| ${h} | ${m.test.hit_rate}% | ${m.test.base_hit_rate}% | ${m.test.in_likely_range}% | ${m.test.rank_ic} | ${m.test.top_minus_bottom} |`).join("\n")}\n`);

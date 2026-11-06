@@ -26,7 +26,10 @@
   /** What gets logged from a finished lead verdict. doc: the industry doc (constituents carry weight and px). */
   function snapshot(result, doc, run_at, extra = {}) {
     if (!result || !doc?.as_of) return null;
-    const hz = Object.fromEntries(ORDER.filter((h) => result.horizons?.[h]).map((h) => { const x = result.horizons[h]; return [h, { call: x.call, expected_move: x.expected_move, probability_up: x.probability_up, conviction: x.conviction || null }]; }));
+    const hz = Object.fromEntries(ORDER.filter((h) => result.horizons?.[h]).map((h) => { const x = result.horizons[h]; return [h, { call: x.call, expected_move: x.expected_move, probability_up: x.probability_up, conviction: x.conviction || null,
+      ...(x.vs_spy ? { vs_spy: { call: x.vs_spy.call, expected_excess: x.vs_spy.expected_excess, probability_beat: x.vs_spy.probability_beat } } : {}),
+      ...(x.anchor ? { anchor: { rel: x.anchor.rel?.median ?? null, rel_p: x.anchor.rel?.prob_beat ?? null, abs: x.anchor.abs?.median ?? null, abs_p: x.anchor.abs?.prob_up ?? null } } : {}),
+      ...(x.model?.expected_move ? { model_move: x.model.expected_move } : {}) }]; }));
     const scn = Object.fromEntries(["bull", "base", "bear"].filter((k) => result.scenarios?.[k]).map((k) => [k, { probability: result.scenarios[k].probability, price_move: result.scenarios[k].price_move }]));
     const cons = (doc.constituents || []).filter((c) => isNum(c.px) && c.px > 0 && isNum(c.weight)).map((c) => ({ symbol: c.symbol, weight: Math.round(c.weight * 1e5) / 1e5, px: c.px }));
     if (!cons.length || (!Object.keys(hz).length && !Object.keys(scn).length)) return null;
@@ -89,6 +92,12 @@
           e.hit = sign(x.call) > 0 ? pct > 0 : sign(x.call) < 0 ? pct < 0 : e.inside;
           e.brier = isNum(x.probability_up) ? Math.round(((x.probability_up / 100 - (pct > 0 ? 1 : 0)) ** 2) * 1000) / 1000 : null;
           e.error = isNum(mid(x.expected_move)) ? Math.round((pct - mid(x.expected_move)) * 10) / 10 : null;
+          // Against the S&P 500: the view vs the market, and the statistical anchor on its own (scored the same way).
+          const ex = isNum(spy) ? pct - spy * 100 : NaN;
+          if (isNum(ex) && x.vs_spy) { const [l2, h2] = x.vs_spy.expected_excess?.length === 2 ? x.vs_spy.expected_excess : [NaN, NaN];
+            e.beat_hit = sign(x.vs_spy.call) ? sign(x.vs_spy.call) * ex > 0 : null; e.rel_inside = isNum(l2) ? ex >= l2 && ex <= h2 : null; }
+          if (isNum(ex) && isNum(x.anchor?.rel)) e.anchor_hit = x.anchor.rel === 0 ? null : Math.sign(x.anchor.rel) * ex > 0;
+          if (isNum(pct) && isNum(x.anchor?.abs)) e.anchor_abs_hit = x.anchor.abs === 0 ? null : Math.sign(x.anchor.abs) * pct > 0;
           e.scored = !entry.etf || !!etfSer; // kept for good once the sector ETF's move is in too
         } else {
           // So far: on the called side of zero, and inside the range scaled to the time elapsed.
@@ -158,6 +167,25 @@
       calibration: bins, pending: open.length, calls: (entries || []).length, rows: done, open_rows: open };
   }
 
+  /**
+   * The scorecard across every industry's matured calls, per horizon: how often the direction was right (absolute and vs
+   * the S&P 500), the anchor's record on the same calls, how often outcomes fell inside the likely range, and the weight
+   * the strategist's view earns against the anchor: 0.5 until 30 calls have matured, then moved by the difference in
+   * hit rates vs the S&P 500 (each 5 points = 0.1), between 0.2 and 0.8.
+   */
+  function scorecard(entries) {
+    const by = {}, blend = {};
+    for (const h of ORDER) {
+      const rows = []; for (const e of entries || []) { const v = e.eval?.horizons?.[h]; if (v?.matured && typeof v.hit === "boolean") rows.push(v); }
+      const rate = (k) => { const xs = rows.filter((v) => typeof v[k] === "boolean"); return xs.length ? Math.round((100 * xs.filter((v) => v[k]).length) / xs.length) : null; };
+      const ins = rows.filter((v) => typeof v.inside === "boolean");
+      by[h] = { n: rows.length, hit: rate("hit"), beat_hit: rate("beat_hit"), anchor_hit: rate("anchor_hit"), in_range: ins.length ? Math.round((100 * ins.filter((v) => v.inside).length) / ins.length) : null,
+        beat_n: rows.filter((v) => typeof v.beat_hit === "boolean" && typeof v.anchor_hit === "boolean").length };
+      const b = by[h];
+      blend[h] = b.beat_n >= 30 && isNum(b.beat_hit) && isNum(b.anchor_hit) ? Math.max(0.2, Math.min(0.8, 0.5 + (b.beat_hit - b.anchor_hit) / 50)) : 0.5;
+    }
+    return { by, blend, n: Object.values(by).reduce((a, b) => a + b.n, 0) };
+  }
   /** Feedback for the lead strategist. */
   function digest(entries) {
     const s = summarize(entries);
@@ -181,7 +209,7 @@
     return L.join("\n");
   }
 
-  const Track = { DAYS, ORDER, snapshot, priceAt, evaluate, needsPrices, summarize, digest };
+  const Track = { scorecard, DAYS, ORDER, snapshot, priceAt, evaluate, needsPrices, summarize, digest };
   if (typeof module !== "undefined" && module.exports) module.exports = Track;
   else root.Track = Track;
 })(typeof window !== "undefined" ? window : globalThis);

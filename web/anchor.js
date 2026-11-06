@@ -7,8 +7,12 @@
  *   - m3:  the last 3 months vs the S&P 500;
  *   - pe:  its P/E against its own 5-year median (log ratio; cheap vs expensive).
  * The model is fitted once on all industries pooled (runner/fit-anchor.mjs, a GitHub job, refitted monthly) with
- * every forward return measured in units of the industry's own volatility vs the market, so one set of weights
- * fits quiet and wild industries alike. It is tested out of sample (fitted on the years before, tested on the next
+ * every forward return measured against the average industry that month (FMP's long industry series are equal-weighted
+ * and rebalanced daily, which drifts away from the S&P 500 for reasons that have nothing to do with the industry, so
+ * only the difference between industries is learned) and in units of the industry's own volatility vs the market, so
+ * one set of weights fits quiet and wild industries alike. The industry's expected return vs the S&P 500 is that
+ * difference; its absolute expected return adds the market's expected return (the risk-free rate plus the equity
+ * risk premium, passed in at prediction time) and its range comes from its own volatility. It is tested out of sample (fitted on the years before, tested on the next
  * year, walking forward), and those test results travel with the model: how often it got the direction vs the
  * S&P 500 right, and how well the predicted order of industries matched what happened.
  *
@@ -88,8 +92,6 @@
   }
   const apply1 = (m, xi) => m.b0 + xi.reduce((a, v, j) => a + ((v - m.mu[j]) / m.sdv[j]) * m.w[j], 0);
 
-  /** Targets in volatility units: the forward return vs the market / (scale * sqrt(h/12)), clipped at +-4. */
-  const yOf = (r, h, abs = false) => { const v = abs ? r.fwd_abs[h] : r.fwd[h], s = (abs ? r.abs_scale : r.scale) * Math.sqrt(H[h] / 12); return isNum(v) && s > 0 ? clamp(v / s, -4, 4) : NaN; };
 
   /**
    * Fit on every industry's rows. data: [{industry, rows}]. Months used for horizon h are spaced h months apart per
@@ -100,9 +102,12 @@
     const model = { v: 1, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
     for (const h of Object.keys(H)) {
       const k = H[h], all = [];
-      for (const d of data) for (let i = 0; i < d.rows.length; i += Math.min(k, 3)) { const r = d.rows[i], y = yOf(r, h), ya = yOf(r, h, true); if (isNum(y)) all.push({ ind: d.industry, month: r.month, x: x(r), y, ya, r }); }
+      // The average industry's forward return each month (raw log returns vs the S&P 500), taken out of every target.
+      const avg = new Map(); for (const d of data) for (const r of d.rows) if (isNum(r.fwd[h])) { const a = avg.get(r.month) || avg.set(r.month, [0, 0]).get(r.month); a[0] += r.fwd[h]; a[1]++; }
+      for (const d of data) for (let i = 0; i < d.rows.length; i += Math.min(k, 3)) { const r = d.rows[i], a = avg.get(r.month); if (!a || a[1] < 10) continue;
+        const s = r.scale * Math.sqrt(k / 12), y = isNum(r.fwd[h]) && s > 0 ? clamp((r.fwd[h] - a[0] / a[1]) / s, -4, 4) : NaN; if (isNum(y)) all.push({ ind: d.industry, month: r.month, x: x(r), y, r }); }
       if (all.length < 200) continue;
-      const m = ridge(all.map((a) => a.x), all.map((a) => a.y), lambda), ma = ridge(all.map((a) => a.x), all.map((a) => a.ya), lambda);
+      const m = ridge(all.map((a) => a.x), all.map((a) => a.y), lambda);
       // Walk forward.
       const test = { n: 0, hits: 0, inband: 0, ics: [], base_hits: 0, spread: [] };
       const years = [...new Set(all.map((a) => Number(a.month.slice(0, 4))))].filter((y) => y >= testFrom).sort();
@@ -113,7 +118,7 @@
         const mm = ridge(tr.map((a) => a.x), tr.map((a) => a.y), lambda);
         const byMonth = new Map();
         for (const a of te) { const p = apply1(mm, a.x); test.n++; if (Math.sign(p) === Math.sign(a.y) && a.y !== 0) test.hits++; if (Math.abs(a.y - p) <= 0.674 * mm.resid) test.inband++;
-          if (a.y > 0 === mm.b0 > 0) test.base_hits++; (byMonth.get(a.month) || byMonth.set(a.month, []).get(a.month)).push([p, a.y]); }
+          if (a.y !== 0 && (a.y > 0) === (mm.b0 > 0)) test.base_hits++; (byMonth.get(a.month) || byMonth.set(a.month, []).get(a.month)).push([p, a.y]); }
         // Cross-section each month: rank correlation, and the top fifth minus the bottom fifth (in vol units).
         for (const xs of byMonth.values()) { if (xs.length < 15) continue;
           const rk = (v) => { const o = v.map((x, i) => [x, i]).sort((a, b) => a[0] - b[0]); const r = Array(v.length); o.forEach(([, i], j) => (r[i] = j)); return r; };
@@ -123,7 +128,7 @@
           test.spread.push(o.slice(0, q).reduce((t, u) => t + u[1], 0) / q - o.slice(-q).reduce((t, u) => t + u[1], 0) / q); }
       }
       const mean = (a) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : NaN);
-      model.horizons[h] = { rel: m, abs: ma, n: all.length,
+      model.horizons[h] = { rel: m, n: all.length,
         test: { n: test.n, hit_rate: test.n ? Math.round((test.hits / test.n) * 1000) / 10 : null, base_hit_rate: test.n ? Math.round((test.base_hits / test.n) * 1000) / 10 : null,
           in_likely_range: test.n ? Math.round((test.inband / test.n) * 1000) / 10 : null, rank_ic: Math.round(mean(test.ics) * 1000) / 1000, months: test.ics.length,
           top_minus_bottom: Math.round(mean(test.spread) * 1000) / 1000, from: testFrom } };
@@ -136,7 +141,7 @@
    * {rel: {median, p25, p75, prob_beat}, abs: {median, p25, p75, prob_up}, drivers: [{feature, label, value, push}]} in %,
    * or null when there isn't enough history.
    */
-  function predict(model, A) {
+  function predict(model, A, { market = 0.07 } = {}) {
     if (!model?.horizons || !A?.months?.length) return null;
     const R = rows({ ...A, months: [...A.months, "9999-99"], ind: [...A.ind, NaN], spy: [...A.spy, NaN], pe: [...A.pe, NaN] }).filter((r) => r.month === A.months[A.months.length - 1]);
     const r = R[0]; if (!r) return null;
@@ -145,12 +150,12 @@
     for (const [h, k] of Object.entries(H)) {
       const M = model.horizons[h]; if (!M) continue;
       const s = r.scale * Math.sqrt(k / 12), sa = r.abs_scale * Math.sqrt(k / 12);
-      const zr = apply1(M.rel, xi), za = apply1(M.abs, xi);
+      const zr = apply1(M.rel, xi), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
       const drivers = FEATS.map((f, j) => ({ feature: f, label: LABEL[f], value: Math.round((f === "pe" ? r.pe : r[f]) * 1000) / 10, push: Math.round(((xi[j] - M.rel.mu[j]) / M.rel.sdv[j]) * M.rel.w[j] * s * 1000) / 10 }))
         .sort((a, b) => Math.abs(b.push) - Math.abs(a.push));
       out.horizons[h] = {
         rel: { median: pct(zr * s), p25: pct((zr - 0.674 * M.rel.resid) * s), p75: pct((zr + 0.674 * M.rel.resid) * s), prob_beat: Math.round(Phi(zr / M.rel.resid) * 100) },
-        abs: { median: pct(za * sa), p25: pct((za - 0.674 * M.abs.resid) * sa), p75: pct((za + 0.674 * M.abs.resid) * sa), prob_up: Math.round(Phi(za / M.abs.resid) * 100) },
+        abs: { median: pct(za * sa), p25: pct((za - 0.674 * residA) * sa), p75: pct((za + 0.674 * residA) * sa), prob_up: Math.round(Phi(za / residA) * 100) }, market: Math.round((Math.exp(mk) - 1) * 1000) / 10,
         rel_sigma: Math.round(s * 1000) / 10, drivers, test: M.test };
     }
     return out;
@@ -159,7 +164,7 @@
   /** One line per horizon for the prompts. */
   function text(an) {
     if (!an?.horizons) return "";
-    return Object.entries(an.horizons).map(([h, a]) => `${h}: vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%), ${a.rel.prob_beat}% chance of beating it; absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%), ${a.abs.prob_up}% chance of a gain; what moves it: ${a.drivers.slice(0, 3).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; tested out of sample since ${a.test.from}: right on direction vs the S&P 500 ${a.test.hit_rate}% of the time (always calling the average ${a.test.base_hit_rate}%), ${a.test.in_likely_range}% of outcomes inside its likely range` : ""}`).join("\n");
+    return Object.entries(an.horizons).map(([h, a]) => `${h}: vs the S&P 500 median ${a.rel.median > 0 ? "+" : ""}${a.rel.median}% (likely ${a.rel.p25}% to ${a.rel.p75}%), ${a.rel.prob_beat}% chance of beating it; absolute median ${a.abs.median > 0 ? "+" : ""}${a.abs.median}% (likely ${a.abs.p25}% to ${a.abs.p75}%), ${a.abs.prob_up}% chance of a gain; what moves it: ${a.drivers.slice(0, 3).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push} pts`).join(", ")}${a.test?.hit_rate ? `; tested out of sample since ${a.test.from}: right on which side of the average industry it lands ${a.test.hit_rate}% of the time (a coin flip is 50%), rank correlation with what happened ${a.test.rank_ic}, ${a.test.in_likely_range}% of outcomes inside its likely range` : ""}`).join("\n");
   }
 
   const Anchor = { H, FEATS, LABEL, monthly, align, rows, ridge, fit, predict, text, Phi };
