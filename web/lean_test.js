@@ -26,4 +26,26 @@ ok(/problems/.test(L.repairPrompt("Banks", "2026-11-06", b, b.checks)), "repair 
 const pv = L.provisional(res, "2026-11-06");
 ok(pv.provisional && pv.calls["1M"].call === "slightly bearish" && pv.calls["3M"].call === "slightly bullish" && pv.calls["6M"].call === "strongly bullish" && pv.calls["12M"].call === "slightly bullish", "provisional: earlier calls mapped onto the scale (neutral by the odds): " + L.leanLine(pv));
 ok(L.leanOf({ ...res, lean: a }) === a && L.leanOf({ ...res, lean: { lean: "bullish", probability: 60 } }).provisional, "leanOf: this format, else provisional (an older lean is ignored)");
+
+// The scoreboard, the challenge and the final calls
+const days = [], closes = []; for (let i = 0; i < 300; i++) { days.push("d" + i); closes.push(100 * Math.exp(0.0004 * i)); }
+const mk = L.marketFacts(days, closes);
+ok(mk.ret["12M"] > 9 && mk.ret["12M"] < 11 && mk.from_high === 0, "S&P 500 facts: trailing returns, distance from the high: " + JSON.stringify(mk.ret));
+ok(L.statCall({ rel: { prob_beat: 47, median: -1 } }) === "slightly bearish" && L.statCall({ rel: { prob_beat: 58 } }) === "bullish" && L.statCall({ rel: { prob_beat: 63 } }) === "strongly bullish", "the anchor's own call on the six levels");
+const f3 = { h: "3M", end: "2027-02-05", sigma: 20.8, trailing: -21.9, vs_spy: -17.3, breadth: 16, reporting: [{ symbol: "NVDA", date: "2026-11-17", weight: 33.9 }, { symbol: "INTC", date: "2027-01-28", weight: 2.1 }],
+  like: { pos: 60, median: 6.1, n: 20 }, anchor: { rel: { median: -1.1, prob_beat: 47 }, drivers: [{ label: "last month vs the S&P 500", push: -1.8 }], test: { hit_rate: 54.8, base_hit_rate: 55 } } };
+const cal = { events: [{ title: "FOMC decision", dates: ["2026-12-09"], importance: "high", id: "C9" }, { title: "Minor data", dates: ["2026-12-01"], importance: "low", id: "C10" }, { title: "Too late", dates: ["2027-03-01"], importance: "high", id: "C11" }] };
+const we = L.windowEvents(cal, f3, "2026-11-06");
+ok(we.length === 2 && we[0].title.startsWith("NVDA") && we[1].id === "C9", "events in the window: high and medium only, big reporters, in date order");
+const board = L.scoreboard([f3], mk, cal, "2026-11-06");
+ok(/THE S&P 500 ITSELF/.test(board) && /Statistical anchor: slightly bearish/.test(board) && /treat it as weak/.test(board) && /2026-12-09 FOMC decision \[C9\]/.test(board), "scoreboard text");
+ok(/SCOREBOARD/.test(L.leanPrompt("X", { today: "2026-11-06", res, board })), "the scoreboard goes in the prompt");
+ok(/paid to find where they are wrong/.test(L.challengePrompt("X", "2026-11-06", a, board)), "challenge prompt");
+const ch = L.cleanChallenge({ windows: { "12M": { recommend: "Soften", case: "too strong", errors: ["10Y misread"] }, "1M": { recommend: "hold", case: "fine" } }, overall: "o" });
+ok(ch.windows["12M"].recommend === "soften" && ch.windows["1M"].recommend === "hold", "challenge cleaned");
+ok(/FINAL calls/.test(L.finalPrompt("X", "2026-11-06", a, ch, board)), "final prompt");
+const fin = L.mergeFinal(a, { headline: "h2", calls: { "12M": { call: "slightly bullish", why: "softened: the 10Y was misread [A1]", for: ["x"], against: ["y"], flips_it: "z", challenge: "the 10Y point stands" } }, evidence_fixes: [{ input: "macro", points: "bearish", weight: 2, why: "corrected" }] }, ch, { res, known: ["A1"] });
+ok(fin.calls["12M"].call === "slightly bullish" && fin.calls["12M"].challenge.before === "bullish" && fin.calls["12M"].challenge.recommend === "soften" && fin.calls["1M"].call === "slightly bearish" && fin.calls["1M"].challenge.before === null, "final: changed windows record what they were, the rest held");
+ok(fin.evidence.find((e) => e.input === "macro").points === "bearish" && fin.evidence.length === 15, "evidence fixes applied");
+ok(L.mergeFinal(a, null, ch) === a, "no final answer: the first calls stand");
 console.log(fails ? fails + " FAILED" : "lean tests passed"); process.exit(fails ? 1 : 0);

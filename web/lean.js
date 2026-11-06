@@ -91,7 +91,7 @@ ${ctx.dossier || "(dossier unavailable: use the analysis)"}
 
 === YOUR FINISHED ANALYSIS (the lead strategist's, kept up to date daily) ===
 ${analysisText(ctx.res)}
-${facts.length ? `\n=== THE STATISTICAL ANCHOR (momentum, the trend and valuation, tested out of sample) ===\n${facts.map((f) => `${f.h}: ${Horizon.anchorText(f.anchor)}`).join("\n")}` : ""}
+${ctx.board ? `\n=== THE SCOREBOARD (code-computed hard numbers for each window: the S&P 500 itself, the industry vs it, the statistical anchor and its tested record, past setups like today, dated events) ===\n${ctx.board}` : facts.length ? `\n=== THE STATISTICAL ANCHOR (momentum, the trend and valuation, tested out of sample) ===\n${facts.map((f) => `${f.h}: ${Horizon.anchorText(f.anchor)}`).join("\n")}` : ""}
 ${ctx.scorecard ? `\n${ctx.scorecard}` : ""}
 ${(ctx.wire || []).length ? `\n=== TODAY'S WIRE (latest headlines touching this industry) ===\n${ctx.wire.slice(0, 15).map((w) => `[${w.id}] ${w.date ? w.date + " " : ""}${trim(w.title, 200)}`).join("\n")}` : ""}
 
@@ -100,6 +100,7 @@ HOW TO MAKE THE CALLS
 - Six levels, no neutral. "slightly": a close call that tips one way. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most inputs point the same way and decisively; use it rarely. If it's close, pick the side the evidence tips toward and say "slightly".
 - First weigh EVERY input, one entry each, in this order: world, macro, trade, regulation, earnings, chain, valuation, positioning, momentum, history, catalysts, scenarios, calls, redteam, verdict. For each: which way it points vs the S&P 500 ("bullish" / "bearish" / "mixed"), how much it matters for THIS industry (weight 1 = minor, 2 = material, 3 = decisive), and why, with the numbers and the dossier's [IDs]. An input with nothing in the dossier is "mixed", weight 1, and says so.
 - Then make the four calls from that evidence. Different windows can differ (near-term momentum, a dated catalyst, valuation that only matters over a year), but a call that flips direction from one window to the next must say in its "why" what changes in between.
+- Square every call with the scoreboard: where you go against the statistical anchor or the past setups, say why; where a big dated event falls in the window, say how it cuts.
 - Each "why" compares with the S&P 500 explicitly: what the index is likely to do over the window and what drives it (rates, the Fed, earnings, the mega-caps), and why this industry does better or worse. Plain words, specific numbers, no hedging filler. No price targets or expected returns.
 - The lead's opportunity verdict and the earlier calls are inputs, not the answer: if the rest of the evidence points the other way, say so and call it the other way.
 - Code checks your calls against the evidence you list and against each other, and sends back contradictions.
@@ -169,6 +170,108 @@ Resolve them: fix the evidence weights if they're wrong, or change the calls (an
 ${SCHEMA}`;
   }
 
+
+  // ------------------------------------------------------------------ the hard numbers every call is checked against
+  const DAYS = { "1M": 21, "3M": 63, "6M": 126, "12M": 252 };
+  /** The S&P 500 itself (SPY closes): trailing returns, volatility, distance from its high. Code only. */
+  function marketFacts(dates, closes) {
+    const n = (closes || []).length; if (n < 30) return null;
+    const last = closes[n - 1], ret = (d) => (n > d ? Math.round((last / closes[n - 1 - d] - 1) * 1000) / 10 : null);
+    const lr = []; for (let i = Math.max(1, n - 21); i < n; i++) lr.push(Math.log(closes[i] / closes[i - 1]));
+    const mu = lr.reduce((a, x) => a + x, 0) / (lr.length || 1), vol = Math.sqrt(lr.reduce((a, x) => a + (x - mu) ** 2, 0) / Math.max(1, lr.length - 1)) * Math.sqrt(252);
+    const hi = Math.max(...closes.slice(-252));
+    return { date: dates[n - 1], ret: Object.fromEntries(HZ.map((h) => [h, ret(DAYS[h])])), vol20: Math.round(vol * 1000) / 10, from_high: Math.round((last / hi - 1) * 1000) / 10 };
+  }
+  /** The statistical anchor's own call on the six-level scale (from its chance of beating the S&P 500). */
+  function statCall(a) {
+    const pb = Number(a?.rel?.prob_beat); if (!isNum(pb)) return null;
+    const d = pb - 50, side = d > 0 || (d === 0 && (a.rel.median || 0) >= 0) ? "bullish" : "bearish";
+    return Math.abs(d) < 4 ? "slightly " + side : Math.abs(d) < 10 ? side : "strongly " + side;
+  }
+  /** Dated events inside a window (the calendar's, plus the largest companies reporting). */
+  function windowEvents(cal, f, today) {
+    if (!f) return [];
+    const out = [];
+    for (const e of (cal?.events || [])) { const d = (e.dates || [])[0]; if (!d || d < today || d > f.end || e.importance === "low") continue; out.push({ date: d, title: e.title, id: e.id, importance: e.importance }); }
+    for (const r of (f.reporting || []).filter((r) => r.weight >= 5)) { if (out.some((e) => e.date === r.date && new RegExp(`\\b${r.symbol}\\b`).test(e.title))) continue; out.push({ date: r.date, title: `${r.symbol} reports (${r.weight}% of the industry)`, importance: "high" }); }
+    const seen = new Set();
+    return out.filter((e) => { const k = e.date + e.title; if (seen.has(k)) return false; seen.add(k); return true; })
+      .sort((a, b) => (a.importance === "high") === (b.importance === "high") ? (a.date < b.date ? -1 : 1) : a.importance === "high" ? -1 : 1).slice(0, 6).sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+  /** The scoreboard: per window, the hard numbers (code, not opinion) the calls must square with. */
+  function scoreboard(facts, mkt, cal, today) {
+    const L = [];
+    if (mkt) L.push(`THE S&P 500 ITSELF (SPY, to ${mkt.date}): last month ${mkt.ret["1M"]}%, 3 months ${mkt.ret["3M"]}%, 6 months ${mkt.ret["6M"]}%, 12 months ${mkt.ret["12M"]}%; 20-day volatility ${mkt.vol20}% a year; ${mkt.from_high}% from its 12-month high.`);
+    for (const f of facts || []) {
+      const sc = statCall(f.anchor), ev = windowEvents(cal, f, today);
+      L.push(`${f.h} (to ${f.end}): the industry's trailing ${f.h} ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs the S&P 500, ${f.breadth ?? "n/a"}% of its companies beat it); one-sigma move ±${f.sigma ?? "n/a"}%.`
+        + (f.anchor ? ` Statistical anchor: ${sc} (vs the S&P 500 median ${f.anchor.rel.median}%, ${f.anchor.rel.prob_beat}% chance of beating it; out of sample it was right ${f.anchor.test?.hit_rate ?? "?"}% of the time vs ${f.anchor.test?.base_hit_rate ?? "?"}% for the average alone, so ${(f.anchor.test?.hit_rate || 0) - (f.anchor.test?.base_hit_rate || 0) >= 2 ? "it carries some signal" : "treat it as weak"}; pushed by ${(f.anchor.drivers || []).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push}`).join(", ")}).` : "")
+        + (f.like ? ` Past setups most like today: ${f.like.pos}% were higher ${f.h} later (median ${f.like.median}%, n=${f.like.n}).` : "")
+        + (ev.length ? ` Dated in this window: ${ev.map((e) => `${e.date} ${e.title}${e.id ? ` [${e.id}]` : ""}`).join("; ")}.` : ""));
+    }
+    return L.join("\n");
+  }
+
+  // ------------------------------------------------------------------ the challenge and the final call
+  /** An independent PM, benchmarked to the S&P 500, attacks each call (small prompt: the calls, the evidence, the numbers). */
+  function challengePrompt(name, today, lean, board) {
+    return `You are an independent portfolio manager benchmarked to the S&P 500. You did NOT make the calls below on the US-listed "${name}" industry, and you are paid to find where they are wrong. Today is ${today}.
+
+THE CALLS (vs the S&P 500) AND THE EVIDENCE BEHIND THEM
+${JSON.stringify({ headline: lean.headline, calls: lean.calls, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })) })}
+
+THE HARD NUMBERS (code-computed; the calls must square with them)
+${board}
+
+For EACH window:
+- Make the strongest case for a different call: the other side, or a different strength. Use the numbers above and the evidence's own citations.
+- Name concrete errors: a number misread or contradicted by the scoreboard, a driver that matters to the S&P 500 just as much (so it is not an edge vs the index), double counting, an input ignored, a dated event in the window the call skips, a "strongly" the evidence doesn't support, a call that ignores what the past setups and the statistical anchor say without a reason.
+- Recommend: "hold" (the call survives), "soften" (same side, weaker), "strengthen", or "flip". Recommend a change only for a real error or a clearly stronger case; don't change calls for the sake of it.
+
+Reply with ONLY this JSON:
+{"windows": {"1M": {"recommend": "hold | soften | strengthen | flip", "case": "2-4 sentences: the strongest case against the call", "errors": ["specific errors, if any"]}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "overall": "one or two sentences: the biggest weakness across the calls"}`;
+  }
+  function cleanChallenge(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    const w = {};
+    for (const h of HZ) { const x = raw.windows?.[h]; if (!x) continue; const r = lc(x.recommend);
+      w[h] = { recommend: /flip/.test(r) ? "flip" : /soft|weak/.test(r) ? "soften" : /strong/.test(r) ? "strengthen" : "hold", case: trim(x.case, 900), errors: (Array.isArray(x.errors) ? x.errors : []).slice(0, 4).map((e) => trim(e, 300)).filter(Boolean) }; }
+    return Object.keys(w).length ? { windows: w, overall: trim(raw.overall, 400) } : null;
+  }
+  /** The lead answers the challenge and makes the final calls. */
+  function finalPrompt(name, today, lean, ch, board) {
+    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. You made the calls below vs the S&P 500; an independent portfolio manager challenged them. Make your FINAL calls.
+
+YOUR CALLS AND EVIDENCE
+${JSON.stringify({ headline: lean.headline, calls: lean.calls, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), verdict: lean.verdict })}
+
+THE CHALLENGE
+${JSON.stringify(ch)}
+
+THE HARD NUMBERS (code-computed)
+${board}
+
+For each window: if the challenge found a real error or made the stronger case, change the call (side or strength) and rewrite its "why"; otherwise hold it and say in one sentence why the challenge doesn't change it. Six levels (${LEVELS.join(", ")}), no neutral, all relative to the S&P 500. Keep the citations; add none that aren't already in your calls or evidence. Fix any evidence entry the challenge showed was wrong.
+
+Reply with ONLY this JSON:
+{"headline": "one sentence", "calls": {"1M": {"call": "...", "why": "3-5 sentences vs the S&P 500, cited", "for": ["..."], "against": ["..."], "flips_it": "...", "challenge": "one sentence: what the challenge changed, or why the call holds"}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "evidence_fixes": [{"input": "...", "points": "bullish | bearish | mixed", "weight": 1, "why": "..."}],
+ "verdict": {"agrees": true, "why": "..."}}`;
+  }
+  /** The final calls on top of the first ones: what changed is recorded per window. */
+  function mergeFinal(lean, raw, ch, opts = {}) {
+    if (!raw || typeof raw !== "object" || !raw.calls) return lean;
+    const ev = new Map(lean.evidence.map((e) => [e.input, e]));
+    for (const e of Array.isArray(raw.evidence_fixes) ? raw.evidence_fixes : []) { const k = keyOf(e?.input); if (k) ev.set(k, { input: k, points: e.points, weight: e.weight, why: e.why }); }
+    const next = cleanLean({ headline: raw.headline || lean.headline, calls: Object.fromEntries(HZ.map((h) => [h, raw.calls[h] || lean.calls[h]])), evidence: [...ev.values()], verdict: raw.verdict || lean.verdict }, opts);
+    if (!next) return lean;
+    for (const h of HZ) { const a = lean.calls[h], b = next.calls[h]; if (!b) continue;
+      b.challenge = { recommend: ch?.windows?.[h]?.recommend || "hold", case: ch?.windows?.[h]?.case || "", errors: ch?.windows?.[h]?.errors || [], answer: trim(String(raw.calls[h]?.challenge || "").replace(/\[[A-Z]{1,6}\d{1,5}[^\]]*\]/g, (m) => m), 400), before: a && a.call !== b.call ? a.call : null }; }
+    next.challenge = { overall: ch?.overall || "" };
+    return next;
+  }
+
   /** Until the strategist has made one: provisional calls read off the earlier calls (no Claude). */
   function provisional(res, today = "") {
     if (!res?.horizons) return null;
@@ -192,7 +295,7 @@ ${SCHEMA}`;
   /** One line for a table or a progress note. */
   const leanLine = (l) => (l ? HZ.filter((h) => l.calls?.[h]).map((h) => `${h} ${l.calls[h].call}`).join(", ") + (l.provisional ? " (provisional)" : "") : "");
 
-  const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA };
+  const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA, DAYS, marketFacts, statCall, windowEvents, scoreboard, challengePrompt, cleanChallenge, finalPrompt, mergeFinal };
   if (typeof module !== "undefined" && module.exports) module.exports = Lean;
   else root.Lean = Lean;
 })(typeof window !== "undefined" ? window : globalThis);

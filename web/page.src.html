@@ -410,6 +410,9 @@ a.btnlink:hover { border-color: var(--accent); }
 .lean-w { color: var(--muted); font-size: 10px; letter-spacing: 1px; margin-left: 4px; white-space: nowrap; }
 .lean-ev td { vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--line); }
 .numbers-fold > summary { cursor: pointer; padding: 6px 0; }
+.lean-nums { display: grid; gap: 3px; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
+.lean-ch summary { cursor: pointer; color: var(--muted); }
+.pos-t { color: var(--pos); } .neg-t { color: var(--neg); } .warn-t { color: var(--c3); }
 .lean-pill { white-space: nowrap; }
 @media (max-width: 560px) { .regime { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 110px 1fr 40px; } }
 @media (max-width: 560px) {
@@ -1486,23 +1489,37 @@ a.btnlink:hover { border-color: var(--accent); }
    * dossier plus the lead's own finished analysis: scenarios and their math, the calls, the anchor, the red team, the
    * opportunity verdict and the latest update. Saved on the analysis (result.lean). `call(prompt)` returns the JSON.
    */
-  async function runLean(name, { call, built = null } = {}) {
+  async function runLean(name, { call, built = null, onStage = () => {} } = {}) {
     const sl = slug(name), d = S.industries[sl]; let ag = S.agents[sl];
     if (!d || !ag?.result) return null;
     const { ctx, idx } = built || leadCtx(name);
     if (!built) { ctx.track = Track.digest(S.track[sl] || (await idbGet("calls:" + sl).catch(() => null)) || []); ctx.historian = rep(name, "history")?.result || null; }
     let dossier = ctx.dossier || Brain.dossier(d, ctx);
     const res = ag.result, facts = res.horizon_facts || Brain.horizonFacts(d, today());
-    const args = { today: today(), res, facts, scorecard: Daily.scorecardText(facts) };
+    // The scoreboard: the S&P 500 itself, the industry vs it, the anchor and its record, past setups, dated events (code).
+    if (!S.bench?.spy?.closes?.length) await refreshBenchmark().catch(() => null);
+    const mkt = S.bench?.spy ? Lean.marketFacts(S.bench.spy.dates, S.bench.spy.closes) : null;
+    const board = Lean.scoreboard(facts, mkt, ag.calendar, today());
+    const args = { today: today(), res, facts, board, scorecard: Daily.scorecardText(facts) };
     const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
     // Too long to send whole: the dossier's tail is cut, never the analysis or the instructions.
     const room = (lim?.maxPromptBytes || 262144) - new TextEncoder().encode(Lean.leanPrompt(name, { ...args, dossier: "" })).length - 8192;
     const enc = new TextEncoder().encode(dossier);
     if (enc.length > room) dossier = new TextDecoder().decode(enc.slice(0, Math.max(0, room))).replace(/\n[^\n]*$/, "") + "\n(The rest of the dossier was cut to fit.)";
     const known = [...new Set([...Object.keys(idx), ...(ag.sources || []).map((x) => x.id), ...(ag.calendar?.events || []).map((e) => e.id), ...(ag.calendar?.standing || []).map((e) => e.id), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean))];
+    onStage("Weighing all 15 inputs vs the S&P 500 and making the four calls");
     let lean = Lean.cleanLean(await call(Lean.leanPrompt(name, { ...args, dossier })), { res, today: today(), known });
+    // An independent PM benchmarked to the S&P 500 attacks every call; the strategist answers and makes the final calls.
+    if (lean) {
+      onStage("An independent portfolio manager is challenging each call");
+      const ch = Lean.cleanChallenge(await call(Lean.challengePrompt(name, today(), lean, board)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; }));
+      if (ch) { onStage("The strategist answers the challenge and makes the final calls");
+        const fin = await call(Lean.finalPrompt(name, today(), lean, ch, board)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+        lean = Lean.mergeFinal(lean, fin, ch, { res, today: today(), known }); }
+    }
     // A lean that goes against its own evidence goes back once (a small prompt: the lean and code's findings).
     if (lean && !lean.consistent) {
+      onStage("Code found contradictions: one fix round");
       const fix = await call(Lean.repairPrompt(name, today(), lean, lean.checks)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
       const l2 = Lean.cleanLean(fix, { res, today: today(), known }); if (l2) { l2.repaired = lean.checks; lean = l2; }
     }
@@ -1511,7 +1528,12 @@ a.btnlink:hover { border-color: var(--accent); }
     ag = S.agents[sl];
     const have = new Set((ag.sources || []).map((x) => x.id)), add = [];
     for (const m of JSON.stringify(lean).matchAll(/\[([A-Z]{1,6}\d{1,5}(?:,\s*[A-Z]{1,6}\d{1,5})*)\]/g)) for (const id of m[1].split(/,\s*/)) { const x = idx[id]; if (x?.url && !have.has(id)) { have.add(id); add.push({ id, kind: x.kind, date: x.date, source: x.source, title: x.title, url: x.url }); } }
-    S.agents[sl] = jsonSafe({ ...ag, sources: [...(ag.sources || []), ...add], result: { ...ag.result, lean } });
+    // Marked with today's levels, so the page can show how each call is doing since it was made; the last ones are kept.
+    const lv = d.index?.levels, sp = S.bench?.spy?.closes;
+    if (lv?.length && sp?.length) lean.mark = { ind: lv[lv.length - 1], ind_date: d.index.dates?.[lv.length - 1] || null, spy: sp[sp.length - 1], spy_date: S.bench.spy.dates[sp.length - 1] };
+    lean.market = mkt;
+    const prev = ag.result.lean, hist = [...(prev?.v === 2 && !prev.provisional ? [{ date: prev.date, calls: Object.fromEntries(Object.entries(prev.calls || {}).map(([h, x]) => [h, x.call])), mark: prev.mark || null }] : []), ...(ag.result.lean_history || [])].slice(0, 12);
+    S.agents[sl] = jsonSafe({ ...ag, sources: [...(ag.sources || []), ...add], result: { ...ag.result, lean, lean_history: hist } });
     return lean;
   }
 
@@ -1520,7 +1542,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (S.leanBusy || !S.sample || busy()) return;
     S.leanBusy = name; S.leanErr = null; renderAll();
     try {
-      const l = await runLean(name, { call: (p) => sampleJson(p, { modelTier: "complex", cache: false }) });
+      const l = await runLean(name, { call: (p) => sampleJson(p, { modelTier: "complex", cache: false }), onStage: (t) => { S.leanStage = t; renderAll(); } });
       if (!l) S.leanErr = { name, text: "No usable lean came back. Try again." };
       else {
         await doFlush(name);
@@ -1529,7 +1551,7 @@ a.btnlink:hover { border-color: var(--accent); }
         if (rec?.rows && name in rec.rows) { rec.rows[name] = overviewFor(name); S.sectorRec[sec] = rec; await idbPut(secKey(sec), jsonSafe(rec)).catch(() => {}); }
       }
     } catch (e) { S.leanErr = { name, text: "The lean didn't finish: " + (FATAL.has(e?.code) ? errText(e) : sampleErr(e)) }; }
-    finally { S.leanBusy = null; renderAll(); }
+    finally { S.leanBusy = null; S.leanStage = null; renderAll(); }
   }
 
   async function runLead(name, { inSector = false, run = null } = {}) {
@@ -3718,11 +3740,27 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   const SRC_LABEL = { quant: "metrics", kpi: "industry KPIs", macro: "macro", world: "world events", trade: "trade", regulation: "regulation", rulebooks: "rule books", valuation: "valuation", news: "news", consensus: "sell-side" };
   /** The lean: for each timeframe, beat or lag the S&P 500 (six levels), and why; the evidence from every input. */
-  function leanBlock(r, name = S.selected) {
+  function leanBlock(r, name = S.selected, d = null) {
     const l = Lean.leanOf(r, today());
+    // The hard numbers beside each call (code): trailing vs the S&P 500, the statistical anchor's own call, dated events.
+    let facts = r.horizon_facts;
+    if (!facts?.length && d) { if (d._lf?.day !== today()) { try { d._lf = { day: today(), f: Brain.horizonFacts(d, today()) }; } catch { d._lf = { day: today(), f: [] }; } } facts = d._lf.f; }
+    const fOf = (h) => (facts || []).find((f) => f.h === h);
+    const cal = S.agents[slug(name || "")]?.calendar;
+    const spy = S.bench?.spy, mk = spy?.closes?.length ? Lean.marketFacts(spy.dates, spy.closes) : null;
+    const sg = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${x}%` : "—");
+    // How the calls have done since they were made (industry vs the S&P 500, from the levels marked then).
+    let since = null;
+    if (l && !l.provisional && l.mark && d?.index?.levels?.length && spy?.closes?.length) {
+      const li = d.index.levels[d.index.levels.length - 1], ls = spy.closes[spy.closes.length - 1];
+      const ri = (li / l.mark.ind - 1) * 100, rs = (ls / l.mark.spy - 1) * 100;
+      if (d.index.dates?.[d.index.levels.length - 1] > (l.mark.ind_date || "")) since = { ind: Math.round(ri * 10) / 10, spy: Math.round(rs * 10) / 10, ex: Math.round((ri - rs) * 10) / 10 };
+    }
     const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
     const btn = `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call: the lead strategist weighs every input and its own analysis vs the S&P 500 (about 1-3 minutes)">${working ? "Making the calls…" : l && !l.provisional ? "Redo the calls" : "Make the calls now"}</button>`;
-    const status = working ? `<div class="notice info small">The lead strategist is reading the whole dossier and its own analysis, weighing all ${Lean.KEYS.length} inputs against the S&P 500, then making the four calls. This takes a minute or three.</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
+    const STG = ["Weighing all 15 inputs vs the S&P 500 and making the four calls", "An independent portfolio manager is challenging each call", "The strategist answers the challenge and makes the final calls"];
+    const stIdx = STG.indexOf(S.leanStage || STG[0]);
+    const status = working ? `<div class="notice info small" style="display:grid;gap:4px"><b>Working on it: three steps, about 2-5 minutes in all.</b>${STG.map((t, i) => `<span>${i < stIdx ? "✓" : i === stIdx ? "▶" : "○"} ${esc(t)}</span>`).join("")}${S.leanStage && !STG.includes(S.leanStage) ? `<span>▶ ${esc(S.leanStage)}</span>` : ""}</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Vs the S&P 500${l?.provisional ? " (provisional)" : ""}</span>${l?.date && !l.provisional ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     if (!l) return name ? `<div class="callout lean-card">${head}${status}<div class="small muted">No calls yet.</div></div>` : "";
     const card = (h) => { const x = l.calls?.[h]; if (!x) return `<div class="lean-h"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><span class="muted">—</span></div>`;
@@ -3732,7 +3770,18 @@ a.btnlink:hover { border-color: var(--accent); }
         ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Read off ${esc(x.basis || "the earlier call")}.</p>`}
         ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${x.for.map(rich).join("; ")}</div>` : ""}
         ${x.against?.length ? `<div class="small"><b>Against:</b> ${x.against.map(rich).join("; ")}</div>` : ""}
-        ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}</div>`; };
+        ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}
+        ${hardNums(h, x)}
+        ${x.challenge ? `<details class="small lean-ch"><summary>${x.challenge.before ? `<b>Changed after the challenge</b> (was ${esc(x.challenge.before)})` : x.challenge.recommend === "hold" ? "Challenged: <b>the call held</b>" : `Challenged (asked to ${esc(x.challenge.recommend)}): <b>the call held</b>`}</summary>
+          ${x.challenge.case ? `<div><b>The case against:</b> ${rich(x.challenge.case)}</div>` : ""}${x.challenge.errors?.length ? `<div><b>Errors it named:</b> ${x.challenge.errors.map(rich).join("; ")}</div>` : ""}${x.challenge.answer ? `<div><b>The answer:</b> ${rich(x.challenge.answer)}</div>` : ""}</details>` : ""}</div>`; };
+    const hardNums = (h, x) => { const f = fOf(h); if (!f && !mk) return "";
+      const sc = f?.anchor ? Lean.statCall(f.anchor) : null, agree = sc && x?.call && Math.abs(f.anchor.rel.prob_beat - 50) > 1 ? Math.sign(Lean.SIGN[sc]) === Math.sign(Lean.SIGN[x.call]) : null;
+      const ev = f ? Lean.windowEvents(cal, f, today()).slice(0, 4) : [];
+      return `<div class="lean-nums small">
+        ${f ? `<div><span class="muted">Last ${esc(h)}:</span> industry ${sg(f.trailing)}, S&P 500 ${sg(mk?.ret?.[h])} → <b class="${f.vs_spy > 0 ? "pos-t" : f.vs_spy < 0 ? "neg-t" : ""}">${sg(f.vs_spy)} vs S&P</b></div>` : ""}
+        ${sc ? `<div title="The statistical anchor: momentum, the trend and valuation; out of sample since ${esc(String(f.anchor.test?.from || ""))} it called the direction vs the S&P 500 right ${f.anchor.test?.hit_rate ?? "?"}% of the time (the average alone ${f.anchor.test?.base_hit_rate ?? "?"}%)"><span class="muted">Stats model:</span> ${Math.abs(f.anchor.rel.prob_beat - 50) <= 1 ? `<span>a coin flip</span>` : `<span class="${Lean.cls(sc)}-t">${esc(Lean.label(sc))}</span>`} (${f.anchor.rel.prob_beat}% to beat)${agree === null ? "" : agree ? ` <span class="muted">· agrees</span>` : ` <span class="warn-t">· differs</span>`}</div>` : ""}
+        ${f?.like ? `<div><span class="muted">Past setups like today:</span> ${f.like.pos}% higher ${esc(h)} later (n=${f.like.n})</div>` : ""}
+        ${ev.length ? `<div><span class="muted">In this window:</span> ${ev.map((e) => `${esc(fmtDate(e.date))} ${esc(e.title)}`).join(" · ")}</div>` : ""}</div>`; };
     const ev = l.evidence || [];
     const bw = ev.filter((e) => e.points === "bullish").reduce((a, e) => a + e.weight, 0), rw = ev.filter((e) => e.points === "bearish").reduce((a, e) => a + e.weight, 0), mw = ev.filter((e) => e.points === "mixed").reduce((a, e) => a + e.weight, 0), tw = bw + rw + mw || 1;
     const dots = (w) => `<span class="lean-w" title="${w === 3 ? "decisive" : w === 2 ? "material" : "minor"}">${"●".repeat(w)}${"○".repeat(3 - w)}</span>`;
@@ -3740,6 +3789,8 @@ a.btnlink:hover { border-color: var(--accent); }
     const evRows = ev.map((e) => `<tr><td><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}</td><td><span class="pill ${PT[e.points][1]}">${PT[e.points][0]}</span></td><td class="wr small">${rich(e.why)}</td></tr>`).join("");
     return `<div class="callout lean-card">${head}${status}
       ${l.headline ? `<b class="headline">${rich(l.headline)}</b>` : ""}
+      ${since ? `<div class="small">Since these calls (${esc(fmtDate(l.date))}): industry ${sg(since.ind)}, S&P 500 ${sg(since.spy)} → <b class="${since.ex >= 0 ? "pos-t" : "neg-t"}">${sg(since.ex)} vs the S&P 500</b> so far</div>` : ""}
+      ${(r.lean_history || []).length && !l.provisional ? `<div class="small muted">Earlier calls: ${(r.lean_history || []).slice(0, 4).map((e) => `${esc(fmtDate(e.date))}: ${Lean.HZ.filter((h) => e.calls?.[h]).map((h) => `${h} ${esc(e.calls[h])}`).join(", ")}`).join(" | ")}</div>` : ""}
       <div class="lean-grid">${Lean.HZ.map(card).join("")}</div>
       ${ev.length ? `<details class="small"><summary><b>What every input says vs the S&P 500</b>: ${ev.filter((e) => e.points === "bullish").length} beat, ${ev.filter((e) => e.points === "bearish").length} lag, ${ev.filter((e) => e.points === "mixed").length} mixed <span class="lean-bal" style="display:inline-flex;width:120px;vertical-align:middle;margin-left:6px"><i class="pos" style="width:${(bw / tw) * 100}%"></i><i class="mix" style="width:${(mw / tw) * 100}%"></i><i class="neg" style="width:${(rw / tw) * 100}%"></i></span></summary>
         <div class="tbl-wrap"><table class="lean-ev"><tbody>${evRows}</tbody></table></div></details>` : ""}
@@ -3772,7 +3823,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${m?.checks?.some((c) => c.ok === false) ? `<div class="small muted">Consistency check: ${m.checks.filter((c) => c.ok === false).map((c) => `the ${c.scenario} case's ${sgn(c.stated)} price move doesn't match its own EPS and P/E (they imply ${sgn(c.implied)} from today's P/E)`).join("; ")}.</div>` : ""}
       ${op?.entry_triggers?.length ? `<div class="small"><b>Becomes a buy if:</b> ${op.entry_triggers.map(rich).join("; ")}</div>` : ""}
       <div class="two">${op?.best_expressions?.length ? `<div><span class="eyebrow">Best ways to express it</span><ul class="dlist small">${op.best_expressions.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}${op?.avoid?.length ? `<div><span class="eyebrow">Avoid</span><ul class="dlist small">${op.avoid.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}</div></div>` : "";
-    const leanBlk = leanBlock(r, d.name);
+    const leanBlk = leanBlock(r, d.name, d);
     const rev = ag.review;
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" };
     const SCN_L = Object.fromEntries(Brain.SCN_SECTIONS);
