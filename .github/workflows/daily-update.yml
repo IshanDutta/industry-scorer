@@ -37,6 +37,10 @@ on:
         description: "Set by the midday market alarm: what moved (makes today a big day)"
         required: false
         default: ""
+      industries:
+        description: "Only these industries (comma list; empty = all of them)"
+        required: false
+        default: ""
       backfill:
         description: "The history pass only: add Times like this to industries that lack it (runs even while daily updates are paused)"
         type: boolean
@@ -142,6 +146,7 @@ jobs:
           JOB_MONTH_BUDGET: ${{ inputs.backfill && '' || matrix.budget }}
           JOB_SHOCK: ${{ inputs.shock }}
           JOB_BACKFILL: ${{ inputs.backfill && '1' || '' }}
+          JOB_DAILY_ONLY: ${{ inputs.industries }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch
