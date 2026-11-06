@@ -1512,6 +1512,23 @@ a.btnlink:hover { border-color: var(--accent); }
     return lean;
   }
 
+  /** The lean button: make (or remake) one industry's lean now, in the browser, and save it with the analysis. */
+  async function leanNow(name) {
+    if (S.leanBusy || !S.sample || busy()) return;
+    S.leanBusy = name; S.leanErr = null; renderAll();
+    try {
+      const l = await runLean(name, { call: (p) => sampleJson(p, { modelTier: "complex", cache: false }) });
+      if (!l) S.leanErr = { name, text: "No usable lean came back. Try again." };
+      else {
+        await doFlush(name);
+        // The sector table's row too.
+        const sec = S.industries[slug(name)]?.sector, rec = sec ? (S.sectorRec[sec] || (await secGet(sec).catch(() => null))) : null;
+        if (rec?.rows && name in rec.rows) { rec.rows[name] = overviewFor(name); S.sectorRec[sec] = rec; await idbPut(secKey(sec), jsonSafe(rec)).catch(() => {}); }
+      }
+    } catch (e) { S.leanErr = { name, text: "The lean didn't finish: " + (FATAL.has(e?.code) ? errText(e) : sampleErr(e)) }; }
+    finally { S.leanBusy = null; renderAll(); }
+  }
+
   async function runLead(name, { inSector = false, run = null } = {}) {
     if ((S.run && !run) || (S.sectorRun && !inSector) || !S.mcp || !S.sample) return;
     const d = S.industries[slug(name)]; if (!d?.summary) return;
@@ -2788,7 +2805,7 @@ a.btnlink:hover { border-color: var(--accent); }
    * by accident doesn't lose it: reopening the page shows the run again and "Resume" finishes only what's
    * missing. Nothing leaves the device; another browser or device starts empty. "Run again" rebuilds all of it.
    */
-  const DBN = "industry-scorer", ST = "runs", KEEP = 150;
+  const DBN = "industry-scorer", ST = "runs", KEEP = 1000;
   let _db;
   function idb() {
     if (_db !== undefined) return _db;
@@ -3698,8 +3715,12 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   const SRC_LABEL = { quant: "metrics", kpi: "industry KPIs", macro: "macro", world: "world events", trade: "trade", regulation: "regulation", rulebooks: "rule books", valuation: "valuation", news: "news", consensus: "sell-side" };
   /** The lean: which way everything points, how sure, and the evidence on each side. */
-  function leanBlock(r) {
-    const l = Lean.leanOf(r, today()); if (!l) return "";
+  function leanBlock(r, name = S.selected) {
+    const l = Lean.leanOf(r, today());
+    const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
+    const btn = `<button class="${l?.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call: the lead strategist weighs every input and its own analysis (about 1-3 minutes)">${working ? "Making the lean…" : l && !l.provisional ? "Remake the lean" : "Make the full lean now"}</button>`;
+    const status = working ? `<div class="notice info small">The lead strategist is reading the whole dossier and its own analysis and weighing all ${Lean.KEYS.length} inputs. This takes a minute or three.</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
+    if (!l) return name ? `<div class="callout lean-card"><div class="callout-head"><span class="eyebrow">Where it leans</span>${btn}</div>${status}<div class="small muted">No lean yet.</div></div>` : "";
     const up = l.lean === "bullish", c = up ? "pos" : "neg";
     const word = up ? "Bullish" : "Bearish";
     const ev = l.evidence || [], t = l.tally || Lean.tally(ev);
@@ -3708,7 +3729,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const item = (e) => `<li><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}<div class="small">${rich(e.why)}</div></li>`;
     const side = (p) => ev.filter((e) => e.points === p).sort((a, b) => b.weight - a.weight);
     const mixed = side("mixed");
-    return `<div class="callout lean-card ${c}"><div class="callout-head"><span class="eyebrow">Where it leans${l.provisional ? " (provisional)" : ""}</span>${l.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}</div>
+    return `<div class="callout lean-card ${c}"><div class="callout-head"><span class="eyebrow">Where it leans${l.provisional ? " (provisional)" : ""}</span>${l.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>${status}
       <div class="lean-top"><div class="lean-big ${c}">${up ? "▲" : "▼"} ${word}</div>
         <div class="lean-sub"><b>${up ? "Beats" : "Lags"} the S&P 500</b> over ${esc(l.horizon === "12M" ? "the next 12 months" : l.horizon === "6M" ? "the next 6 months" : l.horizon === "3M" ? "the next 3 months" : "the next month")}<br><span class="mono">${l.probability}%</span> sure · ${esc(l.strength || "")} lean${l.absolute ? ` · likely ${l.absolute === "up" ? "higher" : "lower"} in absolute terms` : ""}</div></div>
       <div class="meter lean-meter" title="${l.probability}% chance the lean is right"><i style="width:${l.probability}%;background:var(--${c})"></i></div>
@@ -3749,7 +3770,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${m?.checks?.some((c) => c.ok === false) ? `<div class="small muted">Consistency check: ${m.checks.filter((c) => c.ok === false).map((c) => `the ${c.scenario} case's ${sgn(c.stated)} price move doesn't match its own EPS and P/E (they imply ${sgn(c.implied)} from today's P/E)`).join("; ")}.</div>` : ""}
       ${op?.entry_triggers?.length ? `<div class="small"><b>Becomes a buy if:</b> ${op.entry_triggers.map(rich).join("; ")}</div>` : ""}
       <div class="two">${op?.best_expressions?.length ? `<div><span class="eyebrow">Best ways to express it</span><ul class="dlist small">${op.best_expressions.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}${op?.avoid?.length ? `<div><span class="eyebrow">Avoid</span><ul class="dlist small">${op.avoid.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}</div></div>` : "";
-    const leanBlk = leanBlock(r);
+    const leanBlk = leanBlock(r, d.name);
     const rev = ag.review;
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" };
     const SCN_L = Object.fromEntries(Brain.SCN_SECTIONS);
@@ -6053,6 +6074,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.openIndustry) { S.tab = "industries"; renderAll(); choose(t.dataset.openIndustry); return; }
     if (t.dataset.pickIndustry) { S.tab = "industries"; S.pickerOpen = true; S.filter = t.dataset.pickIndustry; renderAll(); return; }
     if (t.dataset.pick) { choose(t.dataset.pick); return; }
+    if (t.dataset.leanNow && S.selected) { leanNow(S.selected); return; }
     if (t.dataset.regBuild && S.selected) { runRegBooks(S.selected, { keys: [t.dataset.regBuild] }); return; }
     if (t.dataset.regAll && S.selected) { const done = new Set(Object.keys(S.regbooks).filter((k) => k.startsWith(slug(S.selected) + "--")).map((k) => k.slice(slug(S.selected).length + 2)));
       runRegBooks(S.selected, { keys: regBodies(S.selected).map((b) => RegBook.bodyKey(b.name)).filter((k) => !done.has(k)) }); return; }
