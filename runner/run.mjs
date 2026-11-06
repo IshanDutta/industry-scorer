@@ -27,7 +27,7 @@
 //   JOB_FMP_GAP_MS              pause between FMP calls in ms (default 230); raise it if several sectors share a small FMP plan
 //   JOB_INDUSTRIES, JOB_POOL, JOB_BODIES   how much runs at once (defaults 10, 8, 12)
 //   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
-//   JOB_DAILY_ONLY              daily update: only these industries (comma list), e.g. the ones a run left unfinished
+//   JOB_DAILY_ONLY              daily update: only these industries (separated by ";"), e.g. the ones a run left unfinished
 //   JOB_BACKFILL=1              daily update: the history pass only (Times like this for industries that lack it; no triage, no sections)
 //   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
 //   CLAUDE_MODEL_LEAD           the lead strategist (synthesis, scenarios, calls, red team, investor verdicts) in every run,
@@ -139,7 +139,7 @@ async function main() {
   if (daily) {
     if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
-    const onlyNames = String(env.JOB_DAILY_ONLY || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const onlyNames = String(env.JOB_DAILY_ONLY || "").split(";").map((x) => x.trim()).filter(Boolean);
     await page.evaluate(([s, c, b, n]) => window.__industryScorer.daily(s, { concurrency: c, backfill: b, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), env.JOB_BACKFILL === "1", onlyNames]);
   } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);
 
