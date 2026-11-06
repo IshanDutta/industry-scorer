@@ -20,7 +20,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
-run-name: ${{ inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
+run-name: ${{ inputs.lean && 'The lean (every industry, from everything)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:
@@ -43,6 +43,10 @@ on:
         default: ""
       backfill:
         description: "The history pass only: add Times like this to industries that lack it (runs even while daily updates are paused)"
+        type: boolean
+        default: false
+      lean:
+        description: "The lean pass only: every industry's lean (bullish or bearish vs the S&P 500) from everything, by the lead model (runs even while daily updates are paused)"
         type: boolean
         default: false
   schedule:
@@ -70,7 +74,8 @@ jobs:
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
           MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '455' }}
-          BACKFILL: ${{ inputs.backfill && '1' || '' }}
+          BACKFILL: ${{ (inputs.backfill || inputs.lean) && '1' || '' }}
+          LEAN: ${{ inputs.lean && '1' || '' }}
         run: |
           # Paused from the runs page ("Daily updates: off", kept in the status branch's control.json): nothing runs
           # except the history pass.
@@ -143,9 +148,10 @@ jobs:
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
           # Bringing the whole analysis up to date, and rewriting it from scratch: the best model, where it matters most.
           CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
-          JOB_MONTH_BUDGET: ${{ inputs.backfill && '' || matrix.budget }}
+          JOB_MONTH_BUDGET: ${{ (inputs.backfill || inputs.lean) && '' || matrix.budget }}
           JOB_SHOCK: ${{ inputs.shock }}
           JOB_BACKFILL: ${{ inputs.backfill && '1' || '' }}
+          JOB_LEAN: ${{ inputs.lean && '1' || '' }}
           JOB_DAILY_ONLY: ${{ inputs.industries }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}

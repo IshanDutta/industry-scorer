@@ -426,11 +426,18 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
       best: Object.entries(scores?.profiles || {}).filter(([, v]) => isNum(v.total)).sort((a, b) => b[1].total - a[1].total)[0]?.[0] || null,
       opportunity: r.opportunity?.verdict || null, expected: r.math?.expected_return ?? null, headline: trim(r.headline, 240),
       horizons: Object.fromEntries(["1M", "3M", "6M", "12M"].map((h) => [h, r.horizons?.[h]?.call || null])),
-      fwd_pe: doc?.forward?.fwd_pe ?? null, rev30: doc?.forward?.rev30 ?? null, positioning: doc?.positioning?.label || null, r1y: doc?.summary?.ret_cw_1Y ?? null };
+      fwd_pe: doc?.forward?.fwd_pe ?? null, rev30: doc?.forward?.rev30 ?? null, positioning: doc?.positioning?.label || null, r1y: doc?.summary?.ret_cw_1Y ?? null,
+      lean: leanRow(r) };
+  }
+  /** The lean, for the sector table: the strategist's, or one read off the calls until it has made one. */
+  function leanRow(r) {
+    const L = typeof module !== "undefined" && module.exports ? require("./lean.js") : root.Lean;
+    const l = L ? L.leanOf(r) : r.lean; if (!l) return null;
+    return { lean: l.lean, probability: l.probability, horizon: l.horizon, strength: l.strength, provisional: !!l.provisional, headline: trim(l.headline, 240), score: l.tally?.score ?? null, date: l.date || null };
   }
 
   const Sector = { SLOTS, BATCH, aliasFor, unalias, brief, planPrompt, cleanPlan, macroFor, indicatorPrompt, indicatorsFor, scoutPrompt, cleanScout, scoutFor, situationPrompt, mergeDive,
-    countryFactsPrompt, tradeImpactPrompt, mergeCountry, countryUnion, bodyUnion, listPrompt, rulePrompt, bookFor, dedupeClaims, manySpec, batches, overviewRow };
+    countryFactsPrompt, tradeImpactPrompt, mergeCountry, countryUnion, bodyUnion, listPrompt, rulePrompt, bookFor, dedupeClaims, manySpec, batches, overviewRow, leanRow };
   if (typeof module !== "undefined" && module.exports) module.exports = Sector;
   else root.Sector = Sector;
 })(typeof window !== "undefined" ? window : globalThis);

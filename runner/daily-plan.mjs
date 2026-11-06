@@ -20,8 +20,9 @@ if (existsSync(runs)) for (const f of readdirSync(runs).filter((x) => /^[a-z-]+\
 }
 const all = rows.reduce((a, x) => a + x.n, 0) || 1;
 const days = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 0)).getUTCDate();
-// The history pass (BACKFILL=1): no monthly share; a stop at about $0.20 an industry plus $1.
-const backfill = env.BACKFILL === "1";
+// The history pass (BACKFILL=1): no monthly share; a stop at about $0.20 an industry plus $1. The lean pass (LEAN=1): $0.60 an industry plus $1.
+// A normal day's stop includes $0.25 an industry for the leans remade after the calls move.
+const backfill = env.BACKFILL === "1", lean = env.LEAN === "1";
 const out = rows.filter((x) => !only.length || only.includes(x.sector)).map((x) => { const b = total && !backfill ? Math.round((total * x.n / all) * 100) / 100 : 0;
-  return { sector: x.sector, budget: b ? String(b) : "", safety: backfill ? String(Math.round((1 + 0.2 * x.n) * 100) / 100) : b ? String(Math.round((4.5 * b / days + 0.15 * x.n) * 100) / 100) : "" }; });
+  return { sector: x.sector, budget: b ? String(b) : "", safety: lean ? String(Math.round((1 + 0.6 * x.n) * 100) / 100) : backfill ? String(Math.round((1 + 0.2 * x.n) * 100) / 100) : b ? String(Math.round((4.5 * b / days + 0.25 * x.n) * 100) / 100) : "" }; });
 process.stdout.write(JSON.stringify(out));
