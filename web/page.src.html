@@ -397,16 +397,19 @@ a.btnlink:hover { border-color: var(--accent); }
 .fclog { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
 .struck { text-decoration: line-through; opacity: .7; }
 .verdict-card { border-left-color: var(--gD); }
-.lean-card { border-left-width: 4px; }
-.lean-card.pos { border-left-color: var(--pos); } .lean-card.neg { border-left-color: var(--neg); }
-.lean-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-.lean-big { font-size: 34px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
-.lean-big.pos { color: var(--pos); } .lean-big.neg { color: var(--neg); }
-.lean-sub { font-size: 14px; line-height: 1.45; }
-.lean-meter { height: 6px; }
+.lean-card { border-left-width: 4px; border-left-color: var(--accent); }
+.lean-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.lean-h { border: 1px solid var(--line); border-top: 3px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; }
+.lean-h.pos { border-top-color: var(--pos); } .lean-h.neg { border-top-color: var(--neg); }
+.lean-lvl { font-size: 20px; font-weight: 700; line-height: 1.15; }
+.lean-lvl.pos { color: var(--pos); } .lean-lvl.neg { color: var(--neg); }
+.lean-dots { display: flex; gap: 4px; } .lean-dots i { width: 22px; height: 5px; border-radius: 3px; background: var(--line); }
+.lean-dots i.pos { background: var(--pos); } .lean-dots i.neg { background: var(--neg); }
 .lean-bal { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
 .lean-bal i { display: block; height: 100%; } .lean-bal i.pos { background: var(--pos); } .lean-bal i.neg { background: var(--neg); } .lean-bal i.mix { background: var(--bench); }
-.lean-w { color: var(--muted); font-size: 10px; letter-spacing: 1px; margin-left: 4px; }
+.lean-w { color: var(--muted); font-size: 10px; letter-spacing: 1px; margin-left: 4px; white-space: nowrap; }
+.lean-ev td { vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--line); }
+.numbers-fold > summary { cursor: pointer; padding: 6px 0; }
 .lean-pill { white-space: nowrap; }
 @media (max-width: 560px) { .regime { grid-template-columns: 1fr; } .bar-row { grid-template-columns: 110px 1fr 40px; } }
 @media (max-width: 560px) {
@@ -2175,7 +2178,7 @@ a.btnlink:hover { border-color: var(--accent); }
             const moved = !!whole || Object.entries(r3?.daily?.horizons || {}).some(([h, hv]) => h === "_scenarios" || hv?.status === "revised") || r3?.rethink?.date === today();
             if (r3 && (!l0 || l0.provisional || age >= 7 || (moved && age >= 1))) {
               const l = await runLean(name, { call: (p) => call(p, leadTier, `The lean: ${name}`) }).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
-              if (l) { dr.leans = (dr.leans || 0) + 1; if (l0 && !l0.provisional && l0.lean !== l.lean) (dr.flips ||= []).push(`${name}: ${l0.lean} to ${l.lean}`); } } }
+              if (l) { dr.leans = (dr.leans || 0) + 1; if (Lean.flipped(l0, l)) (dr.flips ||= []).push(`${name}: 12M ${l0.calls['12M'].call} to ${l.calls['12M'].call}`); } } }
           try { (dr.rows ||= {})[name] = overviewFor(name); } catch {}
           await doFlush(name);
           (changed ? dr.revised : dr.quiet).push(name);
@@ -2230,7 +2233,7 @@ a.btnlink:hover { border-color: var(--accent); }
           const before = r.lean;
           const l = await runLean(name, { call: (p) => call(p, `The lean: ${name}`) });
           if (!l) throw new Error("no lean came back");
-          dr.revised.push(name); if (before && !before.provisional && before.lean !== l.lean) (dr.flips ||= []).push(`${name}: ${before.lean} to ${l.lean}`);
+          dr.revised.push(name); if (Lean.flipped(before, l)) (dr.flips ||= []).push(`${name}: 12M ${before.calls['12M'].call} to ${l.calls['12M'].call}`);
           try { (dr.rows ||= {})[name] = overviewFor(name); } catch {}
           await doFlush(name);
         } catch (e) {
@@ -3276,17 +3279,16 @@ a.btnlink:hover { border-color: var(--accent); }
     const issues = [...skipped.map(([n, why]) => `<li><b>${esc(n)}</b>: left out, ${esc(why)}</li>`), ...staleFree(rec, rec.failed_steps || []).slice(-12).map((x) => `<li>${esc(x)}</li>`)];
     const rows = Object.values(rec.rows || {}).filter(Boolean);
     const sk = S.secSort || { key: "best_score", dir: -1 };
-    const val = (r, k) => (k === "best_score" ? (r.best ? r.scores?.[r.best] : null) : k.startsWith("s_") ? r.scores?.[k.slice(2)] : k.startsWith("h_") ? ((r.horizons?.[k.slice(2)] ? Calls.score(r.horizons[k.slice(2)]) : null)) : k === "opportunity" ? ({ yes: 2, conditional: 1, no: 0 }[r.opportunity] ?? null) : k === "lean" ? (r.lean ? (r.lean.lean === "bullish" ? r.lean.probability : 100 - r.lean.probability) : null) : r[k]);
+    const val = (r, k) => (k === "best_score" ? (r.best ? r.scores?.[r.best] : null) : k.startsWith("s_") ? r.scores?.[k.slice(2)] : k.startsWith("h_") ? (r.lean?.calls?.[k.slice(2)] ? Lean.SIGN[r.lean.calls[k.slice(2)]] : r.horizons?.[k.slice(2)] ? Calls.score(r.horizons[k.slice(2)]) : null) : k === "opportunity" ? ({ yes: 2, conditional: 1, no: 0 }[r.opportunity] ?? null) : k === "lean" ? (r.lean ? (r.lean.lean === "bullish" ? r.lean.probability : 100 - r.lean.probability) : null) : r[k]);
     rows.sort((a, b) => { const x = val(a, sk.key), y = val(b, sk.key); if (typeof x === "string" || typeof y === "string") return sk.dir * String(x ?? "").localeCompare(String(y ?? "")); if (!isNum(num(x)) && !isNum(num(y))) return 0; if (!isNum(num(x))) return 1; if (!isNum(num(y))) return -1; return sk.dir * (x - y); });
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, OPC = { yes: "pos", conditional: "neu", no: "neg" };
     const th = (k, l, c = "n") => `<th class="sortable ${c}" tabindex="0" data-ssort="${k}" aria-sort="${sk.key === k ? (sk.dir > 0 ? "ascending" : "descending") : "none"}">${l}${sk.key === k ? (sk.dir > 0 ? " ▲" : " ▼") : ""}</th>`;
     const sc = (v) => { const g = gradeOf(v); return isNum(num(v)) ? `${Math.round(v)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—"; };
-    const table = rows.length ? `<div class="tbl-wrap"><table class="sec-ov"><thead><tr>${th("name", "Industry", "")}${th("best_score", "Best fit")}${PROFILE_KEYS.map((p) => th("s_" + p, Score.PROFILES[p].label)).join("")}${th("lean", "Lean", "")}${th("opportunity", "Opportunity", "")}${th("expected", "Exp. 12M")}${["1M", "3M", "6M", "12M"].map((h) => th("h_" + h, h, "")).join("")}${th("fwd_pe", "Fwd P/E")}${th("rev30", "Est. 30d")}${th("positioning", "Positioning", "")}${th("r1y", "1Y")}${th("cap", "Mkt cap")}</tr></thead>
+    const table = rows.length ? `<div class="tbl-wrap"><table class="sec-ov"><thead><tr>${th("name", "Industry", "")}${th("best_score", "Best fit")}${PROFILE_KEYS.map((p) => th("s_" + p, Score.PROFILES[p].label)).join("")}${th("opportunity", "Opportunity", "")}${["1M", "3M", "6M", "12M"].map((h) => th("h_" + h, h + " vs S&P", "")).join("")}${th("fwd_pe", "Fwd P/E")}${th("rev30", "Est. 30d")}${th("positioning", "Positioning", "")}${th("r1y", "1Y")}${th("cap", "Mkt cap")}</tr></thead>
       <tbody>${rows.map((r) => `<tr><td class="ind"><button data-pick="${esc(r.name)}" ${busy() ? "disabled" : ""}>${esc(r.name)}</button>${r.done ? "" : ` <span class="pill warn">unfinished</span>`}${r.headline ? `<div class="small muted">${esc(r.headline)}</div>` : ""}</td>
         <td class="n">${r.best ? `${esc(Score.PROFILES[r.best]?.label || r.best)}` : "—"}</td>${PROFILE_KEYS.map((p) => `<td class="n">${sc(r.scores?.[p])}</td>`).join("")}
-        <td>${r.lean ? `<span class="pill lean-pill ${r.lean.lean === "bullish" ? "pos" : "neg"}" title="${esc((r.lean.provisional ? "Provisional: " : "") + (r.lean.headline || ""))}">${r.lean.lean === "bullish" ? "▲ Bullish" : "▼ Bearish"} ${r.lean.probability}%${r.lean.provisional ? "*" : ""}</span>` : "—"}</td>
-        <td>${r.opportunity ? `<span class="pill ${OPC[r.opportunity] || "neu"}">${esc(r.opportunity)}</span>` : "—"}</td><td class="n ${cls(num(r.expected))}">${isNum(num(r.expected)) ? `${r.expected > 0 ? "+" : ""}${r.expected}%` : "—"}</td>
-        ${["1M", "3M", "6M", "12M"].map((h) => `<td>${r.horizons?.[h] ? `${callPill(r.horizons[h])}` : "—"}</td>`).join("")}
+        <td>${r.opportunity ? `<span class="pill ${OPC[r.opportunity] || "neu"}">${esc(r.opportunity)}</span>` : "—"}</td>
+        ${["1M", "3M", "6M", "12M"].map((h) => { const lc = r.lean?.calls?.[h]; return `<td>${lc ? `<span class="pill lean-pill ${Lean.cls(lc)}" title="vs the S&P 500${r.lean.provisional ? " (provisional: read off the earlier calls)" : ""}">${Lean.SIGN[lc] > 0 ? "▲" : "▼"} ${esc(Lean.label(lc))}${r.lean.provisional ? "*" : ""}</span>` : r.horizons?.[h] ? callPill(r.horizons[h]) : "—"}</td>`; }).join("")}
         <td class="n">${isNum(num(r.fwd_pe)) ? fix(r.fwd_pe, 1) : "—"}</td><td class="n ${cls(num(r.rev30))}">${pct(r.rev30)}</td><td>${esc(r.positioning || "—")}</td><td class="n ${cls(num(r.r1y))}">${pct(r.r1y)}</td><td class="n">${cap(r.cap)}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="small muted">Industries appear here as each one finishes.</div>`;
     return `<section class="hero"><span class="eyebrow">Sector run · every industry</span><h1>${esc(sec)}</h1>
@@ -3714,36 +3716,35 @@ a.btnlink:hover { border-color: var(--accent); }
     </section>`;
   }
   const SRC_LABEL = { quant: "metrics", kpi: "industry KPIs", macro: "macro", world: "world events", trade: "trade", regulation: "regulation", rulebooks: "rule books", valuation: "valuation", news: "news", consensus: "sell-side" };
-  /** The lean: which way everything points, how sure, and the evidence on each side. */
+  /** The lean: for each timeframe, beat or lag the S&P 500 (six levels), and why; the evidence from every input. */
   function leanBlock(r, name = S.selected) {
     const l = Lean.leanOf(r, today());
     const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
-    const btn = `<button class="${l?.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call: the lead strategist weighs every input and its own analysis (about 1-3 minutes)">${working ? "Making the lean…" : l && !l.provisional ? "Remake the lean" : "Make the full lean now"}</button>`;
-    const status = working ? `<div class="notice info small">The lead strategist is reading the whole dossier and its own analysis and weighing all ${Lean.KEYS.length} inputs. This takes a minute or three.</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
-    if (!l) return name ? `<div class="callout lean-card"><div class="callout-head"><span class="eyebrow">Where it leans</span>${btn}</div>${status}<div class="small muted">No lean yet.</div></div>` : "";
-    const up = l.lean === "bullish", c = up ? "pos" : "neg";
-    const word = up ? "Bullish" : "Bearish";
-    const ev = l.evidence || [], t = l.tally || Lean.tally(ev);
+    const btn = `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call: the lead strategist weighs every input and its own analysis vs the S&P 500 (about 1-3 minutes)">${working ? "Making the calls…" : l && !l.provisional ? "Redo the calls" : "Make the calls now"}</button>`;
+    const status = working ? `<div class="notice info small">The lead strategist is reading the whole dossier and its own analysis, weighing all ${Lean.KEYS.length} inputs against the S&P 500, then making the four calls. This takes a minute or three.</div>` : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
+    const head = `<div class="callout-head"><span class="eyebrow">Vs the S&P 500${l?.provisional ? " (provisional)" : ""}</span>${l?.date && !l.provisional ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
+    if (!l) return name ? `<div class="callout lean-card">${head}${status}<div class="small muted">No calls yet.</div></div>` : "";
+    const card = (h) => { const x = l.calls?.[h]; if (!x) return `<div class="lean-h"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><span class="muted">—</span></div>`;
+      const c = Lean.cls(x.call);
+      return `<div class="lean-h ${c}"><span class="eyebrow">${esc(Lean.HZ_LABEL[h])}</span><div class="lean-lvl ${c}">${Lean.SIGN[x.call] > 0 ? "▲" : "▼"} ${esc(Lean.label(x.call))}</div>
+        <div class="lean-dots" title="${esc(x.call)}">${[1, 2, 3].map((k) => `<i class="${k <= Math.abs(Lean.SIGN[x.call]) ? c : ""}"></i>`).join("")}</div>
+        ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Read off ${esc(x.basis || "the earlier call")}.</p>`}
+        ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${x.for.map(rich).join("; ")}</div>` : ""}
+        ${x.against?.length ? `<div class="small"><b>Against:</b> ${x.against.map(rich).join("; ")}</div>` : ""}
+        ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}</div>`; };
+    const ev = l.evidence || [];
     const bw = ev.filter((e) => e.points === "bullish").reduce((a, e) => a + e.weight, 0), rw = ev.filter((e) => e.points === "bearish").reduce((a, e) => a + e.weight, 0), mw = ev.filter((e) => e.points === "mixed").reduce((a, e) => a + e.weight, 0), tw = bw + rw + mw || 1;
     const dots = (w) => `<span class="lean-w" title="${w === 3 ? "decisive" : w === 2 ? "material" : "minor"}">${"●".repeat(w)}${"○".repeat(3 - w)}</span>`;
-    const item = (e) => `<li><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}<div class="small">${rich(e.why)}</div></li>`;
-    const side = (p) => ev.filter((e) => e.points === p).sort((a, b) => b.weight - a.weight);
-    const mixed = side("mixed");
-    return `<div class="callout lean-card ${c}"><div class="callout-head"><span class="eyebrow">Where it leans${l.provisional ? " (provisional)" : ""}</span>${l.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>${status}
-      <div class="lean-top"><div class="lean-big ${c}">${up ? "▲" : "▼"} ${word}</div>
-        <div class="lean-sub"><b>${up ? "Beats" : "Lags"} the S&P 500</b> over ${esc(l.horizon === "12M" ? "the next 12 months" : l.horizon === "6M" ? "the next 6 months" : l.horizon === "3M" ? "the next 3 months" : "the next month")}<br><span class="mono">${l.probability}%</span> sure · ${esc(l.strength || "")} lean${l.absolute ? ` · likely ${l.absolute === "up" ? "higher" : "lower"} in absolute terms` : ""}</div></div>
-      <div class="meter lean-meter" title="${l.probability}% chance the lean is right"><i style="width:${l.probability}%;background:var(--${c})"></i></div>
-      ${l.headline ? `<b class="headline">${rich(l.headline)}</b>` : ""}${l.summary ? para("", l.summary) : ""}
-      ${ev.length ? `<div class="lean-bal" title="The evidence, weighted: ${bw} bullish, ${rw} bearish, ${mw} mixed"><i class="pos" style="width:${(bw / tw) * 100}%"></i><i class="mix" style="width:${(mw / tw) * 100}%"></i><i class="neg" style="width:${(rw / tw) * 100}%"></i></div>
-      <div class="small muted">${side("bullish").length} of ${ev.length} inputs point bullish, ${side("bearish").length} bearish, ${mixed.length} mixed (weighted ${bw} to ${rw}; ● = how much it matters)</div>
-      <div class="two"><div><span class="eyebrow" style="color:var(--pos)">Pointing bullish</span><ul class="dlist small">${side("bullish").map(item).join("") || "<li class='muted'>nothing</li>"}</ul></div>
-        <div><span class="eyebrow" style="color:var(--neg)">Pointing bearish</span><ul class="dlist small">${side("bearish").map(item).join("") || "<li class='muted'>nothing</li>"}</ul></div></div>
-      ${mixed.length ? `<details class="small"><summary>Mixed or neutral (${mixed.length})</summary><ul class="dlist small">${mixed.map(item).join("")}</ul></details>` : ""}` : ""}
+    const PT = { bullish: ["Beats the S&P 500", "pos"], bearish: ["Lags the S&P 500", "neg"], mixed: ["Mixed", "neu"] };
+    const evRows = ev.map((e) => `<tr><td><b>${esc(e.label || Lean.LABEL[e.input] || e.input)}</b> ${dots(e.weight)}</td><td><span class="pill ${PT[e.points][1]}">${PT[e.points][0]}</span></td><td class="wr small">${rich(e.why)}</td></tr>`).join("");
+    return `<div class="callout lean-card">${head}${status}
+      ${l.headline ? `<b class="headline">${rich(l.headline)}</b>` : ""}
+      <div class="lean-grid">${Lean.HZ.map(card).join("")}</div>
+      ${ev.length ? `<details class="small"><summary><b>What every input says vs the S&P 500</b>: ${ev.filter((e) => e.points === "bullish").length} beat, ${ev.filter((e) => e.points === "bearish").length} lag, ${ev.filter((e) => e.points === "mixed").length} mixed <span class="lean-bal" style="display:inline-flex;width:120px;vertical-align:middle;margin-left:6px"><i class="pos" style="width:${(bw / tw) * 100}%"></i><i class="mix" style="width:${(mw / tw) * 100}%"></i><i class="neg" style="width:${(rw / tw) * 100}%"></i></span></summary>
+        <div class="tbl-wrap"><table class="lean-ev"><tbody>${evRows}</tbody></table></div></details>` : ""}
       ${l.verdict?.why ? `<div class="small"><b>${l.verdict.agrees ? "Agrees with" : "Goes against"} the lead's opportunity verdict${r.opportunity?.verdict ? ` (${esc(r.opportunity.verdict)})` : ""}:</b> ${rich(l.verdict.why)}</div>` : ""}
-      ${l.decides_it ? `<div class="small"><b>What decides it:</b> ${rich(l.decides_it)}</div>` : ""}
-      ${l.flips_it?.length ? `<div class="small"><b>What would flip it:</b> ${l.flips_it.map(rich).join("; ")}</div>` : ""}
       ${(l.checks || []).length ? `<div class="notice warn small">Code's check: ${l.checks.map(esc).join(" ")}</div>` : ""}
-      ${l.repaired?.length ? `<div class="small muted">The first draft contradicted its own evidence and was sent back once: ${l.repaired.map(esc).join(" ")}</div>` : ""}</div>`;
+      ${l.repaired?.length ? `<div class="small muted">The first draft had contradictions and was sent back once: ${l.repaired.map(esc).join(" ")}</div>` : ""}</div>`;
   }
   /** The lead strategist's synthesis: thesis, ranked drivers, debates, scenarios, what's priced in, tensions. */
   function leadBlock(d, ag) {
@@ -3815,7 +3816,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${hasReads ? `<details style="margin-top:6px"><summary class="small">Every section in each window</summary><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Section</th>${Brain.HORIZONS.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${hzRows}</tbody></table></div></details>` : ""}
       ${calBlock}
       <div class="small muted" style="margin-top:4px">Each window starts today. "A normal move" is one standard deviation of the industry index over that window, from its last year of daily prices; the trailing return, the earnings dates and the calendar come from the data, not the strategist.</div></div>` : "";
-    return `<div style="display:grid;gap:10px;grid-template-columns:minmax(0,1fr)">${leanBlk}${dailyBlock(r)}${oppBlock}${hzBlock}<b class="headline">${rich(r.headline)}</b>
+    return `<div style="display:grid;gap:10px;grid-template-columns:minmax(0,1fr)">${leanBlk}${dailyBlock(r)}${oppBlock || hzBlock ? `<details class="numbers-fold"><summary><b>The numbers</b> <span class="small muted">(the opportunity verdict, expected returns, ranges and probabilities for each timeframe)</span></summary><div style="display:grid;gap:10px;margin-top:10px">${oppBlock}${hzBlock}</div></details>` : ""}<b class="headline">${rich(r.headline)}</b>
       ${r.thesis ? `<div class="box thesis"><h3>Thesis</h3><p class="prose" style="margin:0">${rich(r.thesis)}</p></div>` : `<p class="summary-text">${rich(r.summary)}</p>`}
       <span class="small muted">Lead strategist · written ${esc(ago(ag.run_at))} after every report${ag.bodies ? ` and ${ag.books} of ${ag.bodies} rule books` : ""} · confidence ${esc(r.confidence)} · ${r.kept} citations checked${r.dropped ? `, ${r.dropped} that didn't match a source removed` : ""}${rev ? ` · investment-committee review: ${rev.issues?.length || 0} issue${rev.issues?.length === 1 ? "" : "s"}, ${rev.applied?.length || 0} section${rev.applied?.length === 1 ? "" : "s"} revised` : ""}</span>
       ${r.thesis && r.summary ? `<p class="summary-text" style="margin:0">${rich(r.summary)}</p>` : ""}

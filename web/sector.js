@@ -432,9 +432,10 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
   /** The lean, for the sector table: the strategist's, or one read off the calls until it has made one. */
   function leanRow(r) {
     const L = typeof module !== "undefined" && module.exports ? require("./lean.js") : root.Lean;
-    const l = L ? L.leanOf(r) : r.lean; if (!l) return null;
-    return { lean: l.lean, probability: l.probability, horizon: l.horizon, strength: l.strength, provisional: !!l.provisional, headline: trim(l.headline, 240), score: l.tally?.score ?? null, date: l.date || null };
+    const l = L ? L.leanOf(r) : null; if (!l) return null;
+    return { calls: Object.fromEntries(Object.entries(l.calls || {}).map(([h, x]) => [h, x.call])), provisional: !!l.provisional, headline: trim(l.headline, 240), date: l.date || null };
   }
+
 
   const Sector = { SLOTS, BATCH, aliasFor, unalias, brief, planPrompt, cleanPlan, macroFor, indicatorPrompt, indicatorsFor, scoutPrompt, cleanScout, scoutFor, situationPrompt, mergeDive,
     countryFactsPrompt, tradeImpactPrompt, mergeCountry, countryUnion, bodyUnion, listPrompt, rulePrompt, bookFor, dedupeClaims, manySpec, batches, overviewRow, leanRow };

@@ -1,12 +1,12 @@
-/* Industry Scorer: the lean. One decisive call per industry: which way it leans vs the S&P 500, how sure, and why.
+/* Industry Scorer: the lean. For each timeframe (1M, 3M, 6M, 12M), one call vs the S&P 500 on a six-level scale
+ * (strongly bearish, bearish, slightly bearish, slightly bullish, bullish, strongly bullish: no neutral) and why.
  *
  * The lead strategist (Opus) reads EVERYTHING: the full dossier (every analyst's report: world, macro, trade,
  * regulation, earnings and KPIs, customers and suppliers, valuation, positioning, momentum, history) plus its own
- * finished analysis (scenarios and their math, the 1M-12M calls vs the S&P 500, the statistical anchor and its tested
- * record, the red team, the opportunity verdict and today's update). It must pick a side (no "neutral"), score every
- * input for which way it points and how hard, and say whether it agrees with its own opportunity verdict.
- * Code then tallies the evidence and flags a lean that goes against its own evidence or its own 12M call.
- * Pure functions, no I/O.
+ * finished analysis (scenarios, the earlier calls, the statistical anchor, the red team, the opportunity verdict and
+ * today's update). It scores every input for which way it points vs the S&P 500, then makes the four calls.
+ * Code checks the calls against that evidence and against each other (a direction that flips between timeframes
+ * needs its reason); a contradiction goes back once. Pure functions, no I/O.
  */
 (function (root) {
   "use strict";
@@ -14,25 +14,38 @@
   const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
   const lc = (s) => String(s ?? "").toLowerCase().trim();
   const HZ = ["1M", "3M", "6M", "12M"];
+  const HZ_LABEL = { "1M": "Next month", "3M": "Next 3 months", "6M": "Next 6 months", "12M": "Next 12 months" };
   const req = (f, g) => (typeof module !== "undefined" && module.exports ? require(f) : root[g]);
   const Horizon = req("./horizon.js", "Horizon");
+
+  /** The six levels, most bearish first. No neutral: every call picks a side. */
+  const LEVELS = ["strongly bearish", "bearish", "slightly bearish", "slightly bullish", "bullish", "strongly bullish"];
+  const SIGN = { "strongly bearish": -3, bearish: -2, "slightly bearish": -1, "slightly bullish": 1, bullish: 2, "strongly bullish": 3 };
+  /** Any spelling -> one of LEVELS, or null. */
+  function level(s) {
+    const t = lc(s).replace(/[_-]/g, " ").replace(/\s+/g, " ");
+    const side = /bear|under|negative|short/.test(t) ? "bearish" : /bull|outperf|over|positive|long/.test(t) ? "bullish" : null;
+    if (!side) return null;
+    if (/strong|very|high conviction/.test(t)) return "strongly " + side;
+    if (/slight|mild|modest|lean|weak|small/.test(t)) return "slightly " + side;
+    return side;
+  }
+  const cls = (l) => (SIGN[l] > 0 ? "pos" : SIGN[l] < 0 ? "neg" : "neu");
+  const label = (l) => (l ? l[0].toUpperCase() + l.slice(1) : "");
 
   /** Every input the lean must weigh, in the order shown. */
   const INPUTS = [
     ["world", "World & geopolitics"], ["macro", "Macro & rates"], ["trade", "Trade & tariffs"], ["regulation", "Regulation & policy"],
     ["earnings", "Earnings, estimates & KPIs"], ["chain", "Customers & suppliers"], ["valuation", "Valuation"], ["positioning", "Positioning & flows"],
     ["momentum", "Momentum & the statistical anchor"], ["history", "History: times like this"], ["catalysts", "Dated catalysts ahead"],
-    ["scenarios", "Bull / base / bear scenarios"], ["calls", "The 1M-12M calls"], ["redteam", "Red team & risks"], ["verdict", "The lead's opportunity verdict"],
+    ["scenarios", "Bull / base / bear scenarios"], ["calls", "The earlier 1M-12M calls"], ["redteam", "Red team & risks"], ["verdict", "The lead's opportunity verdict"],
   ];
   const LABEL = Object.fromEntries(INPUTS);
   const KEYS = INPUTS.map(([k]) => k);
-  const ALIAS = { "world & geopolitics": "world", geopolitics: "world", "macro & rates": "macro", rates: "macro", tariffs: "trade", "trade & tariffs": "trade", regulation: "regulation", policy: "regulation", "regulation & policy": "regulation",
-    earnings: "earnings", kpis: "earnings", kpi: "earnings", estimates: "earnings", "earnings & kpis": "earnings", "earnings, estimates & kpis": "earnings", "customers & suppliers": "chain", supply: "chain", "supply chain": "chain",
-    flows: "positioning", "positioning & flows": "positioning", momentum: "momentum", anchor: "momentum", "momentum & the statistical anchor": "momentum", "statistical anchor": "momentum", "times like this": "history", history: "history",
-    catalysts: "catalysts", calendar: "catalysts", events: "catalysts", scenarios: "scenarios", "the calls": "calls", horizons: "calls", "red team": "redteam", risks: "redteam", "red team & risks": "redteam",
-    verdict: "verdict", "lead verdict": "verdict", "the lead verdict": "verdict", opportunity: "verdict", "opportunity verdict": "verdict" };
-  const keyOf = (s) => { const t = lc(s); if (KEYS.includes(t)) return t; if (ALIAS[t]) return ALIAS[t]; const hit = INPUTS.find(([k, l]) => lc(l) === t); if (hit) return hit[0];
-    for (const [a, k] of Object.entries(ALIAS)) if (t.includes(a)) return k; return null; };
+  const ALIAS = { geopolitics: "world", rates: "macro", tariffs: "trade", policy: "regulation", kpis: "earnings", kpi: "earnings", estimates: "earnings", supply: "chain", suppliers: "chain", customers: "chain",
+    flows: "positioning", anchor: "momentum", "times like this": "history", calendar: "catalysts", events: "catalysts", horizons: "calls", "red team": "redteam", risks: "redteam", opportunity: "verdict" };
+  const keyOf = (s) => { const t = lc(s); if (KEYS.includes(t)) return t; const hit = INPUTS.find(([, l]) => lc(l) === t); if (hit) return hit[0];
+    for (const k of KEYS) if (t.startsWith(k)) return k; for (const [a, k] of Object.entries(ALIAS)) if (t.includes(a)) return k; return null; };
 
   /** The lead's own finished analysis, as the prompt shows it. */
   function analysisText(res) {
@@ -48,7 +61,7 @@
     if (isNum(m.expected_return)) o.push(`CODE-COMPUTED SCENARIO MATH: expected 12M return ${m.expected_return}%, probability of a loss ${m.prob_loss ?? "?"}%, reward-to-risk ${m.reward_risk ?? "n/a"}.`);
     for (const h of HZ) { const x = res.horizons?.[h]; if (!x) continue;
       const v = x.vs_spy, a = x.anchor;
-      o.push(`CALL ${h}: ${x.call}, conviction ${x.conviction ?? "?"}/10, ${(x.expected_move || []).join(" to ")}% absolute, ${x.probability_up ?? "?"}% chance higher${v ? `; vs the S&P 500: ${v.call || "?"}, ${(v.expected_excess || []).join(" to ")}% excess, ${v.probability_beat ?? "?"}% chance of beating it` : ""}${a ? `; statistical anchor vs S&P median ${a.rel?.median ?? a.rel_median ?? "?"}%` : ""}. Why: ${trim(x.drivers, 600)}`); }
+      o.push(`EARLIER CALL ${h}: ${x.call}, conviction ${x.conviction ?? "?"}/10, ${(x.expected_move || []).join(" to ")}% absolute, ${x.probability_up ?? "?"}% chance higher${v ? `; vs the S&P 500: ${v.call || "?"}, ${(v.expected_excess || []).join(" to ")}% excess, ${v.probability_beat ?? "?"}% chance of beating it` : ""}${a?.rel ? `; statistical anchor vs S&P median ${a.rel.median}%` : ""}. Why: ${trim(x.drivers, 600)}`); }
     if (op.verdict) o.push(`OPPORTUNITY VERDICT (the lead's): ${op.verdict.toUpperCase()}${op.consistent === false ? " (code flags it as inconsistent with the scenario math)" : ""}: ${trim(op.headline, 300)} ${trim(op.why, 1000)}${(op.entry_triggers || []).length ? ` Entry triggers: ${op.entry_triggers.slice(0, 4).map((t) => trim(t, 160)).join("; ")}` : ""}`);
     const rt = res.redteam;
     if (rt) o.push(`RED TEAM (${rt.stance || "?"}): ${trim(rt.thesis, 900)} Arguments: ${(rt.arguments || []).slice(0, 6).map((a) => `[${a.severity}] ${trim(a.claim, 200)}`).join(" | ")}. Pre-mortem: ${(rt.premortem || []).slice(0, 3).map((p) => `${p.probability}%: ${trim(p.what_happened, 220)}`).join(" | ")}`);
@@ -60,21 +73,19 @@
     return o.join("\n");
   }
 
-  const SCHEMA = `{"lean": "bullish | bearish", "absolute": "up | down",
- "probability": 62, "horizon": "1M | 3M | 6M | 12M", "headline": "one sentence: leaning bullish/bearish because ... (the two or three things that decide it)",
- "summary": "4-6 sentences weighing the evidence: what the bull side has, what the bear side has, why one outweighs the other, and what is priced in",
- "evidence": [{"input": "world | macro | trade | regulation | earnings | chain | valuation | positioning | momentum | history | catalysts | scenarios | calls | redteam | verdict", "points": "bullish | bearish | mixed", "weight": 1, "why": "one or two sentences with the specific numbers and [IDs]"}],
- "verdict": {"agrees": true, "why": "one or two sentences: do you agree with the lead's opportunity verdict and the calls, and if not, why the weight of everything else points the other way"},
- "decides_it": "the single dated event or number that settles which side is right, and when",
- "flips_it": ["2-4 measurable, dated conditions that would flip the lean"]}`;
+  const CALL = `{"call": "${LEVELS.join(" | ")}", "why": "3-5 sentences: what the S&P 500 is likely to do over this window and what drives it, and why this industry does better or worse than it, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call"}`;
+  const SCHEMA = `{"headline": "one sentence: the overall lean vs the S&P 500 and the two or three things that decide it",
+ "evidence": [{"input": "world | macro | trade | regulation | earnings | chain | valuation | positioning | momentum | history | catalysts | scenarios | calls | redteam | verdict", "points": "bullish | bearish | mixed", "weight": 1, "why": "one or two sentences vs the S&P 500, with the numbers and [IDs]"}],
+ "calls": {"1M": ${CALL}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "verdict": {"agrees": true, "why": "one or two sentences: do you agree with the lead's opportunity verdict and the earlier calls, and if not, why the rest of the evidence points the other way"}}`;
 
   /**
    * The prompt. ctx: {today, dossier (Brain.dossier text), res (the lead's result), facts (Horizon.horizonFacts),
-   * scorecard text, wire: today's headlines [{id, title, date}]}.
+   * scorecard text, wire: [{id, title, date}]}.
    */
   function leanPrompt(name, ctx) {
     const facts = (ctx.facts || []).filter((f) => f.anchor);
-    return `You are the head of research for the US-listed "${name}" industry. Today is ${ctx.today}. Your team has finished its work: the dossier below holds every analyst's report, and below it is your own finished analysis. An investor now asks one question: WHICH WAY DOES IT LEAN? Make the call.
+    return `You are the head of research for the US-listed "${name}" industry. Today is ${ctx.today}. Your team has finished its work: the dossier below holds every analyst's report, and below it is your own finished analysis. An investor asks one thing: FOR EACH TIMEFRAME, DOES THIS INDUSTRY BEAT OR LAG THE S&P 500, HOW STRONGLY, AND WHY?
 
 ${ctx.dossier || "(dossier unavailable: use the analysis)"}
 
@@ -84,17 +95,17 @@ ${facts.length ? `\n=== THE STATISTICAL ANCHOR (momentum, the trend and valuatio
 ${ctx.scorecard ? `\n${ctx.scorecard}` : ""}
 ${(ctx.wire || []).length ? `\n=== TODAY'S WIRE (latest headlines touching this industry) ===\n${ctx.wire.slice(0, 15).map((w) => `[${w.id}] ${w.date ? w.date + " " : ""}${trim(w.title, 200)}`).join("\n")}` : ""}
 
-HOW TO MAKE THE CALL
-- Pick a side: "bullish" means the industry beats the S&P 500 over the horizon; "bearish" means it lags it. No "neutral": if it is close, pick the side the evidence tips toward and give a probability near 50.
-- Weigh EVERY input, one entry each, in this order: world, macro, trade, regulation, earnings, chain, valuation, positioning, momentum, history, catalysts, scenarios, calls, redteam, verdict. For each: which way it points ("bullish" / "bearish" / "mixed"), how much it matters for THIS industry over the horizon (weight 1 = minor, 2 = material, 3 = decisive), and why, with the specific numbers and the dossier's [IDs]. An input with nothing in the dossier is "mixed", weight 1, and says so.
-- The lead's opportunity verdict and the calls are inputs, not the answer: if the rest of the evidence points the other way, say so and lean the other way. If you agree, say why the evidence supports them.
-- "absolute": whether the industry is more likely up or down over the horizon (the market's own drift is about +7% a year).
-- "probability": the chance the lean is right, vs the S&P 500 over the horizon, 50-85. Be calibrated: the statistical anchor has called the direction vs the S&P 500 right only about 55% of the time out of sample, so 70+ needs evidence that is lopsided across most inputs, and 80+ is rare.
-- "horizon": the window where you have the most conviction (12M unless a nearer window is clearly decisive).
-- The lean must follow from the evidence you list: code tallies your weights and flags a lean that goes against them, or against your own call vs the S&P 500 for the same window without an explanation in "verdict".
-- Cite only IDs in the dossier or today's wire. Plain words; no hedging filler.
+HOW TO MAKE THE CALLS
+- Every call is RELATIVE TO THE S&P 500: "bullish" means the industry beats the S&P 500 over that window, "bearish" means it lags it. Its absolute direction doesn't matter: an industry that falls 5% while the S&P 500 falls 12% is bullish.
+- Six levels, no neutral. "slightly": a close call that tips one way. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most inputs point the same way and decisively; use it rarely. If it's close, pick the side the evidence tips toward and say "slightly".
+- First weigh EVERY input, one entry each, in this order: world, macro, trade, regulation, earnings, chain, valuation, positioning, momentum, history, catalysts, scenarios, calls, redteam, verdict. For each: which way it points vs the S&P 500 ("bullish" / "bearish" / "mixed"), how much it matters for THIS industry (weight 1 = minor, 2 = material, 3 = decisive), and why, with the numbers and the dossier's [IDs]. An input with nothing in the dossier is "mixed", weight 1, and says so.
+- Then make the four calls from that evidence. Different windows can differ (near-term momentum, a dated catalyst, valuation that only matters over a year), but a call that flips direction from one window to the next must say in its "why" what changes in between.
+- Each "why" compares with the S&P 500 explicitly: what the index is likely to do over the window and what drives it (rates, the Fed, earnings, the mega-caps), and why this industry does better or worse. Plain words, specific numbers, no hedging filler. No price targets or expected returns.
+- The lead's opportunity verdict and the earlier calls are inputs, not the answer: if the rest of the evidence points the other way, say so and call it the other way.
+- Code checks your calls against the evidence you list and against each other, and sends back contradictions.
+- Cite only IDs in the dossier or today's wire.
 
-Reply with ONLY this JSON:
+Reply with ONLY this JSON (all four windows):
 ${SCHEMA}`;
   }
 
@@ -105,90 +116,83 @@ ${SCHEMA}`;
     return { score: w ? Math.round((s / w) * 100) / 100 : 0, bull, bear, mixed, weight: w };
   }
 
-  /** The call vs the S&P 500 for a window, as a probability of beating it (null if there is none). */
-  function callBeat(res, h) {
-    const x = res?.horizons?.[h]; if (!x) return null;
-    if (isNum(Number(x.vs_spy?.probability_beat)) && x.vs_spy?.probability_beat !== null && x.vs_spy?.probability_beat !== undefined) return Number(x.vs_spy.probability_beat);
-    return null;
+  const TURN = /\b(then|after|once|until|before|near[- ]term|short[- ]term|longer[- ]term|later|by (?:the )?(?:spring|summer|mid|end|q[1-4])|bounce|rebound|catch[- ]up|reverses?|fades?|turns?|over (?:a|the) (?:year|longer))\b/i;
+  /** Code's checks on a cleaned lean: issues as plain sentences. */
+  function checks(out) {
+    const iss = [], t = out.tally;
+    const s12 = SIGN[out.calls["12M"]?.call] || 0, s6 = SIGN[out.calls["6M"]?.call] || 0;
+    const long = s12 + s6;
+    if (out.evidence.length >= 8 && long && Math.sign(long) * t.score < -0.15) iss.push(`The 6M and 12M calls are ${long > 0 ? "bullish" : "bearish"}, but the evidence listed tips the other way (score ${t.score > 0 ? "+" : ""}${t.score}).`);
+    for (let i = 1; i < HZ.length; i++) { const a = out.calls[HZ[i - 1]], b = out.calls[HZ[i]];
+      if (a && b && Math.sign(SIGN[a.call]) !== Math.sign(SIGN[b.call]) && !TURN.test(b.why) && !TURN.test(a.why)) iss.push(`${HZ[i - 1]} is ${a.call} but ${HZ[i]} is ${b.call}, and neither says what changes in between.`); }
+    const strong = HZ.filter((h) => /strongly/.test(out.calls[h]?.call || ""));
+    if (strong.length && Math.abs(t.score) < 0.35 && out.evidence.length >= 8) iss.push(`"Strongly" (${strong.join(", ")}) from evidence that is only ${Math.round(Math.abs(t.score) * 100)}% one-sided.`);
+    return iss;
   }
 
   /** Clean the model's answer; add code's tally and checks. */
   function cleanLean(raw, { res = null, today = "", known = null } = {}) {
     if (!raw || typeof raw !== "object") return null;
-    const r = raw.lean && typeof raw.lean === "object" ? raw.lean : raw;
-    const side = /bear|under|short|negative/.test(lc(r.lean || r.call)) ? "bearish" : /bull|over|outperf|long|positive/.test(lc(r.lean || r.call)) ? "bullish" : null;
-    if (!side) return null;
+    const r = raw.lean && typeof raw.lean === "object" && raw.lean.calls ? raw.lean : raw;
     const ids = known ? new Set(known) : null;
     const cite = (t, k) => trim(String(t || "").replace(/\[([A-Z]{1,6}\d{1,5}(?:\s*,\s*[A-Z]{1,6}\d{1,5})*)\]/g, (m, g) => { if (!ids) return m; const keep = g.split(/\s*,\s*/).filter((i) => ids.has(i)); return keep.length ? `[${keep.join(", ")}]` : ""; }).replace(/\s+([.,;:])/g, "$1"), k);
+    const list = (a, n, k) => (Array.isArray(a) ? a : a ? [a] : []).slice(0, n).map((x) => cite(x, k)).filter(Boolean);
+    const calls = {};
+    for (const h of HZ) { const c = r.calls?.[h] || r.calls?.[h.toLowerCase()]; const l = level(c?.call); if (!l) continue;
+      calls[h] = { call: l, why: cite(c.why, 1400), for: list(c.for, 3, 300), against: list(c.against, 2, 300), flips_it: cite(c.flips_it, 300) }; }
+    if (!Object.keys(calls).length) return null;
     const seen = new Set(), evidence = [];
     for (const e of Array.isArray(r.evidence) ? r.evidence : []) {
       const k = keyOf(e?.input); if (!k || seen.has(k)) continue; seen.add(k);
-      const p = lc(e?.points); const points = /bull|positive|up/.test(p) ? "bullish" : /bear|negative|down/.test(p) ? "bearish" : "mixed";
+      const p = lc(e?.points); const points = /bull|positive|beat|outperf/.test(p) ? "bullish" : /bear|negative|lag|underperf/.test(p) ? "bearish" : "mixed";
       evidence.push({ input: k, label: LABEL[k], points, weight: Math.max(1, Math.min(3, Math.round(Number(e?.weight) || 1))), why: cite(e?.why, 500) });
     }
     evidence.sort((a, b) => KEYS.indexOf(a.input) - KEYS.indexOf(b.input));
-    const horizon = HZ.includes(String(r.horizon || "").toUpperCase()) ? String(r.horizon).toUpperCase() : "12M";
-    let probability = Math.round(Number(r.probability));
-    if (!isNum(probability)) probability = 55;
-    probability = Math.max(51, Math.min(85, probability)); // a forced side is at least a coin flip's edge
-    const t = tally(evidence);
-    const out = { date: today, lean: side, absolute: /down|lower|fall/.test(lc(r.absolute)) ? "down" : "up", probability, horizon,
-      strength: probability >= 70 ? "strong" : probability >= 60 ? "clear" : "slight",
-      headline: cite(r.headline, 400), summary: cite(r.summary, 1600), evidence,
-      verdict: { agrees: r.verdict?.agrees !== false && lc(r.verdict?.agrees) !== "false", why: cite(r.verdict?.why, 600) },
-      decides_it: cite(r.decides_it, 400), flips_it: (Array.isArray(r.flips_it) ? r.flips_it : []).slice(0, 4).map((x) => cite(x, 300)).filter(Boolean),
-      tally: t, missing: KEYS.filter((k) => !seen.has(k)), checks: [] };
-    // Code's checks.
-    const dir = side === "bullish" ? 1 : -1;
-    if (t.score * dir < -0.15) out.checks.push(`The lean is ${side}, but the evidence it lists tips the other way (score ${t.score > 0 ? "+" : ""}${t.score}).`);
-    const pb = callBeat(res, horizon);
-    if (pb !== null && ((side === "bullish" && pb < 45) || (side === "bearish" && pb > 55)))
-      out.checks.push(`The lean is ${side}, but the ${horizon} call gives a ${pb}% chance of beating the S&P 500${out.verdict.why ? "; the lean explains why it differs" : ""}.`);
-    if (probability >= 75 && Math.abs(t.score) < 0.4) out.checks.push(`A ${probability}% lean from evidence that is only ${Math.round(Math.abs(t.score) * 100)}% one-sided.`);
+    const out = { v: 2, date: today, headline: cite(r.headline, 400), calls, evidence, tally: tally(evidence), missing: KEYS.filter((k) => !seen.has(k)),
+      verdict: { agrees: r.verdict?.agrees !== false && lc(r.verdict?.agrees) !== "false", why: cite(r.verdict?.why, 600) } };
+    out.checks = checks(out);
+    if (HZ.some((h) => !calls[h])) out.checks.push(`No call for ${HZ.filter((h) => !calls[h]).join(", ")}.`);
     if (out.missing.length > 3) out.checks.push(`${out.missing.length} inputs weren't weighed: ${out.missing.map((k) => LABEL[k]).join(", ")}.`);
-    out.consistent = !out.checks.some((c) => /tips the other way/.test(c));
-    return out.headline || evidence.length ? out : null;
+    out.consistent = !out.checks.length;
+    return out;
   }
 
-  /** One focused fix when the lean contradicts its own evidence (small prompt: no dossier). */
+  /** One focused fix when the calls contradict their evidence or each other (small prompt: no dossier). */
   function repairPrompt(name, today, lean, issues) {
-    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. Code checked your lean and found contradictions:
+    return `You are the head of research for the US-listed "${name}" industry. Today is ${today}. Code checked your calls vs the S&P 500 and found problems:
 ${issues.map((i) => "- " + i).join("\n")}
 
-YOUR LEAN
-${JSON.stringify({ lean: lean.lean, absolute: lean.absolute, probability: lean.probability, horizon: lean.horizon, headline: lean.headline, summary: lean.summary, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), verdict: lean.verdict, decides_it: lean.decides_it, flips_it: lean.flips_it })}
+YOUR CALLS AND EVIDENCE
+${JSON.stringify({ headline: lean.headline, evidence: lean.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), calls: lean.calls, verdict: lean.verdict })}
 
-Resolve them: either the evidence weights are wrong (fix them) or the lean is (flip it, and rewrite the headline and summary). Keep the citations. Reply with ONLY the complete corrected lean, in the same JSON shape:
+Resolve them: fix the evidence weights if they're wrong, or change the calls (and their "why") if those are. A call that flips direction between timeframes must say what changes in between. Keep the citations. Reply with ONLY the complete corrected answer, in the same JSON shape (all four windows, all fifteen inputs):
 ${SCHEMA}`;
   }
 
-  /** Until the strategist has made one: a provisional lean read off the calls (no Claude). */
+  /** Until the strategist has made one: provisional calls read off the earlier calls (no Claude). */
   function provisional(res, today = "") {
-    if (!res) return null;
-    for (const h of ["12M", "6M"]) {
-      const pb = callBeat(res, h);
-      if (pb !== null) { const side = pb >= 50 ? "bullish" : "bearish"; const p = Math.max(51, Math.min(85, Math.round(side === "bullish" ? pb : 100 - pb)));
-        return { date: today, provisional: true, lean: side, probability: p, horizon: h, strength: p >= 70 ? "strong" : p >= 60 ? "clear" : "slight", absolute: (res.horizons[h].probability_up ?? 50) >= 50 ? "up" : "down",
-          headline: `Read off the ${h} call vs the S&P 500 (${pb}% chance of beating it); the strategist's full lean comes with the next update.`, evidence: [], checks: [] }; }
-    }
-    // No view vs the S&P 500 yet: the 12M call's own direction (its absolute numbers run below the market's drift
-    // for nearly every industry, so they can't rank one against the market); neutral goes the way of the verdict.
-    const v = res.opportunity?.verdict, x = res.horizons?.["12M"];
-    if (!v && !x) return null;
-    const c = lc(x?.call), up = isNum(Number(x?.probability_up)) ? Number(x.probability_up) : 50;
-    const side = /bull/.test(c) ? "bullish" : /bear/.test(c) ? "bearish" : v === "yes" ? "bullish" : v === "no" ? "bearish" : up >= 55 ? "bullish" : "bearish";
-    const p = /strong/.test(c) ? 58 : /slight/.test(c) ? 53 : 51;
-    return { date: today, provisional: true, lean: side, probability: p, horizon: "12M", strength: "slight", absolute: up >= 50 ? "up" : "down",
-      headline: `Read off the 12M call (${x?.call || "none"}, ${up}% chance higher) and the opportunity verdict (${v || "none"}); the strategist's full lean, weighing every input vs the S&P 500, comes with the next update.`, evidence: [], checks: [] };
+    if (!res?.horizons) return null;
+    const calls = {};
+    for (const h of HZ) { const x = res.horizons[h]; if (!x) continue;
+      const v = x.vs_spy, base = v?.call || x.call, s = lc(base);
+      let l = level(base);
+      if (!l || s === "neutral") { const pb = Number(v?.probability_beat), pu = Number(x.probability_up), op = res.opportunity?.verdict;
+        l = isNum(pb) ? (pb >= 50 ? "slightly bullish" : "slightly bearish") : op === "yes" ? "slightly bullish" : op === "no" ? "slightly bearish" : isNum(pu) && pu >= 55 ? "slightly bullish" : "slightly bearish"; }
+      else if (!/slight|strong/.test(s)) l = level("slightly " + l);
+      calls[h] = { call: l, basis: v ? "the earlier call vs the S&P 500" : "the earlier absolute call" }; }
+    if (!Object.keys(calls).length) return null;
+    return { v: 2, date: today, provisional: true, headline: "Provisional: read off the earlier calls. Press the button for the strategist's calls vs the S&P 500, with the reasons.", calls, evidence: [], checks: [] };
   }
 
-  /** The lean to show: the strategist's, or a provisional one. */
-  const leanOf = (res, today = "") => res?.lean || provisional(res, today);
+  /** The lean to show: the strategist's (this format), or a provisional one. */
+  const leanOf = (res, today = "") => (res?.lean?.v === 2 && res.lean.calls ? res.lean : provisional(res, today));
 
-  /** One line for a table or the daily prompt. */
-  const leanLine = (l) => (l ? `${l.lean === "bullish" ? "Bullish" : "Bearish"} vs the S&P 500 (${l.probability}%, ${l.horizon})${l.provisional ? " provisional" : ""}: ${trim(l.headline, 240)}` : "");
+  /** Did the 12M call change side (a made lean to a new one)? */
+  const flipped = (a, b) => !!(a && b && !a.provisional && a.v === 2 && a.calls?.["12M"] && b.calls?.["12M"] && Math.sign(SIGN[a.calls["12M"].call]) !== Math.sign(SIGN[b.calls["12M"].call]));
+  /** One line for a table or a progress note. */
+  const leanLine = (l) => (l ? HZ.filter((h) => l.calls?.[h]).map((h) => `${h} ${l.calls[h].call}`).join(", ") + (l.provisional ? " (provisional)" : "") : "");
 
-  const Lean = { INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, repairPrompt, provisional, leanOf, leanLine, SCHEMA };
+  const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA };
   if (typeof module !== "undefined" && module.exports) module.exports = Lean;
   else root.Lean = Lean;
 })(typeof window !== "undefined" ? window : globalThis);
