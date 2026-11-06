@@ -1,0 +1,53 @@
+# Industry Scorer: fit the statistical anchor every 1M-12M call starts from (no Claude; FMP only).
+#
+# Reads every industry's history since 2008 (FMP's daily average change per industry and its P/E), fits one model on
+# all of them pooled (momentum, last month, the 3-month trend and P/E vs its 5-year median, each in units of the
+# industry's own volatility vs the S&P 500), tests it walking forward year by year, and commits the model
+# (web/anchor-model.js) with the rebuilt page. The test results show in the run's summary and travel with the model.
+# Runs on the 3rd of each month, or by hand.
+name: Fit the statistical anchor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 9 3 * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fit-anchor
+  cancel-in-progress: false
+
+jobs:
+  fit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund --omit=optional
+      - name: Get the industries (the exports branch)
+        run: |
+          git fetch -q origin exports
+          mkdir -p exp && git --work-tree=exp checkout FETCH_HEAD -- runs
+      - name: Fit and test
+        working-directory: runner
+        env:
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          ANCHOR_CONCURRENCY: "4"
+        run: node fit-anchor.mjs ../exp
+      - name: Rebuild the page and commit the model
+        run: |
+          git reset -q
+          python3 web/build.py
+          git config user.name "Industry Scorer"; git config user.email "actions@users.noreply.github.com"
+          git add web/anchor-model.js web/industry-scorer.html
+          git diff --cached --quiet && { echo "No change."; exit 0; }
+          git commit -qm "Statistical anchor refitted $(date -u +%F)"
+          for i in 1 2 3; do git pull -q --rebase origin "$GITHUB_REF_NAME" && git push -q origin "HEAD:$GITHUB_REF_NAME" && exit 0; sleep 5; done; exit 1
