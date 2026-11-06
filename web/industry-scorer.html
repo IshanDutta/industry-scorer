@@ -8668,6 +8668,10 @@ Reply with ONLY this JSON:
     if (refs.length) out.daily_refs = [...(out.daily_refs || []), ...refs].slice(-200);
     // How each passed event landed, kept with the analysis (the calendar shows it; the event leaves the open list).
     const evIds = new Set((x.passed || []).map((e) => e.id)), landedNow = [];
+    // A full rewrite read everything again, outcomes included: its passed events count as taken in.
+    if (via === "rewrite") for (const e of x.passed || []) if (e.kind !== "earnings" && !out.landed?.[e.id]?.text) {
+      const t = `Taken into today's full rewrite of the analysis: see the thesis and scenarios${(e.outcome_ids || []).length ? ` [${e.outcome_ids.join(", ")}]` : ""}.`;
+      out.landed = { ...(out.landed || {}), [e.id]: { date: today, text: t, sources: sources.filter((s) => (e.outcome_ids || []).includes(s.id)).map(({ id: i, title, url, source, date }) => ({ id: i, title, url, source, date })) } }; landedNow.push({ id: e.id, text: t }); }
     for (const ev of Array.isArray(upd?.events) ? upd.events : []) { const id = String(ev?.id || ""); const t = cite(ev?.landed, 400);
       if (!evIds.has(id) || !t) continue; landedNow.push({ id, text: /^unknown\.?$/i.test(t.trim()) ? "" : t });
       if (!/^unknown\.?$/i.test(t.trim())) out.landed = { ...(out.landed || {}), [id]: { date: today, text: t, sources: sources.filter((s) => t.includes(`[${s.id}]`)).map(({ id: i, title, url, source, date }) => ({ id: i, title, url, source, date })) } }; }
