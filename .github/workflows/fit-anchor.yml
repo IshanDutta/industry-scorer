@@ -1,10 +1,10 @@
 # Industry Scorer: fit the statistical anchor every 1M-12M call starts from (no Claude; FMP only).
 #
-# Reads every industry's history since 2008 (FMP's daily average change per industry and its P/E), fits one model on
-# all of them pooled (momentum, last month, the 3-month trend and P/E vs its 5-year median, each in units of the
-# industry's own volatility vs the S&P 500), tests it walking forward year by year, and commits the model
-# (web/anchor-model.js) with the rebuilt page. The test results show in the run's summary and travel with the model.
-# Runs on the 3rd of each month, or by hand.
+# Reads every industry's history since 2008 (FMP's daily average change per industry and its P/E), one sector per
+# job, then fits one model on all of them pooled (momentum, last month, the 3-month trend and P/E vs its 5-year median,
+# each in units of the industry's own volatility vs the S&P 500, measured against the average industry each month),
+# tests it walking forward year by year, and commits the model (web/anchor-model.js) with the rebuilt page. The test
+# results show in the run's summary and travel with the model. Runs on the 3rd of each month, or by hand.
 name: Fit the statistical anchor
 
 on:
@@ -20,9 +20,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  fit:
+  plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    outputs:
+      sectors: ${{ steps.p.outputs.sectors }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: p
+        run: |
+          git fetch -q origin exports
+          s=$(git ls-tree --name-only FETCH_HEAD runs/ | grep -E '^runs/[a-z-]+\.json\.gz$' | while read f; do git show "FETCH_HEAD:$f" | gunzip | python3 -c "import json,sys; print(json.load(sys.stdin)['sector'])"; done | python3 -c "import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+          echo "sectors=$s" >> "$GITHUB_OUTPUT"; echo "$s"
+  collect:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        sector: ${{ fromJSON(needs.plan.outputs.sectors) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,17 +51,44 @@ jobs:
       - name: Get the industries (the exports branch)
         run: |
           git fetch -q origin exports
-          mkdir -p exp && git --work-tree=exp checkout FETCH_HEAD -- runs
-      - name: Fit and test
+          mkdir -p exp && git --work-tree=exp checkout FETCH_HEAD -- runs && git reset -q
+      - name: Collect this sector's history
         working-directory: runner
         env:
           FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
           FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
           ANCHOR_CONCURRENCY: "2"
-        run: node fit-anchor.mjs ../exp
+          SECTOR: ${{ matrix.sector }}
+        run: node fit-anchor.mjs ../exp --collect "$SECTOR" --rows ../anchor-rows.json
+      - name: Name the rows file
+        run: n=$(echo "${{ matrix.sector }}" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\+/-/g'); mkdir -p rows && mv anchor-rows.json "rows/anchor-rows-$n.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: anchor-rows-${{ strategy.job-index }}
+          path: rows/
+          retention-days: 3
+  fit:
+    needs: collect
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund --omit=optional
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: anchor-rows-*
+          path: rows
+      - name: Fit and test
+        working-directory: runner
+        run: node fit-anchor.mjs --fit ../rows
       - name: Rebuild the page and commit the model
         run: |
-          git reset -q
           python3 web/build.py
           git config user.name "Industry Scorer"; git config user.email "actions@users.noreply.github.com"
           git add web/anchor-model.js web/industry-scorer.html

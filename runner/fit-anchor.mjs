@@ -2,6 +2,8 @@
 // write the model the page uses: web/anchor-model.js. No Claude; FMP only (a few thousand calls, ~15-30 minutes).
 //
 // Usage: node fit-anchor.mjs <dir with runs/*.json.gz (the exports branch)> [--out ../web/anchor-model.js] [--only "Semiconductors,Banks - Regional"]
+//        node fit-anchor.mjs <exports dir> --collect "<Sector>" --rows <file>   (one sector's monthly rows, for a matrix job)
+//        node fit-anchor.mjs --fit <dir of rows files> [--out file]              (fit on rows collected by sector)
 // Env: FMP_MCP_URL, FMP_MCP_HEADERS (optional), ANCHOR_CONCURRENCY (default 4)
 import fs from "node:fs";
 import path from "node:path";
@@ -14,11 +16,22 @@ const Anchor = require("../web/anchor.js");
 const History = require("../web/history.js");
 const env = process.env;
 const args = process.argv.slice(2);
-const dir = args[0], opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
+const opt = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
+const fitDir = opt("--fit", ""), collect = opt("--collect", ""), rowsOut = opt("--rows", "");
+const dir = fitDir ? "" : args[0];
 const outFile = opt("--out", path.join(path.dirname(new URL(import.meta.url).pathname), "../web/anchor-model.js"));
 const only = (opt("--only", "") || "").split(",").map((s) => s.trim()).filter(Boolean);
-if (!dir) { console.error("usage: node fit-anchor.mjs <exports dir> [--out file]"); process.exit(2); }
-const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+if (!dir && !fitDir) { console.error("usage: node fit-anchor.mjs <exports dir> [--out file] | --fit <rows dir>"); process.exit(2); }
+const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a), log0 = log;
+const end0 = new Date().toISOString().slice(0, 10);
+if (fitDir) {
+  // Fit on every sector's rows.
+  const data = [];
+  for (const f of fs.readdirSync(fitDir, { recursive: true }).map(String).filter((f) => /anchor-rows-.*\.json$/.test(f))) data.push(...JSON.parse(fs.readFileSync(path.join(fitDir, f), "utf8")));
+  log0(`${data.length} industries with rows`);
+  await finish(data, data.length, 0, end0);
+  process.exit(0);
+}
 
 // The industries, each with its exchange weights (share of its top companies' market cap on each exchange).
 const inds = [];
@@ -28,6 +41,7 @@ for (const f of fs.readdirSync(path.join(dir, "runs")).filter((f) => /^[a-z-]+\.
     if (!k.startsWith("run:")) continue;
     const v = typeof v0 === "string" ? JSON.parse(v0) : v0, d = v?.industry; if (!d?.name) continue;
     if (only.length && !only.includes(d.name)) continue;
+    if (collect && j.sector !== collect) continue;
     const w = {}; let t = 0; for (const c of d.constituents || []) { const e = String(c.exchange || "").toUpperCase(); if (!["NASDAQ", "NYSE", "AMEX"].includes(e)) continue; w[e] = (w[e] || 0) + (c.market_cap || 0); t += c.market_cap || 0; }
     for (const e of Object.keys(w)) w[e] = t ? w[e] / t : 0;
     inds.push({ name: d.name, sector: j.sector, weights: w, primary: d.history?.primary || Object.entries(w).sort((a, b) => b[1] - a[1])[0]?.[0] || "NASDAQ" });
@@ -41,11 +55,11 @@ await mcp.connect("FMP");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 // An empty answer or an error is retried (the data provider limits calls per minute); a real gap stays empty.
-const fmp = async (tool, input, { tries = 4 } = {}) => {
+const fmp = async (tool, input, { tries = 2 } = {}) => {
   for (let t = 1; t <= tries; t++) {
     try { const r = await mcp.callTool("FMP", tool, input); const p = r.payload; const rows = Array.isArray(p) ? p : Array.isArray(p?.data) ? p.data : []; if (rows.length || t === tries) return rows; }
     catch (e) { if (t === tries) { failed++; return []; } }
-    await sleep(3000 * t);
+    await sleep(2000 * t);
   }
   return [];
 };
@@ -76,6 +90,10 @@ async function one(ind) {
 const queue = [...inds], N = Math.max(1, Number(env.ANCHOR_CONCURRENCY) || 2);
 await Promise.all(Array.from({ length: N }, async () => { while (queue.length) await one(queue.shift()); }));
 await mcp.close?.();
+if (collect) { fs.writeFileSync(rowsOut || `anchor-rows-${collect.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json`, JSON.stringify(data)); log(`${data.length} of ${inds.length} ${collect} industries collected (${failed} calls failed).`); process.exit(0); }
+await finish(data, inds.length, failed, end);
+
+async function finish(data, of, failed, end) {
 if (data.length < 20) { console.error(`Only ${data.length} industries had enough history; not writing a model.`); process.exit(1); }
 
 const model = Anchor.fit(data, { asOf: end });
@@ -83,6 +101,7 @@ const model = Anchor.fit(data, { asOf: end });
 for (const h of Object.keys(model.horizons)) for (const k of ["rel"]) { const m = model.horizons[h][k]; model.horizons[h][k] = { w: m.w.map((v) => +v.toFixed(5)), mu: m.mu.map((v) => +v.toFixed(5)), sdv: m.sdv.map((v) => +v.toFixed(5)), b0: +m.b0.toFixed(5), resid: +m.resid.toFixed(5) }; }
 model.industries = data.length;
 fs.writeFileSync(outFile, `/* Industry Scorer: the fitted statistical anchor (written by runner/fit-anchor.mjs; don't edit by hand). */\n(function (root) { root.ANCHOR_MODEL = ${JSON.stringify(model)}; if (typeof module !== "undefined" && module.exports) module.exports = root.ANCHOR_MODEL; })(typeof window !== "undefined" ? window : globalThis);\n`);
-log(`Model written to ${outFile} from ${data.length} of ${inds.length} industries (${failed} calls failed after retries).`);
+log(`Model written to ${outFile} from ${data.length} of ${of} industries (${failed} calls failed after retries).`);
 for (const [h, m] of Object.entries(model.horizons)) log(`${h}: weights ${m.rel.w.join(", ")}; out of sample: right side of the average industry ${m.test.hit_rate}% (coin flip 50%; intercept alone ${m.test.base_hit_rate}%), in likely range ${m.test.in_likely_range}%, rank IC ${m.test.rank_ic}, top-minus-bottom fifth ${m.test.top_minus_bottom} sigma, ${m.test.months} months`);
 if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `## Statistical anchor\n\nFitted on ${data.length} industries, ${end}.\n\n| Horizon | Right side of the average industry (out of sample) | Intercept alone | In likely range | Rank IC | Top − bottom fifth (σ) |\n|---|---|---|---|---|---|\n${Object.entries(model.horizons).map(([h, m]) => `| ${h} | ${m.test.hit_rate}% | ${m.test.base_hit_rate}% | ${m.test.in_likely_range}% | ${m.test.rank_ic} | ${m.test.top_minus_bottom} |`).join("\n")}\n`);
+}

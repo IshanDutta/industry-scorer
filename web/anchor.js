@@ -99,7 +99,7 @@
    * before the year began (minus the horizon) and test on that year. Returns the model with its test results.
    */
   function fit(data, { lambda = 50, testFrom = 2013, asOf = null } = {}) {
-    const model = { v: 1, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
+    const model = { v: 1, demeaned: true, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
     for (const h of Object.keys(H)) {
       const k = H[h], all = [];
       // The average industry's forward return each month (raw log returns vs the S&P 500), taken out of every target.
@@ -150,7 +150,8 @@
     for (const [h, k] of Object.entries(H)) {
       const M = model.horizons[h]; if (!M) continue;
       const s = r.scale * Math.sqrt(k / 12), sa = r.abs_scale * Math.sqrt(k / 12);
-      const zr = apply1(M.rel, xi), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
+      // A model fitted before targets were taken against the average industry: drop its intercept (that drift).
+      const zr = apply1(M.rel, xi) - (model.demeaned ? 0 : M.rel.b0), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
       const drivers = FEATS.map((f, j) => ({ feature: f, label: LABEL[f], value: Math.round((f === "pe" ? r.pe : r[f]) * 1000) / 10, push: Math.round(((xi[j] - M.rel.mu[j]) / M.rel.sdv[j]) * M.rel.w[j] * s * 1000) / 10 }))
         .sort((a, b) => Math.abs(b.push) - Math.abs(a.push));
       out.horizons[h] = {

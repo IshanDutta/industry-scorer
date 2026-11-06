@@ -1,7 +1,8 @@
 // Which sectors the daily update runs today, and each one's share of the monthly Claude budget.
 // Usage: node daily-plan.mjs <dir with runs/*.json.gz>   Env: MONTH_BUDGET (total $ a month, all sectors), ONLY (comma list), BACKFILL=1
 // Prints a JSON array [{sector, budget, safety}] for the workflow's matrix. Shares follow each sector's number of
-// industries; `safety` is a hard stop for one day (three times its daily share), in case something runs away.
+// industries; `safety` is a hard stop for one day (four and a half times its daily share plus $0.15 an industry: a big day may
+// spend three days' share on rewrites, and every industry's update must still fit), in case something runs away.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import { join } from "node:path";
@@ -22,5 +23,5 @@ const days = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMon
 // The history pass (BACKFILL=1): no monthly share; a stop at about $0.20 an industry plus $1.
 const backfill = env.BACKFILL === "1";
 const out = rows.filter((x) => !only.length || only.includes(x.sector)).map((x) => { const b = total && !backfill ? Math.round((total * x.n / all) * 100) / 100 : 0;
-  return { sector: x.sector, budget: b ? String(b) : "", safety: backfill ? String(Math.round((1 + 0.2 * x.n) * 100) / 100) : b ? String(Math.round((3 * b / days) * 100) / 100) : "" }; });
+  return { sector: x.sector, budget: b ? String(b) : "", safety: backfill ? String(Math.round((1 + 0.2 * x.n) * 100) / 100) : b ? String(Math.round((4.5 * b / days + 0.15 * x.n) * 100) / 100) : "" }; });
 process.stdout.write(JSON.stringify(out));

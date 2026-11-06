@@ -5449,7 +5449,7 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
    * before the year began (minus the horizon) and test on that year. Returns the model with its test results.
    */
   function fit(data, { lambda = 50, testFrom = 2013, asOf = null } = {}) {
-    const model = { v: 1, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
+    const model = { v: 1, demeaned: true, fitted_at: asOf, features: FEATS, horizons: {}, industries: data.length };
     for (const h of Object.keys(H)) {
       const k = H[h], all = [];
       // The average industry's forward return each month (raw log returns vs the S&P 500), taken out of every target.
@@ -5500,7 +5500,8 @@ Sizes: 3-5 bottlenecks, 3-6 most exposed, 2-4 most resilient, 3-5 watch items. I
     for (const [h, k] of Object.entries(H)) {
       const M = model.horizons[h]; if (!M) continue;
       const s = r.scale * Math.sqrt(k / 12), sa = r.abs_scale * Math.sqrt(k / 12);
-      const zr = apply1(M.rel, xi), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
+      // A model fitted before targets were taken against the average industry: drop its intercept (that drift).
+      const zr = apply1(M.rel, xi) - (model.demeaned ? 0 : M.rel.b0), mk = Math.log(1 + market) * (k / 12), za = (zr * s + mk) / sa, residA = Math.sqrt((M.rel.resid * s) ** 2 + (sa ** 2 - s ** 2 > 0 ? sa ** 2 - s ** 2 : 0)) / sa;
       const drivers = FEATS.map((f, j) => ({ feature: f, label: LABEL[f], value: Math.round((f === "pe" ? r.pe : r[f]) * 1000) / 10, push: Math.round(((xi[j] - M.rel.mu[j]) / M.rel.sdv[j]) * M.rel.w[j] * s * 1000) / 10 }))
         .sort((a, b) => Math.abs(b.push) - Math.abs(a.push));
       out.horizons[h] = {
@@ -8441,7 +8442,7 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
    * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
    */
-  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.06, triage: 0.002, second: 0.01 };
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, triage: 0.002, second: 0.01 };
   const IMPV = { high: 3, medium: 2, low: 1 };
   const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
   /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
