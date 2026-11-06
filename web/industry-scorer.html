@@ -8888,12 +8888,15 @@ ${SCHEMA}`;
         return { date: today, provisional: true, lean: side, probability: p, horizon: h, strength: p >= 70 ? "strong" : p >= 60 ? "clear" : "slight", absolute: (res.horizons[h].probability_up ?? 50) >= 50 ? "up" : "down",
           headline: `Read off the ${h} call vs the S&P 500 (${pb}% chance of beating it); the strategist's full lean comes with the next update.`, evidence: [], checks: [] }; }
     }
+    // No view vs the S&P 500 yet: the 12M call's own direction (its absolute numbers run below the market's drift
+    // for nearly every industry, so they can't rank one against the market); neutral goes the way of the verdict.
     const v = res.opportunity?.verdict, x = res.horizons?.["12M"];
     if (!v && !x) return null;
-    const up = isNum(Number(x?.probability_up)) ? Number(x.probability_up) : 50;
-    const side = v === "yes" ? "bullish" : v === "no" ? "bearish" : up >= 62 ? "bullish" : "bearish";
-    return { date: today, provisional: true, lean: side, probability: 52, horizon: "12M", strength: "slight", absolute: up >= 50 ? "up" : "down",
-      headline: `Read off the opportunity verdict (${v || "none"}) and the 12M call; the strategist's full lean comes with the next update.`, evidence: [], checks: [] };
+    const c = lc(x?.call), up = isNum(Number(x?.probability_up)) ? Number(x.probability_up) : 50;
+    const side = /bull/.test(c) ? "bullish" : /bear/.test(c) ? "bearish" : v === "yes" ? "bullish" : v === "no" ? "bearish" : up >= 55 ? "bullish" : "bearish";
+    const p = /strong/.test(c) ? 58 : /slight/.test(c) ? 53 : 51;
+    return { date: today, provisional: true, lean: side, probability: p, horizon: "12M", strength: "slight", absolute: up >= 50 ? "up" : "down",
+      headline: `Read off the 12M call (${x?.call || "none"}, ${up}% chance higher) and the opportunity verdict (${v || "none"}); the strategist's full lean, weighing every input vs the S&P 500, comes with the next update.`, evidence: [], checks: [] };
   }
 
   /** The lean to show: the strategist's, or a provisional one. */
