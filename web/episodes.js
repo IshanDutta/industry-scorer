@@ -43,7 +43,7 @@
         return vals.filter(isNum).length > 10 ? vals : null; };
       const lc = line(co), li = line(ind), ls = line(spy);
       // Next 1M-12M for each, from the setup day.
-      const iC = co?.dates?.length ? at(co.dates, spy.dates[iS]) : -1, iI = ind?.dates?.length ? at(ind.dates, spy.dates[iS]) : -1;
+      const iC = co?.dates?.length ? at(co.dates, spy.dates[iS]) : -1, iI = ind?.dates?.length && ind.dates[0] <= spy.dates[iS] ? at(ind.dates, spy.dates[iS]) : -1;
       const traded = iC >= 0 && co.dates[0] <= spy.dates[iS];
       const R = {};
       for (const [h, n] of Object.entries(HZ)) {

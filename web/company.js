@@ -512,6 +512,33 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
     context: ["drivers", "lens", "reads_more"],
     exposures: ["lens_exp"],
   };
+  /**
+   * Each part gets only the industry material it writes from (the same material as before, minus what it doesn't use):
+   * the industry's panel reads for its own panels, and the parts of the industry digest its fields draw on.
+   */
+  const PANELS_FOR = {
+    core: ["scores", "street", "val", "fund", "health", "earn", "div", "land", "plan", "peers"],
+    calls: ["plan", "val", "earn", "risk", "street"],
+    context: ["perf", "risk", "stress", "tech", "own", "news", "track", "calls", "land", "peers"],
+    exposures: [],
+  };
+  const DIG_FOR = {
+    core: [["lead", "Lead strategist", 600, 8], ["kpi", "KPIs and cycle", 300, 6], ["macro", "Macro", 300, 6], ["world", "World events", 220, 5], ["trade", "Trade and supply chain", 200, 5], ["regverdict", "Regulation", 300, 6]],
+    calls: [["lead", "Lead strategist", 600, 8], ["kpi", "KPIs and cycle", 300, 6]],
+    context: [["lead", "Lead strategist", 600, 8], ["kpi", "KPIs and cycle", 300, 6], ["macro", "Macro", 300, 6], ["world", "World events", 300, 6]],
+    exposures: [],
+  };
+  const LEAD_FOR = {
+    core: null,
+    calls: ["headline", "thesis", "debates", "priced_in", "opportunity", "scenarios", "catalysts", "outlook", "latest_update"],
+    context: ["headline", "thesis", "drivers", "debates", "risks", "watch", "outlook", "latest_update"],
+  };
+  const leadFor = (L, part) => (!L || !LEAD_FOR[part] ? L : Object.fromEntries(LEAD_FOR[part].filter((k) => L[k] !== undefined && L[k] !== null).map((k) => [k, L[k]])));
+  function panelsFor(text, part) {
+    const keep = new Set(PANELS_FOR[part] || []);
+    let on = false; // a panel's text can run over several lines: continuation lines follow their panel
+    return String(text || "").split("\n").filter((ln) => { const m = /^\[([a-z]+)\] /.exec(ln); if (m) on = keep.has(m[1]); return on; }).join("\n");
+  }
   function schemaFor(part) {
     const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "lens_exp", "reads", "reads_more", "reads_calls"].includes(k));
     const intro = part === "core" ? "This is part one of a four-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
@@ -564,14 +591,8 @@ ${(ctx.mentions || []).map((m) => `[${m.id}] ${m.section}${m.where ? ` › ${m.w
 COMPANY NEWS AND PRESS RELEASES (last 60 days; cite by ID)
 ${(ctx.news || []).map((x) => `[${x.id}] ${x.date} · ${x.source || ""} — ${x.title}${x.summary ? `. ${trim(x.summary, 240)}` : ""}`).join("\n") || "(none)"}
 ${ctx.transcript ? `\nLATEST EARNINGS CALL [${ctx.transcript.id}] (${ctx.transcript.period || ""}, ${ctx.transcript.date || ""}; cite by ID)\n${trim(ctx.transcript.text, 7000)}\n` : ""}
-${ctx.lens && (part === "context" || part === "calls" || part === "exposures") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${(part === "calls" || part === "core") && ctx.times ? `${ctx.times}\n\n` : ""}${ctx.indPanels && part !== "exposures" ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${ctx.indPanels}\n\n` : ""}${part === "exposures" ? "" : `THE INDUSTRY ANALYSIS (your team's; the industry-level view)
-Lead strategist: ${J(lean(D.lead, 600, 8))}
-KPIs and cycle: ${J(lean(D.kpi, 300, 6))}
-Macro: ${J(lean(D.macro, 300, 6))}
-World events: ${J(lean(D.world, 300, 6))}
-Trade and supply chain: ${J(lean(D.trade, 260, 8))}
-Regulation: ${J(lean(D.regverdict, 300, 6))}
-Rule books (top rules): ${J(lean(D.books, 220, 6))}
+${ctx.lens && (part === "context" || part === "calls" || part === "exposures") ? lensBlock(ctx.lens, ctx.sym, part) + "\n\n" : ""}${part === "calls" && ctx.windows ? `${ctx.sym}'S WINDOWS (code)\n${ctx.windows}\n\n` : ""}${(part === "calls" || part === "core") && ctx.times ? `${ctx.times}\n\n` : ""}${panelsFor(ctx.indPanels, part) ? `THE INDUSTRY'S READ, PANEL BY PANEL (the industry report's own analysis and numbers for each panel; set ${ctx.sym}'s against it)\n${panelsFor(ctx.indPanels, part)}\n\n` : ""}${part === "exposures" ? "" : `THE INDUSTRY ANALYSIS (your team's; the industry-level view)
+${DIG_FOR[part].map(([k, label, a, b]) => (D[k] ? `${label}: ${J(lean(k === "lead" ? leadFor(D.lead, part) : D[k], a, b))}` : "")).filter(Boolean).join("\n")}
 
 `}RULES
 - Cite every factual claim with IDs in square brackets: [A#] for the industry analysis, [N#]/[P#] for news and releases, [T#] for the call. Numbers given above (statements, ratios, percentiles) need no citation. Never invent a fact, date, figure or quote; say "(estimate)" for your own estimates.
@@ -679,7 +700,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, PANELS_FOR, DIG_FOR, panelsFor, lensInputs, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);

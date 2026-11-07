@@ -161,10 +161,12 @@ ${c.write ? `## THE COMPANY WRITE-UP\n${w}\n` : ""}${c.company ? `## ${c.sym}: T
 ${trim(c.facts, 3500)}
 ${(c.windows || []).map((x) => `${x.h}: one-sigma move ±${x.sigma ?? "?"}%; trailing ${x.h} ${x.trailing ?? "?"}%; in its own history higher ${x.base_up ?? "?"}% of the time over this span; ${x.own ? `reports ${x.own}` : "doesn't report in the window"}${x.peers?.length ? `; peers reporting ${x.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}` : ""}.`).join("\n")}
 ${c.times ? `\n## ${c.sym} IN TIMES LIKE THIS\n${trim(c.times, 1200)}` : ""}
+${c.prior ? `\n## CODE'S STARTING POINT FOR EACH WINDOW\nThe industry's call, moved by how much ${c.sym} amplifies its industry (beta to the industry), how it did against its industry in the industry's past setups like today, and its estimate revisions and last month against its peers:\n${trim(c.prior, 1400)}` : ""}
 ${(c.news || []).length ? `\n## RECENT NEWS\n${c.news.slice(0, 12).map((x) => `${x.date ? x.date + " " : ""}${trim(x.title, 150)}`).join("\n")}` : ""}
 
 ${RULES(c.sym, CO_INPUTS)}
-- Start from the industry's outlook, then say where ${c.sym} departs from it and why.
+- Start from the industry's outlook, then say where ${c.sym} departs from it and why.${c.prior ? `
+- Each window starts at code's starting point above. Keep it unless the evidence gives a concrete reason to move; when your call differs from the starting point, the window's "why" must say in one clause what moves it off (for example "one notch more bearish than the starting point because ...").` : ""}
 
 Reply with ONLY this JSON (all four windows):
 ${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdict")}`;
