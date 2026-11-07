@@ -46,12 +46,12 @@
   ];
   /** A company's: its industry's outlook first, then the company itself. */
   const CO_INPUTS = [
-    ["industry", "The industry's outlook"], ["verdict", "The company write-up's verdict"], ["business", "Business mix & segments"], ["earnings", "Earnings, estimates & revisions"],
+    ["industry", "The industry's outlook"], ["lead", "The industry lead's verdict"], ["business", "Business mix & segments"], ["earnings", "Earnings, estimates & revisions"],
     ["guidance", "The latest earnings call & guidance"], ["valuation", "Valuation vs peers & its history"], ["quality", "Balance sheet & quality"], ["street", "Wall Street"],
     ["momentum", "Momentum & price action"], ["history", "Past setups like today"], ["catalysts", "Dated catalysts ahead"], ["macro", "Macro & rates"],
     ["world", "World events & trade"], ["regulation", "Regulation & legal"], ["competition", "Competitive position"], ["risks", "Risks & red flags"],
   ];
-  const ALIAS = { lead: "verdict", thesis: "verdict", opportunity: "verdict", scenario: "scenarios", "red team": "redteam", risks: "redteam", daily: "update", rates: "macro", geopolitics: "world",
+  const ALIAS = { thesis: "verdict", opportunity: "verdict", scenario: "scenarios", "red team": "redteam", risks: "redteam", daily: "update", rates: "macro", geopolitics: "world",
     tariffs: "trade", supply: "trade", policy: "regulation", legal: "regulation", kpi: "cycle", "pricing power": "cycle", estimates: "earnings", revisions: "earnings", "earnings call": "guidance",
     priced: "valuation", insiders: "positioning", shorts: "positioning", flows: "positioning", "price action": "momentum", levels: "momentum", "past setups": "history", "statistical": "history",
     "times like this": "history", calendar: "catalysts", events: "catalysts", industry: "industry", segments: "business", "balance sheet": "quality", consensus: "street", analysts: "street", moat: "competition", peers: "competition", "red flags": "risks" };
@@ -155,20 +155,19 @@ ${SCHEMA}`;
 ## THE ${c.industry.toUpperCase()} INDUSTRY'S OUTLOOK
 ${ind?.calls ? `${ind.provisional ? "(provisional, read off the industry's earlier calls; weigh lightly) " : ""}${trim(ind.headline, 240)}\n${HZ.filter((h) => ind.calls[h]).map((h) => `${h}: ${ind.calls[h].call}${ind.calls[h].why ? `: ${trim(ind.calls[h].why, 300)}` : ""}`).join("\n")}` : "(none yet)"}${c.indLatest ? `\nThe industry's latest update: ${trim(c.indLatest, 500)}` : ""}
 
-## THE COMPANY WRITE-UP
-${w}
-
+${c.indLead ? `## THE INDUSTRY LEAD'S VERDICT\n${trim(c.indLead, 900)}\n` : ""}
+${c.write ? `## THE COMPANY WRITE-UP\n${w}\n` : ""}${c.company ? `## ${c.sym}: THE COMPANY\n${trim(c.company, 9000)}\n` : ""}${(c.mentions || []).length ? `## WHAT THE INDUSTRY ANALYSIS SAYS ABOUT ${c.sym}\n${c.mentions.slice(0, 14).map((m) => `${m.section}: ${trim(m.text, 200)}`).join("\n")}\n` : ""}
 ## ${c.sym}'S NUMBERS (code)
 ${trim(c.facts, 3500)}
 ${(c.windows || []).map((x) => `${x.h}: one-sigma move ±${x.sigma ?? "?"}%; trailing ${x.h} ${x.trailing ?? "?"}%; in its own history higher ${x.base_up ?? "?"}% of the time over this span; ${x.own ? `reports ${x.own}` : "doesn't report in the window"}${x.peers?.length ? `; peers reporting ${x.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}` : ""}.`).join("\n")}
 ${c.times ? `\n## ${c.sym} IN TIMES LIKE THIS\n${trim(c.times, 1200)}` : ""}
 ${(c.news || []).length ? `\n## RECENT NEWS\n${c.news.slice(0, 12).map((x) => `${x.date ? x.date + " " : ""}${trim(x.title, 150)}`).join("\n")}` : ""}
 
-${RULES(c.sym, CO_INPUTS).replace("the lead's verdict", "the write-up's verdict")}
+${RULES(c.sym, CO_INPUTS)}
 - Start from the industry's outlook, then say where ${c.sym} departs from it and why.
 
 Reply with ONLY this JSON (all four windows):
-${schemaFor(CO_INPUTS).replace("the lead's verdict", "the write-up's verdict")}`;
+${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdict")}`;
   }
 
   /** Tally the evidence: +1 up, -1 down, 0 mixed, times its weight. score in [-1, 1]. */

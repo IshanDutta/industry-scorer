@@ -3833,12 +3833,12 @@ a.btnlink:hover { border-color: var(--accent); }
     const so = S.savedCoOutlooks?.[co.sym]?.industry === co.run?.name ? S.savedCoOutlooks[co.sym] : null;
     const rec = co.thesis, l = coOutlook(co), ind = co.run ? indOutlook(co.run.name, co.run.lead) : null;
     const working = co.leanBusy;
-    const can = S.sample && !co.writing && !working && rec?.thesis;
-    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the finished write-up and the industry's outlook (about a minute)">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
+    const can = S.sample && !working && co.run;
+    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers, the industry's outlook and the lead's verdict (about half a minute)">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Where ${esc(co.sym)} is going</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
-    if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${rec?.thesis ? "No calls yet. They're made from the finished write-up and the industry's outlook." : co.writing ? "The calls are made right after the write-up finishes." : "Write the analysis first; the calls are made from it."}</div>${indLine}</div>`);
+    if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">No calls yet. They're made from ${esc(co.sym)}'s own numbers and news, the industry's outlook and the industry lead's verdict (about half a minute).</div>${indLine}</div>`);
     const W = (() => { try { return coWindowsPlus(co); } catch { return []; } })();
     const nums = (h) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call;
       return `<div class="lean-nums small">
@@ -4945,92 +4945,115 @@ a.btnlink:hover { border-color: var(--accent); }
       for (const x of list || []) if (x?.id && !idx[x.id]) idx[x.id] = { id: x.id, kind: x.id[0], title: String(title(x) || "").slice(0, 160), source: `industry report · ${src}`, date: x.date || "" };
     for (const h of L?.headlines || []) idx[h.id] = { id: h.id, kind: "H", title: h.title, source: h.source, date: h.date, url: h.url };
   }
-  /**
-   * Write the thesis as two halves at once (the verdict, thesis, scenarios and calls; the drivers, exposures, risks and
-   * fit), each streaming into the page as it comes, then merge, check and save. Two calls in parallel take about half
-   * the time of one.
-   */
-  async function writeThesis(co) {
-    if (co.writing) return;
-    co.writing = true; co.partial = null; co.thesisErr = null; co.writeStart = Date.now(); renderCompany();
-    const ctl = new AbortController(); co.ctl = ctl;
+  /** Everything the company's write-up and its outlook are built from. */
+  function coCtx(co) {
     const run = co.run, f = co.data || {};
-    const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
+    return { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
       peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
       quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
       facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend, indPanels: coIndPanels(co), windows: coWindowsText(co),
       times: co.times ? Regimes.companyText(co.sym, co.times) + (run.reports.history?.read ? `\nThe industry historian's read of these episodes: ${run.reports.history.read}` : "") : "" };
-    const raw = { core: null, calls: null, context: null, exposures: null }; let last = 0;
-    const merged = (a, c, b, x) => { const t = Company.cleanThesis({ ...(b || {}), ...(a || {}), ...(c || {}) }, co.idx); t.lens = Company.cleanLens({ ...(a || {}), ...(b || {}), ...(c || {}), ...(x || {}) }, co.lensIn, co.idx); return t; };
-    const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = merged(raw.core, raw.calls, raw.context, raw.exposures); renderCoWriting(); };
-    const half = async (part) => {
-      const prompt = Company.thesisPrompt(ctx, part);
+  }
+  /** One limit for the whole write-up: everything runs at once and stops at this mark, keeping what has arrived. */
+  const CO_LIMIT_MS = 55000;
+  /**
+   * The company's outlook (where it's going over 1M-12M, six levels, and why): one call on the company's own data,
+   * its industry's outlook and the industry lead's verdict. Needs no write-up, so it runs alongside it.
+   */
+  async function coOutlookCall(co, ctx, { signal, onPartial } = {}) {
+    const run = co.run, ind = indOutlook(run.name, run.lead), op = run.lead?.opportunity;
+    const latest = run.lead?.daily?.date ? `${run.lead.daily.date}: ${run.lead.daily.headline || ""} ${run.lead.daily.summary || ""}` : "";
+    const opts = { today: today(), inputs: Outlook.CO_INPUTS };
+    let streamed = null;
+    const raw = await sampleJson(Outlook.coPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest,
+      indLead: op?.verdict ? `${op.verdict.toUpperCase()}: ${op.headline || ""} ${op.why || ""}` : run.lead?.headline || "",
+      company: Company.companyBlock(ctx), facts: "", windows: coWindowsPlus(co), times: ctx.times, news: co.news, mentions: co.mentions }),
+      { modelTier: "complex", cache: false, signal, onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { streamed = v; onPartial?.(v); } } }).catch((e) => { if (e?.code === "cancelled" && streamed) return streamed; throw e; });
+    return Outlook.clean(raw, opts);
+  }
+  /** Save a company's outlook with its write-up and in the page's database; the earlier one goes into its history. */
+  async function coOutlookSave(co, o) {
+    const run = co.run;
+    o.saved_at = new Date().toISOString();
+    const ser = co.data?.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
+    const ind = indOutlook(run.name, run.lead); o.ind = ind ? { provisional: !!ind.provisional, date: ind.date || null, calls: Object.fromEntries(Object.entries(ind.calls || {}).map(([h, x]) => [h, x.call])) } : null;
+    const cur = (await idbGet("co:" + co.sym).catch(() => null)) || co.thesis || { sym: co.sym, industry: run.name }, so = S.savedCoOutlooks?.[co.sym]?.industry === run.name ? S.savedCoOutlooks[co.sym] : null;
+    const h0 = Outlook.histOf(newer(cur.outlook, so?.outlook)), hist = [...(h0 ? [h0] : []), ...((so?.history?.length || 0) > (cur.outlook_history?.length || 0) ? so.history : cur.outlook_history || [])].slice(0, 12);
+    const nrec = jsonSafe({ ...cur, outlook: o, outlook_history: hist });
+    if (cur.thesis) await idbPut("co:" + co.sym, nrec).catch(() => {});
+    if (co.thesis) co.thesis = { ...co.thesis, outlook: o, outlook_history: hist }; else co.pendingOutlook = { outlook: o, outlook_history: hist };
+    await saveOutlook("co_outlooks", co.sym, { sym: co.sym, name: co.name, industry: run.name, outlook: o, history: hist });
+  }
+  /**
+   * The company analysis, in under a minute: six small parts of the write-up and the outlook all at once, each
+   * streaming into the page; a hard limit stops everything at 55 seconds and keeps what has arrived.
+   */
+  async function writeThesis(co) {
+    if (co.writing) return;
+    co.writing = true; co.partial = null; co.thesisErr = null; co.writeStart = Date.now(); co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; renderCompany();
+    const ctl = new AbortController(); co.ctl = ctl;
+    let timedOut = false; const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CO_LIMIT_MS);
+    const run = co.run, ctx = coCtx(co);
+    const PARTS = ["core", "risks", "calls", "context", "trade", "regulation"], TIER = { core: "complex", risks: "complex" };
+    const raw = Object.fromEntries(PARTS.map((k) => [k, null])); let last = 0;
+    const merged = () => { const R = raw; const t = Company.cleanThesis({ ...(R.context || {}), ...(R.risks || {}), ...(R.calls || {}), ...(R.core || {}) }, co.idx);
+      t.lens = Company.cleanLens(Object.assign({}, ...PARTS.map((k) => R[k] || {})), co.lensIn, co.idx); return t; };
+    const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = merged(); renderCoWriting(); };
+    const part = async (k) => {
+      const prompt = Company.thesisPrompt(ctx, k);
       const b = new TextEncoder().encode(prompt), fitP = b.length <= 260000 ? prompt : new TextDecoder().decode(b.slice(0, 258000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)";
-      const out = await sampleJson(fitP, { modelTier: "complex", signal: ctl.signal, cache: false, onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { raw[part] = v; show(); } } });
-      raw[part] = out; show(); return out;
+      const out = await sampleJson(fitP, { modelTier: TIER[k] || "default", signal: ctl.signal, cache: false, onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { raw[k] = v; show(); } } });
+      raw[k] = out; show(); return out;
     };
+    const outlookP = coOutlookCall(co, ctx, { signal: ctl.signal }).then(async (o) => { if (!o) throw new Error("no usable calls came back"); await coOutlookSave(co, o); return o; })
+      .catch((e) => { co.leanErr = timedOut ? "The calls didn't finish inside the minute; press Make the calls now." : "The calls didn't finish: " + (FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); })
+      .finally(() => { co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); });
     try {
-      const [a, c, b, x] = await Promise.allSettled([half("core"), half("calls"), half("context"), half("exposures")]);
-      if (a.status === "rejected" && c.status === "rejected") throw a.reason;
-      const val = (r, k) => (r.status === "fulfilled" ? r.value : raw[k]);
-      const thesis = merged(val(a, "core"), val(c, "calls"), val(b, "context"), val(x, "exposures"));
-      thesis.range_notes = Company.fitRanges(thesis, coSigmas(co));
-      thesis.call_notes = Company.holdCalls(thesis, coSigmas(co), co.times);
-      thesis.windows = coWindows(co); thesis.times = co.times ? jsonSafe(co.times) : null;
+      const res = await Promise.allSettled(PARTS.map(part));
+      const got = (k, i) => (res[i].status === "fulfilled" ? res[i].value : raw[k]);
+      PARTS.forEach((k, i) => { raw[k] = got(k, i); });
+      if (!raw.core && !raw.risks && !raw.calls) throw res[0].reason || { code: "empty_completion" };
+      const thesis = merged();
+      thesis.times = co.times ? jsonSafe(co.times) : null;
       if (!thesis?.headline && !thesis?.thesis) throw { code: "empty_completion" };
       const basisPE = isNum(num(co.row?.fwd_pe)) && co.row.fwd_pe > 0 ? co.row.fwd_pe : num(co.row?.pe);
       const checks = Company.checks(thesis, co.px, basisPE);
-      // Our 12-month target is the scenarios' probability-weighted price, so the street comparison and the calls agree.
       if (thesis.street && isNum(num(checks.expected_return)) && co.px > 0) thesis.street.our_target = Math.round(co.px * (1 + checks.expected_return) * 100) / 100;
-      const failed = [[a, "verdict and thesis"], [c, "scenarios and 1M-12M calls"], [b, "row-by-row read of the industry report"], [x, "trade and regulation read"]].filter(([r]) => r.status === "rejected");
+      const short = PARTS.filter((k, i) => res[i].status === "rejected");
+      await outlookP;
+      const keep = co.pendingOutlook || (co.thesis?.outlook ? { outlook: co.thesis.outlook, outlook_history: co.thesis.outlook_history } : {});
       const rec = jsonSafe({ sym: co.sym, name: co.name, industry: run.name, industry_run_at: run.saved_at, at: new Date().toISOString(), px: co.px, pe_basis: basisPE, thesis, checks, idx: co.idx,
-        secs: Math.round((Date.now() - co.writeStart) / 1000), partial: failed.length ? failed.map(([, l]) => l).join(", ") : null });
+        secs: Math.round((Date.now() - co.writeStart) / 1000), partial: short.length ? short.map((k) => Company.PART_LABEL[k]).join(", ") : null, ...keep });
+      co.pendingOutlook = null;
       await idbPut("co:" + co.sym, rec).catch(() => {});
       co.thesis = rec; co.partial = null;
-      if (failed.length) co.thesisErr = `${failed.map(([x, l]) => `the ${l} didn't finish (${x.reason?.code === "cancelled" ? "stopped" : sampleErr(x.reason)})`).join("; ")}; Rewrite to try again`;
-      await coLogCalls(co, rec).catch(() => {});
-    } catch (e) { co.thesisErr = e?.code === "cancelled" ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
-    finally { co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
-    // Then the calls vs the S&P 500, from the finished write-up (three small calls, no dossier).
-    if (co.thesis?.thesis && !co.thesisErr && S.co === co) coLean(co);
+      if (short.length) co.thesisErr = timedOut ? `${short.map((k) => Company.PART_LABEL[k]).join(", ")} ${short.length === 1 ? "was" : "were"} cut at the one-minute limit and may be incomplete; Rewrite to try again`
+        : `${short.map((k, i) => `${Company.PART_LABEL[k]} didn't finish (${sampleErr(res[PARTS.indexOf(k)].reason)})`).join("; ")}; Rewrite to try again`;
+    } catch (e) { co.thesisErr = e?.code === "cancelled" ? (timedOut ? "Nothing arrived inside the minute; Rewrite to try again." : "Stopped.") : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+    finally { clearTimeout(timer); co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
   }
   /** Each window for the company, with its trailing return vs its industry too. */
   function coWindowsPlus(co) {
     const P = co.perf || {}, TW = { "1M": "1M", "3M": "3M", "6M": "6M", "12M": "1Y" };
     return coWindows(co).map((w) => ({ ...w, from: today(), vs_ind: isNum(num(P[TW[w.h]]?.vs_ind)) ? Math.round(P[TW[w.h]].vs_ind * 1000) / 10 : null }));
   }
-  /**
-   * The company's outlook (six levels per window, its own direction, with the reasons): one cheap call on its finished
-   * write-up, its industry's outlook and its numbers; a second, small one only if code finds a contradiction.
-   */
+  /** The button: make (or remake) the company's outlook on its own (one call, about half a minute). */
   async function coLean(co) {
-    const rec = co.thesis; if (!rec?.thesis || co.leanBusy || !S.sample) return;
+    if (co.leanBusy || !S.sample || !co.run) return;
     co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; if (S.co === co) renderCompany();
-    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false });
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), CO_LIMIT_MS);
     try {
-      const run = co.run, ind = indOutlook(run.name, run.lead);
-      const latest = run.lead?.daily?.date ? `${run.lead.daily.date}: ${run.lead.daily.headline || ""} ${run.lead.daily.summary || ""}` : "";
-      const opts = { today: today(), inputs: Outlook.CO_INPUTS };
-      let o = Outlook.clean(await call(Outlook.coPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest, write: rec.thesis, facts: coFactsText(co), windows: coWindowsPlus(co), times: co.times ? Regimes.companyText(co.sym, co.times) : "", news: co.news })), opts);
+      let o = await coOutlookCall(co, coCtx(co), { signal: ctl.signal });
       if (!o) throw new Error("no usable calls came back; try again");
       if (!o.consistent) {
         co.leanStage = "Code found contradictions: one small fix"; if (S.co === co) renderCompany();
-        const o2 = Outlook.clean(await call(Outlook.repairPrompt(`${co.name} (${co.sym})`, today(), o, o.checks, Outlook.CO_INPUTS)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }), opts);
+        const o2 = Outlook.clean(await sampleJson(Outlook.repairPrompt(`${co.name} (${co.sym})`, today(), o, o.checks, Outlook.CO_INPUTS), { modelTier: "complex", cache: false, signal: ctl.signal }).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }), { today: today(), inputs: Outlook.CO_INPUTS });
         if (o2) { o2.repaired = o.checks; o = o2; }
       }
-      const ser = co.data?.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
-      o.ind = ind ? { provisional: !!ind.provisional, date: ind.date || null, calls: Object.fromEntries(Object.entries(ind.calls || {}).map(([h, x]) => [h, x.call])) } : null;
-      o.saved_at = new Date().toISOString();
-      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || rec, so = S.savedCoOutlooks?.[co.sym]?.industry === run.name ? S.savedCoOutlooks[co.sym] : null;
-      const h0 = Outlook.histOf(newer(cur.outlook, so?.outlook)), hist = [...(h0 ? [h0] : []), ...((so?.history?.length || 0) > (cur.outlook_history?.length || 0) ? so.history : cur.outlook_history || [])].slice(0, 12);
-      const nrec = jsonSafe({ ...cur, outlook: o, outlook_history: hist });
-      await idbPut("co:" + co.sym, nrec).catch(() => {});
-      await saveOutlook("co_outlooks", co.sym, { sym: co.sym, name: co.name, industry: run.name, outlook: o, history: hist });
-      if (co.thesis?.at === rec.at) co.thesis = nrec;
-    } catch (e) { co.leanErr = "The calls didn't finish: " + (FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
-    finally { co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); }
+      await coOutlookSave(co, o);
+    } catch (e) { co.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" ? "cut at the one-minute limit" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
+    finally { clearTimeout(timer); co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); }
   }
-
   /** The company's own 1M-12M calls go into its track record, scored like the industry's. */
   async function coLogCalls(co, rec) {
     const t = rec.thesis, px = rec.px; if (!t?.horizons || !(px > 0)) return;
@@ -5309,7 +5332,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function coThesis(co, t, ck) {
     const writing = co.writing;
     const el = co.writeStart ? Math.round((Date.now() - co.writeStart) / 1000) : 0;
-    if (!t) return sec("co-thesis", "Analysis", "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> on top of the ${esc(co.run.name)} analysis: four analysts at once (the thesis; the 1M-12M calls; macro, world events and the rest of the industry report row by row; trade and regulation), a minute or two (then it's saved). Everything below is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>`
+    if (!t) return sec("co-thesis", "Analysis", "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> on top of the ${esc(co.run.name)} analysis: seven analysts at once (where it's going; the thesis; risks and fit; scenarios and the KPI rows; macro, world events and the rest of the industry report; trade; regulation), done inside a minute (then it's saved). Everything below is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>`
       : co.thesisErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(co.thesisErr)}</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Try again</button></div>`
       : `<div class="small muted">${S.sample ? `<button class="primary" data-co-rewrite="1">Write ${esc(co.sym)}'s analysis</button>` : "Open this page in Claude to write the company's analysis."}</div>`);
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" }, VC = { yes: "pos", conditional: "neu", no: "neg" };
