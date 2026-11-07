@@ -13821,7 +13821,7 @@ Reply with ONLY this JSON:
       if (dbs?.v === 2 && dbs.industry === co.run.name && (!saved || saved.v !== 2 || String(dbs.at || "") > String(saved.at || ""))) saved = { ...dbs };
       if (saved?.thesis && saved.industry === co.run.name && saved.v === 2) { if (!saved.thesis.range_notes) { saved.thesis.range_notes = Company.fitRanges(saved.thesis, coSigmas(co)); if (saved.thesis.range_notes.length) saved.checks = Company.checks(saved.thesis, saved.px, saved.pe_basis); idbPut("co:" + sym, saved).catch(() => {}); } co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); }
       // Not yet applied (or written the old way): apply the industry's analysis now (two quick calls).
-      if ((!saved?.thesis || saved.industry !== co.run.name || saved.v !== 2) && S.sample) writeThesis(co);
+      if ((!saved?.thesis || saved.industry !== co.run.name || saved.v !== 2 || !saved.rows) && S.sample) writeThesis(co);
     } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
   }
   /**
