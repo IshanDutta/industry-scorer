@@ -433,7 +433,7 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
   function leanRow(r) {
     const L = typeof module !== "undefined" && module.exports ? require("./lean.js") : root.Lean;
     const l = L ? L.leanOf(r) : null; if (!l) return null;
-    return { calls: Object.fromEntries(Object.entries(l.calls || {}).map(([h, x]) => [h, x.call])), provisional: !!l.provisional, headline: trim(l.headline, 240), date: l.date || null };
+    return { calls: Object.fromEntries(Object.entries(l.calls || {}).map(([h, x]) => [h, x.call])), abs: Object.fromEntries(Object.entries(l.calls || {}).filter(([, x]) => x.absolute).map(([h, x]) => [h, x.absolute])), provisional: !!l.provisional, headline: trim(l.headline, 240), date: l.date || null };
   }
 
 

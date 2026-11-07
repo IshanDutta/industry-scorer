@@ -10,7 +10,7 @@ ok(["strongly bearish", "bearish", "slightly bearish", "slightly bullish", "bull
 const p = L.leanPrompt("Semiconductors", { today: "2026-11-06", dossier: "=== QUANT ===\nstuff", res, facts: [], wire: [{ id: "W1", title: "Fed holds" }] });
 ok(/RELATIVE TO THE S&P 500/.test(p) && /no neutral/i.test(p) && /\[W1\] Fed holds/.test(p) && L.KEYS.every((k) => p.includes(k)) && /OPPORTUNITY VERDICT.*CONDITIONAL/.test(p), "the prompt: vs the S&P 500, six levels, every input, the lead's verdict");
 const ev = (pts) => L.KEYS.map((k, i) => ({ input: L.LABEL[k], points: pts(i), weight: (i % 3) + 1, why: "because [A1] and [ZZ9]" }));
-const C = (call, why = "the index is held back by rates [A1]") => ({ call, why, for: ["a [A1]"], against: ["b"], flips_it: "c" });
+const C = (call, why = "the index is held back by rates [A1]", sp = "slightly bullish") => ({ call, sp500: sp, absolute: L.SIGN[L.level(call)] > 0 ? "bullish" : "slightly bearish", absolute_why: "market up, industry edge", why, for: ["a [A1]"], against: ["b"], flips_it: "c" });
 const a = L.cleanLean({ headline: "Leaning bullish [A1]", evidence: ev((i) => (i < 10 ? "bullish" : "bearish")), calls: { "1M": C("slightly bearish", "near-term the selling continues"), "3M": C("slightly bullish", "then the Q4 prints turn it"), "6M": C("bullish"), "12M": C("Bullish") }, verdict: { agrees: false, why: "the evidence outweighs the conditional verdict" } }, { res, today: "2026-11-06", known: ["A1"] });
 ok(a.v === 2 && a.calls["12M"].call === "bullish" && a.calls["1M"].call === "slightly bearish" && a.evidence.length === 15 && !a.missing.length, "cleaned: four calls on the scale, every input matched by its label");
 ok(/\[A1\]/.test(a.evidence[0].why) && !/ZZ9/.test(a.evidence[0].why), "unknown citations dropped");
@@ -61,4 +61,13 @@ const co = L.cleanLean({ headline: "x", evidence: L.CO_KEYS.map((k) => ({ input:
 ok(co.evidence.length === 16 && !co.missing.length && co.calls["1M"].vs_industry === "beats", "company inputs matched by label");
 ok(co.checks.some((c) => /12M: the industry is bullish .* matches the industry, but calls it bearish/.test(c)) && !co.checks.some((c) => /^1M:|^3M:|^6M:/.test(c)), "a call that contradicts the industry's call and its own vs-industry is flagged; consistent ones aren't: " + JSON.stringify(co.checks));
 ok(/analyst responsible for Intel \(INTC\)/.test(L.finalPrompt("Intel", "2026-11-06", co, ch, cb, L.coAbout("Intel", "INTC", "Semiconductors"), L.CO_FINAL_EXTRA)) && /"vs_industry"/.test(L.finalPrompt("Intel", "2026-11-06", co, ch, cb, "x", L.CO_FINAL_EXTRA)), "final prompt for a company keeps vs_industry");
+
+// Up or down, as well as vs the S&P 500
+ok(a.calls["12M"].absolute === "bullish" && a.calls["12M"].sp500 === "slightly bullish" && /market up/.test(a.calls["12M"].absolute_why), "each window: the S&P 500's direction, vs the S&P 500, and its own direction");
+const tri = L.cleanLean({ headline: "x", evidence: [], calls: { "12M": { call: "bullish", sp500: "slightly bullish", absolute: "slightly bearish" }, "6M": { call: "bearish", sp500: "bearish", absolute: "bullish" }, "3M": { call: "bearish", sp500: "bullish", absolute: "slightly bearish" } } });
+ok(tri.checks.some((c) => /^12M: .*should be higher/.test(c)) && tri.checks.some((c) => /^6M: .*should be lower/.test(c)) && !tri.checks.some((c) => /^3M:/.test(c)), "beating a rising market but falling (or lagging a falling one but rising) is flagged; opposite pulls can go either way: " + JSON.stringify(tri.checks));
+ok(L.cleanLean({ headline: "x", calls: { "1M": { call: "bullish" } } }).checks.some((c) => /No up-or-down call for 1M/.test(c)), "a missing up-or-down call is flagged");
+ok(pv.calls["6M"].absolute === "strongly bullish" && pv.calls["12M"].absolute === "slightly bullish" && pv.calls["3M"].absolute === "slightly bullish", "provisional up-or-down read off the earlier absolute calls");
+const fin2 = L.mergeFinal(a, { calls: { "12M": { call: "slightly bullish", why: "w" } } }, ch, { res });
+ok(fin2.calls["12M"].absolute === "bullish" && fin2.calls["12M"].sp500 === "slightly bullish", "a final answer that leaves out the up-or-down call keeps the first one");
 console.log(fails ? fails + " FAILED" : "lean tests passed"); process.exit(fails ? 1 : 0);

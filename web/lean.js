@@ -74,7 +74,7 @@
     return o.join("\n");
   }
 
-  const CALL = `{"call": "${LEVELS.join(" | ")}", "why": "3-5 sentences: what the S&P 500 is likely to do over this window and what drives it, and why this industry does better or worse than it, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call"}`;
+  const CALL = `{"call": "${LEVELS.join(" | ")} (vs the S&P 500)", "sp500": "${LEVELS.join(" | ")} (the S&P 500 itself: higher or lower at the end of the window)", "absolute": "${LEVELS.join(" | ")} (the industry itself: higher or lower at the end of the window)", "absolute_why": "1-2 sentences: the S&P 500's own direction plus the industry's edge (or drag) vs it, and so where the industry itself ends up, with numbers", "why": "3-5 sentences: what the S&P 500 is likely to do over this window and what drives it, and why this industry does better or worse than it, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call"}`;
   const SCHEMA = `{"headline": "one sentence: the overall lean vs the S&P 500 and the two or three things that decide it",
  "evidence": [{"input": "world | macro | trade | regulation | earnings | chain | valuation | positioning | momentum | history | catalysts | scenarios | calls | redteam | verdict", "points": "bullish | bearish | mixed", "weight": 1, "why": "one or two sentences vs the S&P 500, with the numbers and [IDs]"}],
  "calls": {"1M": ${CALL}, "3M": {...}, "6M": {...}, "12M": {...}},
@@ -97,7 +97,8 @@ ${ctx.scorecard ? `\n${ctx.scorecard}` : ""}
 ${(ctx.wire || []).length ? `\n=== TODAY'S WIRE (latest headlines touching this industry) ===\n${ctx.wire.slice(0, 15).map((w) => `[${w.id}] ${w.date ? w.date + " " : ""}${trim(w.title, 200)}`).join("\n")}` : ""}
 
 HOW TO MAKE THE CALLS
-- Every call is RELATIVE TO THE S&P 500: "bullish" means the industry beats the S&P 500 over that window, "bearish" means it lags it. Its absolute direction doesn't matter: an industry that falls 5% while the S&P 500 falls 12% is bullish.
+- "call" is RELATIVE TO THE S&P 500: "bullish" means the industry beats the S&P 500 over that window, "bearish" means it lags it; an industry that falls 5% while the S&P 500 falls 12% is bullish there.
+- For EACH window make three calls on the same six-level scale: "sp500", the S&P 500's own direction (will the index be higher or lower at the end of the window); "call", the industry vs the S&P 500; and "absolute", the industry's own direction (will it be higher or lower). They must add up: beating a rising market means it rises too, and lagging a falling market means it falls too; only when the two point opposite ways can the absolute call go either way, and then "absolute_why" says which force wins and by how much (the market drifts up about 7% a year, so over 12 months "slightly bullish" for the S&P 500 is the default without a reason). Code checks this.
 - Six levels, no neutral. "slightly": a close call that tips one way. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most inputs point the same way and decisively; use it rarely. If it's close, pick the side the evidence tips toward and say "slightly".
 - First weigh EVERY input, one entry each, in this order: world, macro, trade, regulation, earnings, chain, valuation, positioning, momentum, history, catalysts, scenarios, calls, redteam, verdict. For each: which way it points vs the S&P 500 ("bullish" / "bearish" / "mixed"), how much it matters for THIS industry (weight 1 = minor, 2 = material, 3 = decisive), and why, with the numbers and the dossier's [IDs]. An input with nothing in the dossier is "mixed", weight 1, and says so.
 - Then make the four calls from that evidence. Different windows can differ (near-term momentum, a dated catalyst, valuation that only matters over a year), but a call that flips direction from one window to the next must say in its "why" what changes in between.
@@ -122,6 +123,9 @@ ${SCHEMA}`;
   /** Code's checks on a cleaned lean: issues as plain sentences. */
   function checks(out) {
     const iss = [], t = out.tally;
+    for (const h of HZ) { const x = out.calls[h]; if (!x?.absolute || !x.sp500) continue;
+      const m = Math.sign(SIGN[x.sp500]), r = Math.sign(SIGN[x.call]), a = Math.sign(SIGN[x.absolute]);
+      if (m === r && a !== m) iss.push(`${h}: the S&P 500 is ${x.sp500} and this ${r > 0 ? "beats" : "lags"} it, so it should be ${m > 0 ? "higher" : "lower"} too, but its own direction is ${x.absolute}.`); }
     const s12 = SIGN[out.calls["12M"]?.call] || 0, s6 = SIGN[out.calls["6M"]?.call] || 0;
     const long = s12 + s6;
     if (out.evidence.length >= 8 && long && Math.sign(long) * t.score < -0.15) iss.push(`The 6M and 12M calls are ${long > 0 ? "bullish" : "bearish"}, but the evidence listed tips the other way (score ${t.score > 0 ? "+" : ""}${t.score}).`);
@@ -143,6 +147,7 @@ ${SCHEMA}`;
     const calls = {};
     for (const h of HZ) { const c = r.calls?.[h] || r.calls?.[h.toLowerCase()]; const l = level(c?.call); if (!l) continue;
       calls[h] = { call: l, why: cite(c.why, 1400), for: list(c.for, 3, 300), against: list(c.against, 2, 300), flips_it: cite(c.flips_it, 300) };
+      const ab = level(c.absolute), sp = level(c.sp500); if (ab) { calls[h].absolute = ab; calls[h].absolute_why = cite(c.absolute_why, 600); } if (sp) calls[h].sp500 = sp;
       const vi = lc(c.vs_industry); if (vi) calls[h].vs_industry = /beat|out|better|ahead/.test(vi) ? "beats" : /lag|under|worse|behind/.test(vi) ? "lags" : "matches"; }
     if (!Object.keys(calls).length) return null;
     const seen = new Set(), evidence = [];
@@ -161,6 +166,7 @@ ${SCHEMA}`;
       if ((c.vs_industry === "beats" && a < b) || (c.vs_industry === "lags" && a > b) || (c.vs_industry === "matches" && Math.abs(a - b) > 1))
         out.checks.push(`${h}: the industry is ${ic} vs the S&P 500 and this says the company ${c.vs_industry} the industry, but calls it ${c.call}.`); }
     if (HZ.some((h) => !calls[h])) out.checks.push(`No call for ${HZ.filter((h) => !calls[h]).join(", ")}.`);
+    if (HZ.some((h) => calls[h] && !calls[h].absolute)) out.checks.push(`No up-or-down call for ${HZ.filter((h) => calls[h] && !calls[h].absolute).join(", ")}.`);
     if (out.missing.length > 3) out.checks.push(`${out.missing.length} inputs weren't weighed: ${out.missing.map((k) => IL[k]).join(", ")}.`);
     out.consistent = !out.checks.length;
     return out;
@@ -213,7 +219,7 @@ ${schema}`;
     for (const f of facts || []) {
       const sc = statCall(f.anchor), ev = windowEvents(cal, f, today);
       L.push(`${f.h} (to ${f.end}): the industry's trailing ${f.h} ${f.trailing ?? "n/a"}% (${f.vs_spy ?? "n/a"}% vs the S&P 500, ${f.breadth ?? "n/a"}% of its companies beat it); one-sigma move ±${f.sigma ?? "n/a"}%.`
-        + (f.anchor ? ` Statistical anchor: ${sc} (vs the S&P 500 median ${f.anchor.rel.median}%, ${f.anchor.rel.prob_beat}% chance of beating it; out of sample it was right ${f.anchor.test?.hit_rate ?? "?"}% of the time vs ${f.anchor.test?.base_hit_rate ?? "?"}% for the average alone, so ${(f.anchor.test?.hit_rate || 0) - (f.anchor.test?.base_hit_rate || 0) >= 2 ? "it carries some signal" : "treat it as weak"}; pushed by ${(f.anchor.drivers || []).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push}`).join(", ")}).` : "")
+        + (f.anchor ? ` Statistical anchor: ${sc} (vs the S&P 500 median ${f.anchor.rel.median}%, ${f.anchor.rel.prob_beat}% chance of beating it${f.anchor.abs ? `; on its own: median ${f.anchor.abs.median}%, ${f.anchor.abs.prob_up}% chance of being higher` : ""}; out of sample it was right ${f.anchor.test?.hit_rate ?? "?"}% of the time vs ${f.anchor.test?.base_hit_rate ?? "?"}% for the average alone, so ${(f.anchor.test?.hit_rate || 0) - (f.anchor.test?.base_hit_rate || 0) >= 2 ? "it carries some signal" : "treat it as weak"}; pushed by ${(f.anchor.drivers || []).map((d) => `${d.label} ${d.push > 0 ? "+" : ""}${d.push}`).join(", ")}).` : "")
         + (f.like ? ` Past setups most like today: ${f.like.pos}% were higher ${f.h} later (median ${f.like.median}%, n=${f.like.n}).` : "")
         + (ev.length ? ` Dated in this window: ${ev.map((e) => `${e.date} ${e.title}${e.id ? ` [${e.id}]` : ""}`).join("; ")}.` : ""));
     }
@@ -234,6 +240,7 @@ ${board}
 For EACH window:
 - Make the strongest case for a different call: the other side, or a different strength. Use the numbers above and the evidence's own citations.
 - Name concrete errors: a number misread or contradicted by the scoreboard, a driver that matters to the S&P 500 just as much (so it is not an edge vs the index), double counting, an input ignored, a dated event in the window the call skips, a "strongly" the evidence doesn't support, a call that ignores what the past setups and the statistical anchor say without a reason.
+- Check the up-or-down calls too ("sp500" and "absolute"): is the S&P 500 view defensible, and does the absolute call follow from it and the relative call?
 - Recommend: "hold" (the call survives), "soften" (same side, weaker), "strengthen", or "flip". Recommend a change only for a real error or a clearly stronger case; don't change calls for the sake of it.
 
 Reply with ONLY this JSON:
@@ -260,10 +267,11 @@ ${JSON.stringify(ch)}
 THE HARD NUMBERS (code-computed)
 ${board}
 
-${extra}For each window: if the challenge found a real error or made the stronger case, change the call (side or strength) and rewrite its "why"; otherwise hold it and say in one sentence why the challenge doesn't change it. Six levels (${LEVELS.join(", ")}), no neutral, all relative to the S&P 500. Keep the citations; add none that aren't already in your calls or evidence. Fix any evidence entry the challenge showed was wrong.
+${extra}For each window keep the three calls (the S&P 500's direction, vs the S&P 500, its own direction) adding up: beating a rising market means rising too; lagging a falling market means falling too.
+For each window: if the challenge found a real error or made the stronger case, change the call (side or strength) and rewrite its "why"; otherwise hold it and say in one sentence why the challenge doesn't change it. Six levels (${LEVELS.join(", ")}), no neutral, all relative to the S&P 500. Keep the citations; add none that aren't already in your calls or evidence. Fix any evidence entry the challenge showed was wrong.
 
 Reply with ONLY this JSON:
-{"headline": "one sentence", "calls": {"1M": {"call": "...", ${extra ? `"vs_industry": "beats | matches | lags", ` : ""}"why": "3-5 sentences vs the S&P 500, cited", "for": ["..."], "against": ["..."], "flips_it": "...", "challenge": "one sentence: what the challenge changed, or why the call holds"}, "3M": {...}, "6M": {...}, "12M": {...}},
+{"headline": "one sentence", "calls": {"1M": {"sp500": "...", "call": "... (vs the S&P 500)", "absolute": "... (its own direction)", "absolute_why": "...", ${extra ? `"vs_industry": "beats | matches | lags", ` : ""}"why": "3-5 sentences vs the S&P 500, cited", "for": ["..."], "against": ["..."], "flips_it": "...", "challenge": "one sentence: what the challenge changed, or why the call holds"}, "3M": {...}, "6M": {...}, "12M": {...}},
  "evidence_fixes": [{"input": "...", "points": "bullish | bearish | mixed", "weight": 1, "why": "..."}],
  "verdict": {"agrees": true, "why": "..."}}`;
   }
@@ -272,7 +280,7 @@ Reply with ONLY this JSON:
     if (!raw || typeof raw !== "object" || !raw.calls) return lean;
     const ev = new Map(lean.evidence.map((e) => [e.input, e]));
     for (const e of Array.isArray(raw.evidence_fixes) ? raw.evidence_fixes : []) { const k = keyOf(e?.input, opts.inputs || INPUTS, opts.alias || ALIAS); if (k) ev.set(k, { input: k, points: e.points, weight: e.weight, why: e.why }); }
-    const next = cleanLean({ headline: raw.headline || lean.headline, calls: Object.fromEntries(HZ.map((h) => [h, raw.calls[h] || lean.calls[h]])), evidence: [...ev.values()], verdict: raw.verdict || lean.verdict }, opts);
+    const next = cleanLean({ headline: raw.headline || lean.headline, calls: Object.fromEntries(HZ.map((h) => [h, { ...(lean.calls[h] || {}), ...(raw.calls[h] || {}) }])), evidence: [...ev.values()], verdict: raw.verdict || lean.verdict }, opts);
     if (!next) return lean;
     for (const h of HZ) { const a = lean.calls[h], b = next.calls[h]; if (!b) continue;
       b.challenge = { recommend: ch?.windows?.[h]?.recommend || "hold", case: ch?.windows?.[h]?.case || "", errors: ch?.windows?.[h]?.errors || [], answer: trim(String(raw.calls[h]?.challenge || "").replace(/\[[A-Z]{1,6}\d{1,5}[^\]]*\]/g, (m) => m), 400), before: a && a.call !== b.call ? a.call : null }; }
@@ -293,7 +301,7 @@ Reply with ONLY this JSON:
     "balance sheet": "quality", consensus: "street", analysts: "street", "price action": "momentum", "times like this": "history", "past setups": "history", calendar: "catalysts", events: "catalysts",
     rates: "macro", trade: "world", geopolitics: "world", legal: "regulation", moat: "competition", peers: "competition", "red flags": "risks", "write-up": "verdict" };
   const CO_KEYS = CO_INPUTS.map(([k]) => k);
-  const CO_CALL = `{"call": "${LEVELS.join(" | ")}", "vs_industry": "beats | matches | lags (this company vs its own industry over the window)", "why": "3-5 sentences: start from the industry's call vs the S&P 500 for this window, then what makes this company better or worse than its industry (its own numbers, dated events, beta) and so where it lands vs the S&P 500, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call (a price, an estimate, a date)"}`;
+  const CO_CALL = `{"call": "${LEVELS.join(" | ")} (vs the S&P 500)", "sp500": "${LEVELS.join(" | ")} (the S&P 500 itself: higher or lower at the end of the window)", "absolute": "${LEVELS.join(" | ")} (the company itself: higher or lower at the end of the window)", "absolute_why": "1-2 sentences: the S&P 500's own direction plus the company's edge (or drag) vs it, and so where the company itself ends up, with numbers", "vs_industry": "beats | matches | lags (this company vs its own industry over the window)", "why": "3-5 sentences: start from the industry's call vs the S&P 500 for this window, then what makes this company better or worse than its industry (its own numbers, dated events, beta) and so where it lands vs the S&P 500, with the specific numbers and [IDs]", "for": ["1-3 short reasons on the call's side, cited"], "against": ["1-2 short reasons against it, cited"], "flips_it": "one measurable, dated condition that would flip this call (a price, an estimate, a date)"}`;
   const CO_SCHEMA = `{"headline": "one sentence: the lean vs the S&P 500 and the two or three things that decide it",
  "evidence": [{"input": "${CO_KEYS.join(" | ")}", "points": "bullish | bearish | mixed", "weight": 1, "why": "one or two sentences vs the S&P 500, with the numbers and [IDs]"}],
  "calls": {"1M": ${CO_CALL}, "3M": {...}, "6M": {...}, "12M": {...}},
@@ -368,7 +376,8 @@ ${(c.news || []).length ? `\n=== RECENT NEWS AND RELEASES (cite by ID) ===\n${c.
 ${(c.mentions || []).length ? `\n=== WHAT THE INDUSTRY ANALYSIS SAYS ABOUT ${c.sym} (cite by ID) ===\n${c.mentions.slice(0, 25).map((m) => `[${m.id}] ${m.section}: ${trim(m.text, 220)}`).join("\n")}` : ""}
 
 HOW TO MAKE THE CALLS
-- Every call is RELATIVE TO THE S&P 500: "bullish" means ${c.sym} beats the S&P 500 over that window, "bearish" means it lags it. Its absolute direction doesn't matter.
+- "call" is RELATIVE TO THE S&P 500: "bullish" means ${c.sym} beats the S&P 500 over that window, "bearish" means it lags it.
+- For EACH window make three calls on the same six-level scale: "sp500", the S&P 500's own direction (will the index be higher or lower at the end of the window); "call", ${c.sym} vs the S&P 500; and "absolute", ${c.sym}'s own direction (will it be higher or lower). They must add up: beating a rising market means it rises too, and lagging a falling market means it falls too; only when the two point opposite ways can the absolute call go either way, and then "absolute_why" says which force wins and by how much (the market drifts up about 7% a year, so over 12 months "slightly bullish" for the S&P 500 is the default without a reason). Code checks this.
 - Build each call in two steps: (1) the industry's call vs the S&P 500 for the window (above); (2) does ${c.sym} beat, match or lag its own industry over the window ("vs_industry"), from its own numbers, dated events (its own report first), valuation, the street, momentum and beta. The call follows: beats the industry -> at least the industry's level; lags it -> at most; matches -> within one step. Code checks this.
 - Six levels, no neutral. "slightly": a close call. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most inputs point the same way and decisively; rare.
 - First weigh EVERY input, one entry each, in this order: ${CO_KEYS.join(", ")}. For each: which way it points vs the S&P 500 ("bullish" / "bearish" / "mixed"), how much it matters for ${c.sym} (weight 1 = minor, 2 = material, 3 = decisive), and why, with numbers and [IDs]. An input with nothing to go on is "mixed", weight 1.
@@ -392,9 +401,11 @@ ${CO_SCHEMA}`;
       if (!l || s === "neutral") { const pb = Number(v?.probability_beat), pu = Number(x.probability_up), op = res.opportunity?.verdict;
         l = isNum(pb) ? (pb >= 50 ? "slightly bullish" : "slightly bearish") : op === "yes" ? "slightly bullish" : op === "no" ? "slightly bearish" : isNum(pu) && pu >= 55 ? "slightly bullish" : "slightly bearish"; }
       else if (!/slight|strong/.test(s)) l = level("slightly " + l);
-      calls[h] = { call: l, basis: v ? "the earlier call vs the S&P 500" : "the earlier absolute call" }; }
+      let ab = level(x.call); const sa = lc(x.call);
+      if (!ab) ab = isNum(Number(x.probability_up)) && Number(x.probability_up) >= 50 ? "slightly bullish" : "slightly bearish"; else if (!/slight|strong/.test(sa)) ab = level("slightly " + ab);
+      calls[h] = { call: l, absolute: ab, basis: v ? "the earlier call vs the S&P 500" : "the earlier absolute call" }; }
     if (!Object.keys(calls).length) return null;
-    return { v: 2, date: today, provisional: true, headline: "Provisional: read off the earlier calls. Press the button for the strategist's calls vs the S&P 500, with the reasons.", calls, evidence: [], checks: [] };
+    return { v: 2, date: today, provisional: true, headline: "Provisional: read off the earlier calls. Press the button for the strategist's calls, up or down and vs the S&P 500, with the reasons.", calls, evidence: [], checks: [] };
   }
 
   /** The lean to show: the strategist's (this format), or a provisional one. */
@@ -403,7 +414,7 @@ ${CO_SCHEMA}`;
   /** Did the 12M call change side (a made lean to a new one)? */
   const flipped = (a, b) => !!(a && b && !a.provisional && a.v === 2 && a.calls?.["12M"] && b.calls?.["12M"] && Math.sign(SIGN[a.calls["12M"].call]) !== Math.sign(SIGN[b.calls["12M"].call]));
   /** One line for a table or a progress note. */
-  const leanLine = (l) => (l ? HZ.filter((h) => l.calls?.[h]).map((h) => `${h} ${l.calls[h].call}`).join(", ") + (l.provisional ? " (provisional)" : "") : "");
+  const leanLine = (l) => (l ? HZ.filter((h) => l.calls?.[h]).map((h) => `${h} ${l.calls[h].call} vs the S&P 500${l.calls[h].absolute ? `, ${l.calls[h].absolute} itself` : ""}`).join("; ") + (l.provisional ? " (provisional)" : "") : "");
 
   const Lean = { HZ, HZ_LABEL, LEVELS, SIGN, level, cls, label, INPUTS, LABEL, KEYS, keyOf, analysisText, leanPrompt, cleanLean, tally, checks, repairPrompt, provisional, leanOf, leanLine, flipped, SCHEMA, DAYS, marketFacts, statCall, windowEvents, scoreboard, challengePrompt, cleanChallenge, finalPrompt, mergeFinal, CO_INPUTS, CO_ALIAS, CO_KEYS, CO_SCHEMA, coAnalysisText, indCallsText, coScoreboard, coLeanPrompt, coAbout, CO_FINAL_EXTRA, ORD };
   if (typeof module !== "undefined" && module.exports) module.exports = Lean;
