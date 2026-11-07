@@ -5,6 +5,8 @@
 # at once, started in order (each reuses what the ones before it researched), each adding only the industries it doesn't have
 # yet. A sector that runs out of credit waits and resumes by itself once you add credit; one that reaches its limit is
 # skipped; when the queue is done, a daily update of every sector adds "Times like this" where it's missing.
+# "finish" does everything still missing: every waiting industry, then Times like this, then the 1M-12M calls (one
+# cheap call per industry, about $0.04) for every industry without them. "calls" runs just the calls pass now.
 #
 # Every hour and whenever a sector run or daily update ends (a sector run asks for it as its last step), this also writes status.json to the "status" branch:
 # every industry's status, the queue, the runs, and spending (tracked by the runs; with the optional ANTHROPIC_ADMIN_KEY
@@ -17,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status = refresh; finish = generate everything still missing (every waiting industry, then Times like this); start = a new queue from a list; stop; resume; daily_on / daily_off = turn the daily updates on or off"
+        description: "status = refresh; finish = generate everything still missing (every waiting industry, then Times like this, then the 1M-12M calls); calls = the 1M-12M calls now, for every industry without them; start = a new queue from a list; stop; resume; daily_on / daily_off = turn the daily updates on or off"
         type: choice
-        options: [status, finish, start, stop, resume, daily_on, daily_off]
+        options: [status, finish, calls, start, stop, resume, daily_on, daily_off]
         default: status
       sectors:
         description: "start: the sectors in order, each with its spending limit in dollars, e.g. Utilities:9, Energy:20"

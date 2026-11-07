@@ -104,6 +104,16 @@ within the hour of you adding credit; a sector that reaches its limit is skipped
 twice. When the queue is done, a daily update of every sector runs (it also adds "Times like this" to industries that
 don't have it). `stop` and `resume` do what they say.
 
+**The 1M-12M calls on GitHub.** Action `finish` now does everything still missing in order: every waiting industry,
+then Times like this (the history pass), then, once that has ended, **the calls pass**: the 1M-12M calls (where each
+industry is going and why, from every component; one cheap call each, about $0.04) for every finished industry that
+doesn't have its own calls yet (none, or only provisional ones read off the older calls). Industries that already have
+calls are left alone. Action `calls` runs just the calls pass right away (Daily update → `lean_missing` does the same
+by hand). The daily update keeps them current afterwards (remade when the calls move, the analysis is rewritten, or
+they are a week old). Industry Scorer shows, for each sector, how many industries have their calls (made on GitHub
+or in the page), how many are still provisional, and the last calls pass with anything that failed; each industry's
+card says where its calls were made.
+
 The same workflow runs every hour and whenever a run ends, and writes `status.json` to the `status` branch: every
 industry's status, the queue, recent runs and spending. Spending is tracked by the runs themselves; add an Admin API key
 as the `ANTHROPIC_ADMIN_KEY` secret for Anthropic's own cost report, and set the repository variables

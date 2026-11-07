@@ -30,6 +30,7 @@
 //   JOB_DAILY_ONLY              daily update: only these industries (separated by ";"), e.g. the ones a run left unfinished
 //   JOB_BACKFILL=1              daily update: the history pass only (Times like this for industries that lack it; no triage, no sections)
 //   JOB_LEAN=1                  daily update: the lean pass only (every industry's lean from everything, by the lead model)
+//   JOB_LEAN_MISSING=1          with JOB_LEAN: only industries that don't have their 1M-12M calls yet (none or provisional)
 //   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
 //   CLAUDE_MODEL_LEAD           the lead strategist (synthesis, scenarios, calls, red team, investor verdicts) in every run,
 //                               and the daily update's whole-analysis update (default: the complex model)
@@ -142,7 +143,7 @@ async function main() {
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
     const onlyNames = String(env.JOB_DAILY_ONLY || "").split(";").map((x) => x.trim()).filter(Boolean);
     if (env.JOB_LEAN === "1") { log(`The lean pass for ${sector}: every industry's lean from everything, by ${sampler.models.lead || "the lead model"}`);
-      await page.evaluate(([s, c, n]) => window.__industryScorer.lean(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
+      await page.evaluate(([s, c, n, m]) => window.__industryScorer.lean(s, { concurrency: c, missing: m, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames, env.JOB_LEAN_MISSING === "1"]); }
     else await page.evaluate(([s, c, b, n]) => window.__industryScorer.daily(s, { concurrency: c, backfill: b, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), env.JOB_BACKFILL === "1", onlyNames]);
   } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);
 
