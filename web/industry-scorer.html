@@ -10013,6 +10013,41 @@ ${schemaFor(inputs)}`;
     return { ctx, idx };
   }
 
+  // ------------------------------------------------------------- the saved outlooks (the page's own database)
+  /**
+   * Every outlook made (an industry's or a company's) is saved in the page's database, so it survives a pull of newer
+   * runs from GitHub, reaches the page on any device, and the company analysis builds on its industry's. Read once on
+   * load; written when an outlook is made. The newest of the saved one and the one in the run wins.
+   */
+  async function outlookDb() {
+    if (S.odb !== undefined) return S.odb;
+    S.odb = window.claude?.use ? await window.claude.use("db").catch(() => null) : null;
+    return S.odb;
+  }
+  async function loadSavedOutlooks() {
+    const db = await outlookDb(); if (!db) return;
+    try {
+      const [a, b] = await Promise.all([db.collection("outlooks").limit(1000).get(), db.collection("co_outlooks").limit(1000).get()]);
+      S.savedOutlooks = Object.fromEntries(a.docs.filter((x) => x.exists).map((x) => [x.id, x.data()]));
+      S.savedCoOutlooks = Object.fromEntries(b.docs.filter((x) => x.exists).map((x) => [x.id, x.data()]));
+      renderAll(); if (S.co) renderCompany();
+    } catch (e) { console.warn("saved outlooks", e); }
+  }
+  const newer = (a, b) => (!a ? b : !b ? a : String(b.saved_at || b.date || "") > String(a.saved_at || a.date || "") ? b : a);
+  /** The industry's outlook to show and build on: the newest of the run's and the saved one. */
+  function indOutlook(name, res) {
+    const sv = S.savedOutlooks?.[slug(name || "")];
+    const best = newer(res?.outlook?.v === 3 ? res.outlook : null, sv?.outlook?.v === 3 ? sv.outlook : null);
+    return best || Outlook.provisional(res, today());
+  }
+  const indOutlookHist = (name, res) => { const sv = S.savedOutlooks?.[slug(name || "")]; return (sv?.history?.length || 0) >= (res?.outlook_history?.length || 0) ? sv?.history || [] : res?.outlook_history || []; };
+  async function saveOutlook(kind, id, body) {
+    const db = await outlookDb(); if (!db) return false;
+    const doc = { ...jsonSafe(body), saved_at: new Date().toISOString() };
+    try { await db.doc(`${kind}/${id}`).set(doc); (kind === "outlooks" ? (S.savedOutlooks ||= {}) : (S.savedCoOutlooks ||= {}))[id] = doc; return true; }
+    catch (e) { console.warn("save outlook", e); return false; }
+  }
+
   /**
    * The outlook: where the industry is going over 1M, 3M, 6M and 12M (six levels, its own direction) and why, from a
    * compact digest of EVERY component (the lead's verdict, thesis, scenarios, red team and latest update; macro, world,
@@ -10036,8 +10071,11 @@ ${schemaFor(inputs)}`;
     if (!o) return null;
     // Marked with today's level, so the page can show how the calls are doing since they were made.
     const lv = d.index?.levels; if (lv?.length) o.mark = { ind: lv[lv.length - 1], ind_date: d.index.dates?.[lv.length - 1] || null };
-    const cur = S.agents[sl], h0 = Outlook.histOf(cur.result.outlook);
-    S.agents[sl] = jsonSafe({ ...cur, result: { ...cur.result, outlook: o, outlook_history: [...(h0 ? [h0] : []), ...(cur.result.outlook_history || [])].slice(0, 12) } });
+    o.saved_at = new Date().toISOString();
+    const cur = S.agents[sl], prev = indOutlook(name, cur.result), h0 = Outlook.histOf(prev);
+    const hist = [...(h0 ? [h0] : []), ...indOutlookHist(name, cur.result)].slice(0, 12);
+    S.agents[sl] = jsonSafe({ ...cur, result: { ...cur.result, outlook: o, outlook_history: hist } });
+    await saveOutlook("outlooks", sl, { name, sector: d.sector || null, outlook: o, history: hist });
     return o;
   }
 
@@ -11688,7 +11726,7 @@ ${schemaFor(inputs)}`;
     const conn = !S.ready ? "" : S.mcp ? `<span><span class="dot ok"></span>FMP connector</span>` : `<span><span class="dot bad"></span>FMP not available here</span>`;
     const ai = !S.ready ? "" : S.sample ? `<span><span class="dot ok"></span>Analyst agent</span>` : `<span><span class="dot bad"></span>Agent unavailable here</span>`;
     const eod = !S.ready || !S.mcp ? "" : S.eod ? `<span><span class="dot ok"></span>EODHD connector</span>` : `<span title="Add EODHD as a custom connector named EODHD to add measured news sentiment"><span class="dot bad"></span>EODHD not connected</span>`;
-    const sw = S.sweep?.busy ? `<span class="small muted">Updating track records…</span>` : "";
+    const sw = "";
     const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling ? "disabled" : ""} title="Bring in every sector run copied from GitHub">${S.pulling ? "Pulling from GitHub…" : "⟳ Pull from GitHub"}</button>` : "";
     $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
   }
@@ -11806,7 +11844,7 @@ ${schemaFor(inputs)}`;
     const issues = [...skipped.map(([n, why]) => `<li><b>${esc(n)}</b>: left out, ${esc(why)}</li>`), ...staleFree(rec, rec.failed_steps || []).slice(-12).map((x) => `<li>${esc(x)}</li>`)];
     const rows = Object.values(rec.rows || {}).filter(Boolean);
     const sk = S.secSort || { key: "best_score", dir: -1 };
-    const val = (r, k) => (k === "best_score" ? (r.best ? r.scores?.[r.best] : null) : k.startsWith("s_") ? r.scores?.[k.slice(2)] : k.startsWith("h_") ? (r.outlook?.calls?.[k.slice(2)] ? Outlook.SIGN[r.outlook.calls[k.slice(2)]] : r.horizons?.[k.slice(2)] ? Outlook.SIGN[Outlook.provisional({ horizons: { [k.slice(2)]: { call: r.horizons[k.slice(2)] } } })?.calls?.[k.slice(2)]?.call] ?? null : null) : k === "opportunity" ? ({ yes: 2, conditional: 1, no: 0 }[r.opportunity] ?? null) : r[k]);
+    const val = (r, k) => (k === "best_score" ? (r.best ? r.scores?.[r.best] : null) : k.startsWith("s_") ? r.scores?.[k.slice(2)] : k.startsWith("h_") ? (S.savedOutlooks?.[slug(r.name || "")]?.outlook?.calls?.[k.slice(2)] ? Outlook.SIGN[S.savedOutlooks[slug(r.name || "")].outlook.calls[k.slice(2)].call] : r.outlook?.calls?.[k.slice(2)] ? Outlook.SIGN[r.outlook.calls[k.slice(2)]] : r.horizons?.[k.slice(2)] ? Outlook.SIGN[Outlook.provisional({ horizons: { [k.slice(2)]: { call: r.horizons[k.slice(2)] } } })?.calls?.[k.slice(2)]?.call] ?? null : null) : k === "opportunity" ? ({ yes: 2, conditional: 1, no: 0 }[r.opportunity] ?? null) : r[k]);
     rows.sort((a, b) => { const x = val(a, sk.key), y = val(b, sk.key); if (typeof x === "string" || typeof y === "string") return sk.dir * String(x ?? "").localeCompare(String(y ?? "")); if (!isNum(num(x)) && !isNum(num(y))) return 0; if (!isNum(num(x))) return 1; if (!isNum(num(y))) return -1; return sk.dir * (x - y); });
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, OPC = { yes: "pos", conditional: "neu", no: "neg" };
     const th = (k, l, c = "n") => `<th class="sortable ${c}" tabindex="0" data-ssort="${k}" aria-sort="${sk.key === k ? (sk.dir > 0 ? "ascending" : "descending") : "none"}">${l}${sk.key === k ? (sk.dir > 0 ? " ▲" : " ▼") : ""}</th>`;
@@ -11815,15 +11853,16 @@ ${schemaFor(inputs)}`;
       <tbody>${rows.map((r) => `<tr><td class="ind"><button data-pick="${esc(r.name)}" ${busy() ? "disabled" : ""}>${esc(r.name)}</button>${r.done ? "" : ` <span class="pill warn">unfinished</span>`}${r.headline ? `<div class="small muted">${esc(r.headline)}</div>` : ""}</td>
         <td class="n">${r.best ? `${esc(Score.PROFILES[r.best]?.label || r.best)}` : "—"}</td>${PROFILE_KEYS.map((p) => `<td class="n">${sc(r.scores?.[p])}</td>`).join("")}
         <td>${r.opportunity ? `<span class="pill ${OPC[r.opportunity] || "neu"}">${esc(r.opportunity)}</span>` : "—"}</td>
-        ${["1M", "3M", "6M", "12M"].map((h) => { const made = r.outlook?.calls && !r.outlook.provisional, oc = r.outlook?.calls?.[h] || (r.horizons?.[h] ? Outlook.provisional({ horizons: { [h]: { call: r.horizons[h] } } })?.calls?.[h]?.call : null);
-          return `<td>${oc ? `<span class="pill lean-pill ${Outlook.cls(oc)}" title="${made ? esc(r.outlook.headline || "") : "Provisional: read off the earlier calls; open the industry and press Make the calls now"}">${Outlook.SIGN[oc] > 0 ? "▲" : "▼"} ${esc(Outlook.label(oc))}${made ? "" : "*"}</span>` : "—"}</td>`; }).join("")}
+        ${["1M", "3M", "6M", "12M"].map((h) => { const so = S.savedOutlooks?.[slug(r.name || "")]?.outlook, ro = newer(r.outlook?.provisional ? null : r.outlook, so ? { ...so, calls: Object.fromEntries(Object.entries(so.calls || {}).map(([k, x]) => [k, x.call])) } : null) || r.outlook;
+          const made = ro?.calls && !ro.provisional, oc = ro?.calls?.[h] || (r.horizons?.[h] ? Outlook.provisional({ horizons: { [h]: { call: r.horizons[h] } } })?.calls?.[h]?.call : null);
+          return `<td>${oc ? `<span class="pill lean-pill ${Outlook.cls(oc)}" title="${made ? esc(ro.headline || "") : "Provisional: read off the earlier calls; open the industry and press Make the calls now"}">${Outlook.SIGN[oc] > 0 ? "▲" : "▼"} ${esc(Outlook.label(oc))}${made ? "" : "*"}</span>` : "—"}</td>`; }).join("")}
         <td class="n">${isNum(num(r.fwd_pe)) ? fix(r.fwd_pe, 1) : "—"}</td><td class="n ${cls(num(r.rev30))}">${pct(r.rev30)}</td><td>${esc(r.positioning || "—")}</td><td class="n ${cls(num(r.r1y))}">${pct(r.r1y)}</td><td class="n">${cap(r.cap)}</td></tr>`).join("")}</tbody></table></div>`
       : `<div class="small muted">Industries appear here as each one finishes.</div>`;
     return `<section class="hero"><span class="eyebrow">Sector run · every industry</span><h1>${esc(sec)}</h1>
         <span class="small muted">${N} industries${skipped.length ? ` (${skipped.length} left out)` : ""} · started ${esc(fmtDate(rec.started_at))} · ${rows.filter((r) => r.done).length} finished</span>
         ${sectorFresh(sec, rec)}${notices}${run}</section>
       <section class="panel" id="sector-overview"><div class="panel-head"><h2>Every industry, side by side</h2><span class="small muted">Scores are 0–100 for each investor type, from the same pillars as each industry's own page. Click a column to sort${sr ? "" : ", an industry to open its full report"}.</span></div>${table}</section>
-      ${sr ? "" : sectorTrackBlock(sec, rec.names.filter((n) => !rec.skip?.[n]))}
+
       ${issues.length ? `<section class="panel"><h2>What didn't go to plan</h2><ul class="small">${issues.join("")}</ul><div class="small muted">A step that failed is left out of that industry's report; open the industry and use its own Resume or Retry buttons to finish it.</div></section>` : ""}`;
   }
 
@@ -12070,7 +12109,6 @@ ${schemaFor(inputs)}`;
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
       ${timesSection(d)}
-      ${trackSection(d)}
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
           <div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
         ${note(ag, "performance")}
@@ -12286,7 +12324,7 @@ ${schemaFor(inputs)}`;
   }
   /** The industry's outlook: where it's going over each window, and why. */
   function leanBlock(r, name = S.selected, d = null) {
-    const l = Outlook.outlookOf(r, today());
+    const l = indOutlook(name, r);
     let facts = r.horizon_facts;
     if (!facts?.length && d) { if (d._lf?.day !== today()) { try { d._lf = { day: today(), f: Brain.horizonFacts(d, today()) }; } catch { d._lf = { day: today(), f: [] }; } } facts = d._lf.f; }
     const fOf = (h) => (facts || []).find((f) => f.h === h);
@@ -12308,12 +12346,18 @@ ${schemaFor(inputs)}`;
         ${f.like ? `<div><span class="muted">Past setups like today:</span> higher ${f.like.pos}% of the time ${esc(h)} later (n=${f.like.n})</div>` : ""}
         ${isNum(num(f.anchor?.abs?.prob_up)) ? `<div title="Momentum, the trend and valuation; tested out of sample it was barely better than the average alone"><span class="muted">Stats model:</span> ${f.anchor.abs.prob_up}% chance higher</div>` : ""}
         ${ev.length ? `<div><span class="muted">In this window:</span> ${ev.map((e) => `${esc(fmtDate(e.date))} ${esc(trimC(String(e.title).split(/ — |: /)[0], 60))}`).join(" · ")}</div>` : ""}</div>`; };
-    return callsCard(l, { head, status, nums, since, history: r.outlook_history, verdict: "the lead's opportunity verdict", verdictCall: r.opportunity?.verdict });
+    return callsCard(l, { head, status, nums, since, history: indOutlookHist(name, r), verdict: "the lead's opportunity verdict", verdictCall: r.opportunity?.verdict });
   }
 
   /** A company's outlook: where it's going over each window, and why, built on its industry's outlook and its write-up. */
+  /** The company's outlook to show: the newest of the one saved with its write-up and the one in the page's database. */
+  function coOutlook(co) {
+    const so = S.savedCoOutlooks?.[co.sym]?.industry === co.run?.name ? S.savedCoOutlooks[co.sym] : null;
+    return newer(co.thesis?.outlook?.v === 3 ? co.thesis.outlook : null, so?.outlook?.v === 3 ? so.outlook : null);
+  }
   function coLeanBlock(co) {
-    const rec = co.thesis, l = rec?.outlook?.v === 3 ? rec.outlook : null, ind = co.run?.lead ? Outlook.outlookOf(co.run.lead, today()) : null;
+    const so = S.savedCoOutlooks?.[co.sym]?.industry === co.run?.name ? S.savedCoOutlooks[co.sym] : null;
+    const rec = co.thesis, l = coOutlook(co), ind = co.run ? indOutlook(co.run.name, co.run.lead) : null;
     const working = co.leanBusy;
     const can = S.sample && !co.writing && !working && rec?.thesis;
     const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the finished write-up and the industry's outlook (about a minute)">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
@@ -12331,7 +12375,7 @@ ${schemaFor(inputs)}`;
     let since = "";
     const ser = co.data?.ser;
     if (l.mark?.px > 0 && ser?.closes?.length && ser.dates[ser.dates.length - 1] > (l.mark.date || "")) { const ri = Math.round((ser.closes[ser.closes.length - 1] / l.mark.px - 1) * 1000) / 10; since = `<div class="small">Since these calls (${esc(fmtDate(l.date))}): ${esc(co.sym)} is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`; }
-    return sec("co-lean", `Where ${co.sym} is going`, "", callsCard(l, { head, status: status + indLine, nums, since, history: rec.outlook_history, verdict: "the write-up's verdict", verdictCall: rec.thesis?.verdict?.call }));
+    return sec("co-lean", `Where ${co.sym} is going`, "", callsCard(l, { head, status: status + indLine, nums, since, history: (so?.history?.length || 0) > (rec?.outlook_history?.length || 0) ? so.history : rec?.outlook_history, verdict: "the write-up's verdict", verdictCall: rec.thesis?.verdict?.call }));
   }
 
 
@@ -13152,7 +13196,7 @@ ${schemaFor(inputs)}`;
   /** The industry report's sidebar, in the order the sections appear. */
   function industryGroups(d) {
     const has = (id) => true;
-    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"], ["track", "Track record"]] },
+    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"]] },
       { label: "Performance", items: [["performance", "Returns vs SPY"], ["risk", "Risk"]] },
       { label: "Analyst Consensus", items: [["estimates", "Estimates & revisions"]] },
       { label: "Industry Landscape", items: [["ranking", "Company ranking"], ["history", "History & peers"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["companies", "The companies"]] },
@@ -13163,7 +13207,7 @@ ${schemaFor(inputs)}`;
       { label: "News & Sentiment", items: [["news", "Sentiment & news"]] }];
   }
   function secNav() {
-    const links = [["overview", "Overview"], ["plan", "Trade plan"], ["track", "Track record"], ["scores", "Scores"], ["times", "Times like this"], ["estimates", "Estimates"], ["positioning", "Positioning"], ["history", "History & peers"], ["ranking", "Company ranking"], ["industry", "Industry"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"], ["regulation", "Regulation & legal"], ["news", "Sentiment & news"], ["performance", "Performance"], ["fundamentals", "Fundamentals"], ["valuation", "Valuation"], ["earnings", "Earnings"], ["health", "Health"], ["companies", "Companies"]];
+    const links = [["overview", "Overview"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"], ["estimates", "Estimates"], ["positioning", "Positioning"], ["history", "History & peers"], ["ranking", "Company ranking"], ["industry", "Industry"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"], ["regulation", "Regulation & legal"], ["news", "Sentiment & news"], ["performance", "Performance"], ["fundamentals", "Fundamentals"], ["valuation", "Valuation"], ["earnings", "Earnings"], ["health", "Health"], ["companies", "Companies"]];
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
@@ -13204,7 +13248,7 @@ ${schemaFor(inputs)}`;
       lead: { headline: L.headline, thesis: L.thesis, drivers: L.drivers, debates: L.debates, priced_in: L.priced_in, opportunity: L.opportunity, risks: L.risks, catalysts: L.catalysts, watch: L.watch,
         scenarios: L.scenarios && Object.fromEntries(Object.entries(L.scenarios).map(([k, s]) => [k, { probability: s?.probability, narrative: s?.narrative, price_move: s?.price_move, eps_change: s?.eps_change }])),
         horizons: L.horizons && Object.fromEntries(Object.entries(L.horizons).map(([h, x]) => [h, { call: x?.call, expected_move: x?.expected_move, probability_up: x?.probability_up, drivers: x?.drivers }])),
-        outlook: (() => { const ln = Outlook.outlookOf(L, today()); return ln ? { provisional: !!ln.provisional, headline: ln.headline, ...Object.fromEntries(Object.entries(ln.calls || {}).map(([h, x]) => [h, { call: x.call, why: x.why || "" }])) } : null; })(),
+        outlook: (() => { const ln = indOutlook(run.name, L); return ln ? { provisional: !!ln.provisional, headline: ln.headline, ...Object.fromEntries(Object.entries(ln.calls || {}).map(([h, x]) => [h, { call: x.call, why: x.why || "" }])) } : null; })(),
         latest_update: L.daily?.date ? { date: L.daily.date, headline: L.daily.headline, summary: L.daily.summary, changes: (L.daily.changes || []).slice(0, 5) } : null },
       kpi: R.kpi && { summary: R.kpi.summary, cycle_position: R.kpi.cycle_position, pricing_power: R.kpi.pricing_power, demand_drivers: R.kpi.demand_drivers, hot_segments: R.kpi.hot_segments, cool_segments: R.kpi.cool_segments },
       macro: R.macro && { regime: R.macro.regime, headline: R.macro.headline, horizons: R.macro.horizons, drivers: R.macro.drivers },
@@ -13490,7 +13534,7 @@ ${schemaFor(inputs)}`;
     co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; if (S.co === co) renderCompany();
     const call = (p) => sampleJson(p, { modelTier: "complex", cache: false });
     try {
-      const run = co.run, ind = run?.lead ? Outlook.outlookOf(run.lead, today()) : null;
+      const run = co.run, ind = indOutlook(run.name, run.lead);
       const latest = run.lead?.daily?.date ? `${run.lead.daily.date}: ${run.lead.daily.headline || ""} ${run.lead.daily.summary || ""}` : "";
       const opts = { today: today(), inputs: Outlook.CO_INPUTS };
       let o = Outlook.clean(await call(Outlook.coPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest, write: rec.thesis, facts: coFactsText(co), windows: coWindowsPlus(co), times: co.times ? Regimes.companyText(co.sym, co.times) : "", news: co.news })), opts);
@@ -13502,9 +13546,12 @@ ${schemaFor(inputs)}`;
       }
       const ser = co.data?.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
       o.ind = ind ? { provisional: !!ind.provisional, date: ind.date || null, calls: Object.fromEntries(Object.entries(ind.calls || {}).map(([h, x]) => [h, x.call])) } : null;
-      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || rec, h0 = Outlook.histOf(cur.outlook);
-      const nrec = jsonSafe({ ...cur, outlook: o, outlook_history: [...(h0 ? [h0] : []), ...(cur.outlook_history || [])].slice(0, 12) });
+      o.saved_at = new Date().toISOString();
+      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || rec, so = S.savedCoOutlooks?.[co.sym]?.industry === run.name ? S.savedCoOutlooks[co.sym] : null;
+      const h0 = Outlook.histOf(newer(cur.outlook, so?.outlook)), hist = [...(h0 ? [h0] : []), ...((so?.history?.length || 0) > (cur.outlook_history?.length || 0) ? so.history : cur.outlook_history || [])].slice(0, 12);
+      const nrec = jsonSafe({ ...cur, outlook: o, outlook_history: hist });
       await idbPut("co:" + co.sym, nrec).catch(() => {});
+      await saveOutlook("co_outlooks", co.sym, { sym: co.sym, name: co.name, industry: run.name, outlook: o, history: hist });
       if (co.thesis?.at === rec.at) co.thesis = nrec;
     } catch (e) { co.leanErr = "The calls didn't finish: " + (FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
     finally { co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); }
@@ -13782,7 +13829,7 @@ ${schemaFor(inputs)}`;
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
       coFund(co), coHealth(co), coValuation(co), coDividends(co), coOwnership(co), coEarnings(co), coBusiness(co),
-      coReg(co, t), coScenDeb(co, t), coCalendar(co, t), run ? coDrivers(co, t) : "", coTrackSec(co)];
+      coReg(co, t), coScenDeb(co, t), coCalendar(co, t), run ? coDrivers(co, t) : ""];
     return `${notices}<div class="shell">${sideNav(companyGroups(co))}<div class="stream">${secs.map((h) => withRead(co, t, h)).join("")}</div></div>`;
   }
   function coThesis(co, t, ck) {
@@ -13818,11 +13865,10 @@ ${schemaFor(inputs)}`;
       ${t.headline ? `<div class="headline">${rich(t.headline)}</div>` : ""}
       <div class="actions" style="justify-content:flex-start;align-items:center">${t.verdict?.call ? `<span class="pill ${VC[t.verdict.call] || "neu"}">Opportunity: ${esc(t.verdict.call)}</span>` : ""}${t.vs_industry?.call ? `<span class="pill ${VS[t.vs_industry.call] || "neu"}">${esc(t.vs_industry.call)} vs ${esc(co.run.name)}</span>` : ""}</div>
       ${t.verdict?.summary ? `<p class="prose">${rich(t.verdict.summary)}</p>` : ""}
-      ${hz ? `<h3>The 1M-12M calls</h3><div class="hz-grid hz2">${hz}</div>` : ""}
-      ${ck?.issues?.length ? `<div class="notice warn small">Doesn't add up: ${esc(ck.issues.join("; "))}.</div>` : ""}
+      ${hz ? `<div class="small muted">Where ${esc(co.sym)} is going over each window, and why, is at the top of the page.</div>` : ""}
       ${t.thesis ? `<h3>The thesis</h3>` + String(t.thesis).split(/\n{2,}/).map((x) => `<p class="prose">${rich(x)}</p>`).join("") : ""}
       ${t.vs_industry?.why ? para(`Versus ${esc(co.run.name)}:`, t.vs_industry.why) : ""}
-      ${sc ? `<h3>Scenarios (12 months)</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Case</th><th class="n">Probability</th><th class="n">EPS change</th><th class="n">P/E</th><th class="n">Price target</th><th class="n">Move</th><th>What happens</th></tr></thead><tbody>${sc}</tbody></table></div>${math}` : ""}
+      ${sc ? `<details class="numbers-fold"><summary><b>The numbers</b> <span class="small muted">(the 12-month scenarios, price targets and expected return)</span></summary>${ck?.issues?.length ? `<div class="notice warn small">Doesn't add up: ${esc(ck.issues.join("; "))}.</div>` : ""}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Case</th><th class="n">Probability</th><th class="n">EPS change</th><th class="n">P/E</th><th class="n">Price target</th><th class="n">Move</th><th>What happens</th></tr></thead><tbody>${sc}</tbody></table></div>${math}</details>` : ""}
 `);
   }
   /** Times like this, for the company: the industry's closest past months, and what the stock did next vs the industry. */
@@ -14235,7 +14281,7 @@ ${schemaFor(inputs)}`;
       { label: "Regulation & Legal", items: [it(I.rules?.length || I.regItems?.length, "co-reg", "Rules, policy, litigation")] },
       { label: "Scenarios & Debates", items: [it(I.debates?.length || Object.keys(I.iscen || {}).length, "co-scen", "Scenarios, debates, scorecard")] },
       { label: "Catalysts", items: [it(I.calendar?.length, "co-cal", "What's coming")] },
-      { label: "Drivers, Risks & Track", items: [it(run, "co-drivers", "Drivers & risks"), it(co.track?.length, "co-track", "Track record")] },
+      { label: "Drivers & Risks", items: [it(run, "co-drivers", "Drivers & risks")] },
     ];
   }
 
@@ -14285,10 +14331,8 @@ ${schemaFor(inputs)}`;
     const mid = (x) => (x?.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : NaN);
     const pred = t?.headline || t?.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${t.verdict?.call ? `<span class="pill ${VC[t.verdict.call] || "neu"}">Opportunity: ${esc(t.verdict.call)}</span>` : ""}${t.street?.stance ? `<span class="pill ${t.street.stance === "more bullish" ? "pos" : t.street.stance === "more bearish" ? "neg" : "neu"}">${t.street.stance === "agree" ? "with the street" : esc(t.street.stance) + " than the street"}</span>` : ""}${co.writing ? `<span class="small muted">writing…</span>` : ""}</div>
       ${t.headline ? `<b>${rich(t.headline)}</b>` : ""}
-      <div class="strip">${["1M", "3M", "6M", "12M"].map((h) => { const x = t.horizons?.[h], m = mid(x); return `<div><span class="eyebrow">${h}</span><span class="v ${cls(m)}">${isNum(m) ? `${m > 0 ? "+" : ""}${fix(m, 0)}%` : "—"}</span>${x?.call ? callPill(x.call, "justify-self:start") : ""}</div>`; }).join("")}
-        <div><span class="eyebrow">12M expected</span><span class="v ${cls(num(ck?.expected_return))}">${pct(ck?.expected_return)}</span><span class="small muted">from bull/base/bear</span></div>
-        <div><span class="eyebrow">Our target</span><span class="v">${t.street?.our_target ? fix(t.street.our_target, 2) : "—"}</span><span class="small muted">${t.street?.our_target && isNum(co.px) ? pct(t.street.our_target / co.px - 1) : ""}</span></div></div>
-      <div class="small muted">The full analysis is next: <a href="#co-thesis">thesis, scenarios and the 1M-12M calls</a>.</div></div>`
+      ${(() => { const ol = coOutlook(co); return ol ? `<div class="strip">${["1M", "3M", "6M", "12M"].map((h) => { const c = ol.calls?.[h]?.call; return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}</span>${c ? `<span class="pill ${Outlook.cls(c)}" style="justify-self:start">${Outlook.SIGN[c] > 0 ? "▲" : "▼"} ${esc(Outlook.label(c))}</span>` : "—"}</div>`; }).join("")}</div>` : `<div class="small muted">Where ${esc(co.sym)} is going over 1M-12M comes next: <a href="#co-lean">make the calls</a>.</div>`; })()}
+      <div class="small muted">The full analysis is next: <a href="#co-lean">where it's going and why</a>, then <a href="#co-thesis">the thesis</a>.</div></div>`
       : co.writing ? `<div class="notice info"><span><b>Our prediction is being written</b> on top of the ${esc(run?.name || "industry")} analysis (about a minute). Everything else on the page is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>` : "";
     return `<section class="panel" id="co-snap"><div class="panel-head"><div style="display:grid;gap:2px"><span class="eyebrow">${esc([co.industry || co.hit?.industry, sector].filter(Boolean).join(" · "))}</span>
         <h1 style="font-size:26px">${esc(name)} <span class="mono muted" style="font-size:.6em">${esc(co.sym)}</span> ${p.exchange ? `<span class="badge">${esc(p.exchange)}</span>` : ""}</h1>
@@ -14585,8 +14629,7 @@ ${schemaFor(inputs)}`;
     const expPx = isNum(num(ck?.expected_return)) && isNum(co.px) ? co.px * (1 + ck.expected_return) : NaN;
     const vs = sv ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our view versus Wall Street</span>${sv.stance ? `<span class="pill ${STC[sv.stance] || "neu"}">${sv.stance === "agree" ? "agrees with the street" : esc(sv.stance) + " than the street"}</span>` : ""}</div>
       ${sv.summary ? `<p class="prose" style="margin:0">${rich(sv.summary)}</p>` : ""}
-      <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""], ["Our 12M target", sv.our_target ? fix(sv.our_target, 2) : "—", sv.our_target && isNum(co.px) ? pct(sv.our_target / co.px - 1) : ""],
-        ["Scenarios say", isNum(expPx) ? fix(expPx, 2) : "—", isNum(num(ck?.expected_return)) ? pct(ck.expected_return) + " expected" : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
+      <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
       ${sv.eps_view ? `<div class="small"><b>Our EPS versus consensus:</b> ${sv.eps_view.fy1 ? `next fiscal year <span class="pill ${IVC[sv.eps_view.fy1] || "neu"}">${esc(sv.eps_view.fy1)}</span>` : ""} ${sv.eps_view.fy2 ? `the year after <span class="pill ${IVC[sv.eps_view.fy2] || "neu"}">${esc(sv.eps_view.fy2)}</span>` : ""} ${sv.eps_view.why ? rich(sv.eps_view.why) : ""}</div>` : ""}
       ${(sv.differences || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where we differ</th><th>The street assumes</th><th>We assume</th><th>Why</th></tr></thead><tbody>${sv.differences.map((d) => `<tr><td class="wr"><b>${esc(d.topic)}</b></td><td class="wr small">${rich(d.street)}</td><td class="wr small">${rich(d.ours)}</td><td class="wr small">${rich(d.why)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`
       : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="notice info small"><span>This analysis was written before it compared itself with the street.</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite</button></div>` : "";
@@ -14748,9 +14791,9 @@ ${schemaFor(inputs)}`;
   (async () => {
     const [mcp, sample] = await Promise.all(["mcp", "sample"].map((n) => window.claude.use(n).catch(() => null)));
     S.mcp = mcp; S.sample = sample; S.ready = true; renderAll();
+    loadSavedOutlooks();
     if (mcp) { detectEod().then(renderMeta); loadIndustries(); }
     await restored;
-    if (mcp) { setTimeout(() => sweepTracks(), 4000); setInterval(() => { if (S.sweepDay !== today()) sweepTracks(); }, 30 * 60e3); }
     if (mcp && sample && S.sectorAuto && !busy()) { runSector(S.sectorAuto); return; }
     // A run that was cut off mid-way (the page was closed or the tab navigated away) carries on by itself.
     const r = S.restored;
