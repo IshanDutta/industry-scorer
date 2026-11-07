@@ -250,7 +250,7 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
    * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
    */
-  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, lean: 0.3, triage: 0.002, second: 0.01 };
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, lean: 0.04, triage: 0.002, second: 0.01 };
   const IMPV = { high: 3, medium: 2, low: 1 };
   const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
   /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */

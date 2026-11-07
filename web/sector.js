@@ -427,14 +427,15 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
       opportunity: r.opportunity?.verdict || null, expected: r.math?.expected_return ?? null, headline: trim(r.headline, 240),
       horizons: Object.fromEntries(["1M", "3M", "6M", "12M"].map((h) => [h, r.horizons?.[h]?.call || null])),
       fwd_pe: doc?.forward?.fwd_pe ?? null, rev30: doc?.forward?.rev30 ?? null, positioning: doc?.positioning?.label || null, r1y: doc?.summary?.ret_cw_1Y ?? null,
-      lean: leanRow(r) };
+      outlook: leanRow(r) };
   }
   /** The lean, for the sector table: the strategist's, or one read off the calls until it has made one. */
   function leanRow(r) {
-    const L = typeof module !== "undefined" && module.exports ? require("./lean.js") : root.Lean;
-    const l = L ? L.leanOf(r) : null; if (!l) return null;
-    return { calls: Object.fromEntries(Object.entries(l.calls || {}).map(([h, x]) => [h, x.call])), abs: Object.fromEntries(Object.entries(l.calls || {}).filter(([, x]) => x.absolute).map(([h, x]) => [h, x.absolute])), provisional: !!l.provisional, headline: trim(l.headline, 240), date: l.date || null };
+    const O = typeof module !== "undefined" && module.exports ? require("./outlook.js") : root.Outlook;
+    const l = O ? O.outlookOf(r) : null; if (!l) return null;
+    return { calls: Object.fromEntries(Object.entries(l.calls || {}).map(([h, x]) => [h, x.call])), provisional: !!l.provisional, headline: trim(l.headline, 240), date: l.date || null };
   }
+
 
 
   const Sector = { SLOTS, BATCH, aliasFor, unalias, brief, planPrompt, cleanPlan, macroFor, indicatorPrompt, indicatorsFor, scoutPrompt, cleanScout, scoutFor, situationPrompt, mergeDive,

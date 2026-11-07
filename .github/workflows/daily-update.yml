@@ -20,7 +20,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
-run-name: ${{ inputs.lean && 'The lean (every industry, from everything)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
+run-name: ${{ inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:
@@ -46,7 +46,7 @@ on:
         type: boolean
         default: false
       lean:
-        description: "The lean pass only: every industry's lean (bullish or bearish vs the S&P 500) from everything, by the lead model (runs even while daily updates are paused)"
+        description: "The outlook pass only: where every industry is going over 1M-12M and why, from every component (one cheap call each; runs even while daily updates are paused)"
         type: boolean
         default: false
   schedule:
