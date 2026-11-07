@@ -141,13 +141,14 @@ ${trim(c.company, 7000)}
 
 === HOW HARD EACH COMPONENT HITS ${c.sym} (code-measured, against its industry) ===
 ${c.measured || "(none)"}
+${c.prior ? `\n=== CODE'S STARTING POINT FOR ${c.sym}'S CALLS (the industry's call, moved by its beta to the industry, its record in past setups like today and its revisions) ===\n${c.prior}` : ""}
 ${(c.mentions || []).length ? `\n=== WHERE THE INDUSTRY ANALYSIS NAMES ${c.sym} ===\n${c.mentions.slice(0, 20).map((m) => `${m.section}: ${trim(m.text, 200)}`).join("\n")}` : ""}
 ${(c.windows || []).length ? `\n=== ${c.sym}'S WINDOWS (code) ===\n${c.windows.map((x) => `${x.h}: trailing ${x.trailing ?? "?"}%, a normal move ±${x.sigma ?? "?"}%, higher ${x.base_up ?? "?"}% of the time in its history; ${x.own ? `reports ${x.own}` : "no report in the window"}${(x.peers || []).length ? `; peers reporting ${x.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}` : ""}.`).join("\n")}` : ""}
 ${(c.news || []).length ? `\n=== ${c.sym}'S RECENT NEWS ===\n${c.news.slice(0, 10).map((x) => `${x.date ? x.date + " " : ""}${trim(x.title, 150)}`).join("\n")}` : ""}
 
 HOW TO ANSWER
 - One entry in "components" for EVERY component, in this order: ${KEYS.join(", ")}. "applies": how hard the industry's finding hits ${c.sym} compared with the industry as a whole (start from code's read and correct it where you know better); "effect": which way it pushes ${c.sym} over the next year; "why": one or two sentences with ${c.sym}'s numbers. Short.
-- Then the four calls on ${c.sym}'s OWN direction (higher or lower at the end of the window), six levels, no neutral ("slightly" = close, plain = clear, "strongly" = most components agree decisively, rare). Start from the industry's outlook and move it by what applies more or less to ${c.sym}. A flip between windows must say what changes in between.
+- Then the four calls on ${c.sym}'s OWN direction (higher or lower at the end of the window), six levels, no neutral ("slightly" = close, plain = clear, "strongly" = most components agree decisively, rare). Start from CODE'S STARTING POINT and move a window only for a stated reason (what applies more or less to ${c.sym}); say in its "why" where you depart from the starting point and why. A flip between windows must say what changes in between.
 - Plain words, specific numbers, no hedging filler.
 
 Reply with ONLY this JSON:
@@ -187,7 +188,85 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
   }
   const OWN_KEYS = ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "quality", "management", "risks", "watch", "catalysts"];
 
-  const Apply = { COMPONENTS, KEYS, LABEL, APPLIES, inherit, measure, measureText, applyPrompt, cleanApply, ownPrompt, OWN_KEYS };
+
+  // ------------------------------------------------------------------ code's starting point for the company's calls
+  /** Beta of a to b over the last ~252 overlapping trading days (daily returns). {dates, values} each. */
+  function betaTo(a, b, n = 252) {
+    if (!a?.dates?.length || !b?.dates?.length) return null;
+    const m = new Map(b.dates.map((d, i) => [d, b.values[i]])), pts = [];
+    for (let i = 1; i < a.dates.length; i++) { const b1 = m.get(a.dates[i]), b0 = m.get(a.dates[i - 1]); if (b1 > 0 && b0 > 0 && a.values[i] > 0 && a.values[i - 1] > 0) pts.push([a.values[i] / a.values[i - 1] - 1, b1 / b0 - 1]); }
+    const P = pts.slice(-n); if (P.length < 60) return null;
+    const mx = P.reduce((s, p) => s + p[1], 0) / P.length, my = P.reduce((s, p) => s + p[0], 0) / P.length;
+    let cov = 0, vx = 0, vy = 0; for (const [y, x] of P) { cov += (x - mx) * (y - my); vx += (x - mx) ** 2; vy += (y - my) ** 2; }
+    return vx > 0 ? { beta: Math.round((cov / vx) * 100) / 100, corr: Math.round((cov / Math.sqrt(vx * vy)) * 100) / 100, n: P.length } : null;
+  }
+  /**
+   * Code's starting point for each window: the industry's call, moved by how much the stock amplifies its industry
+   * (beta), how it did against its industry in the industry's past setups like today, and its estimate revisions
+   * against its peers. Claude starts from this and says where it departs. Returns {h: {call, score, parts:[{label, adj}]}}.
+   */
+  function prior({ ind, beta, ep, rev30pct, rev1Mpct }) {
+    const out = {};
+    for (const h of ["1M", "3M", "6M", "12M"]) {
+      const ic = ind?.calls?.[h]?.call, base = Outlook.SIGN[ic] || 0, parts = [];
+      parts.push({ label: ic ? `the industry: ${ic}${ind.provisional ? " (provisional)" : ""}` : "no industry call", adj: base });
+      let s = base; const dir = Math.sign(base) || 1;
+      if (isNum(beta) && base) { const a = beta > 1.2 ? 0.5 * dir : beta < 0.8 ? -0.5 * dir : 0; if (a) { parts.push({ label: `beta to its industry ${beta.toFixed(2)} ${beta > 1.2 ? "amplifies" : "dampens"} the industry's move`, adj: a }); s += a; } }
+      const e = ep?.[h]; if (e?.n >= 3) { const r = e.beat / e.n, a = r >= 0.7 ? 0.5 : r <= 0.3 ? -0.5 : 0; if (a) { parts.push({ label: `beat its industry in ${e.beat} of ${e.n} past setups like today`, adj: a }); s += a; } }
+      if (h !== "1M" && isNum(rev30pct)) { const a = rev30pct >= 70 ? 0.5 : rev30pct <= 30 ? -0.5 : 0; if (a) { parts.push({ label: `estimate revisions at the ${rev30pct}th percentile of its industry`, adj: a }); s += a; } }
+      if (h === "1M" && isNum(rev1Mpct)) { const a = rev1Mpct >= 85 ? 0.25 : rev1Mpct <= 15 ? -0.25 : 0; if (a) { parts.push({ label: `last month's return at the ${rev1Mpct}th percentile of its industry`, adj: a }); s += a; } }
+      const sg = Math.sign(s) || dir, m = Math.abs(s);
+      out[h] = { call: `${m < 1.5 ? "slightly " : m >= 2.5 ? "strongly " : ""}${sg > 0 ? "bullish" : "bearish"}`, score: Math.round(s * 100) / 100, parts };
+    }
+    return out;
+  }
+  const priorText = (P) => Object.entries(P || {}).map(([h, x]) => `${h}: ${x.call} (score ${x.score > 0 ? "+" : ""}${x.score}: ${x.parts.map((p) => `${p.label}${p.adj && p.label.indexOf("the industry:") !== 0 ? ` ${p.adj > 0 ? "+" : ""}${p.adj}` : ""}`).join("; ")})`).join("\n");
+
+  // ------------------------------------------------------------------ the industry's rows, for the company's panels
+  /** Every row of the industry's panels the company page shows, by ID (scenarios SC#, countries C#, rules R#, policy/litigation/deals L#, KPIs K#, partners P#, world W#, threats Q#, debates D#, red team RT#, dated events E#). */
+  function rows({ L = {}, res = {}, sym = "", today = "" }) {
+    const o = [], sc = res.scenarios || {};
+    ["bull", "base", "bear"].forEach((k, i) => { const x = sc[k]; if (x) o.push({ id: `SC${i + 1}`, panel: "scenarios", label: `${k} case (${x.probability ?? "?"}%)`, text: `price ${Array.isArray(x.price_move) ? x.price_move.join(" to ") : x.price_move ?? "?"}%: ${trim(noIds(x.narrative), 220)}` }); });
+    for (const c of L.countries || []) o.push({ id: c.id, panel: "trade", label: c.country, text: `${c.importance || ""}, ${c.stance || ""}, threat ${c.threat || "?"}: ${noIds(c.why || c.headline, 200)}${c.revenue ? ` [${sym}: ${p0(c.revenue.share)} of revenue via ${c.revenue.region}]` : ""}` });
+    for (const r of L.rules || []) o.push({ id: r.id, panel: "regulation", label: trim(r.name, 110), text: `${r.status || ""}, ${r.severity || ""}: ${noIds(r.bottom_line, 200)}` });
+    for (const r of L.regItems || []) o.push({ id: r.id, panel: "regulation", label: `${r.kind}: ${trim(r.title, 110)}`, text: `${r.status || ""}${r.direction ? ", " + r.direction : ""}: ${noIds(r.text, 200)}${(r.names || []).length ? ` (names ${r.names.join(", ")})` : ""}` });
+    for (const k of L.kpis || []) o.push({ id: k.id, panel: "kpis", label: k.name, text: `${k.value}${k.change ? `; ${k.change}` : ""}` });
+    for (const p of L.chain || []) o.push({ id: p.id, panel: "chain", label: `${p.symbol || p.name} (${p.role || "?"})`, text: noIds(p.why, 200) });
+    for (const w of L.situations || []) o.push({ id: w.id, panel: "world", label: trim(w.title, 120), text: `${w.stance || ""}, ${w.status || ""}` });
+    for (const q of (L.threats || []).slice(0, 8)) o.push({ id: q.id, panel: "world", label: trim(q.title, 120), text: `${q.status || ""}: ${trim(q.detail, 160)}` });
+    for (const d of L.debates || []) o.push({ id: d.id, panel: "debates", label: d.question, text: `the industry leans ${d.lean || "?"}: ${noIds(d.why, 180)}` });
+    (res.redteam?.arguments || []).slice(0, 6).forEach((a, i) => o.push({ id: `RT${i + 1}`, panel: "debates", label: `Red team: ${trim(a.claim, 140)}`, text: `${a.severity || ""}` }));
+    const ev = (L.calendar || []).filter((e) => (!today || e.date >= today) && (e.importance === "high" || (e.tickers || []).includes(sym))).slice(0, 14);
+    for (const e of ev) o.push({ id: e.id, panel: "calendar", label: `${e.date} ${trim(e.title, 100)}`, text: `${e.importance || ""}${(e.tickers || []).includes(sym) ? ` (names ${sym})` : ""}` });
+    return o;
+  }
+  /** Call C: one line per row that matters, on what it means for the company. */
+  function rowsPrompt(c) {
+    return `You are the analyst covering ${c.name} (${c.sym}) in the US-listed "${c.industry}" industry. Today is ${c.today}. Below are the rows of your team's industry panels (scenarios, trade countries, rules and lawsuits, KPIs, customers and suppliers, world events, debates and the red team, dated events), each with an ID. For each row that matters for ${c.sym}, say in ONE sentence what it means for ${c.sym} specifically: does it hit ${c.sym} more, the same, less, or not at all than the industry, and why, with ${c.sym}'s own numbers. Skip rows that don't matter. At most 30 rows; under a minute.
+
+THE INDUSTRY'S ROWS
+${c.rows.map((r) => `[${r.id}] (${r.panel}) ${r.label}: ${r.text}`).join("\n")}
+
+${c.sym}: THE COMPANY
+${trim(c.company, 6000)}
+
+HOW HARD THE INDUSTRY'S COMPONENTS HIT ${c.sym} (code)
+${c.measured || ""}
+
+Reply with ONLY this JSON:
+{"rows": [{"id": "C1", "applies": "more | same | less | none", "effect": "up | down | mixed", "note": "one sentence for ${c.sym}"}]}`;
+  }
+  function cleanRows(raw, ids) {
+    const ok = new Set(ids || []), out = {};
+    for (const r of Array.isArray(raw?.rows) ? raw.rows : []) {
+      const id = String(r?.id || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); if (!id || (ids && !ok.has(id)) || out[id]) continue;
+      const a = lc(r.applies), f = lc(r.effect);
+      out[id] = { applies: APPLIES.find((x) => a.startsWith(x)) || (/not|n\/a/.test(a) ? "none" : "same"), effect: /up|bull|positive/.test(f) ? "up" : /down|bear|negative/.test(f) ? "down" : "mixed", note: trim(r.note, 360) };
+    }
+    return out;
+  }
+
+  const Apply = { COMPONENTS, KEYS, LABEL, APPLIES, inherit, measure, measureText, applyPrompt, cleanApply, ownPrompt, OWN_KEYS, betaTo, prior, priorText, rows, rowsPrompt, cleanRows };
   if (typeof module !== "undefined" && module.exports) module.exports = Apply;
   else root.Apply = Apply;
 })(typeof window !== "undefined" ? window : globalThis);

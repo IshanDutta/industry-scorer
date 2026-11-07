@@ -421,6 +421,11 @@ a.btnlink:hover { border-color: var(--accent); }
 .ep-legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .ep-legend i.dash { background: repeating-linear-gradient(90deg, var(--bench) 0 4px, transparent 4px 7px); }
 .mk-label { fill: var(--muted); font-size: 10px; }
+.ip-tbl { table-layout: fixed; width: 100%; }
+.ip-tbl td, .ip-tbl th { vertical-align: top; white-space: normal; overflow-wrap: anywhere; }
+.ip-tbl th:first-child { width: 30%; } .ip-tbl th:last-child { width: 36%; }
+.ip-tbl td.n { white-space: nowrap; }
+.ip-tbl tr.hl td { background: var(--sunk); }
 .ap-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 8px; }
 .ap-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; }
 .ap-m { color: var(--fg); background: var(--bg2, transparent); border-left: 2px solid var(--line); padding-left: 6px; }
@@ -9174,13 +9179,14 @@ ${trim(c.company, 7000)}
 
 === HOW HARD EACH COMPONENT HITS ${c.sym} (code-measured, against its industry) ===
 ${c.measured || "(none)"}
+${c.prior ? `\n=== CODE'S STARTING POINT FOR ${c.sym}'S CALLS (the industry's call, moved by its beta to the industry, its record in past setups like today and its revisions) ===\n${c.prior}` : ""}
 ${(c.mentions || []).length ? `\n=== WHERE THE INDUSTRY ANALYSIS NAMES ${c.sym} ===\n${c.mentions.slice(0, 20).map((m) => `${m.section}: ${trim(m.text, 200)}`).join("\n")}` : ""}
 ${(c.windows || []).length ? `\n=== ${c.sym}'S WINDOWS (code) ===\n${c.windows.map((x) => `${x.h}: trailing ${x.trailing ?? "?"}%, a normal move ±${x.sigma ?? "?"}%, higher ${x.base_up ?? "?"}% of the time in its history; ${x.own ? `reports ${x.own}` : "no report in the window"}${(x.peers || []).length ? `; peers reporting ${x.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}` : ""}.`).join("\n")}` : ""}
 ${(c.news || []).length ? `\n=== ${c.sym}'S RECENT NEWS ===\n${c.news.slice(0, 10).map((x) => `${x.date ? x.date + " " : ""}${trim(x.title, 150)}`).join("\n")}` : ""}
 
 HOW TO ANSWER
 - One entry in "components" for EVERY component, in this order: ${KEYS.join(", ")}. "applies": how hard the industry's finding hits ${c.sym} compared with the industry as a whole (start from code's read and correct it where you know better); "effect": which way it pushes ${c.sym} over the next year; "why": one or two sentences with ${c.sym}'s numbers. Short.
-- Then the four calls on ${c.sym}'s OWN direction (higher or lower at the end of the window), six levels, no neutral ("slightly" = close, plain = clear, "strongly" = most components agree decisively, rare). Start from the industry's outlook and move it by what applies more or less to ${c.sym}. A flip between windows must say what changes in between.
+- Then the four calls on ${c.sym}'s OWN direction (higher or lower at the end of the window), six levels, no neutral ("slightly" = close, plain = clear, "strongly" = most components agree decisively, rare). Start from CODE'S STARTING POINT and move a window only for a stated reason (what applies more or less to ${c.sym}); say in its "why" where you depart from the starting point and why. A flip between windows must say what changes in between.
 - Plain words, specific numbers, no hedging filler.
 
 Reply with ONLY this JSON:
@@ -9220,7 +9226,85 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
   }
   const OWN_KEYS = ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "quality", "management", "risks", "watch", "catalysts"];
 
-  const Apply = { COMPONENTS, KEYS, LABEL, APPLIES, inherit, measure, measureText, applyPrompt, cleanApply, ownPrompt, OWN_KEYS };
+
+  // ------------------------------------------------------------------ code's starting point for the company's calls
+  /** Beta of a to b over the last ~252 overlapping trading days (daily returns). {dates, values} each. */
+  function betaTo(a, b, n = 252) {
+    if (!a?.dates?.length || !b?.dates?.length) return null;
+    const m = new Map(b.dates.map((d, i) => [d, b.values[i]])), pts = [];
+    for (let i = 1; i < a.dates.length; i++) { const b1 = m.get(a.dates[i]), b0 = m.get(a.dates[i - 1]); if (b1 > 0 && b0 > 0 && a.values[i] > 0 && a.values[i - 1] > 0) pts.push([a.values[i] / a.values[i - 1] - 1, b1 / b0 - 1]); }
+    const P = pts.slice(-n); if (P.length < 60) return null;
+    const mx = P.reduce((s, p) => s + p[1], 0) / P.length, my = P.reduce((s, p) => s + p[0], 0) / P.length;
+    let cov = 0, vx = 0, vy = 0; for (const [y, x] of P) { cov += (x - mx) * (y - my); vx += (x - mx) ** 2; vy += (y - my) ** 2; }
+    return vx > 0 ? { beta: Math.round((cov / vx) * 100) / 100, corr: Math.round((cov / Math.sqrt(vx * vy)) * 100) / 100, n: P.length } : null;
+  }
+  /**
+   * Code's starting point for each window: the industry's call, moved by how much the stock amplifies its industry
+   * (beta), how it did against its industry in the industry's past setups like today, and its estimate revisions
+   * against its peers. Claude starts from this and says where it departs. Returns {h: {call, score, parts:[{label, adj}]}}.
+   */
+  function prior({ ind, beta, ep, rev30pct, rev1Mpct }) {
+    const out = {};
+    for (const h of ["1M", "3M", "6M", "12M"]) {
+      const ic = ind?.calls?.[h]?.call, base = Outlook.SIGN[ic] || 0, parts = [];
+      parts.push({ label: ic ? `the industry: ${ic}${ind.provisional ? " (provisional)" : ""}` : "no industry call", adj: base });
+      let s = base; const dir = Math.sign(base) || 1;
+      if (isNum(beta) && base) { const a = beta > 1.2 ? 0.5 * dir : beta < 0.8 ? -0.5 * dir : 0; if (a) { parts.push({ label: `beta to its industry ${beta.toFixed(2)} ${beta > 1.2 ? "amplifies" : "dampens"} the industry's move`, adj: a }); s += a; } }
+      const e = ep?.[h]; if (e?.n >= 3) { const r = e.beat / e.n, a = r >= 0.7 ? 0.5 : r <= 0.3 ? -0.5 : 0; if (a) { parts.push({ label: `beat its industry in ${e.beat} of ${e.n} past setups like today`, adj: a }); s += a; } }
+      if (h !== "1M" && isNum(rev30pct)) { const a = rev30pct >= 70 ? 0.5 : rev30pct <= 30 ? -0.5 : 0; if (a) { parts.push({ label: `estimate revisions at the ${rev30pct}th percentile of its industry`, adj: a }); s += a; } }
+      if (h === "1M" && isNum(rev1Mpct)) { const a = rev1Mpct >= 85 ? 0.25 : rev1Mpct <= 15 ? -0.25 : 0; if (a) { parts.push({ label: `last month's return at the ${rev1Mpct}th percentile of its industry`, adj: a }); s += a; } }
+      const sg = Math.sign(s) || dir, m = Math.abs(s);
+      out[h] = { call: `${m < 1.5 ? "slightly " : m >= 2.5 ? "strongly " : ""}${sg > 0 ? "bullish" : "bearish"}`, score: Math.round(s * 100) / 100, parts };
+    }
+    return out;
+  }
+  const priorText = (P) => Object.entries(P || {}).map(([h, x]) => `${h}: ${x.call} (score ${x.score > 0 ? "+" : ""}${x.score}: ${x.parts.map((p) => `${p.label}${p.adj && p.label.indexOf("the industry:") !== 0 ? ` ${p.adj > 0 ? "+" : ""}${p.adj}` : ""}`).join("; ")})`).join("\n");
+
+  // ------------------------------------------------------------------ the industry's rows, for the company's panels
+  /** Every row of the industry's panels the company page shows, by ID (scenarios SC#, countries C#, rules R#, policy/litigation/deals L#, KPIs K#, partners P#, world W#, threats Q#, debates D#, red team RT#, dated events E#). */
+  function rows({ L = {}, res = {}, sym = "", today = "" }) {
+    const o = [], sc = res.scenarios || {};
+    ["bull", "base", "bear"].forEach((k, i) => { const x = sc[k]; if (x) o.push({ id: `SC${i + 1}`, panel: "scenarios", label: `${k} case (${x.probability ?? "?"}%)`, text: `price ${Array.isArray(x.price_move) ? x.price_move.join(" to ") : x.price_move ?? "?"}%: ${trim(noIds(x.narrative), 220)}` }); });
+    for (const c of L.countries || []) o.push({ id: c.id, panel: "trade", label: c.country, text: `${c.importance || ""}, ${c.stance || ""}, threat ${c.threat || "?"}: ${noIds(c.why || c.headline, 200)}${c.revenue ? ` [${sym}: ${p0(c.revenue.share)} of revenue via ${c.revenue.region}]` : ""}` });
+    for (const r of L.rules || []) o.push({ id: r.id, panel: "regulation", label: trim(r.name, 110), text: `${r.status || ""}, ${r.severity || ""}: ${noIds(r.bottom_line, 200)}` });
+    for (const r of L.regItems || []) o.push({ id: r.id, panel: "regulation", label: `${r.kind}: ${trim(r.title, 110)}`, text: `${r.status || ""}${r.direction ? ", " + r.direction : ""}: ${noIds(r.text, 200)}${(r.names || []).length ? ` (names ${r.names.join(", ")})` : ""}` });
+    for (const k of L.kpis || []) o.push({ id: k.id, panel: "kpis", label: k.name, text: `${k.value}${k.change ? `; ${k.change}` : ""}` });
+    for (const p of L.chain || []) o.push({ id: p.id, panel: "chain", label: `${p.symbol || p.name} (${p.role || "?"})`, text: noIds(p.why, 200) });
+    for (const w of L.situations || []) o.push({ id: w.id, panel: "world", label: trim(w.title, 120), text: `${w.stance || ""}, ${w.status || ""}` });
+    for (const q of (L.threats || []).slice(0, 8)) o.push({ id: q.id, panel: "world", label: trim(q.title, 120), text: `${q.status || ""}: ${trim(q.detail, 160)}` });
+    for (const d of L.debates || []) o.push({ id: d.id, panel: "debates", label: d.question, text: `the industry leans ${d.lean || "?"}: ${noIds(d.why, 180)}` });
+    (res.redteam?.arguments || []).slice(0, 6).forEach((a, i) => o.push({ id: `RT${i + 1}`, panel: "debates", label: `Red team: ${trim(a.claim, 140)}`, text: `${a.severity || ""}` }));
+    const ev = (L.calendar || []).filter((e) => (!today || e.date >= today) && (e.importance === "high" || (e.tickers || []).includes(sym))).slice(0, 14);
+    for (const e of ev) o.push({ id: e.id, panel: "calendar", label: `${e.date} ${trim(e.title, 100)}`, text: `${e.importance || ""}${(e.tickers || []).includes(sym) ? ` (names ${sym})` : ""}` });
+    return o;
+  }
+  /** Call C: one line per row that matters, on what it means for the company. */
+  function rowsPrompt(c) {
+    return `You are the analyst covering ${c.name} (${c.sym}) in the US-listed "${c.industry}" industry. Today is ${c.today}. Below are the rows of your team's industry panels (scenarios, trade countries, rules and lawsuits, KPIs, customers and suppliers, world events, debates and the red team, dated events), each with an ID. For each row that matters for ${c.sym}, say in ONE sentence what it means for ${c.sym} specifically: does it hit ${c.sym} more, the same, less, or not at all than the industry, and why, with ${c.sym}'s own numbers. Skip rows that don't matter. At most 30 rows; under a minute.
+
+THE INDUSTRY'S ROWS
+${c.rows.map((r) => `[${r.id}] (${r.panel}) ${r.label}: ${r.text}`).join("\n")}
+
+${c.sym}: THE COMPANY
+${trim(c.company, 6000)}
+
+HOW HARD THE INDUSTRY'S COMPONENTS HIT ${c.sym} (code)
+${c.measured || ""}
+
+Reply with ONLY this JSON:
+{"rows": [{"id": "C1", "applies": "more | same | less | none", "effect": "up | down | mixed", "note": "one sentence for ${c.sym}"}]}`;
+  }
+  function cleanRows(raw, ids) {
+    const ok = new Set(ids || []), out = {};
+    for (const r of Array.isArray(raw?.rows) ? raw.rows : []) {
+      const id = String(r?.id || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); if (!id || (ids && !ok.has(id)) || out[id]) continue;
+      const a = lc(r.applies), f = lc(r.effect);
+      out[id] = { applies: APPLIES.find((x) => a.startsWith(x)) || (/not|n\/a/.test(a) ? "none" : "same"), effect: /up|bull|positive/.test(f) ? "up" : /down|bear|negative/.test(f) ? "down" : "mixed", note: trim(r.note, 360) };
+    }
+    return out;
+  }
+
+  const Apply = { COMPONENTS, KEYS, LABEL, APPLIES, inherit, measure, measureText, applyPrompt, cleanApply, ownPrompt, OWN_KEYS, betaTo, prior, priorText, rows, rowsPrompt, cleanRows };
   if (typeof module !== "undefined" && module.exports) module.exports = Apply;
   else root.Apply = Apply;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -12687,8 +12771,10 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
     if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${co.writing ? `Applying the ${esc(co.run.name)} analysis to ${esc(co.sym)}: the calls come with it (well under a minute).` : `No calls yet. They come with the industry analysis applied to ${esc(co.sym)} (two quick calls).`}</div>${indLine}</div>`);
     const W = (() => { try { return coWindowsPlus(co); } catch { return []; } })();
-    const nums = (h) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call;
+    const pri = coApplied(co)?.prior || co.thesis?.prior;
+    const nums = (h) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call, p = pri?.[h];
       return `<div class="lean-nums small">
+        ${p ? `<div title="${esc(p.parts.map((x) => `${x.label}${x.adj && !/^the industry:/.test(x.label) ? ` (${x.adj > 0 ? "+" : ""}${x.adj})` : ""}`).join("; "))}"><span class="muted">Code's starting point:</span> <span class="${Outlook.cls(p.call)}-t">${esc(Outlook.label(p.call))}</span> <span class="muted">(${esc(p.parts.slice(1).map((x) => x.label.replace(/ the industry's move$/, "")).join("; ") || "the industry's call")})</span></div>` : ""}
         ${ic ? `<div><span class="muted">The industry:</span> <span class="${Outlook.cls(ic)}-t">${esc(Outlook.label(ic))}</span>${ind.provisional ? " <span class='muted'>(provisional)</span>" : ""}</div>` : ""}
         ${w ? `<div><span class="muted">Last ${esc(h)}:</span> <b class="${w.trailing > 0 ? "pos-t" : w.trailing < 0 ? "neg-t" : ""}">${sgP(w.trailing)}</b> · a normal ${esc(h)} move is ±${w.sigma ?? "—"}%</div>` : ""}
         ${isNum(num(w?.base_up)) ? `<div><span class="muted">Its own history:</span> higher ${w.base_up}% of the time over ${esc(h)}</div>` : ""}
@@ -13873,12 +13959,19 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
   /** What the company inherits from the industry analysis, and how hard each part hits it (code; instant; memoized per day). */
   function coApplied(co) {
     const run = co.run; if (!run) return null;
-    if (co._ap?.day === today() && co._ap.at === (run.saved_at || "") && co._ap.ol === (indOutlook(run.name, run.lead)?.saved_at || "")) return co._ap;
+    if (co._ap?.day === today() && co._ap.at === (run.saved_at || "") && co._ap.ol === (indOutlook(run.name, run.lead)?.saved_at || "") && co._ap.ep === (co.epCards?.length || 0)) return co._ap;
     const ind = indOutlook(run.name, run.lead), lens = co.lensIn || {};
     let inh = {}, meas = {};
     try { inh = Apply.inherit({ res: run.lead || {}, d: run.industry || {}, R: run.reports || {}, lens, ind, today: today() }); } catch (e) { console.warn("inherit", e); }
     try { meas = Apply.measure({ sym: co.sym, peers: co.peers, lens, sens: co.sens, indSens: run.industry?.sensitivity, insider: co.data?.insider, implied: co.implied, mentions: co.mentions, calls: run.reports?.calls, credit: run.industry?.credit, times: co.times, ownReport: coWindowsPlus(co).find((w) => w.own)?.own || null, ind }); } catch (e) { console.warn("measure", e); }
-    co._ap = { day: today(), at: run.saved_at || "", ol: ind?.saved_at || "", inh, meas, ind };
+    // Code's starting point for the calls: the industry's call, moved by beta to the industry, past setups and revisions.
+    const ser = co.data?.ser, ix = run.industry?.index;
+    const bt = ser?.dates?.length && ix?.dates?.length ? Apply.betaTo({ dates: ser.dates, values: ser.closes }, { dates: ix.dates, values: ix.levels }) : null;
+    const pr = Object.fromEntries((co.peers || []).map((r) => [r.key, r]));
+    let prior = null, rowsList = [];
+    try { prior = Apply.prior({ ind, beta: bt?.beta, ep: co.epCards?.length ? Episodes.summary(co.epCards) : null, rev30pct: pr.rev30?.pct, rev1Mpct: pr.ret_1M?.pct }); } catch (e) { console.warn("prior", e); }
+    try { rowsList = Apply.rows({ L: lens, res: run.lead || {}, sym: co.sym, today: today() }); } catch (e) { console.warn("rows", e); }
+    co._ap = { day: today(), at: run.saved_at || "", ol: ind?.saved_at || "", ep: co.epCards?.length || 0, inh, meas, ind, beta: bt, prior, rows: rowsList };
     return co._ap;
   }
   /**
@@ -13889,7 +13982,7 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
    */
   async function writeThesis(co) {
     if (co.writing) return;
-    co.writing = true; co.partial = null; co.applyPartial = null; co.thesisErr = null; co.writeStart = Date.now(); co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; renderCompany();
+    co.writing = true; co.partial = null; co.applyPartial = null; co.rowsPartial = null; co.thesisErr = null; co.writeStart = Date.now(); co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; renderCompany();
     const ctl = new AbortController(); co.ctl = ctl;
     let timedOut = false; const timer = setTimeout(() => { timedOut = true; ctl.abort(); }, CO_LIMIT_MS);
     const tick = setInterval(() => { if (S.co === co && co.writing) renderCoWriting(); }, 1000);
@@ -13899,21 +13992,24 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
     const stream = (key, clean) => ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { co[key] = clean(v); show(); } };
     const keepCut = (key) => (e) => { if (e?.code === "cancelled" && co[key]) return null; throw e; };
     const digest = Outlook.digest({ res: run.lead || {}, d: run.industry || {}, R: run.reports || {}, cal: run.agent?.calendar, facts: run.lead?.horizon_facts || [], today: today() });
-    const pA = sampleJson(Apply.applyPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, digest, company, measured: Apply.measureText(ap.meas), mentions: co.mentions, windows: coWindowsPlus(co), news: co.news }),
+    const pA = sampleJson(Apply.applyPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, digest, company, measured: Apply.measureText(ap.meas), prior: Apply.priorText(ap.prior), mentions: co.mentions, windows: coWindowsPlus(co), news: co.news }),
       { modelTier: "complex", cache: false, signal: ctl.signal, onText: stream("applyPartial", (v) => Apply.cleanApply(v, { today: today() })) }).then((v) => (co.applyPartial = Apply.cleanApply(v, { today: today() }))).catch(keepCut("applyPartial"));
     const pB = sampleJson(Apply.ownPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, indVerdict: op?.verdict ? `${op.verdict.toUpperCase()}: ${op.headline || ""} ${op.why || ""}` : run.lead?.headline || "",
       indOutlook: ind ? Outlook.line(ind) : "", company, transcript: co.transcript?.text, news: co.news }, Apply.OWN_KEYS.map((k) => Company.FIELDS[k]).join(",\n ")),
       { modelTier: "complex", cache: false, signal: ctl.signal, onText: stream("partial", (v) => Company.cleanThesis(v, co.idx)) }).then((v) => (co.partial = Company.cleanThesis(v, co.idx))).catch(keepCut("partial"));
+    const ids = ap.rows.map((r) => r.id);
+    const pC = ap.rows.length ? sampleJson(Apply.rowsPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, rows: ap.rows, company, measured: Apply.measureText(ap.meas) }),
+      { modelTier: "default", cache: false, signal: ctl.signal, onText: stream("rowsPartial", (v) => Apply.cleanRows(v, ids)) }).then((v) => (co.rowsPartial = Apply.cleanRows(v, ids))).catch(keepCut("rowsPartial")) : Promise.resolve(null);
     try {
-      const [rA, rB] = await Promise.allSettled([pA, pB]);
+      const [rA, rB] = await Promise.allSettled([pA, pB, pC]);
       const applied = co.applyPartial, thesis = co.partial;
       if (!applied && !thesis) throw rA.reason || rB.reason || { code: "empty_completion" };
       const o = applied?.outlook || null;
       const rec = jsonSafe({ v: 2, sym: co.sym, name: co.name, industry: run.name, industry_run_at: run.saved_at, industry_outlook_at: ind?.saved_at || ind?.date || null, at: new Date().toISOString(), px: co.px,
-        thesis: thesis || {}, applied: applied ? { headline: applied.headline, components: applied.components } : null, idx: co.idx, secs: Math.round((Date.now() - co.writeStart) / 1000),
+        thesis: thesis || {}, applied: applied ? { headline: applied.headline, components: applied.components } : null, rows: co.rowsPartial || {}, prior: ap.prior, beta: ap.beta, idx: co.idx, secs: Math.round((Date.now() - co.writeStart) / 1000),
         partial: [rA.status === "rejected" || !applied ? "the industry applied and the calls" : null, rB.status === "rejected" || !thesis ? "what's specific to the company" : null].filter(Boolean).join(" and ") || null,
         outlook: co.thesis?.outlook || null, outlook_history: co.thesis?.outlook_history || [] });
-      co.thesis = rec; co.partial = null; co.applyPartial = null;
+      co.thesis = rec; co.partial = null; co.applyPartial = null; co.rowsPartial = null;
       if (o) await coOutlookSave(co, o);
       await idbPut("co:" + co.sym, jsonSafe(co.thesis)).catch(() => {});
       await saveOutlook("co_outlooks", co.sym, { ...jsonSafe(co.thesis), history: co.thesis.outlook_history || [], idx: null });
@@ -13939,6 +14035,46 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
     const head = A?.headline ? `<b class="headline">${rich(A.headline)}</b>` : "";
     return sec("co-applied", `The industry analysis, applied to ${co.sym}`, `Every part of the ${esc(co.run.name)} analysis: what the industry concluded, how hard it hits ${esc(co.sym)} (measured), and what it means for it`,
       `${stale}${head}<div class="ap-grid">${cards}</div>`);
+  }
+  /**
+   * The industry's own panels, row by row, with the company added: code's join (its revenue in each country, whether a
+   * rule names it, its move in each scenario at its beta, its sensitivities next to the industry's, its own dates) and
+   * one line from the analyst on what each row that matters means for it.
+   */
+  function coIndRows(co) {
+    if (!co.run) return [];
+    const ap = coApplied(co), notes = co.rowsPartial || co.thesis?.rows || {}, sym = esc(co.sym), L = co.lensIn || {}, run = co.run;
+    const AP = { more: ["harder", "warn"], same: ["same", "neu"], less: ["less", "pos"], none: ["n/a", "neu"] }, EF = { up: "▲", down: "▼", mixed: "◆" };
+    const note = (id) => { const n = notes[id]; return n ? `<span class="pill ${AP[n.applies][1]}" style="font-size:11px">${AP[n.applies][0]}</span> <b class="${n.effect === "up" ? "pos-t" : n.effect === "down" ? "neg-t" : ""}">${EF[n.effect]}</b> ${rich(n.note)}` : co.writing ? `<span class="muted">…</span>` : `<span class="muted">—</span>`; };
+    const by = (panel) => ap.rows.filter((r) => r.panel === panel);
+    const table = (heads, body) => `<div class="tbl-wrap"><table class="wrap-table ip-tbl"><thead><tr>${heads.map((h) => `<th>${h}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div>`;
+    const sg = (v) => (isNum(num(v)) ? `<span class="${v >= 0 ? "pos-t" : "neg-t"}">${v > 0 ? "+" : ""}${Math.round(v * 10) / 10}%</span>` : "—");
+    const out = [], beta = ap.beta?.beta;
+    // Scenarios: the industry's move and the company's at its beta to the industry.
+    const sc = run.lead?.scenarios || {};
+    const scRows = ["bull", "base", "bear"].map((k, i) => { const x = sc[k]; if (!x) return ""; const mv = Array.isArray(x.price_move) ? x.price_move.map(Number) : [Number(x.price_move)];
+      return `<tr><td><b>${k}</b> <span class="muted">${x.probability ?? "?"}%</span><div class="small muted">${esc(trimC(stripCites(x.narrative || ""), 200))}</div></td><td class="n">${mv.map(sg).join(" to ")}</td><td class="n">${isNum(beta) ? mv.map((m) => sg(m * beta)).join(" to ") : "—"}</td><td class="wr small">${note(`SC${i + 1}`)}</td></tr>`; }).join("");
+    if (scRows) out.push(sec("co-ip-scen", `The industry's scenarios, for ${sym}`, isNum(beta) ? `${sym}'s move in each, at its beta of ${beta} to the industry over the last year (code), and what's different for it` : "", table(["Case", "Industry, 12M", `${sym} at its beta`, `For ${sym}`], scRows)));
+    // Macro: the industry's sensitivities next to the company's.
+    const cf = Object.fromEntries((co.sens?.factors || []).map((f) => [f.key, f])), inf = run.industry?.sensitivity?.factors || [];
+    const mRows = inf.map((f) => { const c = cf[f.key], a = f.partial?.effect ?? f.total?.effect, b = c ? c.partial?.effect ?? c.total?.effect : null;
+      return `<tr><td>${esc(f.shock_label || f.label)}</td><td class="n">${sg(isNum(num(a)) ? a * 100 : null)}</td><td class="n">${sg(isNum(num(b)) ? b * 100 : null)}</td><td class="small muted">${isNum(num(a)) && isNum(num(b)) ? (Math.abs(b) > 1.25 * Math.abs(a) ? "more sensitive" : Math.abs(b) < 0.75 * Math.abs(a) ? "less sensitive" : "about the same") : ""}</td></tr>`; }).join("");
+    if (mRows) out.push(sec("co-ip-macro", `Macro: the industry's sensitivities, and ${sym}'s`, `how each moves on the same shock (a year of daily data, code)${run.reports?.macro?.headline ? ` · the industry: ${esc(trimC(stripCites(run.reports.macro.headline), 160))}` : ""}`, table(["Shock", "Industry", sym, ""], mRows)));
+    const simple = (panel, id, title, sub, heads, row) => { const R = by(panel); if (!R.length) return; out.push(sec(id, title, sub, table(heads, R.map(row).join("")))); };
+    const cty = Object.fromEntries((L.countries || []).map((c) => [c.id, c]));
+    simple("trade", "co-ip-trade", `Trade: the industry's map, with ${sym}'s revenue`, `${L.tradev?.headline ? esc(trimC(stripCites(L.tradev.headline), 200)) : ""}`, ["Country", "For the industry", `${sym}'s revenue`, `For ${sym}`],
+      (r) => { const c = cty[r.id] || {}; return `<tr><td><b>${esc(c.country || r.label)}</b></td><td class="small">${esc([c.importance, c.stance, c.threat ? `threat ${c.threat}` : ""].filter(Boolean).join(", "))}<div class="muted">${esc(trimC(stripCites(c.why || ""), 180))}</div></td><td class="n">${c.revenue ? `${Math.round(c.revenue.share * 100)}% <span class="small muted">${esc(c.revenue.region)}</span>` : "—"}</td><td class="wr small">${note(r.id)}</td></tr>`; });
+    const named = (r) => new RegExp(`\\b${co.sym}\\b`).test(r.label + " " + r.text);
+    simple("regulation", "co-ip-reg", `Regulation, litigation and deals, for ${sym}`, `${L.regv?.headline ? esc(trimC(stripCites(L.regv.headline), 200)) : ""}`, ["Item", "Status", `Names ${sym}?`, `For ${sym}`],
+      (r) => `<tr><td><span class="idtag">${esc(r.id)}</span> ${esc(r.label)}</td><td class="small">${esc(trimC(stripCites(r.text), 220))}</td><td>${named(r) ? `<b class="warn-t">yes</b>` : `<span class="muted">no</span>`}</td><td class="wr small">${note(r.id)}</td></tr>`);
+    simple("kpis", "co-ip-kpi", `The industry's KPIs, for ${sym}`, `${L.kpi ? `${esc(L.kpi.cycle || "")} cycle, ${esc(L.kpi.pricing_power || "")} pricing power` : ""}`, ["KPI", "Industry", `For ${sym}`],
+      (r) => `<tr><td><b>${esc(r.label)}</b></td><td class="small">${esc(trimC(r.text, 220))}</td><td class="wr small">${note(r.id)}</td></tr>`);
+    simple("chain", "co-ip-chain", `Customers and suppliers, for ${sym}`, "", ["Partner", "Why it matters to the industry", `For ${sym}`], (r) => `<tr><td><b>${esc(r.label)}</b></td><td class="small">${esc(r.text)}</td><td class="wr small">${note(r.id)}</td></tr>`);
+    simple("world", "co-ip-world", `World events and threats, for ${sym}`, "", ["Event", "Industry", `For ${sym}`], (r) => `<tr><td><span class="idtag">${esc(r.id)}</span> ${esc(r.label)}</td><td class="small">${esc(trimC(stripCites(r.text), 200))}</td><td class="wr small">${note(r.id)}</td></tr>`);
+    simple("debates", "co-ip-debate", `The industry's debates and red team, for ${sym}`, "", ["Question", "The industry", `For ${sym}`], (r) => `<tr><td>${esc(r.label)}</td><td class="small">${esc(trimC(stripCites(r.text), 220))}</td><td class="wr small">${note(r.id)}</td></tr>`);
+    simple("calendar", "co-ip-cal", `What's coming, for ${sym}`, `the industry's important dates, and every one that names ${sym}`, ["Date", "Event", `For ${sym}`],
+      (r) => { const [d, ...t] = r.label.split(" "); return `<tr${/names /.test(r.text) ? ' class="hl"' : ""}><td class="mono small">${esc(fmtDate(d))}</td><td>${esc(t.join(" "))}${/names /.test(r.text) ? ` <b class="warn-t">${sym}</b>` : ""}</td><td class="wr small">${note(r.id)}</td></tr>`; });
+    return out;
   }
   /** A note when the industry analysis has moved on since this company's was applied. */
   function coStale(co) {
@@ -14029,7 +14165,8 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
     const co = S.co, el = $("company"); if (!co || !el || S.tab !== "companies" || co.stage !== "ready") return renderCompany();
     IDX = co.idx || {};
     const t = (co.writing && co.partial) || co.thesis?.thesis || co.partial;
-    for (const [id, html] of [["co-lean", coLeanBlock(co)], ["co-applied", coAppliedBlock(co)], ["co-snap", coSnapshot(co, t)], ["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-times", coTimes(co)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-plan", coPlan(co, t)], ["co-scen", coScenDeb(co, t)], ["co-kpi", coKpis(co, t)], ["co-chain", coChain(co, t)], ["co-cal", coCalendar(co, t)], ["co-biz", coBusiness(co)], ["co-scores", coScores(co, t)], ["co-street", coStreet(co)]]) {
+    const ipr = coIndRows(co).map((h) => [(h.match(/id="([^"]+)"/) || [])[1], h]).filter(([id]) => id);
+    for (const [id, html] of [["co-lean", coLeanBlock(co)], ["co-applied", coAppliedBlock(co)], ["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-times", coTimes(co)], ...ipr, ["co-street", coStreet(co)]]) {
       const cur = el.querySelector("#" + id); if (!cur) return renderCompany();
       if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = withRead(co, t, html); const nx = tmp.firstElementChild; if (nx) { cur.replaceWith(nx); wireCharts(nx); }
     }
@@ -14236,18 +14373,14 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
       return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [run ? coLeanBlock(co) : "", run ? coTimes(co) : "", run ? coAppliedBlock(co) : "", coReturns(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
-      coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
-      run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
-      coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
-      coFund(co), coHealth(co), coValuation(co), coDividends(co), coOwnership(co), coEarnings(co), coBusiness(co),
-      coReg(co, t), coScenDeb(co, t), coCalendar(co, t), run ? coDrivers(co, t) : ""];
+    const secs = [run ? coLeanBlock(co) : "", run ? coTimes(co) : "", run ? coAppliedBlock(co) : "", ...(run ? coIndRows(co) : []), run ? coThesis(co, t, ck) : "", coCalls(co), coStreet(co), coNews(co),
+      coReturns(co), coPerf(co), coRiskSec(co), run ? coPeers(co) : "", coTech(co), coFund(co), coHealth(co), coValuation(co), coDividends(co), coOwnership(co), coEarnings(co), coBusiness(co)];
     return `${notices}<div class="shell">${sideNav(companyGroups(co))}<div class="stream">${secs.map((h) => withRead(co, t, h)).join("")}</div></div>`;
   }
   function coThesis(co, t, ck) {
     const writing = co.writing;
     const el = co.writeStart ? Math.round((Date.now() - co.writeStart) / 1000) : 0;
-    if (!t) return sec("co-thesis", `What's specific to ${esc(co.sym)}`, "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> applying the ${esc(co.run.name)} analysis to it: two quick calls at once (every industry component applied, with the calls; what's specific to the company), well under a minute, then it's saved. Everything below is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>`
+    if (!t) return sec("co-thesis", `What's specific to ${esc(co.sym)}`, "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> applying the ${esc(co.run.name)} analysis to it: three quick calls at once (every industry component applied, with the calls; every row of the industry's panels; what's specific to the company), well under a minute, then it's saved. Everything below is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>`
       : co.thesisErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(co.thesisErr)}</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Try again</button></div>`
       : `<div class="small muted">${S.sample ? `<button class="primary" data-co-rewrite="1">Write ${esc(co.sym)}'s analysis</button>` : "Open this page in Claude to write the company's analysis."}</div>`);
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" }, VC = { yes: "pos", conditional: "neu", no: "neg" };
@@ -14698,29 +14831,18 @@ Sizes: the thesis is ONE paragraph on what is specific to ${c.sym} (not the indu
   }
   /** The company page's sidebar: the 13 panels, then the three for the rest of our analysis. */
   function companyGroups(co) {
-    const run = !!co.run, I = co.lensIn || {};
+    const run = !!co.run, ap = run ? coApplied(co) : null, has = (p) => !!ap?.rows?.some((r) => r.panel === p);
     const it = (ok, id, l) => (ok ? [id, l] : null);
     return [
-      { label: "Performance", items: [["co-returns", "Performance"]] },
-      { label: "Snapshot", items: [it(run, "co-lean", "Where it's going"), it(run, "co-times", "Times like this"), it(run, "co-applied", "Industry, applied"), ["co-snap", "Snapshot"], it(run, "co-thesis", "Specific to it"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
-      { label: "Returns & Risk", items: [it(co.perf, "co-perf", "Returns vs SPY"), it(co.g1, "co-risk", "Risk & Greeks")] },
-      { label: "Analyst Consensus", items: [["co-street", "Wall Street"]] },
-      { label: "Stress Test", items: [it(co.ep?.length, "co-stress", "Crises & booms")] },
-      { label: "Industry Landscape", items: [it(run, "co-land", "Market position"), it(run, "co-peers", "Closest peers"), it(I.kpis?.length, "co-kpi", "KPIs & cycle"), it(I.chain?.length, "co-chain", "Customers & suppliers"), it(co.run?.reports?.calls?.companies?.length, "co-calls", "Earnings calls")] },
-      { label: "Foreign Affairs", items: [it(co.sens || co.run?.reports?.macro, "co-macro", "Macro"), it(I.situations?.length, "co-world", "World events"), it(I.countries?.length, "co-trade", "Trade relations")] },
-      { label: "Timeframe Patterns", items: [it(co.tech, "co-tech", "Technicals & patterns")] },
-      { label: "Fundamentals", items: [it(co.fh?.length >= 2, "co-fund", "Statements"), ["co-health", "Health & quality"]] },
-      { label: "Valuation", items: [["co-val", "Multiples & DCF"]] },
-      { label: "Dividends", items: [["co-div", "Dividends"]] },
-      { label: "Ownership & ESG", items: [["co-own", "Holders, insiders, ESG"]] },
-      { label: "Earnings", items: [it(co.earn?.past?.length || co.earn?.next, "co-earn", "Surprises & reactions")] },
-      { label: "Business", items: [["co-biz", "Business overview"]] },
-      { label: "Regulation & Legal", items: [it(I.rules?.length || I.regItems?.length, "co-reg", "Rules, policy, litigation")] },
-      { label: "Scenarios & Debates", items: [it(I.debates?.length || Object.keys(I.iscen || {}).length, "co-scen", "Scenarios, debates, scorecard")] },
-      { label: "Catalysts", items: [it(I.calendar?.length, "co-cal", "What's coming")] },
-      { label: "Drivers & Risks", items: [it(run, "co-drivers", "Drivers & risks")] },
+      { label: "The call", items: [it(run, "co-lean", "Where it's going"), it(run, "co-times", "Times like this"), it(run, "co-thesis", "Specific to it")] },
+      { label: "The industry, applied", items: [it(run, "co-applied", "Every component"), it(Object.keys(co.run?.lead?.scenarios || {}).length, "co-ip-scen", "Scenarios"), it(co.sens || co.run?.industry?.sensitivity, "co-ip-macro", "Macro"),
+        it(has("trade"), "co-ip-trade", "Trade"), it(has("regulation"), "co-ip-reg", "Regulation & legal"), it(has("kpis"), "co-ip-kpi", "KPIs"), it(has("chain"), "co-ip-chain", "Customers & suppliers"),
+        it(has("world"), "co-ip-world", "World events"), it(has("debates"), "co-ip-debate", "Debates & red team"), it(has("calendar"), "co-ip-cal", "What's coming"), it(co.run?.reports?.calls?.companies?.length, "co-calls", "Earnings calls")] },
+      { label: "The street & news", items: [["co-street", "Wall Street"], it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
+      { label: "The data", items: [["co-returns", "Performance"], it(co.perf, "co-perf", "Returns"), it(co.g1, "co-risk", "Risk"), it(run, "co-peers", "Closest peers"), it(co.tech, "co-tech", "Technicals"), it(co.fh?.length >= 2, "co-fund", "Statements"), ["co-health", "Health & quality"], ["co-val", "Multiples & DCF"], ["co-div", "Dividends"], ["co-own", "Holders, insiders, ESG"], it(co.earn?.past?.length || co.earn?.next, "co-earn", "Earnings history"), ["co-biz", "Business"]] },
     ];
   }
+
 
   // ------------------------------------------------------------- 1. snapshot
   /** Returns over 1M-5Y (3Y and 5Y annualized), each a button that redraws the price chart for that window. */
