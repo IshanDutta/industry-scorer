@@ -7700,32 +7700,24 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
   };
   const PART = {
     core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "reads", "confidence"],
-    calls: ["scenarios", "horizons", "lens_core", "reads_calls"],
+    calls: ["scenarios", "lens_core", "reads_calls"],
     context: ["drivers", "lens", "reads_more"],
     exposures: ["lens_exp"],
   };
   function schemaFor(part) {
     const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "lens_exp", "reads", "reads_more", "reads_calls"].includes(k));
     const intro = part === "core" ? "This is part one of a four-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
-      : part === "calls" ? "This is part two of a four-part write-up: the 12-month scenarios and the full 1M, 3M, 6M and 12M calls, each as complete as the industry's own cards (THE INDUSTRY'S OWN 1M-12M CALLS) but about this company, plus the KPI, chain, calendar, plan and dimension rows for your part. Colleagues write the verdict and thesis, and the rest of the rows, at the same time. Write ONLY the fields below.\n"
+      : part === "calls" ? "This is part two of a four-part write-up: the 12-month scenarios, plus the KPI, chain, calendar, plan and dimension rows for your half of THE INDUSTRY REPORT'S ROWS (a colleague makes the 1M-12M calls at the same time). Write ONLY the fields below.\n"
       : part === "exposures" ? "This is part four of a four-part write-up: trade and regulation. Colleagues write the verdict, thesis, calls and the rest of the rows at the same time. Write ONLY the fields below: take the industry's trade and regulation reports row by row (THE INDUSTRY'S TRADE AND REGULATION REPORTS) and say what each means for this company specifically, with sizes, more or less than for the industry and why, using its regions, segments, plants, customers, filings and numbers.\n"
       : part === "context" ? "This is part three of a four-part write-up; colleagues write the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
     const sizes = part === "exposures" ? "\nSizes: one entry for EVERY trade country, region, rule and policy/litigation/deal ID listed; 2-6 timeline steps; keep each why to one or two sentences and give sizes where the data allows (say estimate)." : part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL."
-      : part === "calls" ? "\nSizes: for EACH horizon, 3-7 decisions (every dated E-row inside that window that can move this stock, the company's own report first if it falls in the window) and 2-6 conflicts (the Q- and W-rows that matter for this company in that window), with refs; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls. The 12M call must agree with the scenarios' probability-weighted return." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones) and product line ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+      : part === "calls" ? "\nSizes: one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones) and product line ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
-  /**
-   * ctx: {today, sym, name, industry, inTop50, rank, px, profile, row, peers (peerTable), closest, quality, implied, estimates, consensus, insider,
-   *       geo (geoMap), seg (segMap), segments: {product, geo}, quarters, mentions (with A-IDs), news (with N/P-IDs), transcript ({id, text}),
-   *       risk: {beta, alpha, vol}, industryDigest: {lead, kpi, macro, world, trade, regverdict, books}}
-   */
-  function thesisPrompt(ctx, part = null) {
-    const J = (x) => JSON.stringify(x);
+  /** The company's own data, as the write-up and the outlook show it. */
+  function companyBlock(ctx) {
     const pc = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a"), fx = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
-    const D = ctx.industryDigest || {};
-    return `You are a senior equity analyst. Write the investment analysis of ${ctx.name} (${ctx.sym}), a company in the US-listed "${ctx.industry}" industry, today ${ctx.today}. Your team has already analyzed the whole industry in depth (below); build on that work: say how each industry finding applies to THIS company, more or less than to its peers, and why, using the company's own business, numbers and news. ${ctx.inTop50 ? `It is #${ctx.rank} of the industry's top 50 by market cap, so the industry analysis names it in places (INDUSTRY ANALYSIS ON THIS COMPANY).` : `It is NOT among the 50 companies the industry analysis covered by name: connect it to the industry findings through its own business mix, geography and numbers.`}
-
-COMPANY
+    return `COMPANY
 Price ${fx(ctx.px, 2)} · market cap ${isNum(n(ctx.row?.market_cap)) ? (n(ctx.row.market_cap) / 1e9).toFixed(1) + "B" : "n/a"} · ${ctx.profile?.exchange || ""} · CEO ${ctx.profile?.ceo || "n/a"} · employees ${ctx.profile?.fullTimeEmployees || "n/a"}
 Business: ${trim(ctx.profile?.description, 1600)}
 Revenue by product (${ctx.segments?.product?.label || "n/a"}): ${(ctx.segments?.product?.items || []).map((x) => `${x.name} ${pc(x.share, 0)}${isNum(x.yoy) ? ` (${x.yoy >= 0 ? "+" : ""}${pc(x.yoy, 0)} y/y)` : ""}`).join("; ") || "n/a"}
@@ -7738,7 +7730,20 @@ ${ctx.ptrend ? `Average analyst target: last month ${fx(ctx.ptrend.m, 2)} (${ctx
 
 VERSUS THE INDUSTRY'S TOP 50 (value · industry median · percentile, 100 = highest)
 ${(ctx.peers || []).map((r) => `${r.label}: ${r.kind === "pct" || r.kind === "chg" ? pc(r.value) : r.kind === "cap" ? (r.value / 1e9).toFixed(1) + "B" : fx(r.value, 2)} · ${r.kind === "pct" || r.kind === "chg" ? pc(r.median) : r.kind === "cap" ? (r.median / 1e9).toFixed(1) + "B" : fx(r.median, 2)} · p${r.pct ?? "n/a"}`).join("\n")}
-Closest peers in the industry: ${(ctx.closest || []).map((c) => `${c.symbol} (${trim(c.name, 40)}; cap ${(n(c.market_cap) / 1e9).toFixed(1)}B, P/E ${fx(n(c.pe))}, growth ${pc(n(c.rev_growth), 0)}, op margin ${pc(n(c.op_margin), 0)}, 1Y ${pc(n(c.ret_1Y), 0)})`).join("; ") || "n/a"}
+Closest peers in the industry: ${(ctx.closest || []).map((c) => `${c.symbol} (${trim(c.name, 40)}; cap ${(n(c.market_cap) / 1e9).toFixed(1)}B, P/E ${fx(n(c.pe))}, growth ${pc(n(c.rev_growth), 0)}, op margin ${pc(n(c.op_margin), 0)}, 1Y ${pc(n(c.ret_1Y), 0)})`).join("; ") || "n/a"}`;
+  }
+  /**
+   * ctx: {today, sym, name, industry, inTop50, rank, px, profile, row, peers (peerTable), closest, quality, implied, estimates, consensus, insider,
+   *       geo (geoMap), seg (segMap), segments: {product, geo}, quarters, mentions (with A-IDs), news (with N/P-IDs), transcript ({id, text}),
+   *       risk: {beta, alpha, vol}, industryDigest: {lead, kpi, macro, world, trade, regverdict, books}}
+   */
+  function thesisPrompt(ctx, part = null) {
+    const J = (x) => JSON.stringify(x);
+    const pc = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a"), fx = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
+    const D = ctx.industryDigest || {};
+    return `You are a senior equity analyst. Write the investment analysis of ${ctx.name} (${ctx.sym}), a company in the US-listed "${ctx.industry}" industry, today ${ctx.today}. Your team has already analyzed the whole industry in depth (below); build on that work: say how each industry finding applies to THIS company, more or less than to its peers, and why, using the company's own business, numbers and news. ${ctx.inTop50 ? `It is #${ctx.rank} of the industry's top 50 by market cap, so the industry analysis names it in places (INDUSTRY ANALYSIS ON THIS COMPANY).` : `It is NOT among the 50 companies the industry analysis covered by name: connect it to the industry findings through its own business mix, geography and numbers.`}
+
+${companyBlock(ctx)}
 
 ITS REVENUE ON THE INDUSTRY'S TRADE MAP
 ${(ctx.geo || []).map((g) => `${g.region} ${pc(g.share, 0)} → ${g.countries.map((c) => `${c.country} (${c.stance || "n/a"}, ${c.trajectory || ""}, ${c.importance || ""} importance${c.threat && c.threat !== "none" ? `, threat ${c.threat}` : ""})`).join("; ") || "no trade-map country"}`).join("\n") || "n/a"}
@@ -7866,7 +7871,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -8775,12 +8780,12 @@ Reply with ONLY this JSON:
   ];
   /** A company's: its industry's outlook first, then the company itself. */
   const CO_INPUTS = [
-    ["industry", "The industry's outlook"], ["verdict", "The company write-up's verdict"], ["business", "Business mix & segments"], ["earnings", "Earnings, estimates & revisions"],
+    ["industry", "The industry's outlook"], ["lead", "The industry lead's verdict"], ["business", "Business mix & segments"], ["earnings", "Earnings, estimates & revisions"],
     ["guidance", "The latest earnings call & guidance"], ["valuation", "Valuation vs peers & its history"], ["quality", "Balance sheet & quality"], ["street", "Wall Street"],
     ["momentum", "Momentum & price action"], ["history", "Past setups like today"], ["catalysts", "Dated catalysts ahead"], ["macro", "Macro & rates"],
     ["world", "World events & trade"], ["regulation", "Regulation & legal"], ["competition", "Competitive position"], ["risks", "Risks & red flags"],
   ];
-  const ALIAS = { lead: "verdict", thesis: "verdict", opportunity: "verdict", scenario: "scenarios", "red team": "redteam", risks: "redteam", daily: "update", rates: "macro", geopolitics: "world",
+  const ALIAS = { thesis: "verdict", opportunity: "verdict", scenario: "scenarios", "red team": "redteam", risks: "redteam", daily: "update", rates: "macro", geopolitics: "world",
     tariffs: "trade", supply: "trade", policy: "regulation", legal: "regulation", kpi: "cycle", "pricing power": "cycle", estimates: "earnings", revisions: "earnings", "earnings call": "guidance",
     priced: "valuation", insiders: "positioning", shorts: "positioning", flows: "positioning", "price action": "momentum", levels: "momentum", "past setups": "history", "statistical": "history",
     "times like this": "history", calendar: "catalysts", events: "catalysts", industry: "industry", segments: "business", "balance sheet": "quality", consensus: "street", analysts: "street", moat: "competition", peers: "competition", "red flags": "risks" };
@@ -8884,20 +8889,19 @@ ${SCHEMA}`;
 ## THE ${c.industry.toUpperCase()} INDUSTRY'S OUTLOOK
 ${ind?.calls ? `${ind.provisional ? "(provisional, read off the industry's earlier calls; weigh lightly) " : ""}${trim(ind.headline, 240)}\n${HZ.filter((h) => ind.calls[h]).map((h) => `${h}: ${ind.calls[h].call}${ind.calls[h].why ? `: ${trim(ind.calls[h].why, 300)}` : ""}`).join("\n")}` : "(none yet)"}${c.indLatest ? `\nThe industry's latest update: ${trim(c.indLatest, 500)}` : ""}
 
-## THE COMPANY WRITE-UP
-${w}
-
+${c.indLead ? `## THE INDUSTRY LEAD'S VERDICT\n${trim(c.indLead, 900)}\n` : ""}
+${c.write ? `## THE COMPANY WRITE-UP\n${w}\n` : ""}${c.company ? `## ${c.sym}: THE COMPANY\n${trim(c.company, 9000)}\n` : ""}${(c.mentions || []).length ? `## WHAT THE INDUSTRY ANALYSIS SAYS ABOUT ${c.sym}\n${c.mentions.slice(0, 14).map((m) => `${m.section}: ${trim(m.text, 200)}`).join("\n")}\n` : ""}
 ## ${c.sym}'S NUMBERS (code)
 ${trim(c.facts, 3500)}
 ${(c.windows || []).map((x) => `${x.h}: one-sigma move ±${x.sigma ?? "?"}%; trailing ${x.h} ${x.trailing ?? "?"}%; in its own history higher ${x.base_up ?? "?"}% of the time over this span; ${x.own ? `reports ${x.own}` : "doesn't report in the window"}${x.peers?.length ? `; peers reporting ${x.peers.map((p) => `${p.symbol} ${p.date}`).join(", ")}` : ""}.`).join("\n")}
 ${c.times ? `\n## ${c.sym} IN TIMES LIKE THIS\n${trim(c.times, 1200)}` : ""}
 ${(c.news || []).length ? `\n## RECENT NEWS\n${c.news.slice(0, 12).map((x) => `${x.date ? x.date + " " : ""}${trim(x.title, 150)}`).join("\n")}` : ""}
 
-${RULES(c.sym, CO_INPUTS).replace("the lead's verdict", "the write-up's verdict")}
+${RULES(c.sym, CO_INPUTS)}
 - Start from the industry's outlook, then say where ${c.sym} departs from it and why.
 
 Reply with ONLY this JSON (all four windows):
-${schemaFor(CO_INPUTS).replace("the lead's verdict", "the write-up's verdict")}`;
+${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdict")}`;
   }
 
   /** Tally the evidence: +1 up, -1 down, 0 mixed, times its weight. score in [-1, 1]. */
@@ -12359,12 +12363,12 @@ ${schemaFor(inputs)}`;
     const so = S.savedCoOutlooks?.[co.sym]?.industry === co.run?.name ? S.savedCoOutlooks[co.sym] : null;
     const rec = co.thesis, l = coOutlook(co), ind = co.run ? indOutlook(co.run.name, co.run.lead) : null;
     const working = co.leanBusy;
-    const can = S.sample && !co.writing && !working && rec?.thesis;
-    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the finished write-up and the industry's outlook (about a minute)">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
+    const can = S.sample && !co.writing && !working && co.run;
+    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers and news, the industry's outlook and the lead's verdict">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Where ${esc(co.sym)} is going</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
-    if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${rec?.thesis ? "No calls yet. They're made from the finished write-up and the industry's outlook." : co.writing ? "The calls are made right after the write-up finishes." : "Write the analysis first; the calls are made from it."}</div>${indLine}</div>`);
+    if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${co.writing ? "The calls are being made alongside the analysis." : `No calls yet. They're made from ${esc(co.sym)}'s own numbers and news, the industry's outlook and the industry lead's verdict (one call).`}</div>${indLine}</div>`);
     const W = (() => { try { return coWindowsPlus(co); } catch { return []; } })();
     const nums = (h) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call;
       return `<div class="lean-nums small">
@@ -13481,6 +13485,8 @@ ${schemaFor(inputs)}`;
     co.writing = true; co.partial = null; co.thesisErr = null; co.writeStart = Date.now(); renderCompany();
     const ctl = new AbortController(); co.ctl = ctl;
     const run = co.run, f = co.data || {};
+    // The company's 1M-12M calls start now, alongside the write-up (they don't need it).
+    const callsP = coLean(co, { signal: ctl.signal });
     const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
       peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
       quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
@@ -13500,25 +13506,22 @@ ${schemaFor(inputs)}`;
       if (a.status === "rejected" && c.status === "rejected") throw a.reason;
       const val = (r, k) => (r.status === "fulfilled" ? r.value : raw[k]);
       const thesis = merged(val(a, "core"), val(c, "calls"), val(b, "context"), val(x, "exposures"));
-      thesis.range_notes = Company.fitRanges(thesis, coSigmas(co));
-      thesis.call_notes = Company.holdCalls(thesis, coSigmas(co), co.times);
       thesis.windows = coWindows(co); thesis.times = co.times ? jsonSafe(co.times) : null;
       if (!thesis?.headline && !thesis?.thesis) throw { code: "empty_completion" };
       const basisPE = isNum(num(co.row?.fwd_pe)) && co.row.fwd_pe > 0 ? co.row.fwd_pe : num(co.row?.pe);
       const checks = Company.checks(thesis, co.px, basisPE);
       // Our 12-month target is the scenarios' probability-weighted price, so the street comparison and the calls agree.
       if (thesis.street && isNum(num(checks.expected_return)) && co.px > 0) thesis.street.our_target = Math.round(co.px * (1 + checks.expected_return) * 100) / 100;
-      const failed = [[a, "verdict and thesis"], [c, "scenarios and 1M-12M calls"], [b, "row-by-row read of the industry report"], [x, "trade and regulation read"]].filter(([r]) => r.status === "rejected");
+      const failed = [[a, "verdict and thesis"], [c, "scenarios and the KPI, chain and calendar rows"], [b, "row-by-row read of the industry report"], [x, "trade and regulation read"]].filter(([r]) => r.status === "rejected");
       const rec = jsonSafe({ sym: co.sym, name: co.name, industry: run.name, industry_run_at: run.saved_at, at: new Date().toISOString(), px: co.px, pe_basis: basisPE, thesis, checks, idx: co.idx,
         secs: Math.round((Date.now() - co.writeStart) / 1000), partial: failed.length ? failed.map(([, l]) => l).join(", ") : null });
       await idbPut("co:" + co.sym, rec).catch(() => {});
       co.thesis = rec; co.partial = null;
       if (failed.length) co.thesisErr = `${failed.map(([x, l]) => `the ${l} didn't finish (${x.reason?.code === "cancelled" ? "stopped" : sampleErr(x.reason)})`).join("; ")}; Rewrite to try again`;
-      await coLogCalls(co, rec).catch(() => {});
+      // The calls may have landed first: keep them with the new write-up.
+      const o = co.callsDone; if (o) { co.thesis = { ...co.thesis, outlook: o.outlook, outlook_history: o.outlook_history }; await idbPut("co:" + co.sym, jsonSafe(co.thesis)).catch(() => {}); }
     } catch (e) { co.thesisErr = e?.code === "cancelled" ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
-    finally { co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
-    // Then the calls vs the S&P 500, from the finished write-up (three small calls, no dossier).
-    if (co.thesis?.thesis && !co.thesisErr && S.co === co) coLean(co);
+    finally { await callsP.catch(() => {}); co.writing = false; co.ctl = null; if (S.co === co) renderCompany(); }
   }
   /** Each window for the company, with its trailing return vs its industry too. */
   function coWindowsPlus(co) {
@@ -13529,15 +13532,18 @@ ${schemaFor(inputs)}`;
    * The company's outlook (six levels per window, its own direction, with the reasons): one cheap call on its finished
    * write-up, its industry's outlook and its numbers; a second, small one only if code finds a contradiction.
    */
-  async function coLean(co) {
-    const rec = co.thesis; if (!rec?.thesis || co.leanBusy || !S.sample) return;
-    co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; if (S.co === co) renderCompany();
-    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false });
+  async function coLean(co, { signal = null } = {}) {
+    const rec0 = co.thesis; if (co.leanBusy || !S.sample || !co.run) return;
+    co.leanBusy = true; co.leanErr = null; co.leanStage = LEAN_STEPS[0]; co.callsDone = null; if (S.co === co) renderCompany();
+    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false, signal });
     try {
-      const run = co.run, ind = indOutlook(run.name, run.lead);
+      const run = co.run, ind = indOutlook(run.name, run.lead), op = run.lead?.opportunity, f = co.data || {};
       const latest = run.lead?.daily?.date ? `${run.lead.daily.date}: ${run.lead.daily.headline || ""} ${run.lead.daily.summary || ""}` : "";
+      const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row, peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied,
+        estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments, quarters: f.c?.q, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y }, ptrend: f.ptrend };
       const opts = { today: today(), inputs: Outlook.CO_INPUTS };
-      let o = Outlook.clean(await call(Outlook.coPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest, write: rec.thesis, facts: coFactsText(co), windows: coWindowsPlus(co), times: co.times ? Regimes.companyText(co.sym, co.times) : "", news: co.news })), opts);
+      let o = Outlook.clean(await call(Outlook.coPrompt({ today: today(), sym: co.sym, name: co.name, industry: run.name, ind, indLatest: latest, indLead: op?.verdict ? `${op.verdict.toUpperCase()}: ${op.headline || ""} ${op.why || ""}` : run.lead?.headline || "",
+        company: Company.companyBlock(ctx), facts: coFactsText(co), windows: coWindowsPlus(co), times: co.times ? Regimes.companyText(co.sym, co.times) : "", news: co.news, mentions: co.mentions })), opts);
       if (!o) throw new Error("no usable calls came back; try again");
       if (!o.consistent) {
         co.leanStage = "Code found contradictions: one small fix"; if (S.co === co) renderCompany();
@@ -13547,15 +13553,16 @@ ${schemaFor(inputs)}`;
       const ser = co.data?.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
       o.ind = ind ? { provisional: !!ind.provisional, date: ind.date || null, calls: Object.fromEntries(Object.entries(ind.calls || {}).map(([h, x]) => [h, x.call])) } : null;
       o.saved_at = new Date().toISOString();
-      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || rec, so = S.savedCoOutlooks?.[co.sym]?.industry === run.name ? S.savedCoOutlooks[co.sym] : null;
+      const cur = (await idbGet("co:" + co.sym).catch(() => null)) || co.thesis || { sym: co.sym, industry: run.name }, so = S.savedCoOutlooks?.[co.sym]?.industry === run.name ? S.savedCoOutlooks[co.sym] : null;
       const h0 = Outlook.histOf(newer(cur.outlook, so?.outlook)), hist = [...(h0 ? [h0] : []), ...((so?.history?.length || 0) > (cur.outlook_history?.length || 0) ? so.history : cur.outlook_history || [])].slice(0, 12);
-      const nrec = jsonSafe({ ...cur, outlook: o, outlook_history: hist });
-      await idbPut("co:" + co.sym, nrec).catch(() => {});
+      co.callsDone = { outlook: o, outlook_history: hist };
+      if (cur.thesis) await idbPut("co:" + co.sym, jsonSafe({ ...cur, outlook: o, outlook_history: hist })).catch(() => {});
       await saveOutlook("co_outlooks", co.sym, { sym: co.sym, name: co.name, industry: run.name, outlook: o, history: hist });
-      if (co.thesis?.at === rec.at) co.thesis = nrec;
-    } catch (e) { co.leanErr = "The calls didn't finish: " + (FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
+      if (co.thesis) co.thesis = { ...co.thesis, outlook: o, outlook_history: hist };
+    } catch (e) { co.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
     finally { co.leanBusy = false; co.leanStage = null; if (S.co === co) renderCompany(); }
   }
+
 
   /** The company's own 1M-12M calls go into its track record, scored like the industry's. */
   async function coLogCalls(co, rec) {

@@ -508,32 +508,24 @@ ${(L.debates || []).map((d) => `[${d.id}] ${d.question} BULL: ${d.bull} BEAR: ${
   };
   const PART = {
     core: ["headline", "verdict", "thesis", "vs_industry", "valuation", "street", "moat", "management", "quality", "risks", "catalysts", "watch", "fit", "reads", "confidence"],
-    calls: ["scenarios", "horizons", "lens_core", "reads_calls"],
+    calls: ["scenarios", "lens_core", "reads_calls"],
     context: ["drivers", "lens", "reads_more"],
     exposures: ["lens_exp"],
   };
   function schemaFor(part) {
     const keys = PART[part] || Object.keys(FIELDS).filter((k) => !["lens", "lens_core", "lens_exp", "reads", "reads_more", "reads_calls"].includes(k));
     const intro = part === "core" ? "This is part one of a four-part write-up; colleagues write the scenarios and the 1M-12M calls, and go through the industry report row by row, at the same time. Write ONLY the fields below: the verdict, the thesis, the street view, fit and the panel reads.\n"
-      : part === "calls" ? "This is part two of a four-part write-up: the 12-month scenarios and the full 1M, 3M, 6M and 12M calls, each as complete as the industry's own cards (THE INDUSTRY'S OWN 1M-12M CALLS) but about this company, plus the KPI, chain, calendar, plan and dimension rows for your part. Colleagues write the verdict and thesis, and the rest of the rows, at the same time. Write ONLY the fields below.\n"
+      : part === "calls" ? "This is part two of a four-part write-up: the 12-month scenarios, plus the KPI, chain, calendar, plan and dimension rows for your half of THE INDUSTRY REPORT'S ROWS (a colleague makes the 1M-12M calls at the same time). Write ONLY the fields below.\n"
       : part === "exposures" ? "This is part four of a four-part write-up: trade and regulation. Colleagues write the verdict, thesis, calls and the rest of the rows at the same time. Write ONLY the fields below: take the industry's trade and regulation reports row by row (THE INDUSTRY'S TRADE AND REGULATION REPORTS) and say what each means for this company specifically, with sizes, more or less than for the industry and why, using its regions, segments, plants, customers, filings and numbers.\n"
       : part === "context" ? "This is part three of a four-part write-up; colleagues write the verdict, thesis, scenarios, 1M-12M calls, risks and catalysts at the same time. Write ONLY the fields below: take the industry report's rows (THE INDUSTRY REPORT'S ROWS) one by one and say what each means for this company specifically, more or less than for the industry and why, using its business mix, regions and numbers.\n" : "";
     const sizes = part === "exposures" ? "\nSizes: one entry for EVERY trade country, region, rule and policy/litigation/deal ID listed; 2-6 timeline steps; keep each why to one or two sentences and give sizes where the data allows (say estimate)." : part === "core" ? "\nSizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, 3-5 street differences; our_target is your probability-weighted 12-month price; a read for EVERY panel in reads, each set against THE INDUSTRY'S READ, PANEL BY PANEL."
-      : part === "calls" ? "\nSizes: for EACH horizon, 3-7 decisions (every dated E-row inside that window that can move this stock, the company's own report first if it falls in the window) and 2-6 conflicts (the Q- and W-rows that matter for this company in that window), with refs; one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls. The 12M call must agree with the scenarios' probability-weighted return." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones) and product line ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
+      : part === "calls" ? "\nSizes: one entry for EVERY KPI, chain partner and calendar ID listed (one sentence each); plans use the price levels given (stops are prices); 3-5 change_mind triggers; a read for EVERY panel in reads_calls." : part === "context" ? "\nSizes: 5-8 drivers; one entry for EVERY macro indicator, world situation (deep dives and tracked ones) and product line ID listed (keep each why to one or two sentences); a read for EVERY panel in reads_more, each set against THE INDUSTRY'S READ, PANEL BY PANEL." : "\nSizes: 5-8 drivers, 2-6 entries in each exposure list (empty if none), 4-7 risks, 3-6 catalysts, 3-5 watch items.";
     return `${intro}Reply with ONLY this JSON:\n{${keys.map((k) => FIELDS[k]).join(",\n ")}}${sizes}`;
   }
-  /**
-   * ctx: {today, sym, name, industry, inTop50, rank, px, profile, row, peers (peerTable), closest, quality, implied, estimates, consensus, insider,
-   *       geo (geoMap), seg (segMap), segments: {product, geo}, quarters, mentions (with A-IDs), news (with N/P-IDs), transcript ({id, text}),
-   *       risk: {beta, alpha, vol}, industryDigest: {lead, kpi, macro, world, trade, regverdict, books}}
-   */
-  function thesisPrompt(ctx, part = null) {
-    const J = (x) => JSON.stringify(x);
+  /** The company's own data, as the write-up and the outlook show it. */
+  function companyBlock(ctx) {
     const pc = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a"), fx = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
-    const D = ctx.industryDigest || {};
-    return `You are a senior equity analyst. Write the investment analysis of ${ctx.name} (${ctx.sym}), a company in the US-listed "${ctx.industry}" industry, today ${ctx.today}. Your team has already analyzed the whole industry in depth (below); build on that work: say how each industry finding applies to THIS company, more or less than to its peers, and why, using the company's own business, numbers and news. ${ctx.inTop50 ? `It is #${ctx.rank} of the industry's top 50 by market cap, so the industry analysis names it in places (INDUSTRY ANALYSIS ON THIS COMPANY).` : `It is NOT among the 50 companies the industry analysis covered by name: connect it to the industry findings through its own business mix, geography and numbers.`}
-
-COMPANY
+    return `COMPANY
 Price ${fx(ctx.px, 2)} · market cap ${isNum(n(ctx.row?.market_cap)) ? (n(ctx.row.market_cap) / 1e9).toFixed(1) + "B" : "n/a"} · ${ctx.profile?.exchange || ""} · CEO ${ctx.profile?.ceo || "n/a"} · employees ${ctx.profile?.fullTimeEmployees || "n/a"}
 Business: ${trim(ctx.profile?.description, 1600)}
 Revenue by product (${ctx.segments?.product?.label || "n/a"}): ${(ctx.segments?.product?.items || []).map((x) => `${x.name} ${pc(x.share, 0)}${isNum(x.yoy) ? ` (${x.yoy >= 0 ? "+" : ""}${pc(x.yoy, 0)} y/y)` : ""}`).join("; ") || "n/a"}
@@ -546,7 +538,20 @@ ${ctx.ptrend ? `Average analyst target: last month ${fx(ctx.ptrend.m, 2)} (${ctx
 
 VERSUS THE INDUSTRY'S TOP 50 (value · industry median · percentile, 100 = highest)
 ${(ctx.peers || []).map((r) => `${r.label}: ${r.kind === "pct" || r.kind === "chg" ? pc(r.value) : r.kind === "cap" ? (r.value / 1e9).toFixed(1) + "B" : fx(r.value, 2)} · ${r.kind === "pct" || r.kind === "chg" ? pc(r.median) : r.kind === "cap" ? (r.median / 1e9).toFixed(1) + "B" : fx(r.median, 2)} · p${r.pct ?? "n/a"}`).join("\n")}
-Closest peers in the industry: ${(ctx.closest || []).map((c) => `${c.symbol} (${trim(c.name, 40)}; cap ${(n(c.market_cap) / 1e9).toFixed(1)}B, P/E ${fx(n(c.pe))}, growth ${pc(n(c.rev_growth), 0)}, op margin ${pc(n(c.op_margin), 0)}, 1Y ${pc(n(c.ret_1Y), 0)})`).join("; ") || "n/a"}
+Closest peers in the industry: ${(ctx.closest || []).map((c) => `${c.symbol} (${trim(c.name, 40)}; cap ${(n(c.market_cap) / 1e9).toFixed(1)}B, P/E ${fx(n(c.pe))}, growth ${pc(n(c.rev_growth), 0)}, op margin ${pc(n(c.op_margin), 0)}, 1Y ${pc(n(c.ret_1Y), 0)})`).join("; ") || "n/a"}`;
+  }
+  /**
+   * ctx: {today, sym, name, industry, inTop50, rank, px, profile, row, peers (peerTable), closest, quality, implied, estimates, consensus, insider,
+   *       geo (geoMap), seg (segMap), segments: {product, geo}, quarters, mentions (with A-IDs), news (with N/P-IDs), transcript ({id, text}),
+   *       risk: {beta, alpha, vol}, industryDigest: {lead, kpi, macro, world, trade, regverdict, books}}
+   */
+  function thesisPrompt(ctx, part = null) {
+    const J = (x) => JSON.stringify(x);
+    const pc = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a"), fx = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
+    const D = ctx.industryDigest || {};
+    return `You are a senior equity analyst. Write the investment analysis of ${ctx.name} (${ctx.sym}), a company in the US-listed "${ctx.industry}" industry, today ${ctx.today}. Your team has already analyzed the whole industry in depth (below); build on that work: say how each industry finding applies to THIS company, more or less than to its peers, and why, using the company's own business, numbers and news. ${ctx.inTop50 ? `It is #${ctx.rank} of the industry's top 50 by market cap, so the industry analysis names it in places (INDUSTRY ANALYSIS ON THIS COMPANY).` : `It is NOT among the 50 companies the industry analysis covered by name: connect it to the industry findings through its own business mix, geography and numbers.`}
+
+${companyBlock(ctx)}
 
 ITS REVENUE ON THE INDUSTRY'S TRADE MAP
 ${(ctx.geo || []).map((g) => `${g.region} ${pc(g.share, 0)} → ${g.countries.map((c) => `${c.country} (${c.stance || "n/a"}, ${c.trajectory || ""}, ${c.importance || ""} importance${c.threat && c.threat !== "none" ? `, threat ${c.threat}` : ""})`).join("; ") || "no trade-map country"}`).join("\n") || "n/a"}
@@ -674,7 +679,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, lensInputs, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
