@@ -2960,12 +2960,43 @@ a.btnlink:hover { border-color: var(--accent); }
    * The runs copied from GitHub travel with this page as files (runs/index.json lists them). Each is read the
    * same way as an imported results file. A host may already have unzipped a .gz file, so the bytes decide.
    */
+  /**
+   * "Update everything from GitHub": one button. It asks Claude (a scheduled task, fired from here) to copy the newest
+   * runs from the GitHub repository into this page as its files; the page then reloads, brings in every sector it
+   * carries a newer copy of, and saves them in this browser. Nothing changes again until the button is pressed again.
+   * Its progress is the "sync/github" doc in the page's database: {pending, state, requested_at, done_at, result, changed}.
+   */
+  const SYNC_TRIGGER = "trig_011ad4f3PZEd3HM6KU5ZaHdX", SYNC_SERVER = "Claude Code Remote";
+  async function watchSync() {
+    const db = await outlookDb(); if (!db || S.syncWatched) return; S.syncWatched = true;
+    try { db.doc("sync/github").onSnapshot((d) => { S.sync = d.exists ? d.data() : null; renderMeta(); renderPicker(); }, () => {}); } catch {}
+  }
+  const syncPending = () => { const x = S.sync; return !!(x?.pending && x.requested_at && Date.now() - Date.parse(x.requested_at) < 45 * 60000 && !(x.done_at && x.done_at > x.requested_at)); };
+  async function updateFromGithub() {
+    if (busy() || S.pulling || syncPending()) return;
+    const db = await outlookDb();
+    if (!S.mcp || !db) { pullFromGithub(); return; } // outside Claude: bring in what the page carries
+    const at = new Date().toISOString();
+    S.sync = { ...(S.sync || {}), pending: true, state: "running", requested_at: at, result: null }; renderMeta();
+    try {
+      await db.doc("sync/github").set({ ...S.sync }).catch(() => {});
+      await S.mcp.callTool(SYNC_SERVER, "fire_trigger", { trigger_id: SYNC_TRIGGER, text: "UPDATE" }, { cache: false });
+      S.notices = [{ kind: "info", text: "Getting the newest runs from GitHub: Claude copies every sector that changed into this page (usually 5–10 minutes). The page reloads by itself when it's done, brings them all in and saves them. You can keep using it meanwhile." }];
+    } catch (e) {
+      const c = e?.code;
+      S.sync = { ...S.sync, pending: false, state: "failed", done_at: new Date().toISOString(), result: c === "not_granted" || c === "declined" ? "This page isn't allowed to use Claude Code Remote yet: allow it when asked, then press the button again." : c === "server_not_connected" ? "Claude Code Remote isn't connected: connect it in Claude's settings, then press the button again." : `Couldn't start it (${c || "error"}${e?.message ? ": " + e.message : ""}).` };
+      await db.doc("sync/github").set({ ...S.sync }).catch(() => {});
+      S.notices = [{ kind: "err", text: S.sync.result }];
+    }
+    renderAll();
+  }
   /** On opening: bring in, by itself, every sector this page carries a newer copy of than this browser has. */
   async function autoPull() {
     if (S.outsideClaude || busy() || S.pulling) return;
     try {
       const r = await fetch("runs/index.json", { cache: "no-store" }); if (!r.ok) return;
-      const all = (await r.json())?.files || [];
+      const idx = await r.json(), all = idx?.files || [];
+      S.carried = { copied_at: idx?.copied_at || null, commit: idx?.commit || null, newest: all.reduce((a, x) => (x.exported_at > a ? x.exported_at : a), "") }; renderMeta();
       const newer = [...new Set(all.filter((x) => x.sector && x.exported_at && (!S.copyAt?.[x.sector] || x.exported_at > S.copyAt[x.sector])).map((x) => x.sector))];
       if (newer.length) await pullFromGithub(null, { only: newer, keepView: true });
     } catch {}
@@ -3214,7 +3245,10 @@ a.btnlink:hover { border-color: var(--accent); }
     const ai = !S.ready ? "" : S.sample ? `<span><span class="dot ok"></span>Analyst agent</span>` : `<span><span class="dot bad"></span>Agent unavailable here</span>`;
     const eod = !S.ready || !S.mcp ? "" : S.eod ? `<span><span class="dot ok"></span>EODHD connector</span>` : `<span title="Add EODHD as a custom connector named EODHD to add measured news sentiment"><span class="dot bad"></span>EODHD not connected</span>`;
     const sw = "";
-    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling ? "disabled" : ""} title="Bring in every sector run copied from GitHub">${S.pulling ? "Pulling from GitHub…" : "⟳ Pull from GitHub"}</button>` : "";
+    const pend = syncPending(), mins = pend ? Math.max(1, Math.round((Date.now() - Date.parse(S.sync.requested_at)) / 60000)) : 0;
+    const lastSync = S.sync?.done_at ? `${S.sync.state === "failed" ? "Last try failed" : "Last updated"} ${ago(S.sync.done_at)}: ${S.sync.result || ""}` : "";
+    const have = S.carried?.newest ? `This page has GitHub's runs up to ${fmtDate(S.carried.newest)}${S.carried.commit ? ` (commit ${S.carried.commit})` : ""}.` : "";
+    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub… ${mins} min` : S.pulling ? "Bringing in the runs…" : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
     $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
   }
 
@@ -3276,13 +3310,13 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="picker-list">${body}</div>
       ${(S.saved || []).length ? `<div class="small muted">${S.saved.length} run${S.saved.length === 1 ? "" : "s"} saved in this browser (the ${KEEP} most recent are kept). <button class="sm" id="clear-saved" ${busy() ? "disabled" : ""}>Delete saved runs</button></div>` : ""}
       <label class="check"><input type="checkbox" id="us-only" ${usOnly() ? "checked" : ""} ${busy() ? "disabled" : ""}> Count US-headquartered companies only (leaves out foreign companies listed in the US, like TSM and ASML)</label>
-      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling ? "Pulling…" : "Pull every sector from GitHub"}</button> brings in every run copied from GitHub, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
+      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling || syncPending() ? "disabled" : ""}>${syncPending() ? "Getting the latest from GitHub…" : S.pulling ? "Bringing in the runs…" : "Update everything from GitHub"}</button> copies every sector and industry from GitHub's newest runs into this page and saves them here, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Nothing changes until you press it again. Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
     $("close-picker")?.addEventListener("click", () => { S.pickerOpen = false; S.filter = ""; renderPicker(); });
     $("clear-saved")?.addEventListener("click", async () => { if (!confirm("Delete every run saved in this browser, and the track record of their calls? What's on screen stays until you leave.")) return; for (const x of S.saved || []) { await idbDel("run:" + x.slug); await idbDel("calls:" + x.slug); } await idbDel("index"); await idbDel("last"); S.saved = []; S.savedAt = {}; S.restored = null; renderAll(); });
     const input = $("pick-filter");
     input.addEventListener("input", () => { S.filter = input.value; renderPicker(); });
     $("import-results")?.addEventListener("click", () => $("import-file")?.click());
-    $("pull-github")?.addEventListener("click", () => pullFromGithub());
+    $("pull-github")?.addEventListener("click", () => updateFromGithub());
     $("import-file")?.addEventListener("change", (ev) => { const fs = [...(ev.target.files || [])]; if (fs.length) importResultsFiles(fs); });
   }
 
@@ -6420,7 +6454,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.closest(".co-ind") && !t.dataset.co) return;
     if (t.dataset.sectorRun) { if (S.sectorRec[t.dataset.sectorRun]?.finished_at && !confirm(`Analyze every ${t.dataset.sectorRun} industry again from scratch? The saved overview and runs are replaced as it goes.`)) return; runSector(t.dataset.sectorRun); return; }
     if (t.dataset.pullSector) { pullFromGithub(t.dataset.pullSector); return; }
-    if (t.dataset.pullAll) { pullFromGithub(); return; }
+    if (t.dataset.pullAll) { updateFromGithub(); return; }
     if (t.dataset.sectorAdd) { runSector(t.dataset.sectorAdd, { addNew: true }); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
     if (t.dataset.sectorView) { if (busy() && S.sectorRun?.sector !== t.dataset.sectorView) return; (async () => { if (_saveName) await flush(); if (S.selected) forget(S.selected); S.selected = null; S.sectorView = t.dataset.sectorView; if (!(S.sectorView in S.sectorRec)) S.sectorRec[S.sectorView] = (await secGet(S.sectorView).catch(() => null)) || null; S.pickerOpen = false; window.scrollTo({ top: 0, behavior: "auto" }); renderAll(); })(); return; }
@@ -6488,7 +6522,7 @@ a.btnlink:hover { border-color: var(--accent); }
   (async () => {
     const [mcp, sample] = await Promise.all(["mcp", "sample"].map((n) => window.claude.use(n).catch(() => null)));
     S.mcp = mcp; S.sample = sample; S.ready = true; renderAll();
-    loadSavedOutlooks();
+    loadSavedOutlooks(); watchSync();
     if (mcp) { detectEod().then(renderMeta); loadIndustries(); }
     await restored;
     if (mcp && sample && S.sectorAuto && !busy()) { runSector(S.sectorAuto); return; }
