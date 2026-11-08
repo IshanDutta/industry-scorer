@@ -738,6 +738,8 @@ a.btnlink:hover { border-color: var(--accent); }
   async function openSector(sector) {
     S.sector = sector; S.filter = ""; renderPicker();
     if (!(sector in S.sectorRec)) { S.sectorRec[sector] = (await secGet(sector).catch(() => null)) || null; renderPicker(); }
+    // A sector's overview on screen follows the sector picked (it used to stay on the one opened first).
+    if (!S.selected && S.sectorView && S.sectorView !== sector && S.sectorRec[sector]) { S.sectorView = sector; renderReport(); }
     try { await sectorUniverse(sector); } catch (e) { if (FATAL.has(e?.code)) S.industriesError = errText(e); }
     if (S.sector === sector) renderPicker();
   }
@@ -2924,9 +2926,10 @@ a.btnlink:hover { border-color: var(--accent); }
     return n;
   }
   /** Import one or more results files (one per sector); opens the first sector's overview. */
-  async function importResultsFiles(files, { open = null } = {}) {
+  async function importResultsFiles(files, { open = null, keepView = false } = {}) {
     const done = [], failed = [];
     for (const f of files) {
+      if (keepView) { S.pullProgress = { i: files.indexOf(f) + 1, n: files.length }; renderMeta(); }
       try {
         let text;
         if (/\.gz$/i.test(f.name) && typeof DecompressionStream !== "undefined") text = await new Response(f.stream().pipeThrough(new DecompressionStream("gzip"))).text();
@@ -2937,11 +2940,19 @@ a.btnlink:hover { border-color: var(--accent); }
         if (file.sector && file.exported_at) { S.copyAt = { ...(S.copyAt || {}), [file.sector]: file.exported_at }; await idbPut("copyAt", S.copyAt).catch(() => {}); }
       } catch (e) { failed.push(`${f.name}: ${e?.message || e}`); }
     }
-    if (done.length) {
+    if (done.length && keepView) {
+      // Brought in quietly (on opening, or after "Update everything from GitHub"): stay on whatever is open now, and
+      // if it's an industry or sector that just came in, show the newer copy of it.
+      if (_saveName) await flush();
+      const sel = S.selected, secs = new Set(done.map((x) => x.sector));
+      if (sel && !busy() && secs.has(S.industries[slug(sel)]?.sector)) { forget(sel); if (await restore(sel)) S.selected = sel; else S.selected = null; }
+      for (const x of secs) if (x in S.sectorRec) S.sectorRec[x] = (await secGet(x).catch(() => null)) || S.sectorRec[x];
+    } else if (done.length) {
       if (_saveName) await flush();
       if (S.selected) forget(S.selected);
       S.selected = null; S.sectorView = (open && done.find((x) => x.sector === open)?.sector) || done[0].sector || null; S.pickerOpen = false; S.restored = null;
     }
+    S.pullProgress = null;
     S.notices = [
       ...(done.length ? [{ kind: "info", text: done.length === 1
         ? `Imported ${done[0].n} industr${done[0].n === 1 ? "y" : "ies"} from the overnight job (${done[0].sector || "results"}, run ${fmtDate(done[0].at)})${done[0].finished ? "" : ". That run hadn't finished; what it finished is here"}.`
@@ -3023,9 +3034,7 @@ a.btnlink:hover { border-color: var(--accent); }
         const gz = bytes[0] === 0x1f && bytes[1] === 0x8b;
         files.push(new File([bytes], (x.sector || "run").replace(/\W+/g, "-") + (gz ? ".json.gz" : ".json")));
       }
-      const keep = keepView ? { sel: S.selected, view: S.sectorView } : null;
-      await importResultsFiles(files, { open: sector || S.sector || S.sectorView });
-      if (keep && keep.sel && !S.selected && await restore(keep.sel)) { S.selected = keep.sel; S.sectorView = keep.view; }
+      await importResultsFiles(files, { open: sector || S.sector || S.sectorView, keepView });
     } catch (e) {
       S.notices = [{ kind: "err", text: `Couldn't pull the runs from GitHub: ${e?.message || e}` }]; renderAll();
     } finally {
@@ -3248,7 +3257,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const pend = syncPending(), mins = pend ? Math.max(1, Math.round((Date.now() - Date.parse(S.sync.requested_at)) / 60000)) : 0;
     const lastSync = S.sync?.done_at ? `${S.sync.state === "failed" ? "Last try failed" : "Last updated"} ${ago(S.sync.done_at)}: ${S.sync.result || ""}` : "";
     const have = S.carried?.newest ? `This page has GitHub's runs up to ${fmtDate(S.carried.newest)}${S.carried.commit ? ` (commit ${S.carried.commit})` : ""}.` : "";
-    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub… ${mins} min` : S.pulling ? "Bringing in the runs…" : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
+    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub… ${mins} min` : S.pulling ? `Saving GitHub's runs here${S.pullProgress ? ` (${S.pullProgress.i} of ${S.pullProgress.n})` : "…"}` : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
     $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
   }
 
