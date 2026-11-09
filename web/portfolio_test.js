@@ -120,5 +120,16 @@ assert.deepStrictEqual(P.changes(fp, fp), []);
 assert(P.changes(null, fp).length === 1);
 assert(P.changes(fp, { ...fp, calls: { ...fp.calls, "12M": "bearish" } })[0].includes("12M"));
 assert(P.changes(fp, { ...fp, exp12: fp.exp12 + 2 }).length === 1 && P.changes(fp, { ...fp, exp12: fp.exp12 + 1 }).length === 0);
+// search suggestions
+const etfs = [{ symbol: "XLP", name: "State Street Consumer Staples Select Sector SPDR ETF" }, { symbol: "XLK", name: "Technology Select Sector SPDR" }, { symbol: "VDC", name: "Vanguard Consumer Staples ETF" }, { symbol: "XLPE", name: "Some Other ETF" }];
+const live = [{ symbol: "FCNTX", name: "Fidelity Contrafund", currency: "USD", exchange: "NASDAQ" }, { symbol: "XVTD.L", name: "Xtrackers ETF" }, { symbol: "^SIXR", name: "Consumer Staples Index" }, { symbol: "KO", name: "Coca-Cola Company", exchange: "NYSE" }];
+const sg = (q, o) => P.suggest(q, { etfs, live, ...o }).map((x) => x.symbol);
+assert.deepStrictEqual(sg("xlp").slice(0, 2), ["XLP", "XLPE"], "an exact ticker first, then tickers that start with it");
+assert.deepStrictEqual(sg("consumer stap").sort(), ["VDC", "XLP"], "names whose words start with what's typed");
+assert.strictEqual(P.suggest("staples", { etfs: [{ symbol: "ZZST", name: "Tiny Staples ETF" }, ...etfs] })[0].symbol !== "ZZST", true, "a best-known fund ranks ahead of a look-alike");
+assert.deepStrictEqual(sg("contra"), ["FCNTX"], "mutual funds from the live search; foreign listings, indexes and stocks left out");
+assert.strictEqual(P.suggest("contra", { live })[0].type, "Mutual fund");
+assert.deepStrictEqual(sg("", { recent: [{ sym: "SPY" }].map((x) => ({ symbol: x.sym, name: "SPDR" })) }), ["SPY"], "an empty box shows the recent funds");
+assert.strictEqual(P.suggest("x", { recent: [{ symbol: "XLK", name: "Tech" }], etfs })[0].symbol, "XLK", "a recent fund ranks first among equals");
 console.log("look-through", JSON.stringify({ on: +lt.on.toFixed(3), best: lt.best, fwd_pe: +lt.val.fwd_pe.v.toFixed(1), exp12: +lt.exp12.v.toFixed(1), calls: Object.fromEntries(P.HZ.map((h) => [h, lt.calls[h].lean || lt.calls[h].call])), overlap: +ac.overlap.toFixed(2), tilt: +ac.tilt.toFixed(2) }));
 console.log("portfolio tests passed", JSON.stringify({ covered: +cov.covered.toFixed(3), ...Object.fromEntries(Object.entries(B).map(([a, b]) => [a, +b.toFixed(3)])) }));

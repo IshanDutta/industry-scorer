@@ -439,7 +439,42 @@ Reply with JSON only, in this shape:
     return out;
   }
 
-  const Portfolio = { dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
+  // ============================================================= search suggestions
+  /** A fund-like line from FMP's search: a US listing (no exchange suffix, not an index), and a fund by its symbol or name. */
+  const FUND_NAME_RE = /\b(etf|fund|funds|trust|index|portfolio|shares|spdr|ishares|vanguard|fidelity|invesco|schwab|admiral|investor|institutional|class [a-z])\b/i;
+  function fundLike(r) {
+    const s = String(r?.symbol || ""), ex = String(r?.exchange || "");
+    if (!s || s.startsWith("^") || /\./.test(s) || (r.currency && r.currency !== "USD") || (ex && !/NASDAQ|NYSE|AMEX|ARCA|BATS|CBOE|OTC|MUTUAL/i.test(ex))) return false;
+    return /^[A-Z]{4}X$/.test(s) || FUND_NAME_RE.test(r.name || "");
+  }
+  /**
+   * Suggestions for the fund search box, best first: an exact ticker, then tickers that start with what's typed, then
+   * names with a word that starts with it, then names that contain it; recent funds first within each. Each source is
+   * [{symbol, name}]: recent (opened here), etfs (FMP's ETF directory, US listings), live (FMP's search as you type).
+   */
+  // The biggest and best-known US stock funds: ranked ahead of look-alikes with the same match (FMP's directory has no size).
+  const POPULAR = new Set(("SPY VOO IVV VTI QQQ QQQM DIA IWM IWB IWF IWD IJH IJR MDY RSP VTV VUG VIG VYM SCHD SCHX SCHB SCHG SCHV ITOT SPLG SPYG SPYV MGK VGT VHT VFH VDC VDE VIS VAW VNQ VPU VCR VOX " +
+    "XLK XLF XLV XLP XLE XLI XLB XLU XLRE XLY XLC SMH SOXX IBB XBI KRE KBE ITA XHB XRT IYW IYR IGV ARKK MTUM QUAL USMV DGRO NOBL COWZ JEPI JEPQ " +
+    "VFIAX VTSAX VTIAX VIGAX VIMAX VSMAX FXAIX FSKAX FZROX FCNTX FBGRX FMAGX AGTHX AIVSX ANCFX TRBCX PRGFX SWPPX SWTSX DODGX VWELX VWUSX VPMCX").split(" "));
+  function suggest(q, { recent = [], etfs = [], live = [] } = {}, k = 8) {
+    const t = String(q || "").trim(), T = t.toUpperCase(), words = lc(t).split(/\s+/).filter(Boolean);
+    const seen = new Map();
+    const add = (r, src) => { const s = tick(r?.symbol); if (!s || seen.has(s)) return; seen.set(s, { symbol: s, name: String(r.name || "").trim(), src, type: src === "etf" ? "ETF" : r.type || (/^[A-Z]{4}X$/.test(s) ? "Mutual fund" : r.src === "etf" ? "ETF" : "") }); };
+    recent.forEach((r) => add({ ...r, type: r.type }, "recent")); etfs.forEach((r) => add(r, "etf")); live.filter(fundLike).forEach((r) => add(r, "live"));
+    if (!t) return [...seen.values()].filter((x) => x.src === "recent").slice(0, k);
+    const score = (x) => {
+      const nm = lc(x.name), bonus = (x.src === "recent" ? 0.5 : 0) + (POPULAR.has(x.symbol) ? 8 : 0);
+      if (x.symbol === T) return 100 + bonus;
+      if (x.symbol.startsWith(T) && POPULAR.has(x.symbol)) return 90 + bonus - (x.symbol.length - T.length);
+      if (x.symbol.startsWith(T)) return 80 - (x.symbol.length - T.length) + bonus;
+      if (words.length && words.every((w) => nm.split(/[^a-z0-9&]+/).some((nw) => nw.startsWith(w)))) return 50 + bonus - nm.length / 200;
+      if (nm.includes(lc(t))) return 30 + bonus;
+      return -1;
+    };
+    return [...seen.values()].map((x) => ({ ...x, score: score(x) })).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol)).slice(0, k);
+  }
+
+  const Portfolio = { suggest, fundLike, dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
   if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
   else root.Portfolio = Portfolio;
 })(typeof window !== "undefined" ? window : globalThis);

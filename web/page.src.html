@@ -392,6 +392,11 @@ button.sm { padding: 5px 10px; font-size: 13px; }
 .tab { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 8px 14px; font: 700 15px var(--display); font-stretch: 85%; color: var(--muted); }
 .tab.cur { color: var(--ink); border-bottom-color: var(--accent); }
 .co-form { display: flex; gap: 8px; } .co-form input { flex: 1; }
+.sug-wrap { position: relative; flex: 1; min-width: 0; } .sug-wrap input { width: 100%; }
+.sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); max-height: 340px; overflow-y: auto; padding: 4px; }
+.sug-item { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
+.sug-item:hover, .sug-item.on { background: var(--sunk); } .sug-item.on { box-shadow: inset 2px 0 0 var(--accent); }
+.sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sug-foot { padding: 6px 10px; }
 .co-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; } .co-chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); }
 .co-chip:hover { border-color: var(--accent); } .co-ind > summary { font-size: 14.5px; }
 button.linkbtn { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; } button.linkbtn:hover { text-decoration: underline; }
@@ -5483,7 +5488,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function fundSearch() {
     const recent = S.fundList || [];
     return `<section class="picker"><div class="picker-head"><h2>Funds</h2><span class="small muted">Any US stock ETF or mutual fund, seen through the industries it holds${S.mcp ? "" : " (open in Claude to look funds up)"}</span></div>
-      <form id="fund-form" class="co-form"><input type="search" id="fund-q" placeholder="Ticker, e.g. XLP, VTI, FCNTX, VFIAX" aria-label="Fund ticker" autocomplete="off" value="${esc(S.fundQuery || "")}"><button class="primary" type="submit">Open</button></form>
+      <form id="fund-form" class="co-form"><div class="sug-wrap"><input type="search" id="fund-q" placeholder="Ticker or name, e.g. XLP, Vanguard 500, Contrafund" aria-label="Fund ticker or name" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="fund-sug" aria-expanded="false" value="${esc(S.fundQuery || "")}"><div id="fund-sug" class="sug" role="listbox" hidden></div></div><button class="primary" type="submit">Open</button></form>
       ${recent.length ? `<div class="co-chips">${recent.map((x) => `<button class="chip co-chip" data-fund="${esc(x.sym)}" title="${esc(x.name || "")}">${esc(x.sym)} <span class="muted">${isNum(x.covered) ? pct(x.covered, false, 0) + " covered" : ""}</span></button>`).join("")}</div>` : ""}</section>`;
   }
   const CALLC = (c) => (/bull/.test(c) ? "pos" : /bear/.test(c) ? "neg" : "neu");
@@ -5693,10 +5698,64 @@ a.btnlink:hover { border-color: var(--accent); }
   function renderFund() {
     const el = $("fund"); if (!el || S.tab !== "funds") return;
     if (!S.fundList) { S.fundList = []; idbGet("funds").then((l) => { S.fundList = l || []; if (!S.fund) renderFund(); }).catch(() => {}); }
+    // Typing in the box survives a redraw (the analysis streams in while you search): keep its focus and caret.
+    const had = document.activeElement?.id === "fund-q" ? { a: document.activeElement.selectionStart, b: document.activeElement.selectionEnd } : null;
     el.innerHTML = fundSearch() + (S.fund ? fundView(S.fund) : `<div class="small muted">Open a fund to see which of your analyzed industries it holds and how much of it they cover.</div>`);
     if (S.fund?.stage === "ready") { wireCharts(el); wireSpy(el); }
-    $("fund-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openFund($("fund-q").value); });
-    $("fund-q")?.addEventListener("input", (ev) => { S.fundQuery = ev.target.value; });
+    // A name typed and submitted opens the best suggestion; a ticker opens as typed.
+    $("fund-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("fund-q").value.trim(), top = (S.fundSugItems || [])[0]; $("fund-q").blur(); openFund(/^[A-Za-z.\-]{1,6}$/.test(v) || !top ? v : top.symbol); });
+    bindFundSearch();
+    if (had) { const q = $("fund-q"); if (q) { q.focus(); try { q.setSelectionRange(had.a, had.b); } catch {} fundSug(true); } }
+  }
+  // ------------------------------------------------------------- fund search: suggestions as you type
+  /** FMP's ETF directory (US listings only), kept here for a week: instant suggestions without a call per keystroke. */
+  async function fundEtfs() {
+    if (S.etfDir) return S.etfDir;
+    const c = await idbGet("etfDir").catch(() => null);
+    if (c?.list?.length && Date.now() - Date.parse(c.at || 0) < 7 * 864e5) return (S.etfDir = c.list);
+    if (!S.mcp) return (S.etfDir = c?.list || []);
+    const rows = await optional(() => fmp("directory", { endpoint: "ETFs-list" }), []);
+    const list = (rows || []).filter((r) => r?.symbol && !/[.^]/.test(r.symbol)).map((r) => ({ symbol: r.symbol, name: String(r.name || "") }));
+    if (list.length) await idbPut("etfDir", { at: new Date().toISOString(), list }).catch(() => {});
+    return (S.etfDir = list.length ? list : c?.list || []);
+  }
+  /** FMP's symbol and name search for what's typed (mutual funds aren't in the ETF directory); one call pair per query, kept for the visit. */
+  const _fundLive = new Map(); let _fundLiveT = null;
+  function fundLive(q) {
+    const k = q.trim().toLowerCase(); if (k.length < 2 || !S.mcp || _fundLive.has(k)) return;
+    clearTimeout(_fundLiveT);
+    _fundLiveT = setTimeout(async () => {
+      _fundLive.set(k, []);
+      const [a, b] = await Promise.all([optional(() => fmp("search", { endpoint: "search-symbol", query: q.trim(), limit: 25 }), []), optional(() => fmp("search", { endpoint: "search-name", query: q.trim(), limit: 25 }), [])]);
+      _fundLive.set(k, [...(a || []), ...(b || [])]);
+      if ($("fund-q")?.value.trim().toLowerCase() === k) fundSug(true);
+    }, 250);
+  }
+  /** Draw the suggestion list under the box (only the list: the rest of the page isn't redrawn while typing). */
+  function fundSug(open = true) {
+    const box = $("fund-sug"), inp = $("fund-q"); if (!box || !inp) return;
+    const q = inp.value, recent = (S.fundList || []).map((x) => ({ symbol: x.sym, name: x.name, type: x.type }));
+    const items = open ? Portfolio.suggest(q, { recent, etfs: S.etfDir || [], live: _fundLive.get(q.trim().toLowerCase()) || [] }) : [];
+    S.fundSugItems = items; if (!(S.fundSugI < items.length)) S.fundSugI = -1;
+    if (!items.length) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
+    const pending = q.trim().length >= 2 && S.mcp && !_fundLive.has(q.trim().toLowerCase());
+    box.innerHTML = items.map((x, i) => `<div class="sug-item${i === S.fundSugI ? " on" : ""}" role="option" id="fund-sug-${i}" aria-selected="${i === S.fundSugI}" data-sug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span><span class="small muted">${x.src === "recent" ? "recent" : esc(x.type || "")}</span></div>`).join("")
+      + (pending ? `<div class="sug-foot small muted">Searching FMP for mutual funds…</div>` : "");
+    box.hidden = false; inp.setAttribute("aria-expanded", "true"); inp.setAttribute("aria-activedescendant", S.fundSugI >= 0 ? `fund-sug-${S.fundSugI}` : "");
+  }
+  function bindFundSearch() {
+    const inp = $("fund-q"), box = $("fund-sug"); if (!inp || !box) return;
+    const go = (sym) => { S.fundQuery = ""; box.hidden = true; inp.blur(); openFund(sym); };
+    inp.addEventListener("input", () => { S.fundQuery = inp.value; S.fundSugI = -1; fundSug(true); fundLive(inp.value); });
+    inp.addEventListener("focus", () => { fundEtfs().then(() => { if (document.activeElement === inp) fundSug(true); }).catch(() => {}); fundSug(true); });
+    inp.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== inp) box.hidden = true; }, 150));
+    inp.addEventListener("keydown", (ev) => {
+      const items = S.fundSugItems || [];
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { if (!items.length) return; ev.preventDefault(); S.fundSugI = ((S.fundSugI ?? -1) + (ev.key === "ArrowDown" ? 1 : -1) + items.length + 1) % (items.length + 1); if (S.fundSugI === items.length) S.fundSugI = -1; fundSug(true); }
+      else if (ev.key === "Enter" && !box.hidden && S.fundSugI >= 0 && items[S.fundSugI]) { ev.preventDefault(); go(items[S.fundSugI].symbol); }
+      else if (ev.key === "Escape") { box.hidden = true; S.fundSugI = -1; }
+    });
+    box.addEventListener("mousedown", (ev) => { const it = ev.target.closest("[data-sug]"); if (it) { ev.preventDefault(); go(it.dataset.sug); } });
   }
 
   // ------------------------------------------------------------- render: Companies tab
