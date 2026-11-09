@@ -208,7 +208,30 @@
       row("The write-up", String(full?.at || "").slice(0, 10)), row("The 1M-12M calls", full?.outlook && !full.outlook.provisional ? full.outlook.date : null)];
   }
 
-  const FundMore = { OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  // ============================================================= times like this, for the fund
+  /**
+   * The industries' and companies' Times like this (regimes.js), on the fund: the same month-end fingerprints of the macro
+   * backdrop, with the fund's own setup (its 3- and 12-month returns, distance from its 200-day average, 6 months vs the
+   * S&P 500, drawdown) in place of the industry's. Regimes.episodes runs on the fund's prices; these put its words on it.
+   */
+  const RG = typeof module !== "undefined" && module.exports ? require("./regimes.js") : root.Regimes;
+  const asFund = (t, sym) => String(t || "").replace(/what the industry and/g, `what ${sym} and`).replace(/the industry's/g, `${sym}'s`).replace(/The industry's/g, `${sym}'s`).replace(/\bIndustry\b/g, sym).replace(/\bindustry\b/g, sym);
+  /** A fingerprint measure's label, for the fund. */
+  const timesLabel = (k, sym) => asFund(RG.FMAP[k]?.label || k, sym);
+  /** The fund's Times like this as prompt text (HE1-HE5 to cite), with the historian's notes when there are any. */
+  function timesText(T, sym, hist = null) {
+    if (!T?.episodes?.length) return "";
+    let t = asFund(RG.text(T), sym).replace(/\(computed by code from/, "(computed by code on the fund's own prices, from");
+    if (hist?.episodes?.length) t += "\n" + hist.episodes.filter((e) => e.then || e.after).map((e) => `[${e.id}] the historian: ${e.then} ${e.after}${e.different ? ` Different now: ${e.different}` : ""}`).join("\n") + (hist.read ? `\nThe historian's read: ${hist.read}` : "");
+    return t;
+  }
+  /** The market historian's prompt, for the fund (the industries' historian, the same rules). */
+  function historianPrompt(name, sym, T, { today, thesis = "" } = {}) {
+    return asFund(RG.historianPrompt(name, T, { today, thesis }).replace(`the US-listed "${name}" industry`, `the fund ${name} (${sym})`), sym);
+  }
+  const cleanHistorian = (raw, T) => RG.cleanHistorian(raw, T);
+
+  const FundMore = { timesLabel, timesText, historianPrompt, cleanHistorian, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -33,7 +33,7 @@ const ctx = A.cleanPart("context", { industries: [{ id: "I1", effect: "helps", w
 assert.strictEqual(ctx.w.industries.length, 1); assert.strictEqual(ctx.w.macro.regime, "headwind"); assert.strictEqual(ctx.w.macro.factors[0].id, "MF1");
 assert(!A.leanPrompt, "the old outlook prompt is gone");
 
-// Wall Street, sentiment, the track record
+// Wall Street and sentiment
 const hh = [{ ticker: "AAA", weight: 0.6, px: 100 }, { ticker: "BBB", weight: 0.4, px: 50 }];
 const stl = A.streetLook(hh, { AAA: { buy: 8, hold: 2, sell: 0, target: 120, consensus: "Buy" }, BBB: { buy: 1, hold: 3, sell: 0, target: 45 } });
 assert(Math.abs(stl.buy_share - (0.6 * 0.8 + 0.4 * 0.25)) < 1e-9 && Math.abs(stl.upside - (0.6 * 0.2 + 0.4 * -0.1)) < 1e-9);
@@ -51,15 +51,22 @@ const oc = A.cleanOutlook(raw, "2026-11-09");
 assert.strictEqual(oc.calls["12M"].call, "strongly bullish"); assert.strictEqual(oc.evidence.length, A.FUND_INPUTS.length); assert(oc.tally.score > 0);
 assert(A.cleanOutlook({ calls: { "1M": { call: "neutral" } } }, "x") === null, "neutral isn't a level");
 assert.strictEqual(A.provisional(pr, "2026-11-09").calls["12M"].call, pr["12M"].call);
-// the track record, on six-level calls: direction, and strength against a normal move
-const ser = { dates: ["2026-01-02", "2026-02-01", "2026-04-02", "2026-11-06"], closes: [100, 104, 99, 110] };
-const lg = A.trackLog([], { "1M": { call: "slightly bullish" }, "3M": { call: "strongly bearish" }, "12M": { call: "bullish" } }, "2026-01-02", 100, { "1M": 5, "3M": 8, "12M": 18 });
-assert.strictEqual(lg.length, 3); assert.strictEqual(A.trackLog(lg, { "1M": { call: "bearish" } }, "2026-01-02", 100).length, 3, "a day's calls are logged once");
-const te = A.trackEval(lg, ser, "2026-11-09");
-const r1 = te.rows.find((r) => r.h === "1M"), r3 = te.rows.find((r) => r.h === "3M"), r12 = te.rows.find((r) => r.h === "12M");
-assert(r1.done && r1.hit === true && r1.strength === true, "1M: +4% on slightly bullish, inside one sigma");
-assert(r3.done && r3.hit === true && r3.strength === false, "3M: -1% on strongly bearish: right way, not strong");
-assert(!r12.done, "12M is still open"); assert.strictEqual(te.done, 2); assert.strictEqual(te.hit, 1); assert.strictEqual(te.strength, 0.5);
+// Times like this: the industries' engine on the fund's own prices; the base rates move code's starting point; HE lines in the dossier
+{
+  const RG = require("./regimes.js"), M = require("./fundmore.js");
+  const mkS = (k, drift, n = 4300) => { const dates = [], values = []; let v = 100; const t0 = Date.UTC(2009, 0, 2); for (let i = 0; i < n; i++) { const d = new Date(t0 + i * 864e5 * 1.4); if (d.getUTCDay() % 6 === 0) continue; v *= 1 + drift + 0.012 * Math.sin(i / k) * Math.cos(i / 97); dates.push(d.toISOString().slice(0, 10)); values.push(v); } return { dates, values }; };
+  const fser = mkS(13, 0.0004), T = RG.episodes({ ind: fser, mk: { spy: mkS(17, 0.0003), vix: { dates: fser.dates, values: fser.values.map((x, i) => 15 + 5 * Math.sin(i / 50)) } }, today: fser.dates[fser.dates.length - 1] });
+  assert(T && T.episodes.length === 5 && T.base["12M"].n >= 15, "five past months like today, and base rates");
+  const fd3 = { ...fd, times: T, hist: { episodes: [{ id: "HE1", then: "A rate scare.", after: "It recovered." }], read: "Mostly up after." } };
+  const dz3 = A.dossier(fd3, "2026-11-09");
+  assert(dz3.idx.HE1 && dz3.idx.HE5 && dz3.blocks.tech.includes("FCNTX, 3 months") && dz3.blocks.tech.includes("[HE1] the historian: A rate scare."), "HE lines, in the fund's words");
+  assert(!/\bindustry\b/i.test(M.timesText(T, "FCNTX").replace(/industries/g, "")), "no industry wording left");
+  const T2 = JSON.parse(JSON.stringify(T)); for (const h of ["1M", "3M", "6M", "12M"]) { T2.base[h].pos = 90; T2.base[h].all_pos = 60; T2.base[h].n = 20; }
+  const p0 = A.prior({ ...fd, times: null }), p2 = A.prior({ ...fd, times: T2 });
+  assert(Math.abs(p2["12M"].score - p0["12M"].score - 0.5) < 1e-9 && /past months most like today/.test(p2["12M"].parts[1].label), "times like this moves the starting point half a notch");
+  assert(M.historianPrompt("Fidelity Contrafund", "FCNTX", T, { today: "2026-11-09" }).includes("market historian for the fund Fidelity Contrafund (FCNTX)"));
+  assert(!("trackLog" in A) && !A.PANELS.calls.track, "no track record");
+}
 // phase 2: what its biggest industries' reports say, panel by panel
 const ir = A.indReads(cov, D, "val", 3);
 assert.strictEqual(ir.length, 3); assert.strictEqual(ir[0].industry, cov.industries[0].industry, "biggest first"); assert(ir[0].text.length > 20);

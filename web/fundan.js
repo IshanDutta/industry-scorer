@@ -70,7 +70,7 @@
     out.push(...[...ev.values()].filter((x) => x.w >= 0.01 || x.importance === "high"));
     return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.w - a.w)).slice(0, 40);
   }
-  // ============================================================= Wall Street, news, technicals, history and the track record
+  // ============================================================= Wall Street, news, technicals and history
   /**
    * Wall Street's view of the fund through its biggest holdings, weighted: the share of analysts at buy, and the upside
    * to the consensus target from the price in the holdings file. street: {TICKER: {buy, hold, sell, consensus, target}}.
@@ -93,31 +93,7 @@
       rows.push({ ticker: h.ticker, weight: h.weight, s30: a?.v ?? NaN, n30: a?.count || 0, s90: b?.v ?? NaN }); }
     return { s30: w30 > 0 ? s30 / w30 : NaN, s90: w90 > 0 ? s90 / w90 : NaN, on: w30, rows: rows.sort((x, y) => y.weight - x.weight) };
   }
-  /**
-   * The track record: each window's outlook call (six levels, no neutral), logged with the day's price and a normal move
-   * for the window (one sigma), scored once the window has passed. Direction: higher or lower, as called. Strength:
-   * "slightly" holds if the move stayed inside one sigma, plain "bullish"/"bearish" if it went at least half a sigma the
-   * called way, "strongly" if it went a full sigma or more. Open calls are marked to market.
-   */
-  const HD = { "1M": 30, "3M": 91, "6M": 182, "12M": 365 };
-  function trackLog(log, calls, date, px, sigmas = {}) {
-    const out = [...(log || [])];
-    for (const h of HZ) { const x = calls?.[h]; if (!x?.call || !isNum(px)) continue; if (out.some((e) => e.date === date && e.h === h)) continue;
-      out.push({ date, h, call: x.call, px, sigma: isNum(n(sigmas[h])) ? n(sigmas[h]) : null }); }
-    return out.slice(-200);
-  }
-  function trackEval(log, ser, today) {
-    const d = ser?.dates || [], c = ser?.closes || []; if (!d.length) return { rows: [], done: 0, hit: NaN, strength: NaN };
-    const at = (date) => { let i = -1; for (let k = 0; k < d.length && d[k] <= date; k++) i = k; return i >= 0 ? c[i] : NaN; };
-    const rows = (log || []).map((e) => { const end = new Date(Date.parse(e.date) + HD[e.h] * 864e5).toISOString().slice(0, 10), done = end <= today;
-      const p1 = done ? at(end) : c[c.length - 1], ret = e.px > 0 && p1 > 0 ? (p1 / e.px - 1) * 100 : NaN, sg = Math.sign(O.SIGN[e.call] || 0), lvl = Math.abs(O.SIGN[e.call] || 0);
-      const hit = !isNum(ret) || !sg ? null : Math.sign(ret) === sg;
-      const z = isNum(ret) && e.sigma > 0 ? (ret * sg) / e.sigma : NaN;
-      const strength = !isNum(z) ? null : lvl === 1 ? Math.abs(ret) / e.sigma <= 1 : lvl === 2 ? z >= 0.5 : z >= 1;
-      return { ...e, end, done, ret, hit, strength }; }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : HZ.indexOf(a.h) - HZ.indexOf(b.h)));
-    const dn = rows.filter((r) => r.done && r.hit !== null), st = dn.filter((r) => r.strength !== null);
-    return { rows, done: dn.length, hit: dn.length ? dn.filter((r) => r.hit).length / dn.length : NaN, strength: st.length ? st.filter((r) => r.strength).length / st.length : NaN };
-  }
+
 
   // ============================================================= the outlook: the company page's engine, for a fund
   /** The components the outlook weighs, one entry each, in this order (the fund's version of the company's sixteen). */
@@ -158,14 +134,14 @@
   function prior(fd) {
     const inds = (fd.cov?.industries || []).map((g) => ({ g, c: indCalls(fd.digests?.[lc(g.industry)]) })).filter((x) => Object.keys(x.c).length);
     if (!inds.length) return null;
-    const out = {}, an = fd.analogs, st = fd.street, rsi = n(fd.tech3?.D?.last?.rsi);
+    const out = {}, tb = fd.times?.base, st = fd.street, rsi = n(fd.tech3?.D?.last?.rsi);
     for (const h of HZ) {
       let w = 0, s0 = 0; for (const { g, c } of inds) if (c[h]) { w += g.weight; s0 += g.weight * O.SIGN[c[h]]; }
       if (!w) continue;
       const base = s0 / w, parts = [{ label: `its industries' outlooks, weighted by the fund (${inds.length} industries, ${Math.round(w * 100)}% of the fund)`, adj: Math.round(base * 100) / 100 }];
       let sc = base; const dir = Math.sign(base) || 1;
-      const e = an?.horizons?.[h], a = an?.all?.[h];
-      if (e?.n >= 15 && isNum(e.pos) && isNum(a?.pos)) { const d = e.pos - a.pos, adj = d >= 0.1 ? 0.5 : d <= -0.1 ? -0.5 : 0; if (adj) { parts.push({ label: `its own setups like today were up ${Math.round(e.pos * 100)}% of the time vs ${Math.round(a.pos * 100)}% for all days`, adj }); sc += adj; } }
+      const b = tb?.[h];
+      if (b?.n >= 15 && isNum(n(b.pos)) && isNum(n(b.all_pos))) { const d = (b.pos - b.all_pos) / 100, adj = d >= 0.1 ? 0.5 : d <= -0.1 ? -0.5 : 0; if (adj) { parts.push({ label: `in the ${b.n} past months most like today (macro and its own setup) it was up ${b.pos}% of the time over ${h} vs ${b.all_pos}% for all months`, adj }); sc += adj; } }
       if ((h === "6M" || h === "12M") && st?.n >= 3 && isNum(st.upside) && isNum(st.buy_share)) { const adj = st.upside >= 0.15 && st.buy_share >= 0.65 ? 0.5 : st.upside <= 0 ? -0.5 : 0; if (adj) { parts.push({ label: `Wall Street sees ${Math.round(st.upside * 100)}% upside on its biggest holdings, ${Math.round(st.buy_share * 100)}% buy`, adj }); sc += adj; } }
       if (h === "1M" && isNum(rsi)) { const adj = rsi >= 70 ? -0.5 : rsi <= 30 ? 0.5 : 0; if (adj) { parts.push({ label: `daily RSI ${Math.round(rsi)} (${rsi >= 70 ? "overbought" : "oversold"})`, adj }); sc += adj; } }
       const sg = Math.sign(sc) || dir, m = Math.abs(sc);
@@ -220,18 +196,17 @@
     const e = [`## THE CALENDAR (next ~4 months)`];
     (fd.cal || []).slice(0, 25).forEach((x, i) => put(e, "E" + (i + 1), `${x.date} ${x.title}`, `${x.date} · ${x.title} (${x.kind}${x.importance ? ", " + x.importance : ""}): ${pc(x.w, 1)} of the fund${x.industries?.length ? ` (${[...new Set(x.industries)].slice(0, 4).join(", ")})` : ""}${x.detail ? `. ${trim(x.detail, 160)}` : ""}.`));
     B.cal = e.join("\n");
-    // T: technicals, the pattern match, past setups like today; N: Wall Street and news; D: distributions; K: the track record
+    // T: technicals and the pattern match; HE: times like this; N: Wall Street and news; D: distributions
     const tl = [`## TECHNICALS, HISTORY, WALL STREET AND NEWS`];
     const T = fd.tech3?.D?.last; if (T) put(tl, "T1", "Technicals", `Daily: close ${f1(T.close, 2)}, SMA 20/50/200 ${f1(T.sma20)}/${f1(T.sma50)}/${f1(T.sma200)}, RSI ${f1(T.rsi, 0)}, MACD ${f1(T.macd, 2)} vs signal ${f1(T.signal, 2)}. Signals: ${(fd.tech3.D.signals || []).map((x) => x.t).join("; ") || "none"}.`);
     const Wk = fd.tech3?.W?.last; if (Wk) put(tl, "T2", "Weekly trend", `Weekly: RSI ${f1(Wk.rsi, 0)}; signals: ${(fd.tech3.W.signals || []).map((x) => x.t).join("; ") || "none"}.`);
     if (fd.pm) put(tl, "T3", "Pattern match", `Pattern match (last ${fd.pm.win} days against its own and SPY's history): ${pc(fd.pm.win_rate, 0)} of the ${fd.pm.n} closest past paths were up ${fd.pm.fwd} days later (base rate ${pc(fd.pm.base_win_rate, 0)}), median ${spf(fd.pm.median)}.`);
-    const an = fd.analogs; if (an) put(tl, "T4", "Times like this", `The ${an.n} past days most like today (1M ${spf(an.now.r1m)}, 3M ${spf(an.now.r3m)}, 12M ${spf(an.now.r12m)}, ${spf(an.now.vs200)} vs the 200-day): ${HZ.map((h) => `${h} later median ${spf(an.horizons[h]?.median)}, ${pc(an.horizons[h]?.pos, 0)} up (all days: ${spf(an.all[h]?.median)}, ${pc(an.all[h]?.pos, 0)} up)`).join("; ")}.`);
+    if (fd.times?.episodes?.length) { tl.push(M.timesText(fd.times, fd.sym, fd.hist)); fd.times.episodes.forEach((x, k) => { idx["HE" + (k + 1)] = `${x.month}: a past month like today`; }); }
     if (fd.levels) put(tl, "T5", "Price levels", `Levels: 52-week high ${f1(fd.levels.high52, 2)}, low ${f1(fd.levels.low52, 2)}, 3-month swing high ${f1(fd.levels.swing_high, 2)}, swing low ${f1(fd.levels.swing_low, 2)}, 50-day ${f1(fd.levels.sma50, 2)}, 200-day ${f1(fd.levels.sma200, 2)}.`);
     const st = fd.street; if (st?.n) put(tl, "N1", "Wall Street on its holdings", `Wall Street on the ${st.n} biggest holdings (${pc(st.on, 0)} of the fund): ${pc(st.buy_share, 0)} of ratings are buy, weighted; consensus targets ${spf(st.upside)} above the holdings' prices. Biggest: ${st.rows.slice(0, 6).map((r) => `${r.ticker} ${r.consensus || "n/a"} (${pc(r.buy_share, 0)} buy, target ${spf(r.upside)})`).join("; ")}.`);
     const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}. ${se.rows.slice(0, 6).map((r) => `${r.ticker} ${f1(r.s30, 2)} (${r.n30} articles)`).join(", ")}.`);
     (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`));
     const dv = fd.dist; if (dv?.paying) put(tl, "D1", "Distributions", `Distributions: ${pc(dv.yield, 2)} trailing yield (${f1(dv.annual, 2)} a share a year, ${String(dv.freq || "").toLowerCase()}); 5-year growth ${spf(dv.cagr5)} a year${dv.cut5 ? "; cut in the last five years" : ""}${dv.next ? `; next ex-date ${dv.next.ex}` : ""}.`);
-    const tr = fd.track; if (tr?.done) put(tl, "K1", "Track record", `This page's past calls on the fund: ${tr.done} scored, direction right ${pc(tr.hit, 0)}, strength held ${pc(tr.strength, 0)}.`);
     B.tech = tl.join("\n");
     // D: the industries' own drivers and risks (for the context analyst)
     const dl = [`## WHAT EACH BIG INDUSTRY'S STRATEGIST SAYS DRIVES IT`];
@@ -261,7 +236,7 @@
   const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund, set against what its biggest industries' own reports say on the same panel (more or less, and why), and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
   const PANELS = {
     core: { score: "the scorecard: which pillars lift or hold back each investor's score, the fund's own numbers against its industries'", peers: "how the fund stacks up against its peer funds on return, risk and cost", holdings: "the holdings and their concentration", industries: "the industry mix and how the industries are rated", valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
-    calls: { season: "the holdings' earnings season: who reported, how it went and who's next", debates: "the industries' debates and which side the fund is on", perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead", plan: "the price levels and when to buy", times: "past setups like today and what came next", track: "how this page's past calls on the fund have done" },
+    calls: { season: "the holdings' earnings season: who reported, how it went and who's next", debates: "the industries' debates and which side the fund is on", perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead", plan: "the price levels and when to buy", times: "the past months most like today (macro and the fund's own setup) and what came next (cite HE)" },
     context: { cycle: "where its industries are in their cycles and what their KPIs say", stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions", world: "the world events that reach the fund" },
     exposures: { trade: "trade and supply chains", regulation: "regulation", outside: "the holdings the analysis can't see" },
   };
@@ -381,7 +356,7 @@ HOW TO MAKE THE CALLS
 - Six levels, no neutral. "slightly": a close call that tips one way. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most components point the same way, decisively; rare. If it's close, pick the side it tips toward and say "slightly".
 - First weigh EVERY component, one entry each, in this order: ${FUND_INPUTS.map(([q]) => q).join(", ")}. For each: does it push ${sym} up or down over the next year ("up" / "down" / "mixed"), how much it matters (weight 1 = minor, 2 = material, 3 = decisive), and why in one sentence with the number. Nothing to go on: "mixed", weight 1.
 - Then the four calls, from that evidence. Near-term windows lean on momentum, positioning, macro and dated events; longer ones on earnings, the cycle, valuation and the scenarios. A call that flips direction from one window to the next must say what changes in between.
-- For each call, put the strongest case against it in "against" and say why it loses. Square the calls with its own history (setups like today, how often it was higher); where you go against them, say why.
+- For each call, put the strongest case against it in "against" and say why it loses. Square the calls with Times like this (the past months most like today, on the macro backdrop and the fund's own setup [HE#], and how often it was higher after them); where you go against them, say why.
 - Start from its industries' outlooks, then say where ${sym} departs from them and why.${pr ? `
 - Each window starts at code's starting point above. Keep it unless the evidence gives a concrete reason to move; when your call differs from the starting point, the window's "why" must say in one clause what moves it off (for example "one notch more bearish than the starting point because ...").` : ""}
 - Plain words, specific numbers, no hedging filler. No price targets or % ranges.
@@ -454,7 +429,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);

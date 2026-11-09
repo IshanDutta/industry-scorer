@@ -5428,16 +5428,16 @@ a.btnlink:hover { border-color: var(--accent); }
     fd.sens = null; const fac = bench?.factors;
     if (fac && fd.spy && fd.ser.dates.length > 200) try { fd.sens = Sensitivity.measure({ dates: fd.ser.dates, levels: fd.ser.closes }, { market: { dates: fd.spy.dates, values: fd.spy.closes }, ...Object.fromEntries(Object.entries(fac).map(([k, v]) => [k, { dates: v.dates, values: v.values }])) }); } catch { fd.sens = null; }
   }
-  /** Technicals, the pattern match, past setups like today, price levels, rolling beta and the track record (code, from the fund's prices). */
+  /** Technicals, the pattern match, Times like this, price levels and rolling beta (code, from the fund's prices). */
   async function fundHistoryFacts(fd) {
     const ser = fd.ser; if (!ser) return;
     try { fd.tech3 = ser.dates.length > 60 ? { D: CoFacts.technicals(ser, "D"), W: CoFacts.technicals(ser, "W"), M: CoFacts.technicals(ser, "M") } : null; } catch { fd.tech3 = null; }
     try { fd.pm = CoFacts.patternMatch([{ name: fd.sym, ser }, ...(fd.spy ? [{ name: "SPY", ser: fd.spy }] : [])]); } catch { fd.pm = null; }
-    try { fd.analogs = History.analogs({ dates: ser.dates, levels: ser.closes }); } catch { fd.analogs = null; }
+    // Times like this: the industries' and companies' engine (regimes.js) on the fund's own prices, with the same macro backdrop.
+    try { fd.times = ser.dates.length >= 600 ? Regimes.episodes({ ind: { dates: ser.dates, values: ser.closes }, mk: S.mcp ? await regimeData() : {}, today: today() }) : null; } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("fund times", e); fd.times = null; }
+    const hs = await idbGet("fundHist:" + fd.sym).catch(() => null); fd.hist = fd.times && hs?.months?.join() === fd.times.episodes.map((e) => e.month).join() ? hs.result : null;
     try { fd.levels = Plan.levels(ser); } catch { fd.levels = null; }
     try { fd.roll = fd.bser || fd.spy ? CoFacts.rollingBeta(ser, fd.bser || fd.spy) : null; } catch { fd.roll = null; }
-    fd.trackLog = (await idbGet("fundCalls:" + fd.sym).catch(() => null)) || [];
-    fd.track = FundAn.trackEval(fd.trackLog, ser, today());
     fd.dlog = (await idbGet("fundDaily:" + fd.sym).catch(() => null)) || [];
   }
   /**
@@ -5514,6 +5514,19 @@ a.btnlink:hover { border-color: var(--accent); }
       if (t?.headline) h.co = `${t.verdict?.call ? `opportunity ${t.verdict.call}; ` : ""}${trimC(stripCites(t.headline), 200)} (written ${String(r.at || "").slice(0, 10)})`; }
   }
   /**
+   * The market historian on the fund's Times like this (the industries' historian: what was going on in each past month,
+   * what happened next and why, what's different now). One call, the default tier; redone only when the months change.
+   */
+  async function fundHistorian(fd, signal = null) {
+    const T = fd.times; if (!T?.episodes?.length || !S.sample || fd.hist) return fd.hist;
+    try {
+      const raw = await sampleJson(FundMore.historianPrompt(fd.facts?.name || fd.sym, fd.sym, T, { today: today(), thesis: fd.full?.parts?.core?.headline || "" }), { modelTier: "default", cache: false, ...(signal ? { signal } : {}) });
+      fd.hist = FundMore.cleanHistorian(raw, T); await idbPut("fundHist:" + fd.sym, jsonSafe({ months: T.episodes.map((e) => e.month), at: new Date().toISOString(), result: fd.hist })).catch(() => {});
+    } catch (e) { if (FATAL.has(e?.code)) throw e; console.warn("fund historian", e); }
+    if (S.fund === fd) renderFund();
+    return fd.hist;
+  }
+  /**
    * The full analysis: four analysts at once on their slices of one dossier (core, calls, context, exposures), then
    * the outlook alongside. Kept per fund with what it was written on; rewritten only when the look-through moves
    * (Portfolio.changes) or on "Rewrite".
@@ -5537,8 +5550,10 @@ a.btnlink:hover { border-color: var(--accent); }
         onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { fd.partial[part] = FundAn.cleanPart(part, v, dz.idx).w; show(); } } });
       raw[part] = FundAn.cleanPart(part, out, dz.idx); fd.partial[part] = raw[part].w; show(); return raw[part];
     };
+    const histP = fundHistorian(fd, ctl.signal).catch(() => null);
     try {
       const parts = FundAn.PARTS, res = await Promise.allSettled(parts.map(one));
+      await histP;
       if (res.every((r) => r.status === "rejected")) throw res[0].reason;
       const P0 = Object.fromEntries(parts.map((p, i) => [p, res[i].status === "fulfilled" ? res[i].value.w : rec?.parts?.[p] || null]));
       const failed = parts.filter((p, i) => res[i].status === "rejected");
@@ -5570,6 +5585,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const ctl = new AbortController(); fd.leanCtl = ctl;
     const call = (p) => sampleJson(p, { modelTier: "complex", cache: false, signal: ctl.signal });
     try {
+      if (!fd.hist && fd.times) { fd.leanStage = "The market historian on times like this"; if (S.fund === fd) renderFund(); await fundHistorian(fd, ctl.signal); fd.leanStage = "Weighing every component and making the four calls"; if (S.fund === fd) renderFund(); }
       fundCard(fd); const dz = FundAn.dossier(fd, today());
       let o = FundAn.cleanOutlook(await call(FundAn.outlookPrompt(fd, dz, today(), fd.full?.parts)), today());
       if (!o) throw new Error("no usable calls came back; try again");
@@ -5583,10 +5599,6 @@ a.btnlink:hover { border-color: var(--accent); }
       const cur = (await idbGet("fundFull:" + fd.sym).catch(() => null)) || fd.full || { sym: fd.sym };
       const h0 = Outlook.histOf(cur.outlook), hist = [...(h0 ? [h0] : []), ...(cur.outlook_history || [])].slice(0, 12);
       fd.full = jsonSafe({ ...cur, outlook: o, outlook_history: hist }); await idbPut("fundFull:" + fd.sym, fd.full).catch(() => {});
-      // The track record: each window's call, logged with the day's price and a normal move, scored once the window has passed.
-      const W = FundAn.windows(fd, today()), px = o.mark?.px;
-      if (isNum(px)) { fd.trackLog = FundAn.trackLog(fd.trackLog || [], o.calls, today(), px, Object.fromEntries(W.map((w) => [w.h, w.sigma])));
-        await idbPut("fundCalls:" + fd.sym, fd.trackLog).catch(() => {}); fd.track = FundAn.trackEval(fd.trackLog, fd.ser, today()); }
     } catch (e) { fd.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" || ctl.signal.aborted ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
     finally { fd.leanBusy = false; fd.leanStage = null; fd.leanCtl = null; if (S.fund === fd) renderFund(); }
   }
@@ -5701,7 +5713,7 @@ a.btnlink:hover { border-color: var(--accent); }
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
   function fundGroups(fd) {
-    return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-times", "Times like this"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-track", "Track record"], ["fund-fresh", "What's changed"]] },
+    return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-times", "Times like this"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
       { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"], ["fund-peers", "Peer funds"]] },
       { label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
       { label: "Wall Street & news", items: [["fund-street", "Wall Street"], ["fund-news", "News & sentiment"], ["fund-season", "Earnings season"]] },
@@ -5923,21 +5935,34 @@ a.btnlink:hover { border-color: var(--accent); }
       ${core.watch?.length || calls.change_mind?.length ? `<div class="box"><b>Watch</b><ul class="dlist small">${(core.watch || []).map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>${calls.change_mind?.length ? `<b>What would change the call</b><ul class="dlist small">${calls.change_mind.map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>` : ""}</div>` : ""}</div>`) : "";
     const calSec = fd.cal?.length ? sec("fund-cal", "Calendar", "the holdings' earnings and the industries' dated events, next four months", `${R("calendar", "calls")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th class="n">Fund weight</th></tr></thead><tbody>${fd.cal.map((x) => `<tr><td class="mono">${esc(x.date)}</td><td class="wr"><b>${esc(x.title)}</b> <span class="small muted">${esc(x.kind)}${x.importance ? ", " + esc(x.importance) : ""}</span>${x.detail ? `<div class="small muted">${esc(trimC(x.detail, 200))}</div>` : ""}</td><td class="n">${pct(x.w, false, 1)}</td></tr>`).join("")}</tbody></table></div>`) : "";
     // ---- times like this: the past days most like today in the fund's own history, and what came next
-    const an = fd.analogs, tim = an ? sec("fund-times", "Times like this", `the ${an.n} past days most like today in ${esc(fd.sym)}'s own history`, `${R("times", "calls")}
-      <div class="kpis">${[kpi("1-month momentum", pct(an.now.r1m)), kpi("3-month", pct(an.now.r3m)), kpi("12-month", pct(an.now.r12m)), kpi("vs the 200-day average", pct(an.now.vs200))].join("")}</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Then, after</th><th class="n">Median</th><th class="n">Middle half</th><th class="n">Share up</th><th class="n">All days: median</th><th class="n">All days: share up</th><th>Edge</th></tr></thead><tbody>${Portfolio.HZ.map((h) => { const x = an.horizons[h] || {}, a = an.all[h] || {}, e = num(x.pos) - num(a.pos);
-        return `<tr><td><b>${h}</b></td><td class="n ${cls(num(x.median))}">${pct(x.median)}</td><td class="n muted">${pct(x.p25)} to ${pct(x.p75)}</td><td class="n"><b>${pct(x.pos, false, 0)}</b></td><td class="n muted">${pct(a.median)}</td><td class="n muted">${pct(a.pos, false, 0)}</td><td>${isNum(e) ? `<span class="pill ${e > 0.05 ? "pos" : e < -0.05 ? "neg" : "neu"}">${e > 0 ? "+" : ""}${Math.round(e * 100)} pts</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
-      <div class="small muted">The past days whose 1-month, 3-month and 12-month moves and distance from the 200-day average were closest to today's, at least three weeks apart. Dates: ${esc((an.dates || []).slice(-8).join(", "))}${an.dates?.length > 8 ? "…" : ""}.</div>`) : "";
+    const T = fd.times, HI = fd.hist, tim = T?.episodes?.length ? (() => {
+      const HS = Object.keys(Regimes.H), by = Object.fromEntries((HI?.episodes || []).map((e) => [e.month, e])), sym = esc(fd.sym);
+      const sg = (v) => (isNum(num(v)) ? `<span style="color:${v >= 0 ? "var(--pos)" : "var(--neg)"}">${v > 0 ? "+" : ""}${v}%</span>` : "—");
+      const ML = (m) => { const [y, mo] = m.split("-"); return `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+mo - 1]} ${y}`; };
+      const LB = (k) => esc(FundMore.timesLabel(k, fd.sym)), fv = (k, v) => esc(Regimes.fval(k, v));
+      const strip = `<div class="times-strip">${HS.map((h) => { const b = T.base[h] || {}, c = OL?.calls?.[h]?.call;
+        return `<div class="box"><div class="dim-head"><b>${h}</b>${c ? `<span class="pill ${Outlook.cls(c)}">our call: ${esc(Outlook.label(c).toLowerCase())}${OL.provisional ? " (provisional)" : ""}</span>` : ""}</div>
+          <div class="hz-num"><span class="v">${b.top_up ?? "—"} of ${b.top_n ?? 5}</span><span class="small muted">closest episodes higher · median ${sg(b.top_median)}</span></div>
+          <div class="small">${T.pool} closest months: up <b>${b.pos ?? "—"}%</b> (all months ${b.all_pos ?? "—"}%), median ${sg(b.median)}, middle half ${sg(b.p25)} to ${sg(b.p75)}${isNum(num(b.beat_spy)) ? `; beat the S&P 500 ${b.beat_spy}%` : ""}</div></div>`; }).join("")}</div>`;
+      const now = `<div class="small times-now"><b>Today (${esc(fmtShort(T.as_of))}):</b> ${T.features.map((k) => `<span class="chip-s">${LB(k)} <b>${fv(k, T.now[k])}</b></span>`).join(" ")}</div>`;
+      const cards = T.episodes.map((e, i) => { const nn = by[e.month], id = `HE${i + 1}`;
+        return `<div class="box ep-card${HI?.closest === id ? " ep-closest" : ""}" id="fep-${id}"><div class="dim-head"><span class="idtag">${id}</span><b>${ML(e.month)}</b><span class="small muted">closer than ${e.similarity}% of all months</span>${HI?.closest === id ? `<span class="pill pos">most like today</span>` : ""}</div>
+          <div class="tbl-wrap"><table class="ep-ret"><thead><tr><th>Next</th>${HS.map((h) => `<th class="n">${h}</th>`).join("")}</tr></thead><tbody>
+            <tr><td>${sym}</td>${HS.map((h) => `<td class="n">${sg(e.industry[h])}</td>`).join("")}</tr><tr><td>S&amp;P 500</td>${HS.map((h) => `<td class="n">${sg(e.spy[h])}</td>`).join("")}</tr>
+            <tr><td>Difference</td>${HS.map((h) => `<td class="n">${isNum(num(e.excess[h])) ? `${e.excess[h] > 0 ? "+" : ""}${e.excess[h]}pp` : "—"}</td>`).join("")}</tr></tbody></table></div>
+          ${epPath(e.path, e.spy_path)}<div class="small muted">Worst drop in the next 6 months: ${sg(e.maxdd6)} · <span style="color:var(--accent)">━</span> ${sym} <span>┅</span> S&amp;P 500, 12 months</div>
+          ${nn?.then ? `<p class="small" style="margin:0"><b>Then.</b> ${esc(nn.then)}</p>` : ""}${nn?.after ? `<p class="small" style="margin:0"><b>What happened next.</b> ${esc(nn.after)}</p>` : ""}${nn?.different ? `<p class="small" style="margin:0"><b>What's different now.</b> ${esc(nn.different)}</p>` : ""}${nn?.lesson ? `<div class="small"><span class="pill neu">${esc(nn.lesson)}</span></div>` : ""}
+          <div class="small"><b>Most alike:</b> ${e.alike.map(LB).join(", ")} · <b>least alike:</b> ${e.unlike.map(LB).join(", ")}</div>
+          <details class="small"><summary>Then vs now, every measure</summary><div class="tbl-wrap"><table><thead><tr><th>Measure</th><th class="n">${ML(e.month)}</th><th class="n">Today</th></tr></thead><tbody>${T.features.map((k) => `<tr><td>${LB(k)}</td><td class="n">${fv(k, e.then[k])}</td><td class="n">${fv(k, T.now[k])}</td></tr>`).join("")}</tbody></table></div></details></div>`; }).join("");
+      const heIdx = Object.fromEntries(T.episodes.map((e, i) => [`HE${i + 1}`, ML(e.month)])), read = HI?.read ? `<div class="callout"><span class="eyebrow">The historian's read</span><p class="small" style="margin:4px 0 0">${fundCites(HI.read, heIdx)}</p></div>` : `<div class="small muted">${fd.writing || fd.leanBusy ? "The market historian is writing its notes on each month…" : "The historian's notes on each month (what was going on, what happened next and why, what's different now) come with the analysis or the next time the calls are made."}</div>`;
+      return sec("fund-times", "Times like this", `the 5 past months most like today, out of ${T.months} since 2009 · what ${sym} did next`, `${strip}${R("times", "calls")}${read}${now}<div class="ep-grid">${cards}</div>
+        <div class="small muted">How it's found, as for industries and companies: every month-end since 2009 gets a fingerprint of the macro backdrop (Fed funds rate and its 12-month change, CPI inflation, unemployment and its change, Treasuries, high-yield credit, oil, the dollar, the VIX, the S&amp;P 500's 6-month return and drawdown) and ${sym}'s own setup (3- and 12-month returns, distance from its 200-day average, 6 months vs the S&amp;P 500, drawdown). Each measure is standardized and today's fingerprint is compared with every past month; the closest five at least 9 months apart are shown, the last 12 months left out. Returns are ${sym}'s own, dividend-adjusted. The calls start from these base rates.</div>`); })()
+      : fd.ser ? sec("fund-times", "Times like this", "", `<div class="small muted">${esc(fd.sym)} needs about three years of prices to be compared with the past months most like today.</div>`) : "";
     // ---- trade plan: levels and each investor's plan
     const LV = fd.levels, plan = LV || calls.plans ? sec("fund-plan", "Trade plan", "price levels from the fund's own chart, and a plan per investor type", `${R("plan", "calls")}
       ${LV ? `<div class="kpis">${[kpi("Last", fix(LV.last, 2)), kpi("50-day / 200-day", `${fix(LV.sma50, 2)} · ${fix(LV.sma200, 2)}`, `${pct(LV.last / LV.sma200 - 1)} vs the 200-day`), kpi("3-month swing", `${fix(LV.swing_low, 2)} – ${fix(LV.swing_high, 2)}`), kpi("52-week range", `${fix(LV.low52, 2)} – ${fix(LV.high52, 2)}`, `${pct(LV.last / LV.high52 - 1)} from the high`)].join("")}</div>` : ""}
       ${calls.plans && Object.keys(calls.plans).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Investor</th><th class="n">Size</th><th>Entry</th><th>Hedge</th><th>Review</th></tr></thead><tbody>${["income", "conservative", "growth", "aggressive"].filter((k) => calls.plans[k]).map((k) => { const x = calls.plans[k];
         return `<tr><td><b>${k[0].toUpperCase() + k.slice(1)}</b></td><td class="n">${isNum(x.size_pct) ? x.size_pct + "%" : "—"}</td><td class="wr small">${fundCites(x.entry, idx)}</td><td class="wr small">${fundCites(x.hedge, idx)}</td><td class="wr small">${fundCites(x.review, idx)}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="small muted">${fd.writing ? "The plans are being written…" : "The plans come with the analysis."}</div>`}`) : "";
-    // ---- track record
-    const TR = fd.track, trk = sec("fund-track", "Track record", "this page's past 1M-12M calls on the fund, scored against its price", TR?.rows?.length ? `${R("track", "calls")}<div class="kpis">${[kpi("Scored calls", String(TR.done), `${TR.rows.length - TR.done} still open`), kpi("Right direction", pct(TR.hit, false, 0)), kpi("Strength held", pct(TR.strength, false, 0), "slightly: inside a normal move · plain: half a normal move or more · strongly: a full one")].join("")}</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Made</th><th>Window</th><th>Call</th><th class="n">Normal move</th><th class="n">Move so far</th><th>Result</th></tr></thead><tbody>${TR.rows.slice(0, 24).map((r) => `<tr><td class="mono">${esc(r.date)}</td><td>${r.h} <span class="small muted">to ${esc(r.end)}</span></td><td><span class="pill ${Outlook.cls(r.call) || CALLC(r.call)}">${esc(Outlook.label(r.call) || r.call)}</span></td><td class="n">${isNum(num(r.sigma)) ? "±" + r.sigma + "%" : "—"}</td>
-        <td class="n ${cls(num(r.ret))}">${pts(r.ret)}</td><td>${r.done ? `${r.hit ? `<span class="pill pos">right way</span>` : `<span class="pill neg">wrong way</span>`}${r.strength === true ? ` <span class="pill pos">strength held</span>` : r.strength === false ? ` <span class="pill warn">strength off</span>` : ""}` : `<span class="small muted">open</span>`}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="small muted">No calls logged yet. Each time the calls are made, they're logged with the day's price and a normal move for each window, and scored once the window has passed.</div>`);
     // ---- timeframe patterns: the company page's panel, on the fund's prices
     let tech = "";
     if (fd.tech3) { const save = S.coTf; S.coTf = S.fundTf || "D"; try { tech = coTech({ tech: fd.tech3, pm: fd.pm, sym: fd.sym }).replace('id="co-tech"', 'id="fund-tech"').replace(/data-co-tf=/g, "data-fund-tf="); } catch { tech = ""; } S.coTf = save;
@@ -5998,7 +6023,7 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="tbl-wrap"><table><thead><tr><th>Input</th><th>As of</th><th class="n">Age</th><th></th></tr></thead><tbody>${FR.map((r) => `<tr><td>${esc(r.what)}</td><td class="mono">${esc(r.date || "—")}</td><td class="n ${r.age > 14 ? "down" : ""}">${r.age === null ? "—" : r.age + "d"}</td><td class="small muted">${esc(r.note)}</td></tr>`).join("")}</tbody></table></div>
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls: its industries' starting point, a move of a normal month or more, a big holding reporting, the write-up's inputs (a re-analyzed industry, shifted weights), or calls a week old. "Update my funds" on the fund list runs the same check for every fund you've analyzed and redoes only what moved: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis.</div>`) : "";
-    const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, trk, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
     return `<div class="shell">${sideNav(fundGroups(fd))}<div class="stream">${secs.filter(Boolean).join("")}</div></div>`;
   }
   function renderFund() {
