@@ -4,7 +4,7 @@ const FX = require("./fixtures/funds.json");
 const m = P.mapHoldings(P.fromFmp(FX.fcntx_holdings), [], FX.cos), cov = P.coverage(m, FX.runs, { now: "2026-11-09" }), D = FX.digests;
 
 // ---- phase 3: the scorecard
-assert(Object.values(D).every((d) => d.v === 4 && d.pillars), "the fixture's digests are v4, with pillars");
+assert(Object.values(D).every((d) => d.v === 5 && d.pillars), "the fixture's digests are v5, with pillars");
 const own = M.ownFrom({ retRows: [{ label: "1M", value: 2, spy: 1 }, { label: "1Y", value: 11, spy: 15 }], g1: { beta: 1.1, vol: 0.2, downside_vol: 0.14, max_dd: -0.18, sharpe: 0.6 }, bench: { symbol: "SPY" },
   hold: [0.08, 0.07, 0.06, 0.05, 0.04, 0.03].map((weight) => ({ weight })), facts: { yield: 0.003, expense: 0.0063 } });
 assert(Math.abs(own.ex1m - 0.01) < 1e-9 && Math.abs(own.ex1y + 0.04) < 1e-9 && Math.abs(own.top5 - 0.3) < 1e-9 && own.yield === 0.003);
@@ -52,6 +52,21 @@ const pt = M.peerTable([{ sym: "A", self: true, r1y: 0.1, expense: 0.006 }, { sy
 assert.deepStrictEqual(pt.map((r) => [r.rank.r1y, r.rank.expense]), [[2, 3], [1, 1], [3, 2]]);
 assert(M.peerText("A", pt).includes("A ranks 2 of 3 on 1-year return"));
 
+// ---- times like this, from the industries' runs
+{
+  const TL = M.timesLook(cov, D, null);
+  assert(TL && TL.n > 10 && TL.on > 0.5 && TL.episodes.length === 5, "five episodes from its industries' runs");
+  const mi = (m) => +m.slice(0, 4) * 12 + +m.slice(5, 7);
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) assert(Math.abs(mi(TL.episodes[i].month) - mi(TL.episodes[j].month)) >= 6, "episodes at least 6 months apart");
+  assert(TL.episodes[0].vote >= TL.episodes[4].vote && TL.episodes[0].industries.length > 1 && TL.episodes[0].note?.then, "the most-picked month first, with a historian's note");
+  const w12 = TL.base["12M"]; assert(w12.pos > 0 && w12.pos < 100 && w12.all_pos > 0, JSON.stringify(w12));
+  assert(Object.keys(TL.now).every((k) => !/^i|^pe$|^v200|^rel6/.test(k)) && "vix" in TL.now, "today's macro backdrop only");
+  // With the fund's own prices, each episode also says what the fund did next.
+  const dates = [], closes = []; let v = 100; for (let t = Date.UTC(2009, 0, 2); t < Date.UTC(2026, 10, 7); t += 864e5) { const d = new Date(t); if (d.getUTCDay() % 6 === 0) continue; v *= 1.0003; dates.push(d.toISOString().slice(0, 10)); closes.push(v); }
+  const TF = M.timesLook(cov, D, { dates, closes }), e0 = TF.episodes.find((e) => e.month < "2025-06");
+  assert(e0.fund && e0.fund["3M"] > 1 && e0.fund_path.length > 5, "the fund's own path after the month");
+  assert(M.timesLookText(TF, "FCNTX").includes("FCNTX itself"));
+}
 // ---- phase 5: the daily check
 const ol = { date: "2026-11-01", mark: { px: 100 }, calls: {} }, ser = { dates: ["2026-11-09"], closes: [106] };
 let ck = M.dailyCheck({ outlook: ol, ser, sigma1m: 5, today: "2026-11-09" });

@@ -219,7 +219,7 @@
    * code-only fill ({name, saved_at, industry}); row: the sector overview row (scores with every section) when there is one;
    * scores: the page's own scores when there isn't.
    */
-  const noCite = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
+  const noCite = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s*\(\s*[,;][^)]*\)/g, "").replace(/\(\s*\)/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
   /** Text without citations, cut at a word end. */
   const cutW = (x, k) => { const t = noCite(x); return t.length <= k ? t : t.slice(0, t.slice(0, k).lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
   /** The inputs Sections.pillars scores a saved run's report sections from (the industry page's own, read off the saved record). */
@@ -240,7 +240,7 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 4, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 5, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -286,6 +286,13 @@
         return { position: k.cycle_position || null, pricing: k.pricing_power?.level || null, oplev: k.unit_economics?.operating_leverage || null, text: cutW(k.cycle_text || k.summary, 260),
           kpis: [...(k.demand_metrics || []).slice(0, 2), ...(k.profitability_metrics || []).slice(0, 1)].filter((x) => x?.name).map((x) => ({ name: cutW(x.name, 70), value: cutW(x.value, 90), vs_cycle: cutW(x.vs_cycle, 110) })),
           tone, next: (k.next_triggers || []).filter((x) => x?.date && x?.event).slice(0, 4).map((x) => ({ date: String(x.date).slice(0, 10), event: cutW(x.event, 110), names: (x.names || []).slice(0, 4) })) }; })(),
+      // Times like this (the industry's own: the past months most like today, on the macro backdrop and its setup, what
+      // followed, the base rates) and the market historian's notes on each month.
+      times: (() => { const T = d.history?.times; if (!T?.episodes?.length) return null; const h = rep("history");
+        const b = Object.fromEntries(Object.entries(T.base || {}).map(([k, x]) => [k, { pos: n(x.pos), all_pos: n(x.all_pos), median: n(x.median), p25: n(x.p25), p75: n(x.p75), top_up: n(x.top_up), top_n: n(x.top_n), top_median: n(x.top_median), beat_spy: n(x.beat_spy), n: n(x.n) }]));
+        return { as_of: T.as_of || null, months: T.months || null, features: T.features || [], now: T.now || {}, base: b,
+          episodes: T.episodes.map((e) => ({ month: e.month, date: e.date, similarity: n(e.similarity), then: e.then || {}, alike: e.alike || [], unlike: e.unlike || [], industry: e.industry || {}, spy: e.spy || {}, excess: e.excess || {}, maxdd6: n(e.maxdd6), path: e.path || [], spy_path: e.spy_path || [] })),
+          hist: h ? { read: cutW(h.read, 700), closest: h.closest || "", episodes: (h.episodes || []).map((x) => ({ month: x.month, then: cutW(x.then, 360), after: cutW(x.after, 400), different: cutW(x.different, 300), lesson: cutW(x.lesson, 90) })) } : null }; })(),
       // The lead strategist's debates (the biggest questions about the industry, each side and which way it leans).
       debates: (a.debates || []).filter((x) => x?.question).slice(0, 3).map((x) => ({ q: cutW(x.question, 180), bull: cutW(x.bull, 240), bear: cutW(x.bear, 240), lean: lc(x.lean || ""), resolves: cutW(x.resolves_with, 160) })),
       positioning: d.positioning?.label || row?.positioning || null,

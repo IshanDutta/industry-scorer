@@ -51,20 +51,15 @@ const oc = A.cleanOutlook(raw, "2026-11-09");
 assert.strictEqual(oc.calls["12M"].call, "strongly bullish"); assert.strictEqual(oc.evidence.length, A.FUND_INPUTS.length); assert(oc.tally.score > 0);
 assert(A.cleanOutlook({ calls: { "1M": { call: "neutral" } } }, "x") === null, "neutral isn't a level");
 assert.strictEqual(A.provisional(pr, "2026-11-09").calls["12M"].call, pr["12M"].call);
-// Times like this: the industries' engine on the fund's own prices; the base rates move code's starting point; HE lines in the dossier
+// Times like this, from its industries' runs: HE lines in the dossier; the weighted base rates move code's starting point
 {
-  const RG = require("./regimes.js"), M = require("./fundmore.js");
-  const mkS = (k, drift, n = 4300) => { const dates = [], values = []; let v = 100; const t0 = Date.UTC(2009, 0, 2); for (let i = 0; i < n; i++) { const d = new Date(t0 + i * 864e5 * 1.4); if (d.getUTCDay() % 6 === 0) continue; v *= 1 + drift + 0.012 * Math.sin(i / k) * Math.cos(i / 97); dates.push(d.toISOString().slice(0, 10)); values.push(v); } return { dates, values }; };
-  const fser = mkS(13, 0.0004), T = RG.episodes({ ind: fser, mk: { spy: mkS(17, 0.0003), vix: { dates: fser.dates, values: fser.values.map((x, i) => 15 + 5 * Math.sin(i / 50)) } }, today: fser.dates[fser.dates.length - 1] });
-  assert(T && T.episodes.length === 5 && T.base["12M"].n >= 15, "five past months like today, and base rates");
-  const fd3 = { ...fd, times: T, hist: { episodes: [{ id: "HE1", then: "A rate scare.", after: "It recovered." }], read: "Mostly up after." } };
-  const dz3 = A.dossier(fd3, "2026-11-09");
-  assert(dz3.idx.HE1 && dz3.idx.HE5 && dz3.blocks.tech.includes("FCNTX, 3 months") && dz3.blocks.tech.includes("[HE1] the historian: A rate scare."), "HE lines, in the fund's words");
-  assert(!/\bindustry\b/i.test(M.timesText(T, "FCNTX").replace(/industries/g, "")), "no industry wording left");
-  const T2 = JSON.parse(JSON.stringify(T)); for (const h of ["1M", "3M", "6M", "12M"]) { T2.base[h].pos = 90; T2.base[h].all_pos = 60; T2.base[h].n = 20; }
-  const p0 = A.prior({ ...fd, times: null }), p2 = A.prior({ ...fd, times: T2 });
-  assert(Math.abs(p2["12M"].score - p0["12M"].score - 0.5) < 1e-9 && /past months most like today/.test(p2["12M"].parts[1].label), "times like this moves the starting point half a notch");
-  assert(M.historianPrompt("Fidelity Contrafund", "FCNTX", T, { today: "2026-11-09" }).includes("market historian for the fund Fidelity Contrafund (FCNTX)"));
+  const M = require("./fundmore.js");
+  const TL = M.timesLook(cov, D, null);
+  const dz3 = A.dossier({ ...fd, timesL: TL }, "2026-11-09");
+  assert(dz3.idx.HE1 && dz3.idx.HE5 && dz3.blocks.tech.includes("TIMES LIKE THIS, THROUGH ITS INDUSTRIES") && /historian/.test(dz3.blocks.tech), "HE lines with the historians' notes");
+  const T2 = JSON.parse(JSON.stringify(TL)); for (const h of ["1M", "3M", "6M", "12M"]) { T2.base[h].pos = 90; T2.base[h].all_pos = 60; }
+  const p0 = A.prior({ ...fd, timesL: null }), p2 = A.prior({ ...fd, timesL: T2 });
+  assert(Math.abs(p2["12M"].score - p0["12M"].score - 0.5) < 1e-9 && /times like this: its industries' past months/.test(p2["12M"].parts[1].label), "times like this moves the starting point half a notch");
   assert(!("trackLog" in A) && !A.PANELS.calls.track, "no track record");
 }
 // phase 2: what its biggest industries' reports say, panel by panel

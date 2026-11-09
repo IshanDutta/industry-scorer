@@ -208,30 +208,59 @@
       row("The write-up", String(full?.at || "").slice(0, 10)), row("The 1M-12M calls", full?.outlook && !full.outlook.provisional ? full.outlook.date : null)];
   }
 
-  // ============================================================= times like this, for the fund
+  // ============================================================= times like this, through its industries
   /**
-   * The industries' and companies' Times like this (regimes.js), on the fund: the same month-end fingerprints of the macro
-   * backdrop, with the fund's own setup (its 3- and 12-month returns, distance from its 200-day average, 6 months vs the
-   * S&P 500, drawdown) in place of the industry's. Regimes.episodes runs on the fund's prices; these put its words on it.
+   * Times like this, from the industry runs (the backend's own: regimes.js on each industry, the market historian's notes):
+   * each industry the fund holds found the five past months most like today on the macro backdrop and its own setup. The
+   * fund's version weights them: base rates by the fund's weights; the past months its industries pick most (each
+   * industry's vote = its fund weight x how close the month was; months within two of each other count as one episode),
+   * with what each of those industries did next, what the fund itself did (its own prices) and the S&P 500, and the
+   * historians' notes. The macro backdrop is the same in every industry's fingerprint, so today's and each month's are shown.
    */
   const RG = typeof module !== "undefined" && module.exports ? require("./regimes.js") : root.Regimes;
-  const asFund = (t, sym) => String(t || "").replace(/what the industry and/g, `what ${sym} and`).replace(/the industry's/g, `${sym}'s`).replace(/The industry's/g, `${sym}'s`).replace(/\bIndustry\b/g, sym).replace(/\bindustry\b/g, sym);
-  /** A fingerprint measure's label, for the fund. */
-  const timesLabel = (k, sym) => asFund(RG.FMAP[k]?.label || k, sym);
-  /** The fund's Times like this as prompt text (HE1-HE5 to cite), with the historian's notes when there are any. */
-  function timesText(T, sym, hist = null) {
+  const mIdx = (m) => { const [y, mo] = String(m).split("-").map(Number); return y * 12 + mo - 1; };
+  const MACRO_KEYS = () => RG.FEATURES.filter((f) => f[3] === "macro" || f[3] === "market").map((f) => f[0]);
+  function timesLook(cov, digests, ser = null, { k = 5, gap = 6, merge = 2 } = {}) {
+    const L = inds(cov, digests).filter((x) => x.d.times?.episodes?.length); if (!L.length) return null;
+    const on = L.reduce((a, x) => a + x.g.weight, 0), wavg = (f) => { let w = 0, s = 0; for (const { g, d } of L) { const v = n(f(d)); if (isNum(v)) { w += g.weight; s += g.weight * v; } } return w ? s / w : NaN; };
+    const base = Object.fromEntries(HZ.map((h) => [h, { pos: wavg((d) => d.times.base?.[h]?.pos), all_pos: wavg((d) => d.times.base?.[h]?.all_pos), median: wavg((d) => d.times.base?.[h]?.median), beat_spy: wavg((d) => d.times.base?.[h]?.beat_spy),
+      top_share: wavg((d) => { const b = d.times.base?.[h]; return b?.top_n ? (100 * b.top_up) / b.top_n : NaN; }) }]));
+    const top = L[0].d.times, MK = MACRO_KEYS(), now = Object.fromEntries(MK.filter((kk) => kk in (top.now || {})).map((kk) => [kk, top.now[kk]]));
+    // Each industry's months, as votes; then the episodes: the strongest month, absorbing its industries' neighbours.
+    const votes = [];
+    for (const { g, d } of L) d.times.episodes.forEach((e, i) => { const note = (d.times.hist?.episodes || []).find((x) => x.month === e.month) || null;
+      votes.push({ month: e.month, mi: mIdx(e.month), date: e.date, v: g.weight * (n(e.similarity) || 50) / 100, industry: g.industry, weight: g.weight, id: `HE${i + 1}`, similarity: n(e.similarity), ret: e.industry, excess: e.excess, maxdd6: e.maxdd6, path: e.path, spy: e.spy, spy_path: e.spy_path, then: e.then, note, closest: d.times.hist?.closest === `HE${i + 1}` }); });
+    const byMonth = new Map(); for (const x of votes) { const c = byMonth.get(x.month) || { month: x.month, mi: x.mi, v: 0 }; c.v += x.v; byMonth.set(x.month, c); }
+    const picks = [];
+    for (const c of [...byMonth.values()].sort((a, b) => b.v - a.v)) { if (picks.length >= k) break; if (picks.some((p) => Math.abs(p.mi - c.mi) < gap)) continue; picks.push(c); }
+    const fwdOf = (month) => { if (!ser?.dates?.length) return null; const end = month + "-31"; let i = -1; for (let q = 0; q < ser.dates.length && ser.dates[q] <= end; q++) i = q; if (i < 0 || ser.dates[i].slice(0, 7) !== month) return null;
+      const f = RG.forward({ dates: ser.dates, values: ser.closes || ser.values }, ser.dates[i]); return f; };
+    const episodes = picks.sort((a, b) => b.v - a.v).map((c, i) => {
+      const xs = votes.filter((x) => Math.abs(x.mi - c.mi) <= merge).sort((a, b) => b.weight - a.weight), w = xs.reduce((a, x) => a + x.weight, 0);
+      const wr = (f) => { let ww = 0, s = 0; for (const x of xs) { const v = n(f(x)); if (isNum(v)) { ww += x.weight; s += x.weight * v; } } return ww ? Math.round((s / ww) * 10) / 10 : null; };
+      const ind = Object.fromEntries(HZ.map((h) => [h, wr((x) => x.ret?.[h])])), lead = xs.find((x) => x.month === c.month) || xs[0];
+      const path = (lead.path || []).map((_, m) => wr((x) => x.path?.[m])), f = fwdOf(c.month);
+      const own = f ? Object.fromEntries(HZ.map((h) => [h, f.ret[h]])) : null;
+      return { id: `HE${i + 1}`, month: c.month, vote: c.v, reach: w, industries: xs.map((x) => ({ industry: x.industry, weight: x.weight, month: x.month, id: x.id, similarity: x.similarity, ret: x.ret, closest: x.closest, note: x.note })),
+        then: Object.fromEntries(MK.filter((kk) => kk in (lead.then || {})).map((kk) => [kk, lead.then[kk]])), ind, spy: lead.spy || {}, fund: own, fund_path: f?.path || null, path, spy_path: lead.spy_path || [],
+        maxdd6: wr((x) => x.maxdd6), fund_maxdd6: f?.maxdd6 ?? null, note: xs.find((x) => x.note?.then)?.note || null, note_from: xs.find((x) => x.note?.then)?.industry || null };
+    });
+    const reads = L.filter((x) => x.d.times.hist?.read).slice(0, 6).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, read: d.times.hist.read, closest: (() => { const m = /HE(\d)/.exec(d.times.hist.closest || ""); return m ? d.times.episodes[m[1] - 1]?.month || null : null; })() }));
+    return { on, n: L.length, as_of: top.as_of, months: top.months, now, base, episodes, reads, setups: L.slice(0, 8).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, now: Object.fromEntries((d.times.features || []).filter((kk) => !MK.includes(kk)).map((kk) => [kk, d.times.now?.[kk]])) })) };
+  }
+  const fp = (v) => (isNum(n(v)) ? `${v > 0 ? "+" : ""}${v}%` : "n/a");
+  /** The fund's Times like this as dossier text (HE1-HE5, the fund's own episodes). */
+  function timesLookText(T, sym) {
     if (!T?.episodes?.length) return "";
-    let t = asFund(RG.text(T), sym).replace(/\(computed by code from/, "(computed by code on the fund's own prices, from");
-    if (hist?.episodes?.length) t += "\n" + hist.episodes.filter((e) => e.then || e.after).map((e) => `[${e.id}] the historian: ${e.then} ${e.after}${e.different ? ` Different now: ${e.different}` : ""}`).join("\n") + (hist.read ? `\nThe historian's read: ${hist.read}` : "");
-    return t;
+    const L = [`TIMES LIKE THIS, THROUGH ITS INDUSTRIES (each industry run's own search of every month since 2009 on the macro backdrop and its setup; weighted by the fund; ${pc(T.on, 0)} of the fund has it)`];
+    L.push(`Today's macro backdrop: ${Object.entries(T.now).map(([kk, v]) => `${RG.FMAP[kk]?.label || kk} ${RG.fval(kk, v)}`).join("; ")}.`);
+    L.push(`Base rates, weighted by the fund (its industries' 20 closest months vs all months): ${HZ.map((h) => { const b = T.base[h]; return `${h}: up ${isNum(b.pos) ? Math.round(b.pos) : "n/a"}% of the time (all months ${isNum(b.all_pos) ? Math.round(b.all_pos) : "n/a"}%), median ${isNum(b.median) ? fp(Math.round(b.median * 10) / 10) : "n/a"}; their 5 closest episodes up ${isNum(b.top_share) ? Math.round(b.top_share) : "n/a"}% of the time`; }).join("; ")}.`);
+    for (const e of T.episodes) L.push(`[${e.id}] ${e.month}: picked by ${e.industries.length} of its industries, ${pc(e.reach, 0)} of the fund: ${e.industries.slice(0, 6).map((x) => `${x.industry} (${pc(x.weight)}, closer than ${x.similarity}% of months${x.month !== e.month ? `, as ${x.month}` : ""})`).join(", ")}${e.industries.length > 6 ? ` and ${e.industries.length - 6} more` : ""}. Macro then: ${Object.entries(e.then).map(([kk, v]) => `${RG.FMAP[kk]?.label || kk} ${RG.fval(kk, v)}`).join("; ")}. After: those industries (weighted) ${HZ.map((h) => `${h} ${fp(e.ind[h])}`).join(", ")}; ${e.fund ? `${sym} itself ${HZ.map((h) => `${h} ${fp(e.fund[h])}`).join(", ")}; ` : `${sym} didn't trade yet; `}S&P 500 ${HZ.map((h) => `${h} ${fp(e.spy[h])}`).join(", ")}.${e.note ? ` The ${e.note_from} historian: ${e.note.then} ${e.note.after}${e.note.different ? ` Different now: ${e.note.different}` : ""}` : ""}`);
+    for (const r of T.reads) L.push(`The ${r.industry} historian (${pc(r.weight)} of the fund)${r.closest ? `, closest month ${r.closest}` : ""}: ${r.read}`);
+    return L.join("\n");
   }
-  /** The market historian's prompt, for the fund (the industries' historian, the same rules). */
-  function historianPrompt(name, sym, T, { today, thesis = "" } = {}) {
-    return asFund(RG.historianPrompt(name, T, { today, thesis }).replace(`the US-listed "${name}" industry`, `the fund ${name} (${sym})`), sym);
-  }
-  const cleanHistorian = (raw, T) => RG.cleanHistorian(raw, T);
 
-  const FundMore = { timesLabel, timesText, historianPrompt, cleanHistorian, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  const FundMore = { timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);
