@@ -54,7 +54,7 @@ on:
         type: boolean
         default: false
   schedule:
-    - cron: "37 21 * * *" # every day at 21:37 UTC (after the US close on weekdays; weekends catch the news)
+    - cron: "37 21 * * 1-6" # Monday to Saturday at 21:37 UTC (after the US close; Saturday covers real news events only, Sunday is off)
 
 permissions:
   contents: write # to save the updated sectors in the exports branch
@@ -77,7 +77,7 @@ jobs:
           ONLY: ${{ inputs.sector }}
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
-          MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '455' }}
+          MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '500' }}
           BACKFILL: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing) && '1' || '' }}
           LEAN: ${{ (inputs.lean || inputs.lean_missing) && '1' || '' }}
           LEAN_MISSING: ${{ inputs.lean_missing && '1' || '' }}
@@ -126,7 +126,7 @@ jobs:
         if: strategy.job-index > 0
         env:
           INDEX: ${{ strategy.job-index }}
-        run: sleep $(( (INDEX % 6) * 60 ))
+        run: sleep $(( (INDEX % 6) * 180 ))
       - name: Get the sector's last analysis
         env:
           SLUG: ${{ steps.slug.outputs.slug }}
@@ -162,7 +162,10 @@ jobs:
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
           CLAUDE_MODE: batch
-          CLAUDE_STRAGGLER_MIN: "30"
+          # Overnight nobody is waiting: give a slow batch two and a half hours at half price before paying full price.
+          CLAUDE_STRAGGLER_MIN: "150"
+          # The lead model's daily update thinks at medium effort (about half the output of its default).
+          CLAUDE_EFFORT_LEAD: ${{ vars.CLAUDE_EFFORT_DAILY_LEAD || 'medium' }}
           CLAUDE_BUDGET_USD: ${{ inputs.budget || vars.DAILY_BUDGET_USD || matrix.safety }}
         run: |
           set +e

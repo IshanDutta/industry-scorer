@@ -58,6 +58,7 @@ function sectorStatus(file) {
   const u = j.sampler?.usage || {};
   return { sector: j.sector, finished: !!j.finished, exported_at: j.exported_at, round: rec.round ? { n: rec.round.n, adding: rec.round.names.length } : null,
     daily: rec.daily?.date || null, usd: r2(u.usd || 0), calls_run: rec.lean_run ? { date: rec.lean_run.date, at: rec.lean_run.at || null, made: (rec.lean_run.made || []).length, failed: (rec.lean_run.failed || []).length, failed_names: (rec.lean_run.failed || []).slice(0, 5), missing_only: !!rec.lean_run.missing_only } : null,
+    daily_last: rec.daily ? { usd: rec.daily.spent ?? null, money: rec.daily.day_money ?? null, updated: rec.daily.analyses_updated || 0, quiet: rec.daily.quiet_day ?? null, held: (rec.daily.held_updates || []).length } : null,
     daily_month: rec.daily_spend?.month === now.slice(0, 7) ? { usd: rec.daily_spend.usd || 0, budget: rec.daily_spend.budget || null } : { usd: 0, budget: rec.daily_spend?.budget || null },
     daily_held: (rec.daily?.held || []).length, daily_updated: rec.daily?.analyses_updated || 0, big_day: rec.daily?.date === now.slice(0, 10) ? rec.daily?.big_day || "" : "", requests: u.requests || 0, cache_saved: r2(u.saved || 0), failed_steps: (rec.failed_steps || []).slice(-5), industries };
 }
@@ -362,7 +363,8 @@ W("industries", status.sectors.flatMap((x) => x.industries.map((i) => ({ sector:
   since_full: i.status === "done" ? `${i.updates_since_full}${i.rewrite_due ? " · full rewrite due" : ""}` : null, times_like_this: timesState(x.sector, i), calls_scale: i.status !== "done" ? null : i.new_scale ? "new" : "old", historian: i.historian ? "yes" : "no", calls: callsState(x.sector, i), calls_made: i.calls_date, outlook_12m: i.calls_12m, call_12m: i.call_12m, opportunity: i.opportunity }))));
 W("sectors", status.sectors.map((x) => ({ sector: x.sector, total: x.industries.length, done: x.counts.done || 0, working: x.counts.working || 0, waiting: x.counts.waiting || 0, left_out: x.counts["left out"] || 0,
   spend_usd: x.usd || 0, state: x.running ? "running" : x.never_run ? "never run" : x.finished ? "finished" : x.round ? "adding industries" : (x.counts.waiting ? "unfinished" : "finished"),
-  queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null, daily_updated: x.daily_updated || 0, big_day: x.big_day || null,
+  queue: queue?.items?.find((i) => i.sector === x.sector)?.state || null, last_daily: x.daily || null, daily_updated: x.daily_updated || 0, daily_last_usd: x.daily_last?.usd ?? null, daily_day_money: x.daily_last?.money ?? null, daily_month_usd: r2(x.daily_month?.usd || 0), daily_month_budget: x.daily_month?.budget ?? null,
+  daily_quiet: x.daily_last?.quiet ?? null, daily_held: x.daily_last?.held ?? null, big_day: x.big_day || null,
   updating_now: daily.daily_state === "running" && (daily.daily_working || "").split(", ").includes(x.sector), history_now: HP?.[x.sector] || null,
   with_calls: x.industries.filter((i) => i.status === "done" && i.calls === "made").length, lacking_calls: x.industries.filter((i) => i.status === "done" && i.calls !== "made").length,
   calls_now: CP?.[x.sector] || null, calls_last: x.calls_run ? `${x.calls_run.date}: ${x.calls_run.made} made${x.calls_run.failed ? `, ${x.calls_run.failed} failed` : ""}` : null })));

@@ -59,10 +59,25 @@ Only the connections change:
 
 ## A monthly budget for the daily updates (default about $500 a month)
 
-The daily update runs every day and keeps every analysis as current as a full rewrite would, on a budget: the
-repository variable `DAILY_MONTHLY_BUDGET_USD` (default 455, about $500 a month with GitHub's minutes) is split across
-sectors by their number of industries, and each day spends its share of what's left this month (a quiet day leaves
-more for a busy one). Each day, per industry:
+The daily update runs Monday to Saturday (Saturday only for real news events; Sunday is off) on a budget that
+covers **everything** it spends: the repository variable `DAILY_MONTHLY_BUDGET_USD` (default **500**) is split across
+sectors by their number of industries, and each day spends its share of what's left this month, so an expensive day
+is paid back by cheaper ones and the month lands on the budget. Within the day's money:
+
+- **Real events** (a move of 1.5+ normal moves, a top company's earnings or 8-K, a big company moving 8%+, a scheduled
+  high-importance event, a market alarm) get the whole analysis brought up to date by the lead model (Opus, at medium
+  effort), biggest first.
+- **Smaller news** (other triggers, or the triage calls the day material) gets the same update from the balanced model
+  (Sonnet), next.
+- **Quiet days** get code only: prices, numbers, Times like this and the calls held to them; no Claude.
+- What doesn't fit waits for a later day. Section rewrites get what's left, at most a fifth of the day (none at the
+  weekend); only a big market day may borrow ahead. The rolling rewrite of the oldest analysis happens on Mondays.
+- Calls that disagree are repaired by Sonnet; the outlook is remade only when a call changes level, the analysis was
+  rewritten, or it's a week old.
+- A slow batch gets 2.5 hours at half price before anything is re-sent at full price, and sectors start three
+  minutes apart. Each run's summary shows its cost by step.
+
+Each day, per industry:
 
 1. **Data, no Claude:** prices, estimates, positioning, macro values, news, and one shared list of the SEC's 8-K
    filings (a top company filing one with financial statements is usually results: a hard trigger).

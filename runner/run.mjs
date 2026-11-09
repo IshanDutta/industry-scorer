@@ -79,7 +79,7 @@ async function main() {
     apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
     // As the page asks in claude.ai: the most capable model for "complex" steps, the balanced model for the rest.
     models: { complex: env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_QUICK || env.CLAUDE_MODEL_DEFAULT || env.CLAUDE_MODEL || "claude-sonnet-5-5", lead: env.CLAUDE_MODEL_LEAD || env.CLAUDE_MODEL_COMPLEX || env.CLAUDE_MODEL || "claude-opus-5-5" },
-    effort: { ...(env.CLAUDE_EFFORT_COMPLEX ? { complex: env.CLAUDE_EFFORT_COMPLEX } : {}), ...(env.CLAUDE_EFFORT_DEFAULT ? { default: env.CLAUDE_EFFORT_DEFAULT } : {}) },
+    effort: { ...(env.CLAUDE_EFFORT_COMPLEX ? { complex: env.CLAUDE_EFFORT_COMPLEX } : {}), ...(env.CLAUDE_EFFORT_DEFAULT ? { default: env.CLAUDE_EFFORT_DEFAULT } : {}), ...(env.CLAUDE_EFFORT_LEAD ? { lead: env.CLAUDE_EFFORT_LEAD } : {}) },
     budgetUsd: env.CLAUDE_BUDGET_USD || 0, directConcurrency: Number(env.CLAUDE_DIRECT_CONCURRENCY || 12),
     mode: env.CLAUDE_MODE === "direct" ? "direct" : "batch", log,
     flushMs: Number(env.CLAUDE_FLUSH_MS || 4000), pollMs: Number(env.CLAUDE_POLL_MS || 20000), stragglerMin: env.CLAUDE_STRAGGLER_MIN ?? 20, directAfterMin: env.CLAUDE_DIRECT_AFTER_MIN || 0,
@@ -90,7 +90,7 @@ async function main() {
     checkpoint = readMaybeGz(args.resume);
     // Keep the settings the run started with, unless this run sets a model or effort explicitly.
     // A daily update always uses its own (cheaper) models, not the ones the full run started with.
-    sampler.load(checkpoint.sampler, { keepSettings: args.daily !== "true" && !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_MODEL_QUICK", "CLAUDE_MODEL_LEAD", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT"].some((k) => env[k]) });
+    sampler.load(checkpoint.sampler, { keepSettings: args.daily !== "true" && !["CLAUDE_MODEL", "CLAUDE_MODEL_COMPLEX", "CLAUDE_MODEL_DEFAULT", "CLAUDE_MODEL_QUICK", "CLAUDE_MODEL_LEAD", "CLAUDE_EFFORT_COMPLEX", "CLAUDE_EFFORT_DEFAULT", "CLAUDE_EFFORT_LEAD"].some((k) => env[k]) });
     log(`Continuing from a checkpoint saved ${checkpoint.exported_at} (${Object.keys(checkpoint.records || {}).length} saved records, ${sampler.done.size} Claude answers kept, ${sampler.pending.size} still in batches)`);
   }
 
@@ -210,8 +210,16 @@ async function main() {
   if (daily) {
     const dd = rec.daily || {};
     log(`Daily update: ${(dd.revised || []).length} industries revised, ${(dd.quiet || []).length} unchanged, ${(dd.failed || []).length} failed · ${cost.requests} Claude requests · $${cost.usd}`);
+    log(`This session: $${cost.session_usd} (day's money $${dd.day_money ?? "no limit"}; ${dd.analyses_updated || 0} updated by Claude, ${dd.quiet_day || 0} quiet (code only), ${(dd.held_updates || []).length} held for the budget)`);
+    for (const [k, v] of Object.entries(cost.by_step).slice(0, 25)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests)`);
+    // Cost by kind of step (the step names carry the industry after a colon).
+    const kinds = {}; for (const [k, v] of Object.entries(cost.by_step)) { const kk = k.replace(/:.*$/, ""); (kinds[kk] ||= { usd: 0, requests: 0 }); kinds[kk].usd += v.usd; kinds[kk].requests += v.requests; }
+    const kindRows = Object.entries(kinds).sort((a, b) => b[1].usd - a[1].usd);
     summary([`### ${sector}: daily update ${dd.date || ""}`, "", `- Revised calls: **${(dd.revised || []).join(", ") || "none"}**`, `- Unchanged: ${(dd.quiet || []).join(", ") || "none"}`,
-      ...((dd.failed || []).length ? [`- Failed: ${dd.failed.join("; ")}`] : []), `- Claude: ${cost.requests} requests, **$${cost.session_usd}** (${cost.mode}) · data calls ${cost.mcp_calls}`, ...status.notices.map((n) => `> ${n}`)].join("\n"));
+      ...((dd.failed || []).length ? [`- Failed: ${dd.failed.join("; ")}`] : []), `- Claude: ${cost.requests} requests, **$${cost.session_usd}** (${cost.mode}) · data calls ${cost.mcp_calls}`,
+      `- The day's money: ${dd.day_money != null ? `$${dd.day_money}` : "no limit"} · ${dd.analyses_updated || 0} analyses updated by Claude, ${dd.quiet_day || 0} quiet days (code only)${(dd.held_updates || []).length ? `, ${(dd.held_updates || []).length} held for the budget: ${dd.held_updates.join(", ")}` : ""}${dd.weekend ? " · weekend: real events only" : ""}`,
+      ...(kindRows.length ? ["", "**Claude cost by step**", "", "| Step | Cost | Requests |", "|---|---:|---:|", ...kindRows.map(([k, v]) => `| ${k} | $${v.usd.toFixed(2)} | ${v.requests} |`)] : []),
+      ...status.notices.map((n) => `> ${n}`)].join("\n"));
     await browser.close(); await mcp.close();
     // Reaching the day's spending cap is the budget working, not a failure: what finished is saved.
     process.exit((sampler.fatal && !sampler.fatal.budget) || (env.JOB_BACKFILL !== "1" && !(dd.revised || []).length && !(dd.quiet || []).length) ? 1 : 0);

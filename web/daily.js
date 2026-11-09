@@ -250,7 +250,34 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
    * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
    */
-  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, lean: 0.04, triage: 0.002, second: 0.01 };
+  // What each step costs at half (batch) price, as measured on the November 2026 runs: the lead model's update of the
+// whole analysis (Opus, medium effort), the same by the balanced model (Sonnet), a repair of calls that disagree
+// (Sonnet), the outlook (Sonnet), the triage (Haiku).
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, update_lead: 0.12, update: 0.05, repair: 0.04, lean: 0.03, triage: 0.002, second: 0.01 };
+  /**
+   * How much happened to an industry today: 2 = a real event (a move of 1.5 sigma or more, a top-10 company's earnings
+   * or 8-K, a big company moving 8%+, a scheduled high-importance event, a market alarm), 1 = something (other code
+   * triggers, or the triage calls the day material), 0 = a quiet day (code refreshes the numbers; no Claude).
+   */
+  function strength(x, tri, shock) {
+    const strong = (isNum(x?.z) && Math.abs(x.z) >= 1.5) || !!shock || (x?.triggers || []).some((t) => / reported \(|filed an 8-K|% of the industry\)|has passed$/.test(t));
+    return strong ? 2 : (x?.triggers || []).length || tri?.material === true ? 1 : 0;
+  }
+  /**
+   * Who gets Claude today within the day's money: real events first (the lead model), then the rest (the balanced
+   * model), biggest first; what doesn't fit waits for a later day. rows: [{name, strength, score, leanDue}];
+   * budget: dollars (Infinity = no limit); weekend: only real events. Returns {plans: {name: "lead"|"complex"},
+   * held: [name], left: dollars still unspent}.
+   */
+  function allot(rows, budget, { weekend = false } = {}) {
+    const plans = {}, held = []; let left = budget;
+    const ranked = rows.filter((r) => r.strength > 0 && (!weekend || r.strength >= 2)).sort((a, b) => b.strength - a.strength || b.score - a.score);
+    for (const r of ranked) {
+      const tier = r.strength >= 2 ? "lead" : "complex", cost = (tier === "lead" ? COST.update_lead : COST.update) + 0.3 * COST.repair + (r.leanDue ? COST.lean : 0);
+      if (left >= cost) { plans[r.name] = tier; left -= cost; } else held.push(r.name);
+    }
+    return { plans, held, left: left === Infinity ? Infinity : Math.round(left * 100) / 100 };
+  }
   const IMPV = { high: 3, medium: 2, low: 1 };
   const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
   /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
@@ -485,7 +512,7 @@ Reply with ONLY this JSON:
   }
   const prev_filings = (res) => res?.daily?.filings || [];
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, borrowCap, bigDay, COST, scoreOf, drift, DRIFT, analysisOf, mergeAnalysis, scorecardText };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, borrowCap, bigDay, COST, strength, allot, scoreOf, drift, DRIFT, analysisOf, mergeAnalysis, scorecardText };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);

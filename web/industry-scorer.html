@@ -8523,7 +8523,34 @@ Reply with ONLY this JSON: {"material": true or false, "horizons": ["the horizon
    * About what one rewrite costs at batch prices (Sonnet for the analysts, the lead tier for the whole analysis), to
    * plan a day's spending; the job's own meter is the real figure. A rule book costs this per regulator.
    */
-  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, lean: 0.04, triage: 0.002, second: 0.01 };
+  // What each step costs at half (batch) price, as measured on the November 2026 runs: the lead model's update of the
+// whole analysis (Opus, medium effort), the same by the balanced model (Sonnet), a repair of calls that disagree
+// (Sonnet), the outlook (Sonnet), the triage (Haiku).
+  const COST = { kpi: 0.25, macro: 0.4, world: 0.7, trade: 0.8, reg: 0.35, rulebook: 0.5, chain: 0.15, thesis: 1.6, calls: 0.12, update_lead: 0.12, update: 0.05, repair: 0.04, lean: 0.03, triage: 0.002, second: 0.01 };
+  /**
+   * How much happened to an industry today: 2 = a real event (a move of 1.5 sigma or more, a top-10 company's earnings
+   * or 8-K, a big company moving 8%+, a scheduled high-importance event, a market alarm), 1 = something (other code
+   * triggers, or the triage calls the day material), 0 = a quiet day (code refreshes the numbers; no Claude).
+   */
+  function strength(x, tri, shock) {
+    const strong = (isNum(x?.z) && Math.abs(x.z) >= 1.5) || !!shock || (x?.triggers || []).some((t) => / reported \(|filed an 8-K|% of the industry\)|has passed$/.test(t));
+    return strong ? 2 : (x?.triggers || []).length || tri?.material === true ? 1 : 0;
+  }
+  /**
+   * Who gets Claude today within the day's money: real events first (the lead model), then the rest (the balanced
+   * model), biggest first; what doesn't fit waits for a later day. rows: [{name, strength, score, leanDue}];
+   * budget: dollars (Infinity = no limit); weekend: only real events. Returns {plans: {name: "lead"|"complex"},
+   * held: [name], left: dollars still unspent}.
+   */
+  function allot(rows, budget, { weekend = false } = {}) {
+    const plans = {}, held = []; let left = budget;
+    const ranked = rows.filter((r) => r.strength > 0 && (!weekend || r.strength >= 2)).sort((a, b) => b.strength - a.strength || b.score - a.score);
+    for (const r of ranked) {
+      const tier = r.strength >= 2 ? "lead" : "complex", cost = (tier === "lead" ? COST.update_lead : COST.update) + 0.3 * COST.repair + (r.leanDue ? COST.lean : 0);
+      if (left >= cost) { plans[r.name] = tier; left -= cost; } else held.push(r.name);
+    }
+    return { plans, held, left: left === Infinity ? Infinity : Math.round(left * 100) / 100 };
+  }
   const IMPV = { high: 3, medium: 2, low: 1 };
   const WEIGHT = { thesis: 1.3, kpi: 1.2, reg: 1.1, trade: 1.1, world: 1.0, macro: 1.0, rulebook: 0.9, chain: 0.9 };
   /** How much a rewrite is worth today: importance, then what code saw for itself, then how long it has waited. */
@@ -8758,7 +8785,7 @@ Reply with ONLY this JSON:
   }
   const prev_filings = (res) => res?.daily?.filings || [];
 
-  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, borrowCap, bigDay, COST, scoreOf, drift, DRIFT, analysisOf, mergeAnalysis, scorecardText };
+  const Daily = { prevState, deltas, deltaText, triagePrompt, updatePrompt, apply, HZ, SECTIONS, sectionBrief, pickSections, plan, dayBudget, borrowCap, bigDay, COST, strength, allot, scoreOf, drift, DRIFT, analysisOf, mergeAnalysis, scorecardText };
   if (typeof module !== "undefined" && module.exports) module.exports = Daily;
   else root.Daily = Daily;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -11044,7 +11071,9 @@ Reply with ONLY this JSON:
           const drift = dft ? { ...dft, updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null } : { updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null };
           const cands = backfill ? [] : Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
           const l0 = res.outlook, lAge = l0?.date ? (Date.parse(today()) - Date.parse(l0.date)) / 864e5 : Infinity;
-          day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length, leanDue: !l0 || l0.provisional || lAge >= 6 || !!(x.triggers.length || tri?.material) };
+          const st = backfill ? 2 : Daily.strength(x, tri, shock);
+          day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length, strength: st, score: (isNum(x.z) ? Math.abs(x.z) * 10 : 0) + x.triggers.length + (tri?.material ? 5 : 0),
+            leanDue: !l0 || l0.provisional || lAge >= 7, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
           await doFlush(name);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
@@ -11056,22 +11085,28 @@ Reply with ONLY this JSON:
       const month = today().slice(0, 7), ds = rec?.daily_spend?.month === month ? rec.daily_spend : { month, usd: 0 };
       const spentAtStart = JOB && window.__job_spent ? Number(await window.__job_spent().catch(() => 0)) || 0 : 0;
       const all = Object.entries(day).flatMap(([n, v]) => v.cands.map((c) => ({ ...c, industry: n, bodies: v.bodies })));
-      // The rolling rewrite: the industry whose whole analysis is oldest (30+ days) gets one, as low-priority work that waits longest.
-      const oldest = backfill ? null : Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
+      // The rolling rewrite: the industry whose whole analysis is oldest (30+ days) gets one, as low-priority work that waits longest (Mondays only).
+      const dow = new Date(today() + "T00:00:00Z").getUTCDay(), weekend = !backfill && (dow === 6 || dow === 0);
+      const oldest = backfill || dow !== 1 ? null : Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
       if (oldest && !all.some((c) => c.industry === oldest[0] && c.key === "thesis")) all.push({ industry: oldest[0], key: "thesis", label: Daily.SECTIONS.thesis.label, why: `rolling refresh: the whole analysis is from ${oldest[1].runAt.slice(0, 10)}`, by: "rotation", importance: "low", waited: Math.min(5, Math.floor((Date.now() - Date.parse(oldest[1].runAt)) / (15 * 864e5))) });
       let budget = Infinity, stretch = 0;
       const vals = Object.values(day), highShare = vals.length ? vals.filter((v) => v.cands.some((c) => c.importance === "high")).length / vals.length : 0;
       const big = Daily.bigDay({ ...mkt, highShare, shock });
       dr.bigDay = big.big ? big.why : "";
+      // The day's money covers everything: the updates, the repairs, the outlooks and the section rewrites. Real events
+      // get the lead model first, then the rest get the balanced model, biggest first; quiet industries get code only.
+      // Sections get what's left, at most a fifth of the day (none at the weekend); only a big day may borrow ahead
+      // (up to three days' share, never more than a quarter of the month's remainder).
+      let dayMoney = Infinity;
       if (JOB?.monthBudget > 0) {
-        const callsReserve = vals.filter((v) => v.x.triggers.length || v.tri?.material || v.cands.length).length * Daily.COST.calls + vals.filter((v) => v.leanDue).length * Daily.COST.lean;
         const share = Daily.dayBudget(JOB.monthBudget, ds.usd, today()), cap = Daily.borrowCap(JOB.monthBudget, ds.usd, today());
-        // A big day spends up to three days' share (never more than a quarter of the month's remainder); any day, the
-        // urgent rewrites (drift guard, earnings, two days' wait) may borrow up to that much.
-        budget = Math.max(0, (big.big ? Math.max(share, cap) : share) - spentAtStart - callsReserve);
-        stretch = Math.max(0, cap - share);
+        dayMoney = Math.max(0, (big.big ? Math.max(share, cap) : share) - spentAtStart);
       }
-      const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch: big.big ? 0 : stretch });
+      const al = Daily.allot(Object.entries(day).map(([n, v]) => ({ name: n, strength: v.strength, score: v.score, leanDue: v.leanDue })), dayMoney, { weekend: weekend && !big.big });
+      for (const [n, v] of Object.entries(day)) v.plan = al.plans[n] || null;
+      dr.heldUpdates = al.held; dr.quietDay = Object.values(day).filter((v) => !v.plan).length;
+      if (dayMoney !== Infinity) { budget = weekend && !big.big ? 0 : Math.max(0, Math.min(al.left, big.big ? al.left : 0.2 * dayMoney)); stretch = 0; }
+      const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch });
       dr.borrowed = pl.borrowed || 0;
       const chosen = {}; for (const c of pl.run) (chosen[c.industry] ||= []).push(c);
       const heldBy = {}; for (const c of pl.held) (heldBy[c.industry] ||= []).push(c);
@@ -11104,9 +11139,11 @@ Reply with ONLY this JSON:
               return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
             let upd = null;
             // The whole analysis brought up to date by the lead strategist: every part today's news changes, nothing else.
-            if (x.triggers.length || tri?.material || rewritten || v.cands.length) { via = "update";
-              const bp = Brain.basePE(d);
-              upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten, { pe: bp?.pe, drift: v.drift }), leadTier, `Daily update: ${name}`); }
+            // Only industries the day's plan picked (or whose sections were just rewritten): real events by the lead model,
+            // the rest by the balanced one. A quiet day is code only: prices, numbers and the calls held to them.
+            if (v.plan || rewritten) { via = "update";
+              const bp = Brain.basePE(d), tier = backfill || v.plan === "lead" ? leadTier : "complex";
+              upd = await call(Daily.updatePrompt(name, res, x, today(), Brain.horizonFacts(d, today()), rewritten, { pe: bp?.pe, drift: v.drift }), tier, `Daily update${tier === leadTier ? "" : " (balanced model)"}: ${name}`); }
             const known = [...(ag.sources || []).map((s) => s.id), ...(ag.calendar?.events || []).map((e) => e.id), ...(ag.calendar?.standing || []).map((e) => e.id),
               ...(d.history?.times?.episodes || []).map((e, i) => "HE" + (i + 1)), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean);
             const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world, ...(x.outcome || []), ...(x.filings || [])], sections, known });
@@ -11117,7 +11154,7 @@ Reply with ONLY this JSON:
             if (r2.horizons) Horizon.holdCalls(r2.horizons, r2.horizon_facts);
             // Calls that contradict each other or their numbers go back to the strategist once.
             if (r2.horizons && upd) { const iss = Horizon.issuesOf(Brain.horizonChecks(r2.horizons, r2.horizon_facts, r2.math, ag.calendar, Brain.SCN_KEYS));
-              if (iss.length) { const fix = await call(Horizon.repairPrompt(name, today(), r2.horizons, iss, r2.horizon_facts), leadTier, `Daily update, making the calls agree: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+              if (iss.length) { const fix = await call(Horizon.repairPrompt(name, today(), r2.horizons, iss, r2.horizon_facts), backfill ? leadTier : "complex", `Daily update, making the calls agree: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
                 if (fix?.horizons) { r2.horizons = Horizon.mergeRepair(r2.horizons, fix.horizons); Horizon.holdCalls(r2.horizons, r2.horizon_facts); r2.daily = { ...(r2.daily || {}), repaired: iss.slice(0, 8) }; } } }
             if (a.changed && r2.scenarios) { const bp = Brain.basePE(d); const mm = Brain.scenarioMath(r2.scenarios, Number(bp.pe)); if (mm) { mm.pe_basis = bp.basis; r2.math = mm; } }
             // Code's checks, as after a full run: does the opportunity verdict still match its own numbers?
@@ -11130,7 +11167,10 @@ Reply with ONLY this JSON:
           }
           // The lean, made again when the calls moved, the whole analysis was rewritten, or it is a week old (or missing).
           { const r3 = S.agents[sl]?.result, l0 = r3?.outlook, age = l0?.date ? (Date.parse(today()) - Date.parse(l0.date)) / 864e5 : Infinity;
-            const moved = !!whole || Object.entries(r3?.daily?.horizons || {}).some(([h, hv]) => h === "_scenarios" || hv?.status === "revised") || r3?.rethink?.date === today();
+            // Remade only when a call actually changed level (not just its wording or conviction), the analysis was rewritten
+            // or rethought today, or it's a week old, provisional or missing.
+            const callMoved = Object.entries(r3?.horizons || {}).some(([h, hv]) => v.calls0?.[h] && hv?.call && hv.call !== v.calls0[h]);
+            const moved = !!whole || callMoved || r3?.rethink?.date === today();
             if (r3 && (!l0 || l0.provisional || age >= 7 || (moved && age >= 1))) {
               const l = await runLean(name, { call: (p) => call(p, "complex", `The outlook: ${name}`) }).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
               if (l) { dr.leans = (dr.leans || 0) + 1; if (Outlook.flipped(l0, l)) (dr.flips ||= []).push(`${name}: 12M ${l0.calls['12M'].call} to ${l.calls['12M'].call}`); } } }
@@ -11149,7 +11189,7 @@ Reply with ONLY this JSON:
       const r0 = await secGet(sector);
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, rows: { ...(r0.rows || {}), ...(dr.rows || {}) }, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
         daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
-          analyses_updated: dr.updated || 0, leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
+          analyses_updated: dr.updated || 0, quiet_day: dr.quietDay || 0, held_updates: dr.heldUpdates || [], day_money: dr.budget, weekend: !!(new Date(today() + "T00:00:00Z").getUTCDay() % 6 === 0), leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
       S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
