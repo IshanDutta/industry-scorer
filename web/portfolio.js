@@ -219,7 +219,16 @@
    * code-only fill ({name, saved_at, industry}); row: the sector overview row (scores with every section) when there is one;
    * scores: the page's own scores when there isn't.
    */
-  function digest(rec, { row = null, scores = null, slug = "" } = {}) {
+  const noCite = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
+  /** Text without citations, cut at a word end. */
+  const cutW = (x, k) => { const t = noCite(x); return t.length <= k ? t : t.slice(0, t.slice(0, k).lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
+  /** The inputs Sections.pillars scores a saved run's report sections from (the industry page's own, read off the saved record). */
+  function sectionCtx(rec) {
+    const rep = (k) => { for (const [key, v] of Object.entries(rec?.reports || {})) if (key.endsWith("--" + k)) return v?.result || null; return null; };
+    return { doc: rec?.industry || {}, pack: rec?.research || null, kpi: rep("kpi"), macro: rep("macro"), world: rep("world"), trade: rep("trade"), reg: rep("reg"), regVerdict: rep("regverdict"),
+      books: Object.values(rec?.regbooks || {}).map((b) => b?.book).filter(Boolean), lead: rec?.agent?.result || null, chain: rep("chain"), calls: rep("calls") };
+  }
+  function digest(rec, { row = null, scores = null, slug = "", pillars = null } = {}) {
     const d = rec?.industry || {}, a = rec?.agent?.result || {}, S0 = d.summary || {}, F = d.fund || {}, W = d.forward || {};
     const rep = (k) => { for (const [key, v] of Object.entries(rec?.reports || {})) if (key.endsWith("--" + k)) return v?.result || null; return null; };
     const world = rep("world"), trade = rep("trade"), tmap = rep("trademap"), rv = rep("regverdict"), macro = rep("macro");
@@ -227,11 +236,11 @@
     const calls = {}; for (const h of HZ) { const x = H[h]; if (x?.call) calls[h] = { call: x.call, mid: mid(x.expected_move), lo: n(x.expected_move?.[0]), hi: n(x.expected_move?.[1]), p_up: n(x.probability_up) }; else if (row?.horizons?.[h]) calls[h] = { call: row.horizons[h] }; }
     const leanC = {}; for (const h of HZ) { const c = lean[h]; const v = typeof c === "string" ? c : c?.call; if (v) leanC[h] = v; }
     const implied = Object.fromEntries((a.math?.checks || []).map((c) => [c.scenario, n(c.stated ?? c.implied)]));
-    const scen = {}; for (const k of ["bull", "base", "bear"]) { const s = a.scenarios?.[k]; if (s) scen[k] = { p: n(s.probability), move: isNum(implied[k]) ? implied[k] : n(s.price_move) }; }
+    const scen = {}; for (const k of ["bull", "base", "bear"]) { const s = a.scenarios?.[k]; if (s) scen[k] = { p: n(s.probability), move: isNum(implied[k]) ? implied[k] : n(s.price_move), text: cutW(s.narrative, 220) }; }
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 3, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 4, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -270,6 +279,15 @@
       drivers: (a.drivers || []).slice(0, 4).map((x) => String(x?.driver || x?.name || x?.title || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       risks: (a.risks || []).slice(0, 3).map((x) => String(x?.risk || x?.text || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       sens: (d.sensitivity?.factors || []).map((f) => ({ key: f.key, label: f.label, shock: f.shock_label || "", effect: n(f.total?.effect), t: n(f.total?.t) })).filter((f) => f.key && isNum(f.effect)),
+      // Every scorecard pillar the industry page shows (0-100), so a fund's scorecard can be built through its industries.
+      pillars: pillars ? Object.fromEntries(Object.entries(pillars).filter(([, v]) => isNum(n(v))).map(([k, v]) => [k, Math.round(n(v) * 10) / 10])) : null,
+      // The KPI analyst's cycle: where the industry is, pricing power, operating leverage, its key KPIs, what managements signal, what's next.
+      cycle: (() => { const k = rep("kpi"); if (!k) return null; const tone = {}; for (const x of k.management_signals || []) if (x?.tone) tone[lc(x.tone)] = (tone[lc(x.tone)] || 0) + 1;
+        return { position: k.cycle_position || null, pricing: k.pricing_power?.level || null, oplev: k.unit_economics?.operating_leverage || null, text: cutW(k.cycle_text || k.summary, 260),
+          kpis: [...(k.demand_metrics || []).slice(0, 2), ...(k.profitability_metrics || []).slice(0, 1)].filter((x) => x?.name).map((x) => ({ name: cutW(x.name, 70), value: cutW(x.value, 90), vs_cycle: cutW(x.vs_cycle, 110) })),
+          tone, next: (k.next_triggers || []).filter((x) => x?.date && x?.event).slice(0, 4).map((x) => ({ date: String(x.date).slice(0, 10), event: cutW(x.event, 110), names: (x.names || []).slice(0, 4) })) }; })(),
+      // The lead strategist's debates (the biggest questions about the industry, each side and which way it leans).
+      debates: (a.debates || []).filter((x) => x?.question).slice(0, 3).map((x) => ({ q: cutW(x.question, 180), bull: cutW(x.bull, 240), bear: cutW(x.bear, 240), lean: lc(x.lean || ""), resolves: cutW(x.resolves_with, 160) })),
       positioning: d.positioning?.label || row?.positioning || null,
       macro: macro ? { regime: macro.regime || null } : null,
       world: (world?.dives || []).filter((x) => x?.title).slice(0, 10).map((x) => ({ title: String(x.title).slice(0, 160), stance: x.stance || "", status: x.status || "", category: x.category || "" })),
@@ -494,7 +512,7 @@ Reply with JSON only, in this shape:
     return [...seen.values()].map((x) => ({ ...x, score: score(x) })).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol)).slice(0, k);
   }
 
-  const Portfolio = { suggest, fundLike, dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
+  const Portfolio = { sectionCtx, suggest, fundLike, dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
   if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
   else root.Portfolio = Portfolio;
 })(typeof window !== "undefined" ? window : globalThis);

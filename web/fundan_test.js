@@ -24,7 +24,7 @@ for (const id of ["F1", "I1", "H1", "P1", "P2", "S1", "MF1", "V1", "V6"]) assert
 for (const part of A.PARTS) { const pr = A.partPrompt(fd, dz, part, "2026-11-09"); assert(pr.length < 70000, `${part} prompt ${pr.length}`); assert(pr.includes("Reply with ONLY this JSON")); }
 // cleaning
 const core = A.cleanPart("core", { headline: "Chips [I1] and [ZZ9]", verdict: { call: "Attractive" }, fit: { growth: { fit: "Strong", adjust: 12 } }, risks: [{ risk: "Taiwan [C1]", likelihood: "High", ids: ["C1", "Q1"] }], reads: { holdings: "Top 10 [H1]" } }, dz.idx);
-assert.strictEqual(core.w.headline, "Chips [I1] and"); assert.strictEqual(core.w.verdict.call, "attractive"); assert.strictEqual(core.w.fit.growth.adjust, 5); assert.deepStrictEqual(core.w.risks[0].ids, ["C1"]); assert.strictEqual(core.dropped, 2);
+assert.strictEqual(core.w.headline, "Chips [I1] and"); assert.strictEqual(core.w.verdict.call, "attractive"); assert.strictEqual(core.w.fit.growth.fit, "strong"); assert(!("adjust" in core.w.fit.growth), "the fit's points come from the fit word"); assert.deepStrictEqual(core.w.risks[0].ids, ["C1"]); assert.strictEqual(core.dropped, 2);
 const calls = A.cleanPart("calls", { scenarios: { bull: { probability: 30, narrative: "x", triggers: ["a"], move: [20, 10] }, base: { probability: 50 }, bear: { probability: 30 } },
   horizons: { "1M": { call: "Slightly Bullish", expected_move: [-2, 4], probability_up: 56, drivers: "d [F4]" } } }, dz.idx);
 assert(!("move" in calls.w.scenarios.bull) && !("expected_move" in calls.w.horizons["1M"]) && !("call" in calls.w.horizons["1M"]), "no ranges and no calls in the write-up's calls part");
@@ -48,7 +48,7 @@ assert(op.includes("Six levels, no neutral") && op.includes("CODE'S STARTING POI
 const raw = { headline: "Up", evidence: A.FUND_INPUTS.map(([k], i) => ({ input: k, points: i % 3 ? "up" : "down", weight: 2, why: "w" })),
   calls: { "1M": { call: "slightly bearish", why: "then it rebounds" }, "3M": { call: "bullish", why: "after earnings" }, "6M": { call: "bullish", why: "y" }, "12M": { call: "Strongly Bullish", why: "z" } }, verdict: { agrees: true, why: "v" } };
 const oc = A.cleanOutlook(raw, "2026-11-09");
-assert.strictEqual(oc.calls["12M"].call, "strongly bullish"); assert.strictEqual(oc.evidence.length, 16); assert(oc.tally.score > 0);
+assert.strictEqual(oc.calls["12M"].call, "strongly bullish"); assert.strictEqual(oc.evidence.length, A.FUND_INPUTS.length); assert(oc.tally.score > 0);
 assert(A.cleanOutlook({ calls: { "1M": { call: "neutral" } } }, "x") === null, "neutral isn't a level");
 assert.strictEqual(A.provisional(pr, "2026-11-09").calls["12M"].call, pr["12M"].call);
 // the track record, on six-level calls: direction, and strength against a normal move
@@ -67,3 +67,22 @@ const ib = A.indReadsBlock(fd, "core");
 assert(/WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY/.test(ib) && /valuation: Semiconductors/.test(ib), ib.slice(0, 300));
 assert(A.partPrompt(fd, dz, "context", "2026-11-09").includes("world events:"), "the context analyst gets the industries' world reads");
 console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3), eff: +conc.effective_n.toFixed(1), cal: cal.length, prompts: A.PARTS.map((p) => A.partPrompt(fd, dz, p, "2026-11-09").length) }));
+// phases 3-4: the scorecard, peers, season, debates and cycle go into the dossier, and the analysts' answers are cleaned
+{
+  const M = require("./fundmore.js");
+  const fd2 = { ...fd, card: M.scorecard({ cov, digests: D, own: { ex1y: 0.02, vol: 0.18, yield: 0.004, expense: 0.0063 } }), debates: M.debates(cov, D), cycle: M.cycleLook(cov, D),
+    season: { n: 2, on: 0.1, reported: 0.08, beat_share: 1, median_surprise: 0.05, next30: 0.02, recent: [{ ticker: "NVDA", last: "2026-08-27", surprise: 0.05, weight: 0.07 }], upcoming: [], weeks: [] },
+    peers: { rows: M.peerTable([{ sym: "FCNTX", self: true, r1y: 0.11, r3y: 0.15, vol: 0.18, max_dd: -0.12, expense: 0.0063 }, { sym: "VUG", r1y: 0.14, r3y: 0.17, vol: 0.2, max_dd: -0.15, expense: 0.0004 }]) } };
+  const dz2 = A.dossier(fd2, "2026-11-09");
+  for (const id of ["SC1", "PR1", "ES1", "DB1", "CY1"]) assert(dz2.idx[id], `dossier has ${id}`);
+  assert(A.partPrompt(fd2, dz2, "core", "2026-11-09").includes("[SC1]") && A.partPrompt(fd2, dz2, "calls", "2026-11-09").includes("[DB1]") && A.partPrompt(fd2, dz2, "context", "2026-11-09").includes("[CY1]"));
+  const k2 = A.cleanPart("calls", { debates: [{ id: "DB1", side: "Bull", why: "AI [H1]" }, { id: "DB99", side: "bear" }] }, dz2.idx);
+  assert.deepStrictEqual(k2.w.debates.map((x) => x.side), ["bull"]);
+  const x2 = A.cleanPart("context", { cycle: { phase: "Late", summary: "late [CY1]", kpis_watch: ["NVDA [KT1]"] } }, dz2.idx);
+  assert.strictEqual(x2.w.cycle.phase, "late");
+  const c2 = A.cleanPart("core", { peers: { stance: "Lagging", summary: "costs more [PR1]" } }, dz2.idx);
+  assert.strictEqual(c2.w.peers.stance, "lagging");
+  assert(A.outlookPrompt(fd2, dz2, "2026-11-09", { calls: k2.w, context: x2.w, core: c2.w }).includes("Debates: DB1 bull"));
+  assert(A.FUND_INPUTS.some(([k]) => k === "cycle") && A.FUND_INPUTS.some(([k]) => k === "season"));
+}
+console.log("fundan ok (phases 3-4)");
