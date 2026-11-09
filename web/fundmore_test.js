@@ -4,7 +4,7 @@ const FX = require("./fixtures/funds.json");
 const m = P.mapHoldings(P.fromFmp(FX.fcntx_holdings), [], FX.cos), cov = P.coverage(m, FX.runs, { now: "2026-11-09" }), D = FX.digests;
 
 // ---- phase 3: the scorecard
-assert(Object.values(D).every((d) => d.v === 5 && d.pillars), "the fixture's digests are v5, with pillars");
+assert(Object.values(D).every((d) => d.v === 6 && d.pillars), "the fixture's digests are v6, with pillars");
 const own = M.ownFrom({ retRows: [{ label: "1M", value: 2, spy: 1 }, { label: "1Y", value: 11, spy: 15 }], g1: { beta: 1.1, vol: 0.2, downside_vol: 0.14, max_dd: -0.18, sharpe: 0.6 }, bench: { symbol: "SPY" },
   hold: [0.08, 0.07, 0.06, 0.05, 0.04, 0.03].map((weight) => ({ weight })), facts: { yield: 0.003, expense: 0.0063 } });
 assert(Math.abs(own.ex1m - 0.01) < 1e-9 && Math.abs(own.ex1y + 0.04) < 1e-9 && Math.abs(own.top5 - 0.3) < 1e-9 && own.yield === 0.003);
@@ -66,6 +66,17 @@ assert(M.peerText("A", pt).includes("A ranks 2 of 3 on 1-year return"));
   const TF = M.timesLook(cov, D, { dates, closes }), e0 = TF.episodes.find((e) => e.month < "2025-06");
   assert(e0.fund && e0.fund["3M"] > 1 && e0.fund_path.length > 5, "the fund's own path after the month");
   assert(M.timesLookText(TF, "FCNTX").includes("FCNTX itself"));
+}
+// ---- macro, world, trade and regulation: the industry reports' tables, merged and weighted
+{
+  const X = M.affairs(cov, D, hold);
+  assert(X && X.n >= 5 && X.indicators.length > 10 && X.world.length > 5 && X.trade.length > 5 && X.rules.length > 5, "every table has rows");
+  assert(X.indicators[0].id === "MI1" && X.indicators[0].read_by >= X.indicators[X.indicators.length - 1].read_by, "indicators by how much of the fund reads them");
+  assert(X.indicators.every((x) => x.reads.every((r) => r.industry && r.effect)), "each industry's read of each indicator");
+  const tw = X.trade[0]; assert(tw.rev >= X.trade[1].rev && tw.industries.length >= 1 && tw.exposed_held.every((h) => h.weight > 0), "countries by revenue at stake, holdings named");
+  assert(X.rules.every((r, i) => i === 0 || ({ critical: 0, high: 1, medium: 2, low: 3 }[r.severity] ?? 4) >= ({ critical: 0, high: 1, medium: 2, low: 3 }[X.rules[i - 1].severity] ?? 4)), "rules most severe first");
+  assert(Object.keys(X.regime_mix).length && X.regimes.every((r) => r.industry), "each industry's macro regime");
+  const T = M.affairsText(X); assert(T.macro.includes("[MI1]") && T.world.includes("[WS1]") && T.trade.includes("[TC1]") && T.reg.includes("[RL1]"));
 }
 // ---- phase 5: the daily check
 const ol = { date: "2026-11-01", mark: { px: 100 }, calls: {} }, ser = { dates: ["2026-11-09"], closes: [106] };

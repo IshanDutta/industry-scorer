@@ -260,7 +260,77 @@
     return L.join("\n");
   }
 
-  const FundMore = { timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  // ============================================================= macro, world events, trade and regulation: the full tables
+  /**
+   * The industry reports' macro, world-events, trade and regulation tables (each digest's "lens", read the company
+   * page's way), merged across the fund's industries and weighted: every indicator its industries read, every world
+   * situation, every country on their trade maps, every rule in their rule books and every policy, litigation and deal
+   * item, each with how much of the fund it reaches, how its industries read it, the fullest industry's detail, and
+   * which of the fund's holdings it names. IDs for the analysts: MI (indicators), WS (situations), TC (countries),
+   * RL (rules), LI (policy, litigation, deals).
+   */
+  const SEVR = { critical: 0, high: 1, medium: 2, low: 3 }, THR = { none: 0, low: 1, moderate: 2, medium: 2, elevated: 3, high: 3, severe: 4, critical: 4 }, IMP = { existential: 3, high: 2, medium: 1, low: 0 };
+  const tk = (t) => lc(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 7).join(" ");
+  function affairs(cov, digests, hold = [], { nI = 24, nW = 16, nC = 16, nR = 18, nL = 14 } = {}) {
+    const L = inds(cov, digests).filter((x) => x.d.lens); if (!L.length) return null;
+    const on = L.reduce((a, x) => a + x.g.weight, 0);
+    const held = new Map((hold || []).filter((h) => h.ticker).map((h) => [h.ticker, h.weight]));
+    const namesHeld = (syms) => [...new Set((syms || []).filter((x) => held.has(x)))].map((x) => ({ symbol: x, weight: held.get(x) })).sort((a, b) => b.weight - a.weight);
+    const tally = (rows, f) => { const o = {}; for (const r of rows) { const k = f(r); if (k) o[k] = (o[k] || 0) + r.weight; } return o; };
+    const merge = (getRows, keyOf) => { const m = new Map();
+      for (const { g, d } of L) for (const x of getRows(d) || []) { const k = keyOf(x); if (!k) continue; const e = m.get(k) || { key: k, w: 0, rows: [] }; if (!e.rows.some((r) => r.industry === g.industry)) { e.w += g.weight; e.rows.push({ industry: g.industry, weight: g.weight, x }); } m.set(k, e); }
+      return [...m.values()]; };
+    // Macro: each industry's regime, then every indicator its industries read (the same indicator is matched by name).
+    const regimes = L.filter((x) => x.d.lens.macro?.regime || x.d.lens.macro?.headline).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.lens.macro, indicators: undefined }));
+    const indicators = merge((d) => d.lens.macro?.indicators, (x) => lc(x.label)).map((e) => { const rd = e.rows.filter((r) => r.x.ind);
+      const rel = rd.filter((r) => r.x.ind.relevance !== "low"), top = e.rows.sort((a, b) => b.weight - a.weight)[0].x;
+      return { label: top.label, group: top.group, value: top.value, unit: top.unit, prior: top.prior, prior_label: top.prior_label, date: top.date, reach: e.w, read_by: rel.reduce((a, r) => a + r.weight, 0),
+        effects: tally(rel, (r) => r.x.ind.effect), relevance: tally(rd, (r) => r.x.ind.relevance), reads: rd.sort((a, b) => b.weight - a.weight).map((r) => ({ industry: r.industry, weight: r.weight, ...r.x.ind })) }; })
+      .sort((a, b) => b.read_by - a.read_by || b.reach - a.reach).slice(0, nI).map((x, i) => ({ id: "MI" + (i + 1), ...x }));
+    // World: every situation, matched by title; the fullest deep dive from the biggest industry that has one.
+    const world = merge((d) => d.lens.world, (x) => tk(x.title)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), dv = (rs.find((r) => r.x.deep) || rs[0]).x;
+      const st = tally(rs, (r) => r.x.stance);
+      return { ...dv, reach: e.w, deep_any: rs.some((r) => r.x.deep), adverse: st.adverse || 0, favorable: st.supportive || st.favorable || 0, stances: st, industries: rs.map((r) => ({ industry: r.industry, weight: r.weight, stance: r.x.stance, deep: r.x.deep })),
+        winners_held: namesHeld(rs.flatMap((r) => r.x.winners)), losers_held: namesHeld(rs.flatMap((r) => r.x.losers)) }; })
+      .sort((a, b) => (b.deep_any - a.deep_any) || b.reach - a.reach).slice(0, nW).map((x, i) => ({ id: "WS" + (i + 1), ...x }));
+    // Trade: every country on their trade maps; the industries' revenue there (filings, else the analyst's estimate) at the fund's weight.
+    const trade = merge((d) => d.lens.trade?.countries, (x) => lc(x.country)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), top = rs[0].x;
+      const rev = rs.reduce((a, r) => a + (isNum(n(r.x.share)) ? r.weight * r.x.share : 0), 0), est = rs.some((r) => r.x.est && isNum(n(r.x.share)));
+      return { ...top, reach: e.w, rev: on ? rev / on : 0, rev_est: est, threat: rs.map((r) => r.x.threat).sort((a, b) => (THR[lc(b)] ?? 0) - (THR[lc(a)] ?? 0))[0] || "", importance: rs.map((r) => r.x.importance).sort((a, b) => (IMP[lc(b)] ?? 0) - (IMP[lc(a)] ?? 0))[0] || "",
+        stances: tally(rs, (r) => r.x.stance), industries: rs.map((r) => ({ industry: r.industry, weight: r.weight, share: r.x.share, est: r.x.est, stance: r.x.stance, threat: r.x.threat, importance: r.x.importance })),
+        exposed_held: namesHeld(rs.flatMap((r) => (r.x.exposed || []).map((y) => y.symbol))) }; })
+      .sort((a, b) => b.rev - a.rev || b.reach - a.reach).slice(0, nC).map((x, i) => ({ id: "TC" + (i + 1), ...x }));
+    const tradeVerdicts = L.filter((x) => x.d.lens.trade?.verdict).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.lens.trade.verdict }));
+    // Regulation: every rule in their rule books (matched by name), then policy, litigation and deals; each verdict.
+    const rules = merge((d) => d.lens.reg?.rules, (x) => tk(x.name)).map((e) => { const rs = e.rows.sort((a, b) => (SEVR[a.x.severity] ?? 4) - (SEVR[b.x.severity] ?? 4) || b.weight - a.weight), top = rs[0].x;
+      const text = rs.map((r) => [r.x.name, r.x.what, r.x.impact, r.x.bottom_line, r.x.numeric].join(" ")).join(" ");
+      return { ...top, reach: e.w, industries: rs.map((r) => ({ industry: r.industry, weight: r.weight, severity: r.x.severity, bottom_line: r.x.bottom_line })), named_held: namesHeld([...held.keys()].filter((t) => t.length >= 2 && new RegExp(`\\b${t.replace(/[.\-]/g, "\\$&")}\\b`).test(text))) }; })
+      .sort((a, b) => (SEVR[a.severity] ?? 4) - (SEVR[b.severity] ?? 4) || b.reach - a.reach).slice(0, nR).map((x, i) => ({ id: "RL" + (i + 1), ...x }));
+    const items = merge((d) => d.lens.reg?.items, (x) => tk(x.title)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), top = rs[0].x;
+      return { ...top, reach: e.w, industries: rs.map((r) => ({ industry: r.industry, weight: r.weight, direction: r.x.direction })), named_held: namesHeld(rs.flatMap((r) => r.x.names)) }; })
+      .sort((a, b) => (b.named_held.length > 0) - (a.named_held.length > 0) || b.reach - a.reach).slice(0, nL).map((x, i) => ({ id: "LI" + (i + 1), ...x }));
+    const regVerdicts = L.filter((x) => x.d.lens.reg?.verdict).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.lens.reg.verdict }));
+    return { on, n: L.length, regimes, regime_mix: tally(regimes, (r) => r.regime), indicators, world, trade, tradeVerdicts, trade_mix: tally(tradeVerdicts, (r) => r.rating), rules, items, regVerdicts, reg_mix: tally(regVerdicts, (r) => r.stance) };
+  }
+  /** The tables as the analysts' dossier blocks (each row with its ID). */
+  function affairsText(A) {
+    if (!A) return { macro: "", world: "", trade: "", reg: "" };
+    const w = (x) => pc(x, 0), mix = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${w(v / (Object.values(o).reduce((p, q) => p + q, 0) || 1))}`).join(", ") || "n/a";
+    const val = (r) => `${r.value ?? "n/a"}${r.unit === "%" ? "%" : r.unit ? " " + r.unit : ""}${r.prior !== undefined && r.prior !== null ? ` (${r.prior_label || "prior"} ${r.prior}${r.unit === "%" ? "%" : ""})` : ""}${r.date ? `, ${r.date}` : ""}`;
+    const macro = [`## THE MACRO, AS ITS INDUSTRIES' MACRO REPORTS READ IT (${A.n} industries, ${w(A.on)} of the fund)`, `Regimes by fund weight: ${mix(A.regime_mix)}.`,
+      ...A.regimes.slice(0, 10).map((r) => `${r.industry} (${pc(r.weight)}): ${r.regime || "n/a"}${r.confidence ? `, ${r.confidence} confidence` : ""}. ${r.headline || ""} ${HZ.filter((h) => r.horizons?.[h]).map((h) => `${h} ${r.horizons[h].call}`).join(", ")}.`),
+      ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}. Read by industries worth ${w(x.read_by)} of the fund: ${mix(x.effects)}. ${x.reads.slice(0, 3).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${r.why || ""}`).join(" | ")}`)].join("\n");
+    const world = [`## WORLD EVENTS, FROM ITS INDUSTRIES' WORLD-EVENTS REPORTS`,
+      ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, 6).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${x.summary || ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
+    const trade = [`## TRADE, FROM ITS INDUSTRIES' TRADE MAPS AND COUNTRY DOSSIERS`, `Trade verdicts by fund weight: ${mix(A.trade_mix)}. ${A.tradeVerdicts.slice(0, 6).map((v) => `${v.industry} (${pc(v.weight)}): ${v.rating || "n/a"}${v.health !== null && v.health !== undefined ? `, health ${v.health}/100` : ""}. ${v.headline || ""}`).join(" | ")}`,
+      ...A.trade.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}, threat ${c.threat || "n/a"}; its industries' revenue there about ${pc(c.rev)}${c.rev_est ? " (partly estimates)" : ""}, named by industries worth ${w(c.reach)} of the fund. ${c.headline || c.why || ""}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${r.risk} (${[r.likelihood, r.impact].filter(Boolean).join("/")})`).join("; ")}.` : ""}${c.deps?.length ? ` Depends on: ${c.deps.map((d) => `${d.input} (${d.criticality})`).join("; ")}.` : ""}${c.freeze ? ` If trade froze: ${c.freeze}` : ""}${c.exposed_held.length ? ` Holdings named most exposed: ${c.exposed_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
+    const reg = [`## REGULATION, FROM ITS INDUSTRIES' RULE BOOKS AND LEGAL REPORTS`, `Regulatory verdicts by fund weight: ${mix(A.reg_mix)}. ${A.regVerdicts.slice(0, 6).map((v) => `${v.industry} (${pc(v.weight)}): ${v.stance}${v.intensity ? `, ${v.intensity}` : ""}. ${v.headline || ""}`).join(" | ")}`,
+      ...A.rules.map((r) => `[${r.id}] ${r.name} (${r.body}; ${r.severity}, ${String(r.status).replace(/_/g, " ")}${r.effective ? `, effective ${r.effective}` : ""}): reaches ${w(r.reach)} of the fund (${r.industries.slice(0, 5).map((x) => x.industry).join(", ")}). ${r.bottom_line || r.impact || ""}${r.numeric ? ` Numbers: ${r.numeric}` : ""}${r.next12 ? ` Next 12 months: ${r.next12}` : ""}${r.named_held.length ? ` Names holdings: ${r.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`),
+      ...A.items.map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status}${x.date ? `, ${x.date}` : ""}${x.direction ? `, ${x.direction}` : ""}): reaches ${w(x.reach)} of the fund. ${x.text || ""}${x.next ? ` Next: ${x.next}` : ""}${x.named_held.length ? ` Names holdings: ${x.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
+    return { macro, world, trade, reg };
+  }
+
+  const FundMore = { affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);

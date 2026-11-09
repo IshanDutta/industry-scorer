@@ -67,7 +67,7 @@ const ir = A.indReads(cov, D, "val", 3);
 assert.strictEqual(ir.length, 3); assert.strictEqual(ir[0].industry, cov.industries[0].industry, "biggest first"); assert(ir[0].text.length > 20);
 const ib = A.indReadsBlock(fd, "core");
 assert(/WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY/.test(ib) && /valuation: Semiconductors/.test(ib), ib.slice(0, 300));
-assert(A.partPrompt(fd, dz, "context", "2026-11-09").includes("world events:"), "the context analyst gets the industries' world reads");
+assert(A.partPrompt(fd, dz, "world", "2026-11-09").includes("world events:"), "the world analyst gets the industries' world reads");
 console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3), eff: +conc.effective_n.toFixed(1), cal: cal.length, prompts: A.PARTS.map((p) => A.partPrompt(fd, dz, p, "2026-11-09").length) }));
 // phases 3-4: the scorecard, peers, season, debates and cycle go into the dossier, and the analysts' answers are cleaned
 {
@@ -90,9 +90,9 @@ console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3
 console.log("fundan ok (phases 3-4)");
 // fleshed-out reads: a note per panel (text, findings, what it means, what to watch); a fifth analyst on the markets
 {
-  assert.deepStrictEqual(A.PARTS, ["core", "calls", "markets", "context", "exposures"]);
+  assert.deepStrictEqual(A.PARTS, ["core", "calls", "markets", "context", "world", "exposures"]);
   const keys = Object.values(A.PANELS).flatMap((x) => Object.keys(x));
-  for (const k of ["score", "peers", "holdings", "industries", "valuation", "fundamentals", "income", "coverage", "debates", "calendar", "plan", "times", "perf", "risk", "stress", "tech", "street", "news", "dist", "season", "cycle", "sens", "look", "world", "active", "trade", "regulation", "outside"]) assert(keys.includes(k), "a read for " + k);
+  for (const k of ["score", "peers", "holdings", "industries", "valuation", "fundamentals", "income", "coverage", "debates", "calendar", "plan", "times", "perf", "risk", "stress", "tech", "street", "news", "dist", "season", "cycle", "sens", "look", "world", "macro_ind", "active", "trade", "regulation", "outside"]) assert(keys.includes(k), "a read for " + k);
   assert.strictEqual(new Set(keys).size, keys.length, "each panel read by one analyst");
   const mk = A.cleanPart("markets", { returns: { summary: "Lagged SPY [P1]." }, risk_profile: { level: "High", summary: "Beta 1.1 [P2].", worst_case: "-31% in 2020 [S1]." },
     reads: { risk: { text: "Riskier than SPY [P2] [ZZ1].", points: ["Beta 1.1 [P2]", { text: "Max drawdown -18% [P2]" }], means: "Size it smaller.", watch: "Beta above 1.2" }, perf: "Old-style string [P1]." } }, dz.idx);
@@ -101,4 +101,20 @@ console.log("fundan ok (phases 3-4)");
   const hn = A.cleanPart("core", { holdings_notes: [{ id: "H1", bet: "AI chips", view: "18% of the fund [H1].", stance: "Tailwind" }, { id: "H99", view: "x" }] }, dz.idx);
   assert.deepStrictEqual(hn.w.holdings_notes.map((x) => [x.id, x.stance]), [["H1", "tailwind"]]);
   console.log("fundan ok (fleshed-out reads)");
+}
+// macro, world, trade and regulation: the industry reports' full tables, row by row, for two analysts
+{
+  const M = require("./fundmore.js");
+  const fd4 = { ...fd, aff: M.affairs(cov, D, hold) }, dz4 = A.dossier(fd4, "2026-11-09");
+  for (const id of ["MI1", "WS1", "TC1", "RL1", "LI1"]) assert(dz4.idx[id], "dossier has " + id);
+  const pw = A.partPrompt(fd4, dz4, "world", "2026-11-09"), pe = A.partPrompt(fd4, dz4, "exposures", "2026-11-09");
+  assert(pw.includes("[MI1]") && pw.includes("[WS1]") && pe.includes("[TC1]") && pe.includes("[RL1]") && pe.includes("[LI1]"), "each analyst gets its tables");
+  assert(pw.length < 110000 && pe.length < 110000, `prompt sizes ${pw.length} ${pe.length}`);
+  const w = A.cleanPart("world", { macro_overall: { regime: "Headwind", summary: "s [MI1]" }, indicators: [{ id: "MI1", effect: "Headwind", relevance: "high", vs_industries: "stronger", why: "10Y [MI1]" }, { id: "MI999" }],
+    world: [{ id: "WS1", effect: "hurts", magnitude: "high", channel: "ads", scenario: "x", watch: "y", why: "z [WS1]" }] }, dz4.idx);
+  assert.strictEqual(w.w.macro_overall.regime, "headwind"); assert.deepStrictEqual(w.w.indicators.map((x) => [x.id, x.effect, x.vs_industries]), [["MI1", "headwind", "stronger"]]); assert.strictEqual(w.w.world[0].channel, "ads");
+  const e = A.cleanPart("exposures", { trade: [{ id: "TC1", exposure: "high", effect: "hurts", channel: "c", risk: "r", freeze: "f", why: "w" }], regulation: [{ id: "RL1", effect: "hurts", materiality: "medium", link: "l", cost: "$1B", timing: "2027", why: "w" }],
+    items: [{ id: "LI1", effect: "mixed", materiality: "low", next: "n", why: "w" }], reg_overall: { stance: "headwind", summary: "s", timeline: [{ date: "2027-01", event: "e", why: "y" }] } }, dz4.idx);
+  assert(e.w.trade[0].freeze === "f" && e.w.regulation[0].cost === "$1B" && e.w.items[0].next === "n" && e.w.reg_overall.timeline.length === 1);
+  console.log("fundan ok (macro, world, trade, regulation tables)", pw.length, pe.length);
 }

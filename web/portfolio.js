@@ -11,6 +11,7 @@
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const n = (x) => { if (x === null || x === undefined || x === "") return NaN; const v = Number(String(x).replace(/[%,\s]/g, "")); return v; };
   const lc = (s) => String(s || "").toLowerCase();
+  const CO = () => (typeof module !== "undefined" && module.exports ? require("./company.js") : root.Company);
   const SECTORS = ["Technology", "Financial Services", "Consumer Cyclical", "Consumer Defensive", "Basic Materials", "Communication Services", "Healthcare", "Industrials", "Energy", "Utilities", "Real Estate"];
   const SECTOR_ALIAS = { "consumer cyclicals": "Consumer Cyclical", "consumer staples": "Consumer Defensive", "health care": "Healthcare", "materials": "Basic Materials", "information technology": "Technology", "financials": "Financial Services", "consumer discretionary": "Consumer Cyclical", "telecommunication services": "Communication Services" };
   const sectorName = (s) => { const k = lc(s).trim(); return SECTOR_ALIAS[k] || SECTORS.find((x) => lc(x) === k) || null; };
@@ -228,6 +229,34 @@
     return { doc: rec?.industry || {}, pack: rec?.research || null, kpi: rep("kpi"), macro: rep("macro"), world: rep("world"), trade: rep("trade"), reg: rep("reg"), regVerdict: rep("regverdict"),
       books: Object.values(rec?.regbooks || {}).map((b) => b?.book).filter(Boolean), lead: rec?.agent?.result || null, chain: rep("chain"), calls: rep("calls") };
   }
+  /** The saved run as the company page reads it, then its macro, world, trade and regulation tables, trimmed for the fund. */
+  function lensOf(rec) {
+    if (!rec?.agent && !rec?.reports) return null;
+    const sl = Object.keys(rec.reports || {})[0]?.split("--")[0] || "";
+    const reports = Object.fromEntries(Object.entries(rec.reports || {}).map(([k, v]) => [k.replace(sl + "--", ""), v?.result]).filter(([, v]) => v));
+    const books = Object.values(rec.regbooks || {}).filter((b) => b?.book).map((b) => ({ body: b.body, book: b.book }));
+    const L = CO().lensInputs({ name: rec.name, saved_at: rec.saved_at, industry: rec.industry, agent: rec.agent, macro: rec.macro, reports, books, lead: rec.agent?.result || null }, [], [], rec.industry?.as_of || null);
+    const m = reports.macro || {}, t = (x, k) => cutW(x, k);
+    return {
+      macro: { regime: m.regime ? lc(m.regime) : null, confidence: m.confidence || null, headline: t(m.headline, 260), horizons: Object.fromEntries(HZ.filter((h) => m.horizons?.[h]).map((h) => [h, { call: lc(m.horizons[h].call || ""), text: t(m.horizons[h].text, 220) }])),
+        channels: L.macroInd?.channels || {}, flip: L.macroInd?.flip || [],
+        indicators: (L.indicators || []).map((r) => ({ label: r.label, group: r.group || "", value: r.value, unit: r.unit || "", prior: r.prior, prior_label: r.prior_label || "", date: r.date || "", ind: r.ind })) },
+      world: (L.situations || []).map((x) => ({ title: x.title, stance: x.stance || "", status: x.status || "", region: x.region || "", category: x.category || "", since: x.since || "", deep: !!x.deep, relevance: x.relevance || "",
+        summary: t(x.summary, 280), now: t(x.now, 220), why_now: t(x.why_now, 160), trigger: t(x.trigger, 160), first_order: t(x.first_order, 180), near_term: t(x.near_term, 180), structural: t(x.structural, 160),
+        developments: (x.developments || []).slice(-2).map((d) => ({ date: d.date, text: t(d.text, 150) })), channels: (x.channels || []).slice(0, 5), offsets: (x.offsets || []).slice(0, 2), watch: (x.watch || []).slice(0, 3), exposure: t(x.exposure, 300),
+        winners: x.winners || [], losers: x.losers || [], scenarios: (x.scenarios || []).slice(0, 3) })),
+      trade: { verdict: L.tradev, countries: (L.countries || []).map((c) => ({ country: c.country, importance: c.importance || "", stance: c.stance || "", trajectory: c.trajectory || "", threat: c.threat || "", roles: c.roles || "",
+        why: t(c.why, 180), headline: t(c.headline, 200), alliance: c.alliance || "", relationship: t(c.relationship, 160), outlook: t(c.outlook, 170), freeze: t(c.freeze, 200),
+        risks: (c.risks || []).slice(0, 2).map((r) => ({ risk: t(r.risk, 110), type: r.type || "", likelihood: r.likelihood || "", impact: r.impact || "", timing: r.timing || "", mechanism: t(r.mechanism, 140) })),
+        security: c.security?.threat ? { level: c.security.level || "", threat: t(c.security.threat, 120) } : null, deps: (c.deps || []).slice(0, 2).map((d) => ({ input: t(d.input, 70), criticality: d.criticality || "", share: t(d.share, 80) })),
+        developments: (c.developments || []).slice(0, 1).map((d) => ({ date: d.date, text: t(d.text, 150) })), watch: (c.watch || []).slice(0, 2).map((w) => t(w, 110)), exposed: (c.exposed || []).slice(0, 6).map((x) => ({ symbol: x.symbol, channel: x.channel, severity: x.severity })),
+        share: isNum(n(c.ind_share)) && n(c.ind_share) > 0 ? n(c.ind_share) : isNum(n(c.ind_est)) ? n(c.ind_est) : null, est: !(isNum(n(c.ind_share)) && n(c.ind_share) > 0) })) },
+      reg: { verdict: L.regv ? { ...L.regv, timeline: (L.regv.timeline || []).slice(0, 6), regulators: (L.regv.regulators || []).slice(0, 5) } : null,
+        rules: (L.rules || []).map((r) => ({ body: r.body, name: r.name, status: r.status || "", effective: r.effective || "", severity: r.severity || "", category: r.category || "", bottom_line: t(r.bottom_line, 260), citation: r.citation || "",
+          numeric: t(r.numeric, 130), what: t(r.what, 180), impact: t(r.impact, 200), last12: t(r.last12, 140), today: t(r.today, 140), next12: t(r.next12, 160) })),
+        items: (L.regItems || []).map((x) => ({ kind: x.kind, title: x.title, status: x.status || "", date: x.date || "", direction: x.direction || "", text: t(x.text, 280), parties: t(x.parties, 140), next: t(x.next, 140), value: x.value || "", names: x.names || [] })) },
+    };
+  }
   function digest(rec, { row = null, scores = null, slug = "", pillars = null } = {}) {
     const d = rec?.industry || {}, a = rec?.agent?.result || {}, S0 = d.summary || {}, F = d.fund || {}, W = d.forward || {};
     const rep = (k) => { for (const [key, v] of Object.entries(rec?.reports || {})) if (key.endsWith("--" + k)) return v?.result || null; return null; };
@@ -240,7 +269,7 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 5, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 6, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -293,6 +322,9 @@
         return { as_of: T.as_of || null, months: T.months || null, features: T.features || [], now: T.now || {}, base: b,
           episodes: T.episodes.map((e) => ({ month: e.month, date: e.date, similarity: n(e.similarity), then: e.then || {}, alike: e.alike || [], unlike: e.unlike || [], industry: e.industry || {}, spy: e.spy || {}, excess: e.excess || {}, maxdd6: n(e.maxdd6), path: e.path || [], spy_path: e.spy_path || [] })),
           hist: h ? { read: cutW(h.read, 700), closest: h.closest || "", episodes: (h.episodes || []).map((x) => ({ month: x.month, then: cutW(x.then, 360), after: cutW(x.after, 400), different: cutW(x.different, 300), lesson: cutW(x.lesson, 90) })) } : null }; })(),
+      // The industry report's macro, world-events, trade and regulation tables, as the company page reads them
+      // (Company.lensInputs on the saved run): every indicator, situation, country, rule and policy/legal item.
+      lens: (() => { try { return lensOf(rec); } catch (e) { return null; } })(),
       // The lead strategist's debates (the biggest questions about the industry, each side and which way it leans).
       debates: (a.debates || []).filter((x) => x?.question).slice(0, 3).map((x) => ({ q: cutW(x.question, 180), bull: cutW(x.bull, 240), bear: cutW(x.bear, 240), lean: lc(x.lean || ""), resolves: cutW(x.resolves_with, 160) })),
       positioning: d.positioning?.label || row?.positioning || null,
@@ -519,7 +551,7 @@ Reply with JSON only, in this shape:
     return [...seen.values()].map((x) => ({ ...x, score: score(x) })).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol)).slice(0, k);
   }
 
-  const Portfolio = { sectionCtx, suggest, fundLike, dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
+  const Portfolio = { lensOf, sectionCtx, suggest, fundLike, dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
   if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
   else root.Portfolio = Portfolio;
 })(typeof window !== "undefined" ? window : globalThis);
