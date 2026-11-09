@@ -446,6 +446,7 @@ a.btnlink:hover { border-color: var(--accent); }
   <section class="picker" id="picker" aria-label="Choose an industry"></section>
   <div id="report" style="display:grid;gap:18px"></div>
   <div id="company" style="display:grid;gap:18px" hidden></div>
+  <div id="fund" style="display:grid;gap:18px" hidden></div>
 
   <section class="method">
     <h3 style="color:var(--ink)">How the numbers are built</h3>
@@ -9405,6 +9406,209 @@ Reply with ONLY this JSON:
   else root.Apply = Apply;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* Industry Scorer: an ETF or mutual fund, seen through the industries it holds.
+ *
+ * Code only (no I/O). Step 1 of the fund analysis: read a fund from both sources (FMP: every holding with its
+ * ticker and weight, refreshed daily; EODHD: the fund's facts, its asset mix, and for ETFs each holding's own
+ * sector and industry), sort every holding into what it is (a US stock, a foreign listing, a private company,
+ * cash, a derivative), match each US stock to an industry (the saved industry runs first, then EODHD's label,
+ * then an FMP profile), and report how much of the fund the saved industry analysis covers.
+ */
+(function (root) {
+  "use strict";
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const n = (x) => { if (x === null || x === undefined || x === "") return NaN; const v = Number(String(x).replace(/[%,\s]/g, "")); return v; };
+  const lc = (s) => String(s || "").toLowerCase();
+  const SECTORS = ["Technology", "Financial Services", "Consumer Cyclical", "Consumer Defensive", "Basic Materials", "Communication Services", "Healthcare", "Industrials", "Energy", "Utilities", "Real Estate"];
+  const SECTOR_ALIAS = { "consumer cyclicals": "Consumer Cyclical", "consumer staples": "Consumer Defensive", "health care": "Healthcare", "materials": "Basic Materials", "information technology": "Technology", "financials": "Financial Services", "consumer discretionary": "Consumer Cyclical", "telecommunication services": "Communication Services" };
+  const sectorName = (s) => { const k = lc(s).trim(); return SECTOR_ALIAS[k] || SECTORS.find((x) => lc(x) === k) || null; };
+  const SPDR = { Technology: "XLK", "Financial Services": "XLF", "Consumer Cyclical": "XLY", "Consumer Defensive": "XLP", "Basic Materials": "XLB",
+    "Communication Services": "XLC", Healthcare: "XLV", Industrials: "XLI", Energy: "XLE", Utilities: "XLU", "Real Estate": "XLRE" };
+
+  /** "Alphabet Inc. Class A", "ALPHABET INC CL A" -> "alphabet": what's left of a name once legal forms and share classes go. */
+  function nameKey(s) {
+    return lc(s).replace(/[&+]/g, " ").replace(/\band\b/g, " ").replace(/\((?:the)\)|\(.*?\)/g, " ").replace(/[.,/'’]/g, " ")
+      .replace(/\b(class|cl|series|ser)\s+[a-z0-9-]{1,3}\b/g, " ").replace(/\b(non\s*vtg|non\s*voting|vtg|shs|shares|ordinary|common|stock|ads|adr|sponsored|new|old)\b/g, " ")
+      .replace(/\b(the|inc|incorporated|corp|corporation|co|company|companies|plc|ltd|limited|sa|nv|ag|se|holdings?|group|llc|lp)\b/g, " ")
+      .replace(/[^a-z0-9]+/g, " ").trim();
+  }
+  /** "BRK-B", "BRK.B", "BRK/B" -> "BRK-B"; the root ("BRK") for matching another share class. */
+  const tick = (t) => String(t || "").trim().toUpperCase().replace(/[/ ]/g, "-");
+  const tickRoot = (t) => tick(t).replace(/-[A-Z]{1,2}$/, "");
+  // An exchange suffix (SHOP.TO, 000660.KS, BATS.L): a listing outside the US. A US share class is "-" plus a letter (FMP) or
+  // "." plus a letter (BRK.B), so a one-letter suffix only counts as foreign when it's an exchange's (London, Tokyo, ...).
+  const EXCH = new Set(["L", "T", "F", "V", "TO", "CN", "NE", "KS", "KQ", "HE", "AS", "BR", "PA", "DE", "SW", "MI", "MC", "ST", "CO", "OL", "IR", "LS", "VI", "WA", "HK", "SS", "SZ", "TW", "TWO",
+    "AX", "NZ", "SA", "MX", "JO", "BO", "NS", "SI", "TA", "KL", "BK", "JK", "IS", "AT", "PR", "BD", "XC", "SN", "LIM", "BA", "SG", "DU", "MU", "BE", "HM", "XETRA", "TSE", "LSE"]);
+  const isForeign = (t) => { const s = String(t || "").trim().toUpperCase(), m = s.match(/\.([A-Z]{1,5})$/); return /^\d/.test(s) || (!!m && EXCH.has(m[1])); };
+  const CASH_RE = /\b(us dollars?|u\.?s\.? dollar|cash|money market|cash central fund|treasury bills?|t-bills?|repo|repurchase|sweep|government (?:money|portfolio)|liquidity fund)\b/i;
+  const DERIV_RE = /\b(futures?|e-?mini|index contracts?|swaps?|options?|forwards?|cvr|contra)\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\d{2}\b/i;
+  const FUT_TICK_RE = /^[A-Z]{1,4}[FGHJKMNQUVXZ]\d$/; // IXRZ6: an exchange futures code
+  const BOND_RE = /\d(?:\.\d+)?\s?%\s+\d{1,2}\/\d{1,2}\/\d{2,4}|\bnotes? due\b|\bbonds?\b|\bdebentures?\b/i;
+  const PRIVATE_RE = /\bseries [a-z0-9-]+\b|\bunits?\b|\bpbc\b|\block ?up\b|\bllc\b/i;
+
+  /** What one holding is: stock (US listing), foreign (listed abroad), private (no listing), cash, derivative, bond, other. */
+  function kindOf(h) {
+    const t = tick(h.ticker), name = h.name || "";
+    if (CASH_RE.test(name) && !t) return "cash";
+    // Company names can contain these words (Option Care Health), so they only count for a line with no ticker.
+    if ((!t && DERIV_RE.test(name)) || (t && FUT_TICK_RE.test(t))) return "derivative";
+    if (!t && BOND_RE.test(name)) return "bond";
+    if (t && isForeign(t)) return "foreign";
+    if (t) return CASH_RE.test(name) && /\bfund\b/i.test(name) ? "cash" : "stock";
+    if (CASH_RE.test(name)) return "cash";
+    return PRIVATE_RE.test(name) || h.name ? "private" : "other";
+  }
+
+  /** FMP etfAndMutualFunds "holdings" rows -> [{ticker, name, isin, weight (0-1), value, shares, date}]. */
+  function fromFmp(rows) {
+    return (rows || []).filter((r) => r && (r.asset || r.name)).map((r) => ({ ticker: tick(r.asset), name: String(r.name || "").trim(), isin: r.isin || "", cusip: r.securityCusip || "",
+      weight: isNum(n(r.weightPercentage)) ? n(r.weightPercentage) / 100 : NaN, value: n(r.marketValue), shares: n(r.sharesNumber), date: String(r.updatedAt || "").slice(0, 10) }));
+  }
+  /** EODHD ETF_Data.Holdings (all of an ETF's holdings, each with its sector and industry) -> the same shape plus sector/industry. */
+  function fromEodEtf(f) {
+    const H = f?.ETF_Data?.Holdings || {};
+    return Object.values(H).filter(Boolean).map((r) => ({ ticker: tick(r.Code), name: String(r.Name || "").trim(), weight: isNum(n(r["Assets_%"])) ? n(r["Assets_%"]) / 100 : NaN,
+      sector: sectorName(r.Sector), industry: r.Industry || "", country: r.Country || "", exchange: r.Exchange || "" }));
+  }
+  /** EODHD's top holdings for a mutual fund (names and weights only, from the last filing). */
+  function eodTop(f) {
+    if (f?.ETF_Data) return Object.values(f.ETF_Data.Top_10_Holdings || {}).map((r) => ({ name: r.Name, ticker: tick(r.Code), weight: n(r["Assets_%"]) / 100 }));
+    return Object.values(f?.Top_Holdings || {}).map((r) => ({ name: r.Name, ticker: "", weight: n(r.Weight) / 100 })).filter((r) => isNum(r.weight));
+  }
+
+  const pct01 = (v) => (isNum(n(v)) ? n(v) / 100 : null);
+  /** The fund's facts from both sources, EODHD first where it has them, FMP filling the rest. */
+  function facts(sym, fmpInfo, eod) {
+    const I = Array.isArray(fmpInfo) ? fmpInfo[0] || {} : fmpInfo || {}, G = eod?.General || {}, E = eod?.ETF_Data || null, M = eod && !E ? eod : null;
+    const type = G.Type === "ETF" || E ? "ETF" : G.Type === "FUND" || M ? "Mutual fund" : I.avgVolume === 0 ? "Mutual fund" : "ETF";
+    // Asset mix: ETFs file it as an object keyed by type, mutual funds as a numbered list.
+    const mix = {}; const add = (k, v) => { if (!isNum(n(v))) return; const key = /non.?us/i.test(k) ? "stock_nonus" : /stock/i.test(k) ? "stock_us" : /cash/i.test(k) ? "cash" : /bond/i.test(k) ? "bond" : "other"; mix[key] = (mix[key] || 0) + n(v) / 100; };
+    if (E?.Asset_Allocation) for (const [k, v] of Object.entries(E.Asset_Allocation)) add(k, v?.["Net_Assets_%"]);
+    if (M?.Asset_Allocation) for (const v of Object.values(M.Asset_Allocation)) add(v?.Type || "", v?.["Net_%"]);
+    const sectors = {};
+    if (E?.Sector_Weights) for (const [k, v] of Object.entries(E.Sector_Weights)) { const s = sectorName(k); if (s && isNum(n(v?.["Equity_%"]))) sectors[s] = n(v["Equity_%"]) / 100; }
+    if (M?.Sector_Weights) for (const grp of ["Cyclical", "Defensive", "Sensitive"]) for (const v of Object.values(M.Sector_Weights[grp] || {})) { const s = sectorName(v?.Name); if (s && isNum(n(v["Amount_%"]))) sectors[s] = n(v["Amount_%"]) / 100; }
+    if (!Object.keys(sectors).length) for (const x of I.sectorsList || []) { const s = sectorName(x.industry); if (s && isNum(n(x.exposure))) sectors[s] = n(x.exposure) / 100; }
+    const P = E ? eod?.ETF_Data?.Performance || {} : {};
+    return {
+      symbol: sym, type, name: G.Name || I.name || sym, family: E?.Company_Name || G.Fund_Family || I.etfCompany || "", category: (G.Category || G.Fund_Category || "").replace(/^Unclassified$/i, "") || I.assetClass || "",
+      description: G.Description || G.Fund_Summary || I.description || "", inception: E?.Inception_Date || M?.Inception_Date || I.inceptionDate || "",
+      expense: isNum(n(E?.NetExpenseRatio)) && n(E.NetExpenseRatio) > 0 ? n(E.NetExpenseRatio) : pct01(M?.Expense_Ratio) ?? pct01(I.expenseRatio),
+      aum: n(E?.TotalAssets) > 0 ? n(E.TotalAssets) : n(M?.Portfolio_Net_Assets) > 0 ? n(M.Portfolio_Net_Assets) : n(I.assetsUnderManagement) || null,
+      turnover: isNum(n(E?.AnnualHoldingsTurnover)) ? n(E.AnnualHoldingsTurnover) : null, yield: pct01(E?.Yield ?? M?.Yield),
+      holdings_count: n(E?.Holdings_Count) || n(I.holdingsCount) || null, nav: n(M?.Nav ?? I.nav) || null,
+      mix: Object.keys(mix).length ? mix : null, sectors, eod_date: G.UpdatedAt || M?.Update_Date || "", fmp_date: String(I.updatedAt || "").slice(0, 10),
+      perf: E ? { vol_1y: pct01(P["1y_Volatility"]), vol_3y: pct01(P["3y_Volatility"]), sharpe_3y: n(P["3y_SharpRatio"]), ret_ytd: pct01(P.Returns_YTD), ret_1y: pct01(P.Returns_1Y), ret_3y: pct01(P.Returns_3Y), ret_5y: pct01(P.Returns_5Y), ret_10y: pct01(P.Returns_10Y), beta: n(eod?.Technicals?.Beta) }
+        : M ? { ret_ytd: pct01(M.Yield_YTD), ret_1y: pct01(M.Yield_1Year_YTD), ret_3y: pct01(M.Yield_3Year_YTD), ret_5y: pct01(M.Yield_5Year_YTD) } : {},
+    };
+  }
+
+  /**
+   * The ticker -> industry lookup: every company in the saved runs (coIndex.cos: {symbol: {industry, slug, sector, name, rank}}),
+   * by ticker, by the root of another share class (GOOGL -> GOOG kept by the run, BRK-B -> BRK-A), and by name.
+   */
+  function lookup(cos) {
+    const byT = new Map(), byRoot = new Map(), byName = new Map();
+    for (const [sym, c] of Object.entries(cos || {})) { const t = tick(sym); byT.set(t, c); if (!byRoot.has(tickRoot(t))) byRoot.set(tickRoot(t), c); const k = nameKey(c.name); if (k && !byName.has(k)) byName.set(k, c); }
+    return (h) => {
+      const t = tick(h.ticker);
+      if (t && byT.has(t)) return { c: byT.get(t), via: "saved runs" };
+      const k = nameKey(h.name);
+      if (k && byName.has(k)) return { c: byName.get(k), via: "saved runs (another share class)" };
+      if (t && byRoot.has(tickRoot(t)) && tickRoot(t) !== t && k && nameKey(byRoot.get(tickRoot(t)).name).split(" ")[0] === k.split(" ")[0]) return { c: byRoot.get(tickRoot(t)), via: "saved runs (another share class)" };
+      return null;
+    };
+  }
+
+  /**
+   * Every holding with what it is and its industry. fmpH/eodH: holdings from each source (FMP is the main list;
+   * EODHD's own list fills in for an ETF FMP has nothing for). cos: the saved runs' companies. profiles: {TICKER:
+   * {industry, sector}} already looked up from FMP. Returns [{ticker, name, weight, kind, industry, sector, slug, via, top50}].
+   */
+  function mapHoldings(fmpH, eodH, cos, profiles = {}) {
+    const base = fmpH?.length ? fmpH : eodH || [];
+    const eodBy = new Map((eodH || []).map((h) => [tick(h.ticker), h]));
+    const find = lookup(cos);
+    return base.filter((h) => isNum(h.weight) && h.weight > 0).map((h) => {
+      const kind = kindOf(h), out = { ticker: h.ticker, name: h.name, weight: h.weight, kind, industry: null, sector: null, slug: null, via: null, top50: false, rank: null };
+      if (kind !== "stock") return out;
+      const r = find(h);
+      if (r) return { ...out, industry: r.c.industry, sector: r.c.sector || null, slug: r.c.slug, via: r.via, top50: true, rank: r.c.rank ?? null, run_symbol: r.c.symbol };
+      const e = eodBy.get(tick(h.ticker)) || (h.industry ? h : null);
+      if (e?.industry) return { ...out, industry: e.industry, sector: e.sector || null, via: "EODHD" };
+      const p = profiles[tick(h.ticker)];
+      if (p?.industry) return { ...out, industry: p.industry, sector: sectorName(p.sector) || p.sector || null, via: "FMP profile" };
+      return out;
+    });
+  }
+  /** The US stocks still without an industry, biggest first: the FMP profile lookups worth making (at most `max`). */
+  function needProfiles(mapped, max = 25, minWeight = 0.0005) {
+    return mapped.filter((h) => h.kind === "stock" && !h.industry && h.ticker && h.weight >= minWeight).sort((a, b) => b.weight - a.weight).slice(0, max).map((h) => h.ticker);
+  }
+
+  /**
+   * How much of the fund the saved analysis covers. runs: {slug: {name, saved_at}} (coIndex.runs); runBySlugName
+   * maps an industry name to its saved run. staleDays: a run older than this counts as stale. Every share is of
+   * the fund's total weight in the holdings list.
+   */
+  function coverage(mapped, runs, { now = new Date().toISOString().slice(0, 10), staleDays = 14 } = {}) {
+    const runByName = new Map(Object.entries(runs || {}).map(([sl, r]) => [lc(r.name), { slug: sl, ...r }]));
+    const ageOf = (iso) => (iso ? Math.round((Date.parse(now) - Date.parse(String(iso).slice(0, 10))) / 864e5) : null);
+    const total = mapped.reduce((a, h) => a + h.weight, 0) || 1;
+    const B = { analyzed: 0, stale: 0, not_analyzed: 0, unmapped: 0, foreign: 0, private: 0, cash: 0, derivative: 0, bond: 0, other: 0 };
+    const inds = new Map();
+    for (const h of mapped) {
+      if (h.kind !== "stock") { B[h.kind] = (B[h.kind] || 0) + h.weight; continue; }
+      if (!h.industry) { B.unmapped += h.weight; continue; }
+      const run = runByName.get(lc(h.industry)), age = run ? ageOf(run.saved_at) : null;
+      const status = !run ? "not_analyzed" : age !== null && age > staleDays ? "stale" : "analyzed";
+      B[status] += h.weight;
+      const key = lc(h.industry);
+      if (!inds.has(key)) inds.set(key, { industry: run?.name || h.industry, sector: h.sector || run?.sector || null, slug: run?.slug || null, status, saved_at: run?.saved_at || null, age, weight: 0, holdings: 0, in_top50: 0, top: [] });
+      const g = inds.get(key); g.weight += h.weight; g.holdings++; if (h.top50) g.in_top50 += h.weight; g.top.push(h);
+    }
+    for (const k of Object.keys(B)) B[k] /= total;
+    const industries = [...inds.values()].map((g) => ({ ...g, weight: g.weight / total, in_top50: g.in_top50 / total, top: g.top.sort((a, b) => b.weight - a.weight).slice(0, 5).map((h) => ({ ticker: h.ticker, name: h.name, weight: h.weight / total, top50: h.top50 })) }))
+      .sort((a, b) => b.weight - a.weight);
+    const sectors = {}; for (const g of industries) if (g.sector) sectors[g.sector] = (sectors[g.sector] || 0) + g.weight;
+    const outside = mapped.filter((h) => h.kind !== "stock" || !h.industry).sort((a, b) => b.weight - a.weight).slice(0, 25).map((h) => ({ ticker: h.ticker, name: h.name, weight: h.weight / total, kind: h.kind === "stock" ? "unmapped" : h.kind }));
+    const viaW = {}; for (const h of mapped) if (h.via) viaW[h.via] = (viaW[h.via] || 0) + h.weight / total;
+    return { buckets: B, covered: B.analyzed + B.stale, us_stock: B.analyzed + B.stale + B.not_analyzed + B.unmapped, industries, sectors, outside, via: viaW, holdings: mapped.length, total_weight: total };
+  }
+
+  /**
+   * Where the two sources disagree enough to matter: a position in EODHD's top holdings that FMP lists without a
+   * ticker or at a much smaller weight (e.g. a private company under lock-up), or one FMP doesn't have at all.
+   */
+  function crossCheck(mapped, top) {
+    const flags = [];
+    for (const t of top || []) {
+      if (!isNum(t.weight) || t.weight < 0.01) continue;
+      const k = nameKey(t.name), hit = mapped.find((h) => (t.ticker && tick(h.ticker) === tick(t.ticker)) || (k && nameKey(h.name) === k) || (k && nameKey(h.name).startsWith(k.split(" ").slice(0, 2).join(" "))));
+      if (!hit) flags.push({ name: t.name, eod: t.weight, fmp: null, note: "in EODHD's top holdings, not in FMP's list" });
+      else if (hit.weight < t.weight * 0.6 || hit.weight > t.weight * 1.6) flags.push({ name: t.name, eod: t.weight, fmp: hit.weight, kind: hit.kind, note: "weights differ (the sources' dates differ)" });
+      else if (hit.kind !== "stock") flags.push({ name: t.name, eod: t.weight, fmp: hit.weight, kind: hit.kind, note: `a top holding the analysis can't cover (${hit.kind})` });
+    }
+    return flags;
+  }
+
+  /**
+   * The benchmark, by category: a fund with 60%+ in one sector -> that sector's SPDR; a Nasdaq or Nasdaq-100 fund -> QQQ;
+   * anything else -> SPY. sectors: {sector: 0-1}, from the fund's facts or the holdings.
+   */
+  function benchmark(f, sectors) {
+    const s = Object.entries(sectors || {}).sort((a, b) => b[1] - a[1])[0];
+    const txt = `${f?.name || ""} ${f?.category || ""} ${f?.description || ""}`;
+    if (s && s[1] >= 0.6 && SPDR[s[0]] && SPDR[s[0]] !== f?.symbol) return { symbol: SPDR[s[0]], why: `${Math.round(s[1] * 100)}% in ${s[0]}: that sector's SPDR` };
+    if (/nasdaq/i.test(txt) && f?.symbol !== "QQQ") return { symbol: "QQQ", why: "A Nasdaq fund: the Nasdaq-100 (QQQ)" };
+    return { symbol: f?.symbol === "SPY" ? "VOO" : "SPY", why: "A broad US stock fund: the S&P 500" };
+  }
+
+  const Portfolio = { nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
+  if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
+  else root.Portfolio = Portfolio;
+})(typeof window !== "undefined" ? window : globalThis);
+
 </script>
 <script>
 (() => {
@@ -13746,7 +13950,7 @@ Reply with ONLY this JSON:
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
-  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); keepAwake(); }
+  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); keepAwake(); }
 
   // ============================================================= Companies tab: one company, on top of its industry's analysis
   /**
@@ -14202,12 +14406,117 @@ Reply with ONLY this JSON:
     await idbPut(key, log).catch(() => {}); co.track = log; if (S.co === co) renderCompany();
   }
 
+  // ============================================================= Funds tab: an ETF or mutual fund, through the industries it holds
+  /**
+   * Step 1 of the fund analysis (code only, no Claude): the fund's facts and holdings from FMP and EODHD, every
+   * holding sorted into what it is and matched to an industry, and how much of the fund the saved industry runs cover.
+   * About 2 FMP calls and 1 EODHD call per fund, plus an FMP profile for each US stock no run or EODHD label places
+   * (at most 25, each looked up once and kept). Saved here per fund for a day.
+   */
+  const FUND_TTL_MS = 20 * 3600e3;
+  async function fundTickInd() { return (await idbGet("tickInd").catch(() => null)) || {}; }
+  async function openFund(q, { refresh = false } = {}) {
+    const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
+    S.tab = "funds"; S.fundQuery = "";
+    const fd = S.fund = { sym, stage: "loading", step: "Reading the fund from FMP and EODHD…", err: null };
+    renderAll(); window.scrollTo?.(0, 0);
+    try {
+      let raw = refresh ? null : await idbGet("fund:" + sym).catch(() => null);
+      if (!raw || Date.now() - Date.parse(raw.fetched_at || 0) > FUND_TTL_MS) {
+        if (!S.mcp) { if (!raw) throw new Error("open this page in Claude to look a fund up"); }
+        else {
+          if (S.eod === undefined) await detectEod();
+          const [info, hold, eod] = await Promise.all([
+            optional(() => fmp("etfAndMutualFunds", { endpoint: "information", symbol: sym }), []),
+            optional(() => fmp("etfAndMutualFunds", { endpoint: "holdings", symbol: sym }), []),
+            S.eod ? optional(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", include_financials: false }), null) : Promise.resolve(null)]);
+          const eodOk = eod && (eod.ETF_Data || eod.General?.Type === "FUND" || eod.Asset_Allocation) ? eod : null;
+          if (!info?.length && !hold?.length && !eodOk) throw new Error(`neither FMP nor EODHD knows ${sym} as an ETF or mutual fund`);
+          raw = { sym, fetched_at: new Date().toISOString(), info, holdings: Portfolio.fromFmp(hold), eod: eodOk ? { General: eodOk.General, Technicals: eodOk.Technicals, ETF_Data: eodOk.ETF_Data,
+            ...(eodOk.ETF_Data ? {} : { Asset_Allocation: eodOk.Asset_Allocation, Sector_Weights: eodOk.Sector_Weights, Top_Holdings: eodOk.Top_Holdings, Expense_Ratio: eodOk.Expense_Ratio, Portfolio_Net_Assets: eodOk.Portfolio_Net_Assets,
+              Nav: eodOk.Nav, Update_Date: eodOk.Update_Date, Inception_Date: eodOk.Inception_Date, Yield: eodOk.Yield, Yield_YTD: eodOk.Yield_YTD, Yield_1Year_YTD: eodOk.Yield_1Year_YTD, Yield_3Year_YTD: eodOk.Yield_3Year_YTD, Yield_5Year_YTD: eodOk.Yield_5Year_YTD }) } : null };
+          await idbPut("fund:" + sym, raw).catch(() => {});
+        }
+      }
+      fd.step = "Matching the holdings to your saved industries…"; renderFund();
+      const ci = await coIndex();
+      const eodH = Portfolio.fromEodEtf(raw.eod);
+      const tickInd = await fundTickInd();
+      let mapped = Portfolio.mapHoldings(raw.holdings, eodH, ci.cos, tickInd);
+      const need = Portfolio.needProfiles(mapped).filter((t) => !tickInd[t]);
+      if (need.length && S.mcp) {
+        fd.step = `Looking up ${need.length} compan${need.length === 1 ? "y" : "ies"} no saved industry or EODHD places…`; renderFund();
+        for (const t of need) { const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: t }), []))?.[0]; tickInd[t] = p ? { industry: p.industry || "", sector: p.sector || "", at: today() } : { industry: "", at: today() }; }
+        await idbPut("tickInd", tickInd).catch(() => {});
+        mapped = Portfolio.mapHoldings(raw.holdings, eodH, ci.cos, tickInd);
+      }
+      const facts = Portfolio.facts(sym, raw.info, raw.eod);
+      const cov = Portfolio.coverage(mapped, ci.runs, { now: today() });
+      const sectors = Object.keys(facts.sectors || {}).length ? facts.sectors : cov.sectors;
+      Object.assign(fd, { stage: "ready", raw, facts, mapped, cov, flags: Portfolio.crossCheck(mapped, Portfolio.eodTop(raw.eod)), bench: Portfolio.benchmark(facts, sectors), eodHoldings: eodH.length });
+      const list = ((await idbGet("funds").catch(() => null)) || []).filter((x) => x.sym !== sym);
+      list.unshift({ sym, name: facts.name, type: facts.type, covered: cov.covered, at: raw.fetched_at });
+      await idbPut("funds", list.slice(0, 40)).catch(() => {}); S.fundList = list.slice(0, 40);
+    } catch (e) { fd.stage = "error"; fd.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    if (S.fund === fd) renderFund();
+  }
+
+  // ------------------------------------------------------------- render: Funds tab
+  const FUND_BUCKETS = [["analyzed", "Analyzed industries", "var(--pos)"], ["stale", "Analyzed, but more than 2 weeks old", "var(--c3)"], ["not_analyzed", "Industries not analyzed yet", "var(--c4)"],
+    ["unmapped", "US stocks with no industry found", "var(--bench)"], ["foreign", "Listed outside the US", "var(--accent)"], ["private", "Private companies", "var(--neg)"],
+    ["cash", "Cash", "var(--faint)"], ["derivative", "Futures and other derivatives", "var(--line)"], ["bond", "Bonds", "var(--muted)"], ["other", "Other", "var(--sunk)"]];
+  function fundSearch() {
+    const recent = S.fundList || [];
+    return `<section class="picker"><div class="picker-head"><h2>Funds</h2><span class="small muted">Any US stock ETF or mutual fund, seen through the industries it holds${S.mcp ? "" : " (open in Claude to look funds up)"}</span></div>
+      <form id="fund-form" class="co-form"><input type="search" id="fund-q" placeholder="Ticker, e.g. XLP, VTI, FCNTX, VFIAX" aria-label="Fund ticker" autocomplete="off" value="${esc(S.fundQuery || "")}"><button class="primary" type="submit">Open</button></form>
+      ${recent.length ? `<div class="co-chips">${recent.map((x) => `<button class="chip co-chip" data-fund="${esc(x.sym)}" title="${esc(x.name || "")}">${esc(x.sym)} <span class="muted">${isNum(x.covered) ? pct(x.covered, false, 0) + " covered" : ""}</span></button>`).join("")}</div>` : ""}</section>`;
+  }
+  function fundView(fd) {
+    if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
+    if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
+    const f = fd.facts, c = fd.cov, B = c.buckets, mix = f.mix;
+    const head = `<section class="hero"><span class="eyebrow">${esc(f.type)}${f.family ? " · " + esc(f.family) : ""}${f.category ? " · " + esc(f.category) : ""}</span><h1>${esc(f.name)} <span class="muted mono" style="font-size:.6em">${esc(f.symbol)}</span></h1>
+      <div class="kpis">${[kpi("Covered by your analysis", pct(c.covered, false, 0), `${pct(B.analyzed, false, 0)} fresh${B.stale > 0.005 ? `, ${pct(B.stale, false, 0)} stale` : ""}`),
+        kpi("Expense ratio", isNum(f.expense) ? pct(f.expense, false, 2) : "—", isNum(f.turnover) ? `turnover ${pct(f.turnover, false, 0)} a year` : ""),
+        kpi("Assets", cap(f.aum), f.holdings_count ? `${f.holdings_count} holdings` : ""), kpi("Yield", isNum(f.yield) ? pct(f.yield, false, 2) : "—", f.inception ? `since ${esc(String(f.inception).slice(0, 4))}` : ""),
+        kpi("1-year return", isNum(f.perf?.ret_1y) ? pct(f.perf.ret_1y) : "—", isNum(f.perf?.ret_3y) ? `3Y ${pct(f.perf.ret_3y)} a year · 5Y ${pct(f.perf.ret_5y)}` : "", ""),
+        kpi("Benchmark", esc(fd.bench.symbol), esc(fd.bench.why))].join("")}</div>
+      <div class="actions"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}">Fetch again</button><span class="small muted">Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}. Fetched ${esc(ago(fd.raw.fetched_at))}.</span></div></section>`;
+    // Coverage: one bar of the whole fund, then each bucket.
+    const bar = `<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--sunk)">${FUND_BUCKETS.filter(([k]) => B[k] > 0.0005).map(([k, l, col]) => `<i title="${esc(l)}: ${pct(B[k], false, 1)}" style="display:block;width:${(B[k] * 100).toFixed(2)}%;background:${col}"></i>`).join("")}</div>`;
+    const legend = `<div class="legend-list" style="max-width:640px">${FUND_BUCKETS.filter(([k]) => B[k] > 0.0005).map(([k, l, col]) => `<div><i style="background:${col}"></i><span>${esc(l)}</span><b class="mono">${pct(B[k], false, 1)}</b></div>`).join("")}</div>`;
+    const mixNote = mix ? `<div class="small muted">EODHD's asset mix: US stocks ${pct(mix.stock_us || 0, false, 1)}, non-US stocks ${pct(mix.stock_nonus || 0, false, 1)}, cash ${pct(mix.cash || 0, false, 1)}${mix.bond > 0.0005 ? `, bonds ${pct(mix.bond, false, 1)}` : ""}${mix.other > 0.0005 ? `, other ${pct(mix.other, false, 1)}` : ""}. The analysis covers US-listed stocks; everything else is shown, not analyzed.</div>` : "";
+    const viaNote = Object.keys(c.via).length ? `<div class="small muted">How holdings were placed in an industry: ${Object.entries(c.via).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 1)}`).join(" · ")}.</div>` : "";
+    const covSec = sec("fund-cov", "How much of the fund your analysis covers", `${c.holdings} holdings`, `${bar}${legend}${mixNote}${viaNote}`);
+    // Industries, biggest first.
+    const ST = { analyzed: ["pos", "analyzed"], stale: ["warn", "stale"], not_analyzed: ["neu", "not analyzed"] };
+    const rows = c.industries.map((g) => `<tr><td class="wr"><b>${g.slug ? `<button class="linkbtn" data-open-industry="${esc(g.industry)}">${esc(g.industry)}</button>` : esc(g.industry)}</b><div class="small muted">${esc(g.top.map((h) => `${h.ticker || h.name} ${pct(h.weight, false, 1)}`).join(", "))}</div></td>
+      <td>${esc(g.sector || "")}</td><td class="n"><b>${pct(g.weight, false, 1)}</b></td><td class="n">${g.holdings}</td><td class="n">${g.weight > 0 ? pct(g.in_top50 / g.weight, false, 0) : "—"}</td>
+      <td><span class="pill ${ST[g.status][0]}">${ST[g.status][1]}</span>${g.saved_at ? ` <span class="small muted">${esc(ago(g.saved_at))}</span>` : ""}</td></tr>`).join("");
+    const notA = c.industries.filter((g) => g.status === "not_analyzed"), notW = notA.reduce((a, g) => a + g.weight, 0);
+    const indSec = sec("fund-ind", "The industries it holds", `${c.industries.length} industries`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry and its biggest holdings</th><th>Sector</th><th class="n">Weight</th><th class="n">Holdings</th><th class="n">In the industry's top 50</th><th>Your analysis</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${notA.length ? `<div class="small muted">${notA.length} industr${notA.length === 1 ? "y" : "ies"} (${pct(notW, false, 1)} of the fund) not analyzed yet. Step 2 fills these with the code-only data and scores (no Claude calls).</div>` : ""}`);
+    // Outside the analysis: the biggest holdings it can't cover, and where the sources disagree.
+    const KL = { foreign: "listed abroad", private: "private", cash: "cash", derivative: "derivative", bond: "bond", unmapped: "no industry found", other: "other" };
+    const out = c.outside.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>What it is</th><th class="n">Weight</th></tr></thead><tbody>${c.outside.slice(0, 15).map((h) => `<tr><td class="wr">${h.ticker ? `<span class="mono">${esc(h.ticker)}</span> ` : ""}${esc(h.name)}</td><td>${esc(KL[h.kind] || h.kind)}</td><td class="n">${pct(h.weight, false, 2)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">Every holding is a US stock in an industry.</div>`;
+    const flags = fd.flags?.length ? `<div class="callout"><div class="callout-head"><b>Where FMP and EODHD disagree</b></div><ul class="dlist small">${fd.flags.map((x) => `<li><b>${esc(x.name)}</b>: EODHD ${pct(x.eod, false, 2)}, FMP ${isNum(x.fmp) ? pct(x.fmp, false, 2) : "not listed"}. ${esc(x.note)}.</li>`).join("")}</ul><div class="small muted">FMP's holdings are refreshed daily; EODHD's mutual-fund top holdings come from the last quarterly filing${f.eod_date ? ` (${esc(f.eod_date)})` : ""}.</div></div>` : "";
+    const outSec = sec("fund-out", "What the analysis can't cover", "", `${out}${flags}`);
+    return `${head}${covSec}${indSec}${outSec}`;
+  }
+  function renderFund() {
+    const el = $("fund"); if (!el || S.tab !== "funds") return;
+    if (!S.fundList) { S.fundList = []; idbGet("funds").then((l) => { S.fundList = l || []; if (!S.fund) renderFund(); }).catch(() => {}); }
+    el.innerHTML = fundSearch() + (S.fund ? fundView(S.fund) : `<div class="small muted">Open a fund to see which of your analyzed industries it holds and how much of it they cover.</div>`);
+    $("fund-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openFund($("fund-q").value); });
+    $("fund-q")?.addEventListener("input", (ev) => { S.fundQuery = ev.target.value; });
+  }
+
   // ------------------------------------------------------------- render: Companies tab
   function renderTabs() {
     const el = $("tabs"); if (!el) return;
-    el.innerHTML = `<button class="tab ${S.tab !== "companies" ? "cur" : ""}" data-tab="industries" aria-pressed="${S.tab !== "companies"}">Industries</button><button class="tab ${S.tab === "companies" ? "cur" : ""}" data-tab="companies" aria-pressed="${S.tab === "companies"}">Companies</button>`;
-    const on = S.tab === "companies";
-    for (const [id, show] of [["picker", !on], ["report", !on], ["company", on]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
+    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
+    el.innerHTML = T.map(([k, l]) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}">${l}</button>`).join("");
+    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
   }
   function companySearch() {
     const ci = S.coIdx;
@@ -15460,6 +15769,9 @@ Reply with ONLY this JSON:
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
     if (t.dataset.tab) { S.tab = t.dataset.tab; renderAll(); if (S.tab === "companies" && !S.coIdx) coIndex().then(() => renderCompany()).catch(() => {}); return; }
+    if (t.dataset.fund) { openFund(t.dataset.fund); return; }
+    if (t.dataset.fundRefresh) { openFund(t.dataset.fundRefresh, { refresh: true }); return; }
+    if (t.dataset.fundList) { S.fund = null; renderFund(); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }
     if (t.dataset.coRewrite) { if (S.co) { S.co.thesis = null; writeThesis(S.co); } return; }

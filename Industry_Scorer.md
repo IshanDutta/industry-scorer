@@ -65,6 +65,28 @@ Opening a sector shows **Analyze all N industries**. It runs every industry in t
 
 ---
 
+## 1c. Funds: ETFs and mutual funds through the industries they hold
+
+The **Funds** tab opens any US stock ETF or mutual fund and reads it through the industries already analyzed. A fund is a weighted basket of industries, so its analysis is mostly code over the saved industry runs; Claude writes at most one piece per fund (step 3). Built in steps:
+
+| Step | What | Who |
+|---|---|---|
+| 1 (built) | Facts and holdings from FMP and EODHD, each holding sorted and matched to an industry, the coverage report | Code |
+| 2 | Look-through roll-ups (scores, 1M-12M calls, scenarios, valuation, macro, world, trade, regulation), active weights vs the benchmark; quant-only fill for industries not analyzed | Code |
+| 3 | One fund-strategist write-up per fund, rewritten only when the look-through moves | Claude |
+| 4 | Compare 2-4 funds, a watchlist, funds in the GitHub job and its export | Code |
+| 5 | Track record of the fund calls | Code |
+
+- **Sources.** FMP (`etfAndMutualFunds`: `information`, `holdings`) gives every holding with its ticker and weight, refreshed daily, for ETFs and mutual funds alike. EODHD (`get_fundamentals_data`) gives the facts (expense ratio, turnover, yield, assets, category, family), the asset mix (US stock, non-US stock, cash, bonds, other), returns and volatility, and for an ETF every holding with its own sector and industry; for a mutual fund only the top 10 by name, from the last quarterly filing.
+- **What each holding is.** A US-listed stock; a listing abroad (an exchange suffix: SHOP.TO, 000660.KS, BATS.L); a private company (no ticker: SpaceX, Anthropic Series F); cash (US dollar, cash central and money-market funds); a derivative (futures codes like IXRZ6, index contracts, CVRs); a bond. Only US-listed stocks are analyzed; the rest is shown with its weight.
+- **Industry of each US stock.** The saved runs first (by ticker, then by name, so GOOGL maps through GOOG and BRK-B through BRK-A, the classes the runs kept), then EODHD's industry label, then an FMP profile for what's left (at most 25 per fund, each ticker looked up once and kept in `tickInd`). The runs win where sources disagree.
+- **Coverage.** Every holding's weight falls in one bucket: analyzed (a saved run 14 days old or newer), stale, industry not analyzed, US stock with no industry, abroad, private, cash, derivative, bond. Per industry: weight, holdings, the share in the industry's top 50 and the run's age.
+- **Cross-check.** A position in EODHD's top holdings that FMP lists at a very different weight, without a ticker, or not at all is flagged (Contrafund's SpaceX lock-up shares).
+- **Benchmark.** 60%+ in one sector: that sector's SPDR; a Nasdaq fund: QQQ; anything else: SPY.
+- **Saving.** Each fund's raw data is kept in the browser for 20 hours (`fund:<SYM>`), with a list of recent funds (`funds`).
+
+---
+
 ## 2. Report sections
 
 1. **Overview:** the lead strategist's verdict. See §6.
@@ -573,6 +595,7 @@ It runs **after everything else**: every specialist report, every regulatory rul
 | `regbook.js` | Rule-book search, prompts, fact-check, verdict, JSON repair |
 | `brain.js` | Lead strategist dossier, prompts, review merge, critic |
 | `agent.js` | Research tools for the lead strategist (news and M&A search) |
+| `portfolio.js` | Funds: both sources' facts and holdings, what each holding is, industry matching, coverage, cross-check, benchmark |
 | `insights.js` | Takeaways written by code from the numbers |
 | `build.py` | Inlines the modules into `industry-scorer.html` |
 | `runner/` | The overnight job: `run.mjs`, the viewer stand-ins (`lib/shim.js`, `lib/sampler.mjs`, `lib/mcp.mjs`), offline tests (`test/`) |
