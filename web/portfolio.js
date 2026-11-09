@@ -325,7 +325,110 @@
     return { rows, tilt, tilt_on: tiltOn, aligned: alOn > 0 ? al / alOn : NaN, overlap: share, active_share: 1 - share };
   }
 
-  const Portfolio = { digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
+  // ============================================================= Step 3: the fund strategist's read
+  const f1 = (v, d = 1) => (isNum(v) ? Number(v).toFixed(d) : "n/a");
+  const pc = (v, d = 1) => (isNum(v) ? (v * 100).toFixed(d) + "%" : "n/a");
+  const sp = (v, d = 1) => (isNum(v) ? (v > 0 ? "+" : "") + Number(v).toFixed(d) + "%" : "n/a");
+  /**
+   * Everything the write-up rests on, as ID'd lines: F (fund facts), I (industries), A (benchmark), W (world events),
+   * C (countries), M (macro factors), R (rules), O (holdings outside the analysis). Returns {text, idx: {ID: label}}.
+   * fd: {facts, cov, look, act, bench, digests, flags}.
+   */
+  function dossier(fd) {
+    const F = fd.facts || {}, c = fd.cov, L = fd.look, A = fd.act, D = fd.digests || {}, idx = {}, out = [];
+    const put = (id, label, line) => { idx[id] = label; out.push(`[${id}] ${line}`); };
+    const B = c.buckets;
+    out.push(`## THE FUND`);
+    put("F1", "Fund facts", `${F.name} (${F.symbol}), ${F.type}${F.family ? ", " + F.family : ""}${F.category ? ", category " + F.category : ""}. Expense ratio ${pc(F.expense, 2)}${isNum(F.turnover) ? `, turnover ${pc(F.turnover, 0)}` : ""}, assets ${isNum(F.aum) ? "$" + (F.aum / 1e9).toFixed(1) + "B" : "n/a"}, ${F.holdings_count || c.holdings} holdings, yield ${pc(F.yield, 2)}. Returns: 1Y ${pc(F.perf?.ret_1y)}, 3Y ${pc(F.perf?.ret_3y)} a year, 5Y ${pc(F.perf?.ret_5y)} a year${isNum(F.perf?.vol_1y) ? `, 1Y volatility ${pc(F.perf.vol_1y)}` : ""}.`);
+    put("F2", "Coverage", `Of the fund's weight: ${pc(B.analyzed)} in industries with the full analysis (fresh), ${pc(B.stale)} stale, ${pc(B.quant)} code-only (data and scores, no analyst team), ${pc(B.not_analyzed)} in industries not covered, ${pc(B.unmapped)} US stocks with no industry, ${pc(B.foreign)} listed abroad, ${pc(B.private)} private companies, ${pc(B.cash)} cash, ${pc(B.derivative)} derivatives, ${pc(B.bond)} bonds.${F.mix ? ` EODHD's asset mix: US stock ${pc(F.mix.stock_us)}, non-US stock ${pc(F.mix.stock_nonus)}, cash ${pc(F.mix.cash)}.` : ""}`);
+    if (L?.n) {
+      put("F3", "Look-through", `Weighted over the ${L.n} covered industries (${pc(L.on, 0)} of the fund; ${pc(L.full_on, 0)} with the full analysis): scores income ${f1(L.scores.income.v, 0)}, conservative ${f1(L.scores.conservative.v, 0)}, growth ${f1(L.scores.growth.v, 0)}, aggressive ${f1(L.scores.aggressive.v, 0)} (best fit ${L.best}). Scenario-weighted 12-month return ${sp(L.exp12.v)} (bull ${sp(L.scen.bull.move, 0)} at ${f1(L.scen.bull.p, 0)}%, bear ${sp(L.scen.bear.move, 0)} at ${f1(L.scen.bear.p, 0)}%). Forward P/E ${f1(L.val.fwd_pe.v)}, trailing ${f1(L.val.pe.v)}, EV/EBITDA ${f1(L.val.ev_ebitda.v)}, NTM EPS growth ${pc(L.val.eps_growth.v)}, 30-day estimate revisions ${pc(L.val.rev30.v)}, dividend yield ${pc(L.val.div_yield.v, 2)}, beta ${f1(L.risk.beta.v, 2)}.`);
+      put("F4", "Calls by horizon", HZ.map((h) => { const x = L.calls[h], t = x.dist.up + x.dist.flat + x.dist.down || 1; return `${h}: outlook ${x.lean || "n/a"}, strategists ${x.call || "n/a"}, middle of ranges ${sp(x.expected)}, ${f1(x.p_up, 0)}% chance up, ${pc(x.dist.up / t, 0)} of covered weight up / ${pc(x.dist.down / t, 0)} down`; }).join("; ") + ".");
+    }
+    out.push(`\n## INDUSTRIES (biggest first; weight is of the whole fund)`);
+    const actBy = new Map((A?.rows || []).map((r) => [lc(r.industry), r]));
+    c.industries.slice(0, 28).forEach((g, i) => {
+      const d = D[lc(g.industry)], a = actBy.get(lc(g.industry)), id = "I" + (i + 1);
+      const calls = d ? HZ.map((h) => `${h} ${d.lean?.[h] || d.calls?.[h]?.call || "n/a"}`).join(", ") : "";
+      put(id, g.industry, `${g.industry} (${g.sector || "?"}): ${pc(g.weight)} of the fund${a ? `, ${A ? `benchmark ${pc(a.bench)}, active ${sp(a.active * 100)}` : ""}` : ""}; top holdings ${g.top.slice(0, 4).map((h) => `${h.ticker || h.name} ${pc(h.weight)}`).join(", ")}. ${d ? `${d.kind === "quant" ? "CODE-ONLY (no analyst team). " : ""}Scores ${Object.entries(d.scores || {}).map(([k, v]) => `${k} ${v ?? "n/a"}`).join(", ")}. Calls ${calls}. 12-month expected ${sp(d.expected12)}${d.opportunity ? `, opportunity ${d.opportunity}` : ""}. Fwd P/E ${f1(d.val.fwd_pe)}, EPS growth ${pc(d.val.eps_growth)}, revisions ${pc(d.val.rev30)}, positioning ${d.positioning || "n/a"}.${d.headline ? ` Strategist: ${d.headline}` : ""}` : "NOT COVERED by any analysis."}`);
+    });
+    if (A) {
+      out.push(`\n## AGAINST THE BENCHMARK (${fd.bench?.symbol})`);
+      put("A1", `Against ${fd.bench?.symbol}`, `Overlap by industry ${pc(A.overlap, 0)}, active share ${pc(A.active_share, 0)}. The active weights add ${sp(A.tilt, 2)} of expected 12-month return; ${pc(A.aligned, 0)} of active weight leans the way the 12-month calls point. Biggest active weights: ${A.rows.slice(0, 8).map((r) => `${r.industry} ${sp(r.active * 100)} (${r.call12 || "no call"}, expected ${sp(r.expected)})`).join("; ")}.`);
+    }
+    if (L?.world?.length) { out.push(`\n## WORLD EVENTS reaching the fund's industries`); L.world.slice(0, 8).forEach((x, i) => put("W" + (i + 1), x.title, `${x.title}: reaches ${pc(x.w, 0)} of the fund; adverse for ${pc(x.adverse, 0)}, favorable for ${pc(x.favorable, 0)}; industries: ${x.industries.slice(0, 6).join(", ")}.`)); }
+    if (L?.trade?.length) { out.push(`\n## COUNTRIES the industries depend on`); L.trade.slice(0, 8).forEach((x, i) => put("C" + (i + 1), x.country, `${x.country}: industries' revenue there about ${pc(x.rev / (L.on || 1))} (estimate), named by industries worth ${pc(x.w, 0)} of the fund; usual stance ${x.stance || "n/a"}; worst threat ${x.threat || "n/a"}.`)); }
+    if (L?.sens?.length) { out.push(`\n## MACRO SENSITIVITIES (measured, weighted)`); L.sens.slice(0, 6).forEach((x, i) => put("M" + (i + 1), x.label, `${x.shock || x.label}: the fund's industries move ${pc(x.effect, 2)} (rests on ${pc(x.on, 0)} of the fund).`)); }
+    if (L?.rules?.length) { out.push(`\n## REGULATION`); if (Object.keys(L.regStance).length) out.push(`Verdicts by fund weight: ${Object.entries(L.regStance).map(([k, w]) => `${k} ${pc(w, 0)}`).join(", ")}.`); L.rules.slice(0, 6).forEach((r, i) => put("R" + (i + 1), r.name, `${r.name} (${r.body}; ${r.severity}${r.status ? ", " + r.status : ""}): ${pc(r.w, 0)} of the fund, in ${r.industries.join(", ")}.${r.bottom_line ? " " + r.bottom_line : ""}`)); }
+    if (c.outside?.length) { out.push(`\n## OUTSIDE THE ANALYSIS`); c.outside.slice(0, 8).forEach((h, i) => put("O" + (i + 1), h.name, `${h.ticker ? h.ticker + " " : ""}${h.name}: ${pc(h.weight, 2)}, ${h.kind}.`)); }
+    if (fd.flags?.length) out.push(`Source disagreements: ${fd.flags.map((x) => `${x.name}: EODHD ${pc(x.eod, 2)} vs FMP ${isNum(x.fmp) ? pc(x.fmp, 2) : "not listed"} (${x.note})`).join("; ")}.`);
+    return { text: out.join("\n"), idx };
+  }
+  const FITS = ["strong", "moderate", "weak", "poor"], VERDICTS = ["attractive", "neutral", "unattractive"];
+  function writePrompt(fd, today) {
+    const { text } = dossier(fd);
+    return `You are the fund strategist on an investment research team. Today is ${today}. Your team has analyzed US industries one at a time (each with a lead strategist's 1M-12M calls, scenarios, macro, world-events, trade and regulation reports). Code has already mapped this fund's holdings onto those industries and weighted every figure by the fund's weights. Your job: read the fund THROUGH its industries and write the read an investor needs before owning it.
+
+Rules:
+- Use only the numbers and facts below. Don't invent figures, holdings, events or dates. When you use a number, it must appear below.
+- Cite the lines you rely on with their IDs in square brackets, e.g. [I1][W2]. Every claim needs at least one ID.
+- Be plain and direct. Short sentences. Say what the fund is betting on, not what it "offers".
+- Weigh coverage honestly: what the analysis doesn't cover (private companies, foreign listings, code-only industries) limits how sure you can be. Say so where it matters.
+- The calls by horizon are the industries' calls, weighted. You may disagree with how they add up for this fund, but say why.
+- Fit per investor type: start from the weighted score and adjust by at most 5 points either way for judgment (concentration, fees, coverage, the benchmark tilts). Give the reason.
+
+${text}
+
+Reply with JSON only, in this shape:
+{"headline": "one sentence: what owning this fund means now",
+ "verdict": {"call": "attractive|neutral|unattractive", "why": "2-3 sentences with IDs"},
+ "summary": "4-6 sentences: what the fund really holds, what its industries' analysis says, and what that means over 12 months, with IDs",
+ "bets": [{"text": "a main bet the fund is making (an industry, a theme, a tilt vs the benchmark), and whether the analysis supports it", "ids": ["I1"]}],
+ "drivers": [{"text": "what moves the fund over the next 12 months", "ids": ["W1"]}],
+ "risks": [{"text": "a risk to the fund, with how much of it is exposed", "ids": ["C1"]}],
+ "vs_benchmark": "2-3 sentences: is the fund's tilt against its benchmark worth paying for, with IDs",
+ "blind_spots": "1-3 sentences: what the analysis can't see in this fund and how much that matters, with IDs",
+ "fit": {"income": {"fit": "strong|moderate|weak|poor", "adjust": 0, "why": "one sentence"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "watch": ["what to watch, with IDs"]}
+3-5 bets, 3-5 drivers, 3-5 risks, 3-5 watch items.`;
+  }
+  /** The write-up with only IDs the dossier has, adjustments within ±5, and known enums. Returns {w, dropped}. */
+  function cleanWriteup(o, idx) {
+    let dropped = 0;
+    const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
+    const txt = (s, k = 1200) => String(s ?? "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1").trim().slice(0, k);
+    const list = (a, k = 5) => (Array.isArray(a) ? a : []).slice(0, k).map((x) => (typeof x === "string" ? { text: txt(x, 500), ids: [] } : { text: txt(x?.text, 500), ids: (Array.isArray(x?.ids) ? x.ids : []).filter((id) => known(id) || (dropped++, false)) })).filter((x) => x.text);
+    const fit = {}; for (const t of ["income", "conservative", "growth", "aggressive"]) { const x = o?.fit?.[t] || {}; const adj = Math.max(-5, Math.min(5, Math.round(n(x.adjust) || 0)));
+      fit[t] = { fit: FITS.includes(lc(x.fit)) ? lc(x.fit) : null, adjust: adj, why: txt(x.why, 300) }; }
+    const v = lc(o?.verdict?.call);
+    const w = { headline: txt(o?.headline, 300), verdict: { call: VERDICTS.includes(v) ? v : null, why: txt(o?.verdict?.why, 600) }, summary: txt(o?.summary, 1500),
+      bets: list(o?.bets), drivers: list(o?.drivers), risks: list(o?.risks), vs_benchmark: txt(o?.vs_benchmark, 700), blind_spots: txt(o?.blind_spots, 500), fit,
+      watch: (Array.isArray(o?.watch) ? o.watch : []).slice(0, 6).map((x) => txt(typeof x === "string" ? x : x?.text, 300)).filter(Boolean) };
+    return { w, dropped };
+  }
+  /** What the write-up was written on: enough to tell when the fund's look-through has moved. */
+  function fingerprint(fd) {
+    const L = fd.look || {}, c = fd.cov || {};
+    return { covered: c.covered ?? null, exp12: L.exp12?.v ?? null, best: L.best || null, calls: Object.fromEntries(HZ.map((h) => [h, L.calls?.[h]?.lean || L.calls?.[h]?.call || null])),
+      weights: Object.fromEntries((c.industries || []).slice(0, 15).map((g) => [lc(g.industry), Math.round(g.weight * 1000) / 1000])),
+      runs: Object.fromEntries((c.industries || []).filter((g) => g.weight >= 0.05).map((g) => [lc(g.industry), g.saved_at || null])), bench: fd.bench?.symbol || null };
+  }
+  /** Why a saved write-up is out of date (empty when it isn't): a call changed, the expected return moved 1.5 points, coverage 5 points, holdings turned over 10%, a big industry was re-analyzed. */
+  function changes(a, b) {
+    if (!a) return ["no write-up yet"];
+    const out = [];
+    for (const h of HZ) if ((a.calls?.[h] || null) !== (b.calls?.[h] || null)) out.push(`the ${h} call moved from ${a.calls?.[h] || "none"} to ${b.calls?.[h] || "none"}`);
+    if (isNum(a.exp12) && isNum(b.exp12) && Math.abs(a.exp12 - b.exp12) >= 1.5) out.push(`the expected 12-month return moved ${sp(b.exp12 - a.exp12)}`);
+    if (isNum(a.covered) && isNum(b.covered) && Math.abs(a.covered - b.covered) >= 0.05) out.push(`coverage moved from ${pc(a.covered, 0)} to ${pc(b.covered, 0)}`);
+    const keys = new Set([...Object.keys(a.weights || {}), ...Object.keys(b.weights || {})]); let turn = 0; for (const k of keys) turn += Math.abs((a.weights?.[k] || 0) - (b.weights?.[k] || 0));
+    if (turn / 2 >= 0.1) out.push(`the fund's biggest industry weights shifted ${pc(turn / 2, 0)}`);
+    for (const [k, t] of Object.entries(b.runs || {})) if (a.runs?.[k] && t && t > a.runs[k]) { out.push(`${k} was re-analyzed`); break; }
+    if (a.bench !== b.bench) out.push("the benchmark changed");
+    if (a.best !== b.best && a.best && b.best) out.push(`the best fit moved to ${b.best}`);
+    return out;
+  }
+
+  const Portfolio = { dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
   if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
   else root.Portfolio = Portfolio;
 })(typeof window !== "undefined" ? window : globalThis);

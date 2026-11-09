@@ -5374,6 +5374,7 @@ a.btnlink:hover { border-color: var(--accent); }
     finally { S.fundFill = null; }
     if (S.fund === fd) await fundAnalyze(fd, { quiet: true });
     renderAll();
+    if (S.fund === fd && !fd.writing && fd.view !== undefined) fundThesis(fd);
   }
   /** Coverage, digests, the look-through and the benchmark comparison, from the fund's raw data. */
   async function fundAnalyze(fd, { quiet = false } = {}) {
@@ -5394,9 +5395,35 @@ a.btnlink:hover { border-color: var(--accent); }
     Object.assign(fd, { stage: "ready", facts, mapped, cov, bcov, bnote, digests, eodHoldings, bench, flags: Portfolio.crossCheck(mapped, Portfolio.eodTop(fd.raw.eod)),
       look: Portfolio.lookThrough(cov, digests), act: bcov ? Portfolio.active(cov, bcov, digests) : null });
   }
+  /**
+   * Step 3: the fund strategist's read (one Claude call). Kept per fund; rewritten only when the look-through has moved
+   * (a call changed, the expected return moved 1.5 points, coverage 5 points, holdings turned over, a big industry was
+   * re-analyzed), or on "Rewrite".
+   */
+  async function fundThesis(fd, { force = false } = {}) {
+    if (fd.stage !== "ready" || fd.writing) return;
+    const rec = fd.view !== undefined ? fd.view : await idbGet("fundView:" + fd.sym).catch(() => null);
+    const fp = Portfolio.fingerprint(fd), why = Portfolio.changes(rec?.fp, fp);
+    fd.view = rec || null; fd.viewWhy = why;
+    if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) { if (S.fund === fd) renderFund(); return; }
+    const ctl = new AbortController(); fd.ctl = ctl; fd.writing = true; fd.viewErr = null; fd.partial = null; const t0 = Date.now(); renderFund();
+    const { idx } = Portfolio.dossier(fd); let last = 0;
+    try {
+      const out = await sampleJson(Portfolio.writePrompt(fd, today()), { modelTier: "complex", cache: false, signal: ctl.signal,
+        onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object" && S.fund === fd && Date.now() - last > 700) { last = Date.now(); fd.partial = Portfolio.cleanWriteup(v, idx).w; renderFund(); } } });
+      const { w, dropped } = Portfolio.cleanWriteup(out, idx);
+      if (!w.headline && !w.summary) throw { code: "empty_completion" };
+      const r = jsonSafe({ sym: fd.sym, at: new Date().toISOString(), fp, w, idx, dropped, secs: Math.round((Date.now() - t0) / 1000), reasons: why });
+      await idbPut("fundView:" + fd.sym, r).catch(() => {});
+      fd.view = r; fd.viewWhy = [];
+    } catch (e) { fd.viewErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+    finally { fd.writing = false; fd.partial = null; fd.ctl = null; }
+    if (S.fund === fd) renderFund();
+  }
   async function openFund(q, { refresh = false } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
     S.tab = "funds"; S.fundQuery = "";
+    S.fund?.ctl?.abort();
     const fd = S.fund = { sym, stage: "loading", step: "Reading the fund from FMP and EODHD…", err: null };
     renderAll(); window.scrollTo?.(0, 0);
     try {
@@ -5407,8 +5434,9 @@ a.btnlink:hover { border-color: var(--accent); }
       await idbPut("funds", list.slice(0, 40)).catch(() => {}); S.fundList = list.slice(0, 40);
     } catch (e) { fd.stage = "error"; fd.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     if (S.fund === fd) renderFund();
-    // Industries no run covers get the code-only fill straight away (the biggest 8 of those at 0.5%+ of the fund).
-    if (fd.stage === "ready") fillFund(fd);
+    // Industries no run covers get the code-only fill straight away (the biggest 8 of those at 0.5%+ of the fund),
+    // then the strategist's read is written, or kept if nothing material has moved since.
+    if (fd.stage === "ready") { await fillFund(fd); if (S.fund === fd) fundThesis(fd); }
   }
 
   // ------------------------------------------------------------- render: Funds tab
@@ -5423,6 +5451,29 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   const CALLC = (c) => (/bull/.test(c) ? "pos" : /bear/.test(c) ? "neg" : "neu");
   const pts = (v, d = 1) => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}%` : "—");
+  /** Text with its [ID] citations shown as chips naming what they point to. */
+  function fundCites(s, idx) { return esc(s || "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (idx?.[id] ? `<span class="cite" title="${esc(idx[id])}">${id}</span>` : "")); }
+  function fundRead(fd) {
+    const r = fd.view, w = fd.writing ? fd.partial : r?.w, idx = fd.writing ? Portfolio.dossier(fd).idx : r?.idx || {}, L = fd.look;
+    const btns = fd.writing ? `<button class="sm" data-fund-stop="1">Stop</button>` : S.sample && L?.n ? `<button class="sm" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${r ? "Rewrite" : "Write the read"}</button>` : "";
+    const status = fd.writing ? `<span class="small muted">Writing… (one Claude call)</span>` : r ? `<span class="small muted">Written ${esc(ago(r.at))}${r.secs ? ` in ${r.secs}s` : ""}${r.dropped ? ` · ${r.dropped} citation${r.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.viewWhy?.length ? ` Out of date: ${esc(fd.viewWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
+    const err = fd.viewErr ? `<div class="notice err"><span>The read didn't finish: ${esc(fd.viewErr)}</span></div>` : "";
+    if (!w) return sec("fund-read", "The fund strategist's read", "", `<div class="actions" style="align-items:center">${btns}${status}</div>${err}${!S.sample ? `<div class="small muted">Open this page in Claude to have the read written.</div>` : !L?.n ? `<div class="small muted">Nothing in this fund is covered by your analysis yet, so there's nothing to read through.</div>` : ""}`);
+    const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" };
+    const fit = w.fit ? `<div class="kpis">${["income", "conservative", "growth", "aggressive"].map((t) => { const x = w.fit[t] || {}, base = L?.scores?.[t]?.v, adj = isNum(base) ? base + (x.adjust || 0) : NaN, g = gradeOf(adj);
+      return `<div class="kpi"><span class="eyebrow">${t}</span><span class="v">${isNum(adj) ? `${Math.round(adj)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—"}</span><span class="small muted">${x.fit ? esc(x.fit) + " fit" : ""}${x.adjust ? ` · ${x.adjust > 0 ? "+" : ""}${x.adjust} from ${Math.round(base)}` : ""}</span>${x.why ? `<span class="small">${fundCites(x.why, idx)}</span>` : ""}</div>`; }).join("")}</div>` : "";
+    const li = (a) => (a || []).map((x) => `<li>${fundCites(x.text, idx)}${(x.ids || []).filter((id) => !(x.text || "").includes(`[${id}]`)).map((id) => idx[id] ? ` <span class="cite" title="${esc(idx[id])}">${id}</span>` : "").join("")}</li>`).join("");
+    const box = (title, a, cls = "") => (a?.length ? `<div class="box ${cls}"><b>${title}</b><ul class="dlist small">${li(a)}</ul></div>` : "");
+    return sec("fund-read", "The fund strategist's read", "one Claude call, on the look-through below", `
+      <div class="callout"><div class="callout-head">${w.verdict?.call ? `<span class="pill ${VC[w.verdict.call]}">${esc(w.verdict.call)}</span>` : ""}<b class="headline">${fundCites(w.headline, idx)}</b></div>
+        ${w.verdict?.why ? `<div class="small">${fundCites(w.verdict.why, idx)}</div>` : ""}</div>
+      ${w.summary ? `<p class="prose">${fundCites(w.summary, idx)}</p>` : ""}${fit}
+      <div class="two">${box("The fund's main bets", w.bets)}${box("What moves it over 12 months", w.drivers)}${box("Risks", w.risks, "cool")}${w.watch?.length ? box("Watch", w.watch.map((t) => ({ text: t }))) : ""}</div>
+      ${w.vs_benchmark ? `<div class="small"><b>Against ${esc(fd.bench?.symbol || "the benchmark")}:</b> ${fundCites(w.vs_benchmark, idx)}</div>` : ""}
+      ${w.blind_spots ? `<div class="small"><b>What the analysis can't see:</b> ${fundCites(w.blind_spots, idx)}</div>` : ""}
+      <div class="actions" style="align-items:center">${btns}${status}</div>${err}
+      <div class="small muted">Fit starts from the weighted score and moves at most 5 points for the strategist's judgment. Citations: F fund, I industries, A benchmark, W world events, C countries, M macro, R rules, O holdings outside the analysis.</div>`);
+  }
   function fundView(fd) {
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
@@ -5501,7 +5552,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const out = c.outside.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>What it is</th><th class="n">Weight</th></tr></thead><tbody>${c.outside.slice(0, 15).map((h) => `<tr><td class="wr">${h.ticker ? `<span class="mono">${esc(h.ticker)}</span> ` : ""}${esc(h.name)}</td><td>${esc(KL[h.kind] || h.kind)}</td><td class="n">${pct(h.weight, false, 2)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">Every holding is a US stock in an industry.</div>`;
     const flags = fd.flags?.length ? `<div class="callout"><div class="callout-head"><b>Where FMP and EODHD disagree</b></div><ul class="dlist small">${fd.flags.map((x) => `<li><b>${esc(x.name)}</b>: EODHD ${pct(x.eod, false, 2)}, FMP ${isNum(x.fmp) ? pct(x.fmp, false, 2) : "not listed"}. ${esc(x.note)}.</li>`).join("")}</ul><div class="small muted">FMP's holdings are refreshed daily; EODHD's mutual-fund top holdings come from the last quarterly filing${f.eod_date ? ` (${esc(f.eod_date)})` : ""}.</div></div>` : "";
     const outSec = sec("fund-out", "What the analysis can't cover", "", `${out}${flags}`);
-    return `${head}${lookSec}${actSec}${expSec}${indSec}${covSec}${outSec}`;
+    return `${head}${fundRead(fd)}${lookSec}${actSec}${expSec}${indSec}${covSec}${outSec}`;
   }
   function renderFund() {
     const el = $("fund"); if (!el || S.tab !== "funds") return;
@@ -6771,7 +6822,9 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.tab) { S.tab = t.dataset.tab; renderAll(); if (S.tab === "companies" && !S.coIdx) coIndex().then(() => renderCompany()).catch(() => {}); return; }
     if (t.dataset.fund) { openFund(t.dataset.fund); return; }
     if (t.dataset.fundRefresh) { openFund(t.dataset.fundRefresh, { refresh: true }); return; }
-    if (t.dataset.fundList) { S.fund = null; renderFund(); return; }
+    if (t.dataset.fundList) { S.fund?.ctl?.abort(); S.fund = null; renderFund(); return; }
+    if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundThesis(S.fund, { force: true }); return; }
+    if (t.dataset.fundStop) { S.fund?.ctl?.abort(); return; }
     if (t.dataset.fundFill) { if (S.fund?.sym === t.dataset.fundFill) fillFund(S.fund, { limit: 20, minWeight: 0 }); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }

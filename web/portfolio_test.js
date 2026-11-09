@@ -101,5 +101,24 @@ assert(isFinite(ac.tilt));
 // the code-only fill counts as covered, separately
 const qcov = P.coverage([{ kind: "stock", industry: "Widgets", weight: 1 }], {}, { now: "2026-11-09", quant: { widgets: { name: "Widgets", saved_at: "2026-11-08" } } });
 assert.strictEqual(qcov.buckets.quant, 1); assert.strictEqual(qcov.covered, 1); assert.strictEqual(qcov.covered_full, 0);
+
+// ---- step 3: the fund strategist's dossier, prompt, checks and when to rewrite
+const fd = { facts: ff, cov, look: lt, act: ac, bench: { symbol: "SPY" }, digests: FX.digests, flags };
+const dz = P.dossier(fd);
+for (const id of ["F1", "F2", "F3", "F4", "I1", "A1", "W1", "C1", "M1", "O1"]) assert(dz.idx[id], `dossier has ${id}`);
+assert(/Semiconductors/.test(dz.text) && /Space Exploration/.test(dz.text));
+const pr = P.writePrompt(fd, "2026-11-09");
+assert(pr.length < 60000, `prompt stays small: ${pr.length}`);
+const raw = { headline: "A growth fund leaning on chips [I1] and [Z9].", verdict: { call: "Attractive", why: "x [I1]" }, summary: "s", bets: [{ text: "chips", ids: ["I1", "Q7"] }, "plain bet [W1]"],
+  fit: { growth: { fit: "Strong", adjust: 9, why: "w" }, income: { fit: "meh", adjust: -2 } }, watch: ["CPI [M1]"] };
+const cw = P.cleanWriteup(raw, dz.idx);
+assert.strictEqual(cw.w.headline, "A growth fund leaning on chips [I1] and."); assert.strictEqual(cw.dropped, 2);
+assert.deepStrictEqual(cw.w.bets[0].ids, ["I1"]); assert.strictEqual(cw.w.bets[1].text, "plain bet [W1]");
+assert.strictEqual(cw.w.verdict.call, "attractive"); assert.strictEqual(cw.w.fit.growth.adjust, 5); assert.strictEqual(cw.w.fit.growth.fit, "strong"); assert.strictEqual(cw.w.fit.income.fit, null);
+const fp = P.fingerprint(fd);
+assert.deepStrictEqual(P.changes(fp, fp), []);
+assert(P.changes(null, fp).length === 1);
+assert(P.changes(fp, { ...fp, calls: { ...fp.calls, "12M": "bearish" } })[0].includes("12M"));
+assert(P.changes(fp, { ...fp, exp12: fp.exp12 + 2 }).length === 1 && P.changes(fp, { ...fp, exp12: fp.exp12 + 1 }).length === 0);
 console.log("look-through", JSON.stringify({ on: +lt.on.toFixed(3), best: lt.best, fwd_pe: +lt.val.fwd_pe.v.toFixed(1), exp12: +lt.exp12.v.toFixed(1), calls: Object.fromEntries(P.HZ.map((h) => [h, lt.calls[h].lean || lt.calls[h].call])), overlap: +ac.overlap.toFixed(2), tilt: +ac.tilt.toFixed(2) }));
 console.log("portfolio tests passed", JSON.stringify({ covered: +cov.covered.toFixed(3), ...Object.fromEntries(Object.entries(B).map(([a, b]) => [a, +b.toFixed(3)])) }));
