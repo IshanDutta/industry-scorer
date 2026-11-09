@@ -7459,9 +7459,13 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
         developments: (d?.developments || []).slice(0, 3).map((x) => ({ date: x.date || "", text: nc0(x.text, 180) })), watch: (d?.watch || []).slice(0, 4).map((w) => nc0(w, 140)),
         exposed: (d?.exposed || []).slice(0, 8).map((x) => ({ symbol: x.symbol, channel: x.channel || "", severity: x.severity || "", mechanism: nc0(x.mechanism, 200) })),
         ind_share: isNum(Number(e?.revenue_share)) ? Number(e.revenue_share) : null, hq: (e?.hq || []).slice(0, 8) }; };
-    const shareOf = (country) => { const g = (geo || []).find((r) => (r.countries || []).some((c) => lc(c.country) === lc(country) && (c.via === "exact" || c.via === "region" || c.via === undefined))); return g ? { region: g.region, share: g.share } : null; };
+    // The company's reported revenue that covers a country: the country's own line (exact), or the whole region it sits in.
+    const shareOf = (country) => { let hit = null; const g = (geo || []).find((r) => (r.countries || []).some((c) => { const ok = lc(c.country) === lc(country) && (c.via === "exact" || c.via === "region" || c.via === undefined); if (ok) hit = c; return ok; }));
+      return g ? { region: g.region, share: g.share, exact: hit?.via === "exact" || (hit?.via === undefined && lc(g.region) === lc(country)) } : null; };
     const countries = (R.trademap?.countries || []).slice(0, 12).map((c, i) => ({ id: "C" + (i + 1), country: c.country, importance: c.importance, stance: c.stance, trajectory: c.trajectory, threat: c.threat, roles: (c.roles || []).join(", "),
-      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country) }));
+      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country),
+      // The trade analyst's estimate of the industry's revenue there, for when no filing names the country.
+      ind_est: isNum(c.revenue_share_estimate) ? c.revenue_share_estimate : null, ind_basis: trim(c.revenue_basis, 200) }));
     const rules = (run?.books || []).flatMap((b) => (b.book?.rules || []).map((r) => ({ body: b.body, ...r })))
       .sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (a.status === "in_force" ? -1 : 1)).slice(0, 10)
       .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 90), name: trim(r.name, 160), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300),
@@ -14863,14 +14867,31 @@ Reply with ONLY this JSON:
       ${dossier(c)}</div>`; }).join("");
     const top = `${TV ? `<div class="small"><b>The industry's trade verdict:</b> <span class="pill ${TV.rating === "manageable" ? "neu" : /severe|high|critical/.test(TV.rating) ? "neg" : "warn"}">${esc(TV.rating)}</span>${TV.health !== null ? ` <span class="muted">health ${esc(String(TV.health))}/100 (${esc(TV.band)})</span>` : ""} ${esc(TV.headline)}</div>` : ""}
       ${TO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${TO.risk ? `<span class="pill ${RK[TO.risk] || "neu"}">${esc(TO.risk)} trade risk</span>` : ""}</div>${TO.summary ? `<p class="small" style="margin:0">${rich(TO.summary)}</p>` : ""}${TO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(TO.biggest)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${TO.watch.map(rich).join("; ")}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s trade read is being written…</div>` : ""}`;
-    // Code: where the company's revenue sits against the industry's, country by country, with the country's risk.
-    const shares = In.filter((c) => c.revenue || num(c.ind_share) > 0).map((c) => ({ c, me: num(c.revenue?.share), ind: num(c.ind_share) })).sort((a, b) => (isNum(b.me) ? b.me : -1) - (isNum(a.me) ? a.me : -1) || (isNum(b.ind) ? b.ind : 0) - (isNum(a.ind) ? a.ind : 0));
+    // Code: where the company's revenue sits against the industry's. The industry's share is the filings figure where
+    // companies name the country, else the trade analyst's estimate (a filings 0 for a country no company names is "not
+    // reported", not 0). A company that reports only regions gets one row per region: its region total against the
+    // industry's figures summed over the same countries on the trade map (approximate: the map names only some of a region).
     const risky = (c) => ["high", "severe", "critical", "elevated"].includes(lc(c.threat)) || ["rival", "adversary", "competitor"].includes(lc(c.stance));
-    const shareT = shares.some((x) => isNum(x.me)) ? `<h3>Where ${esc(co.sym)}'s revenue is, against its industry</h3><div class="tbl-wrap"><table><thead><tr><th>Country</th><th class="n">${esc(co.sym)}'s revenue</th><th class="n">Industry's revenue</th><th>${esc(co.sym)} vs industry</th><th>The industry's read of the country</th></tr></thead><tbody>${shares.map(({ c, me, ind }) => { const d = isNum(me) && isNum(ind) ? me - ind : NaN;
-      return `<tr><td><b>${esc(c.country)}</b>${c.revenue?.region ? `<div class="small muted">via ${esc(c.revenue.region)}</div>` : ""}</td><td class="n"><b>${isNum(me) ? pct(me, false, 0) : "—"}</b></td><td class="n muted">${isNum(ind) ? pct(ind, false, 0) : "—"}</td>
-        <td class="small">${isNum(d) ? `<span class="pill ${Math.abs(d) < 0.03 ? "neu" : d > 0 ? (risky(c) ? "neg" : "warn") : "pos"}">${Math.abs(d) < 0.03 ? "about the same" : d > 0 ? `${pct(d, false, 0)} more exposed` : `${pct(-d, false, 0)} less exposed`}</span>` : ""}</td>
-        <td class="small"><span class="pill ${STC[c.stance] || "neu"}">${esc(c.stance || "")}</span>${c.threat && !["none", "low"].includes(c.threat) ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}${exp1(c) ? ` <span class="pill warn">named most exposed</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
-      <div class="small muted">Code: ${esc(co.sym)}'s reported geographic revenue mapped onto the industry's trade map, next to the industry's share. Countries where ${esc(co.sym)} is more exposed than its industry feel the industry's trade risks harder.</div>` : "";
+    const indOf = (c) => (num(c.ind_share) > 0 ? { v: c.ind_share, est: false } : isNum(c.ind_est) ? { v: c.ind_est, est: true, basis: c.ind_basis } : null);
+    const groups = new Map();
+    for (const c of In) {
+      const r = c.revenue, key = r ? (r.exact ? "c:" + c.country : "r:" + r.region) : "n:" + c.country;
+      if (!groups.has(key)) groups.set(key, { region: r && !r.exact ? r.region : null, me: num(r?.share), cs: [] });
+      groups.get(key).cs.push(c);
+    }
+    const rowsG = [...groups.values()].map((g) => { const ii = g.cs.map(indOf), got = ii.filter(Boolean);
+      return { ...g, ind: got.length ? got.reduce((a, x) => a + x.v, 0) : NaN, est: got.some((x) => x.est), partial: got.length < ii.length, basis: got.length === 1 ? got[0].basis : "" }; })
+      .filter((g) => isNum(g.me) || isNum(g.ind))
+      .sort((a, b) => (isNum(b.me) ? b.me : -1) - (isNum(a.me) ? a.me : -1) || (isNum(b.ind) ? b.ind : 0) - (isNum(a.ind) ? a.ind : 0));
+    const readOf = (c) => `<span class="pill ${STC[c.stance] || "neu"}">${esc(c.stance || "")}</span>${c.threat && !["none", "low"].includes(c.threat) ? ` <span class="pill neg">${esc(c.threat)} threat</span>` : ""}${exp1(c) ? ` <span class="pill warn">named most exposed</span>` : ""}`;
+    const shareT = rowsG.some((g) => isNum(g.me)) ? `<h3>Where ${esc(co.sym)}'s revenue is, against its industry</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where</th><th class="n">${esc(co.sym)}'s revenue</th><th class="n">Industry's revenue</th><th>${esc(co.sym)} vs industry</th><th>The industry's read of the country</th></tr></thead><tbody>${rowsG.map((g) => {
+      const d = isNum(g.me) && isNum(g.ind) ? g.me - g.ind : NaN, approx = !!g.region || g.est;
+      const where = g.region ? `<b>${esc(g.region)}</b><div class="small muted">${esc(co.sym)} reports this region only; on the industry's map: ${esc(g.cs.map((c) => c.country).join(", "))}</div>` : `<b>${esc(g.cs[0].country)}</b>`;
+      const indCell = isNum(g.ind) ? `${pct(g.ind, false, 0)}${g.est ? ` <span class="small" title="${esc(g.basis || "The industry's trade analyst's estimate: no filing names the country")}">est.</span>` : ""}${g.region && g.cs.length > 1 ? `<div class="small muted">${g.cs.length} countries${g.partial ? ", some without a figure" : ""}</div>` : ""}` : `<span class="small">not reported</span>`;
+      const cmp = isNum(d) ? `<span class="pill ${Math.abs(d) < 0.03 ? "neu" : d > 0 ? (g.cs.some(risky) ? "neg" : "warn") : "pos"}">${Math.abs(d) < 0.03 ? "about the same" : d > 0 ? `${pct(d, false, 0)} more exposed` : `${pct(-d, false, 0)} less exposed`}</span>${approx ? ` <span class="small muted">${g.region ? "approx.: a region total against the countries the map names" : "approx.: against an estimate"}</span>` : ""}` : "";
+      const read = g.cs.length === 1 ? readOf(g.cs[0]) : `<div style="display:grid;gap:3px">${g.cs.map((c) => `<div><span class="muted">${esc(c.country)}</span> ${readOf(c)}</div>`).join("")}</div>`;
+      return `<tr><td class="wr">${where}</td><td class="n"><b>${isNum(g.me) ? pct(g.me, false, 0) : "—"}</b></td><td class="n muted">${indCell}</td><td class="small">${cmp}</td><td class="small">${read}</td></tr>`; }).join("")}</tbody></table></div>
+      <div class="small muted">Code: ${esc(co.sym)}'s reported geographic revenue (FMP) next to the industry's: from filings where companies name the country, else the industry's trade analyst's estimate (est.). Where ${esc(co.sym)} reports only a region, the comparison is with the industry's figures for the countries on its trade map in that region, so it's approximate. Where ${esc(co.sym)} is more exposed than its industry, it feels the industry's trade risks harder.</div>` : "";
     return sec("co-trade", "Trade relations", `the ${esc(co.run.name)} trade map and country dossiers, for ${esc(co.sym)}`,
       `${top}${shareT}<div class="two">${cards}</div>
       <div class="small muted">Revenue is ${esc(co.sym)}'s reported geographic segment that covers the country, from FMP.</div>${lensNote(co, t)}${mentionsFor(co, "trade")}`);

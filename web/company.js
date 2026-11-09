@@ -257,9 +257,13 @@
         developments: (d?.developments || []).slice(0, 3).map((x) => ({ date: x.date || "", text: nc0(x.text, 180) })), watch: (d?.watch || []).slice(0, 4).map((w) => nc0(w, 140)),
         exposed: (d?.exposed || []).slice(0, 8).map((x) => ({ symbol: x.symbol, channel: x.channel || "", severity: x.severity || "", mechanism: nc0(x.mechanism, 200) })),
         ind_share: isNum(Number(e?.revenue_share)) ? Number(e.revenue_share) : null, hq: (e?.hq || []).slice(0, 8) }; };
-    const shareOf = (country) => { const g = (geo || []).find((r) => (r.countries || []).some((c) => lc(c.country) === lc(country) && (c.via === "exact" || c.via === "region" || c.via === undefined))); return g ? { region: g.region, share: g.share } : null; };
+    // The company's reported revenue that covers a country: the country's own line (exact), or the whole region it sits in.
+    const shareOf = (country) => { let hit = null; const g = (geo || []).find((r) => (r.countries || []).some((c) => { const ok = lc(c.country) === lc(country) && (c.via === "exact" || c.via === "region" || c.via === undefined); if (ok) hit = c; return ok; }));
+      return g ? { region: g.region, share: g.share, exact: hit?.via === "exact" || (hit?.via === undefined && lc(g.region) === lc(country)) } : null; };
     const countries = (R.trademap?.countries || []).slice(0, 12).map((c, i) => ({ id: "C" + (i + 1), country: c.country, importance: c.importance, stance: c.stance, trajectory: c.trajectory, threat: c.threat, roles: (c.roles || []).join(", "),
-      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country) }));
+      why: trim(c.why, 260), headline: trim(tradeBy[lc(c.country)]?.headline, 300), revenue: shareOf(c.country), ...tradeDossier(tradeBy[lc(c.country)], c.country),
+      // The trade analyst's estimate of the industry's revenue there, for when no filing names the country.
+      ind_est: isNum(c.revenue_share_estimate) ? c.revenue_share_estimate : null, ind_basis: trim(c.revenue_basis, 200) }));
     const rules = (run?.books || []).flatMap((b) => (b.book?.rules || []).map((r) => ({ body: b.body, ...r })))
       .sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (a.status === "in_force" ? -1 : 1)).slice(0, 10)
       .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 90), name: trim(r.name, 160), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300),
