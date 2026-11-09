@@ -5483,33 +5483,72 @@ a.btnlink:hover { border-color: var(--accent); }
     const rec = fd.full !== undefined ? fd.full : await idbGet("fundFull:" + fd.sym).catch(() => null);
     const fp = Portfolio.fingerprint(fd), why = Portfolio.changes(rec?.fp, fp);
     fd.full = rec || null; fd.fullWhy = why;
-    if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) { if (S.fund === fd) renderFund(); return; }
+    if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) {
+      if (S.fund === fd) renderFund();
+      // A write-up from before the calls were made the company page's way: just make the calls (one call).
+      if (rec && !rec.outlook && S.sample && fd.look?.n && S.fund === fd) fundLean(fd);
+      return;
+    }
     const ctl = new AbortController(); fd.ctl = ctl; fd.writing = true; fd.fullErr = null; fd.partial = {}; fd.writeStart = Date.now(); renderFund();
     const dz = FundAn.dossier(fd, today()), raw = {}; let last = 0;
     const show = () => { if (S.fund !== fd || Date.now() - last < 800) return; last = Date.now(); renderFund(); };
     const one = async (part) => {
-      const prompt = part === "lean" ? FundAn.leanPrompt(fd, dz, today()) : FundAn.partPrompt(fd, dz, part, today());
-      const out = await sampleJson(prompt, { modelTier: "complex", signal: ctl.signal, cache: false,
+      const out = await sampleJson(FundAn.partPrompt(fd, dz, part, today()), { modelTier: "complex", signal: ctl.signal, cache: false,
         onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { fd.partial[part] = FundAn.cleanPart(part, v, dz.idx).w; show(); } } });
       raw[part] = FundAn.cleanPart(part, out, dz.idx); fd.partial[part] = raw[part].w; show(); return raw[part];
     };
     try {
-      const parts = [...FundAn.PARTS, "lean"], res = await Promise.allSettled(parts.map(one));
+      const parts = FundAn.PARTS, res = await Promise.allSettled(parts.map(one));
       if (res.every((r) => r.status === "rejected")) throw res[0].reason;
       const P0 = Object.fromEntries(parts.map((p, i) => [p, res[i].status === "fulfilled" ? res[i].value.w : rec?.parts?.[p] || null]));
       const failed = parts.filter((p, i) => res[i].status === "rejected");
       const r = jsonSafe({ sym: fd.sym, at: new Date().toISOString(), fp, parts: P0, idx: dz.idx, dropped: parts.reduce((a, p) => a + (raw[p]?.dropped || 0), 0),
-        checks: FundAn.checks(P0.calls || {}), secs: Math.round((Date.now() - fd.writeStart) / 1000), reasons: why, failed });
+        checks: FundAn.checks(P0.calls || {}), secs: Math.round((Date.now() - fd.writeStart) / 1000), reasons: why, failed, outlook: rec?.outlook || null, outlook_history: rec?.outlook_history || [] });
       await idbPut("fundFull:" + fd.sym, r).catch(() => {});
       fd.full = r; fd.fullWhy = [];
-      // The track record: each window's call, logged with today's price, scored once the window has passed.
-      const px = fd.ser?.closes?.[fd.ser.closes.length - 1];
-      if (P0.calls?.horizons && isNum(px)) { fd.trackLog = FundAn.trackLog(fd.trackLog || [], P0.calls.horizons, today(), px);
-        await idbPut("fundCalls:" + fd.sym, fd.trackLog).catch(() => {}); fd.track = FundAn.trackEval(fd.trackLog, fd.ser, today()); }
       if (failed.length) fd.fullErr = `${failed.join(", ")} didn't finish (${sampleErr(res[parts.indexOf(failed[0])].reason)}); Rewrite to try again`;
     } catch (e) { fd.fullErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { fd.writing = false; fd.partial = null; fd.ctl = null; }
     if (S.fund === fd) renderFund();
+    // Then the 1M-12M calls, made the company page's way on the finished write-up.
+    if (S.fund === fd && fd.full && !fd.fullErr?.startsWith("Stopped")) await fundLean(fd);
+  }
+  /** What the calls were made on: code's starting point for each window (its industries' outlooks, weighted). */
+  const fundIndSnap = (fd) => { const pr = FundAn.prior(fd); return pr ? Object.fromEntries(Object.entries(pr).map(([h, x]) => [h, x.call])) : null; };
+  /** Why the calls are out of step: code's starting point has moved in some window since they were made. */
+  function fundStale(fd) {
+    const o = fd.full?.outlook, now = fundIndSnap(fd); if (!o?.ind_snap || !now) return [];
+    return Outlook.HZ.filter((h) => o.ind_snap[h] && now[h] && o.ind_snap[h] !== now[h]).map((h) => `the ${h} starting point from its industries moved from ${o.ind_snap[h]} to ${now[h]}`);
+  }
+  /**
+   * The fund's 1M-12M calls (six levels, its own direction, with the reasons): the company page's outlook, on the fund's
+   * finished write-up, its industries' outlooks and its numbers; one small repair call only if code finds a contradiction.
+   */
+  async function fundLean(fd) {
+    if (fd.leanBusy || !S.sample || fd.stage !== "ready") return;
+    fd.leanBusy = true; fd.leanErr = null; fd.leanStage = "Weighing every component and making the four calls"; if (S.fund === fd) renderFund();
+    const ctl = new AbortController(); fd.leanCtl = ctl;
+    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false, signal: ctl.signal });
+    try {
+      const dz = FundAn.dossier(fd, today());
+      let o = FundAn.cleanOutlook(await call(FundAn.outlookPrompt(fd, dz, today(), fd.full?.parts)), today());
+      if (!o) throw new Error("no usable calls came back; try again");
+      if (!o.consistent) {
+        fd.leanStage = "Code found contradictions: one small fix"; if (S.fund === fd) renderFund();
+        const o2 = FundAn.cleanOutlook(await call(Outlook.repairPrompt(`${fd.facts?.name || fd.sym} (${fd.sym})`, today(), o, o.checks, FundAn.FUND_INPUTS)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }), today());
+        if (o2) { o2.repaired = o.checks; o = o2; }
+      }
+      const ser = fd.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
+      const pr = FundAn.prior(fd); o.prior = pr ? jsonSafe(pr) : null; o.ind_snap = fundIndSnap(fd); o.saved_at = new Date().toISOString();
+      const cur = (await idbGet("fundFull:" + fd.sym).catch(() => null)) || fd.full || { sym: fd.sym };
+      const h0 = Outlook.histOf(cur.outlook), hist = [...(h0 ? [h0] : []), ...(cur.outlook_history || [])].slice(0, 12);
+      fd.full = jsonSafe({ ...cur, outlook: o, outlook_history: hist }); await idbPut("fundFull:" + fd.sym, fd.full).catch(() => {});
+      // The track record: each window's call, logged with the day's price and a normal move, scored once the window has passed.
+      const W = FundAn.windows(fd, today()), px = o.mark?.px;
+      if (isNum(px)) { fd.trackLog = FundAn.trackLog(fd.trackLog || [], o.calls, today(), px, Object.fromEntries(W.map((w) => [w.h, w.sigma])));
+        await idbPut("fundCalls:" + fd.sym, fd.trackLog).catch(() => {}); fd.track = FundAn.trackEval(fd.trackLog, fd.ser, today()); }
+    } catch (e) { fd.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" || ctl.signal.aborted ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
+    finally { fd.leanBusy = false; fd.leanStage = null; fd.leanCtl = null; if (S.fund === fd) renderFund(); }
   }
   async function openFund(q, { refresh = false } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
@@ -5568,7 +5607,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function fundView(fd) {
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
-    const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, lean = P.lean || {};
+    const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, OL = fd.full?.outlook || FundAn.provisional(FundAn.prior(fd), today());
     const R = (k, part) => fundReadBox((P[part] || {}).reads?.[k], idx);
     const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
     const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: four analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
@@ -5579,11 +5618,12 @@ a.btnlink:hover { border-color: var(--accent); }
     const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? ` Out of date: ${esc(fd.fullWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
     const btn = !fd.writing && S.sample && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
     // ---- snapshot: the hero, our prediction
-    const lc12 = (h) => lean.calls?.[h]?.call || calls.horizons?.[h]?.call || L?.calls?.[h]?.lean || L?.calls?.[h]?.call || "";
+    const lc12 = (h) => OL?.calls?.[h]?.call || "";
+    const callStrip = (pfx) => `<div class="strip">${Outlook.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}${pfx}</span>${x ? `<span class="pill ${Outlook.cls(x)} lean-pill">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</div>`; }).join("")}</div>`;
     const pred = core.headline || core.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${core.verdict?.call ? `<span class="pill ${VC[core.verdict.call]}">${esc(core.verdict.call)}</span>` : ""}${core.vs_benchmark?.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)} vs ${esc(fd.bench.symbol)}</span>` : ""}${core.confidence ? `<span class="small muted">${esc(core.confidence)} confidence</span>` : ""}</div>
       ${core.headline ? `<b class="headline">${fundCites(core.headline, idx)}</b>` : ""}${core.verdict?.summary ? `<div class="small">${fundCites(core.verdict.summary, idx)}</div>` : ""}
-      <div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h}</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`
-      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div><div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h} (industries)</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`;
+      ${callStrip(OL?.provisional ? " (provisional)" : "")}<div class="small muted">The full analysis is next: <a href="#fund-lean">where it's going and why</a>, then <a href="#fund-thesis">the thesis</a>.</div></div>`
+      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div>${callStrip(" (provisional)")}</div>`;
     const snap = `<section class="panel" id="fund-snap"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(f.type)}${f.family ? " · " + esc(f.family) : ""}${f.category ? " · " + esc(f.category) : ""}</span><h1 style="font-size:26px">${esc(f.name)} <span class="mono muted" style="font-size:.6em">${esc(f.symbol)}</span></h1>
       ${fd.lv ? `<div class="mono"><span style="font-size:22px;font-weight:600">${fix(fd.lv.px, 2)}</span> <span class="small muted">${esc(fd.ser.dates[fd.ser.dates.length - 1])}</span></div>` : ""}</div>
       <div class="kpis">${[kpi("Covered by your analysis", pct(c.covered, false, 0), `${pct(c.covered_full, false, 0)} full${B.quant > 0.0005 ? `, ${pct(B.quant, false, 0)} code-only` : ""}`),
@@ -5593,30 +5633,40 @@ a.btnlink:hover { border-color: var(--accent); }
       ${pred}${writing}${fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span></div>` : ""}${fill}${leftNote}${skipNote}
       <div class="actions" style="align-items:center"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}" ${busy() ? "disabled" : ""}>Fetch again</button>${btn}${status}</div>
       <div class="small muted">Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}; prices from FMP. Fetched ${esc(ago(fd.raw.fetched_at))}.</div></section>`;
-    // ---- where it's going: the outlook, against the industries' weighted calls
-    const leanSec = sec("fund-lean", "Where it's going", "the fund strategist's outlook, next to its industries' calls weighted by the fund", `${lean.headline ? `<p class="headline" style="margin:0">${fundCites(lean.headline, idx)}</p>` : ""}
-      <div class="hz-grid hz2">${Portfolio.HZ.map((h) => { const x = lean.calls?.[h], w = L?.calls?.[h];
-        return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x?.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${w ? `<span class="small muted">industries: ${esc(w.lean || w.call || "—")}${isNum(w.expected) ? `, ${pts(w.expected)}` : ""}</span>` : ""}</div>
-          ${x?.why ? `<p class="small" style="margin:0">${fundCites(x.why, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`}
-          ${x?.for?.length ? `<div class="small"><b class="up">For:</b><ul class="dlist small">${x.for.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}
-          ${x?.against?.length ? `<div class="small"><b class="down">Against:</b><ul class="dlist small">${x.against.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("")}</div>`);
+    // ---- where it's going: the company page's outlook card, on the fund
+    const W5 = (() => { try { return FundAn.windows(fd, today()); } catch { return []; } })(), PR = OL?.prior || null, PRnow = FundAn.prior(fd);
+    const leanNums = (h) => { const w = W5.find((y) => y.h === h), sp = (PR || PRnow)?.[h], mine = OL?.calls?.[h]?.call, ic = L?.calls?.[h];
+      const iA = Outlook.LEVELS.indexOf(sp?.call), iB = Outlook.LEVELS.indexOf(mine), moved = iA >= 0 && iB >= 0 ? iB - iA : 0;
+      return `<div class="lean-nums small">
+        ${sp ? `<div><span class="muted">Its industries, weighted (code's starting point${PR ? "" : ", today"}):</span> <span class="${Outlook.cls(sp.call)}-t">${esc(Outlook.label(sp.call))}</span>${mine && PR && !OL.provisional ? (moved ? ` · <b>moved ${Math.abs(moved)} notch${Math.abs(moved) === 1 ? "" : "es"} ${moved > 0 ? "more bullish" : "more bearish"}</b>` : " · kept") : ""}</div>` : ""}
+        ${sp?.parts?.length > 1 ? `<div class="muted">${sp.parts.slice(1).map((p) => `${esc(p.label)} ${p.adj > 0 ? "+" : ""}${p.adj}`).join(" · ")}</div>` : ""}
+        ${ic ? `<div><span class="muted">Share of its covered weight:</span> ${pct(ic.dist.up / (ic.dist.up + ic.dist.flat + ic.dist.down || 1), false, 0)} bullish · ${pct(ic.dist.down / (ic.dist.up + ic.dist.flat + ic.dist.down || 1), false, 0)} bearish</div>` : ""}
+        ${w ? `<div><span class="muted">Last ${esc(h)}:</span> <b class="${w.trailing > 0 ? "pos-t" : w.trailing < 0 ? "neg-t" : ""}">${sgP(w.trailing)}</b>${w.vs_bench !== null ? ` (${sgP(w.vs_bench)} vs ${esc(fd.bench.symbol)})` : ""} · a normal ${esc(h)} move is ±${w.sigma ?? "—"}%</div>` : ""}
+        ${isNum(num(w?.base_up)) ? `<div><span class="muted">Its own history:</span> higher ${w.base_up}% of the time over ${esc(h)}</div>` : ""}
+        ${w ? `<div><span class="muted">In this window:</span> ${w.reporting.length ? w.reporting.slice(0, 4).map((r) => `${esc(r.symbol)} reports ${esc(fmtDate(r.date))} (${r.weight}%)`).join(" · ") : "no big holding reports"}</div>` : ""}</div>`; };
+    let since = "";
+    if (OL?.mark?.px > 0 && fd.ser?.closes?.length && fd.ser.dates[fd.ser.dates.length - 1] > (OL.mark.date || "")) { const ri = Math.round((fd.ser.closes[fd.ser.closes.length - 1] / OL.mark.px - 1) * 1000) / 10; since = `<div class="small">Since these calls (${esc(fmtDate(OL.date))}): ${esc(fd.sym)} is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`; }
+    const stl = fundStale(fd), canLean = S.sample && !fd.writing && !fd.leanBusy && L?.n;
+    const leanBtn = `<button class="${!fd.full?.outlook ? "primary " : ""}sm" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"} title="One Claude call on the fund's write-up, its industries' outlooks and its numbers">${fd.leanBusy ? "Making the calls…" : fd.full?.outlook ? "Redo the calls" : "Make the calls"}</button>`;
+    const leanHead = `<div class="callout-head"><span class="eyebrow">Where ${esc(fd.sym)} is going</span>${OL?.date && !OL.provisional ? `<span class="small muted">as of ${esc(fmtDate(OL.date))}</span>` : ""}<span style="margin-left:auto">${leanBtn}</span></div>`;
+    const leanStatus = (fd.leanBusy ? leanSteps(fd.leanStage) : fd.leanErr ? `<div class="notice err small">${esc(fd.leanErr)}</div>` : "")
+      + (stl.length && !fd.leanBusy && fd.full?.outlook ? `<div class="notice warn small stale-note"><span><b>Out of step with its industries:</b> since these calls, ${esc(stl.join("; "))}.</span><button class="sm primary" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"}>Redo the calls</button></div>` : "");
+    const leanSec = OL ? sec("fund-lean", `Where ${fd.sym} is going`, "", callsCard(OL, { head: leanHead, status: leanStatus, nums: leanNums, since, history: fd.full?.outlook_history || [], verdict: "the fund write-up's verdict", verdictCall: core.verdict?.call || "" }))
+      : sec("fund-lean", `Where ${fd.sym} is going`, "", `<div class="callout lean-card">${leanHead}${leanStatus}<div class="small muted">${fd.writing ? "The calls are made right after the analysis." : "No calls yet: none of its industries has an outlook to start from."}</div></div>`);
     // ---- the analysis: thesis, calls, scenarios
-    const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
-    const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], w = L?.calls?.[h];
-      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
-        <div class="hz-num"><span class="v">${esc(rng(x.expected_move))}</span><span class="small muted">expected move${isNum(x.probability_up) ? ` · ${x.probability_up}% chance it's higher` : ""}</span></div>
-        ${w ? `<div class="small"><span class="muted">Industries, weighted:</span> ${esc(w.call || "—")}${isNum(w.expected) ? ` · ${pts(w.expected)}` : ""}${isNum(fd.ext?.base?.[h]?.v) ? ` · base rate ${pct(fd.ext.base[h].v, false, 0)} up` : ""}</div>` : ""}
+    const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], oc = OL?.calls?.[h]?.call, sp = (PR || PRnow)?.[h];
+      return `<div class="box hz"><div class="dim-head"><b>${esc(Outlook.HZ_LABEL[h])}</b>${oc ? `<span class="pill ${Outlook.cls(oc)}">${Outlook.SIGN[oc] > 0 ? "▲" : "▼"} ${esc(Outlook.label(oc))}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
+        ${sp ? `<div class="small"><span class="muted">Its industries, weighted:</span> <span class="${Outlook.cls(sp.call)}-t">${esc(Outlook.label(sp.call))}</span>${isNum(fd.ext?.base?.[h]?.v) ? ` · their past setups like today were up ${pct(fd.ext.base[h].v, false, 0)} of the time` : ""}</div>` : ""}
         ${x.drivers ? `<p class="small" style="margin:0">${fundCites(x.drivers, idx)}</p>` : ""}
         ${x.decisions?.length ? `<div class="small"><span class="eyebrow">In the window</span><ul class="dlist small">${x.decisions.map((d) => `<li><span class="mono">${esc(d.date)}</span> ${fundCites(d.event, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("");
     const SC = { bull: "pos", base: "neu", bear: "neg" };
     const scen = calls.scenarios && Object.keys(calls.scenarios).length ? `<h3>12-month scenarios</h3><div class="hcards">${["bull", "base", "bear"].filter((k) => calls.scenarios[k]).map((k) => { const x = calls.scenarios[k];
-      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k}</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b><span class="mono small">${esc(rng(x.move))}</span></div><div class="small">${fundCites(x.narrative, idx)}</div></div>`; }).join("")}</div>
-      ${isNum(fd.full?.checks?.expected) ? `<div class="small muted">Probability-weighted: ${pts(fd.full.checks.expected)} over 12 months (the industries' own, weighted: ${pts(L?.exp12?.v)}).</div>` : ""}` : "";
-    const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the calls: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
+      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k} case</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b></div><div class="meter"><i style="width:${isNum(x.probability) ? x.probability : 0}%;background:${k === "bull" ? "var(--pos)" : k === "bear" ? "var(--neg)" : "var(--accent)"}"></i></div><div class="small">${fundCites(x.narrative, idx)}</div>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${x.triggers.map((y) => fundCites(y, idx)).join("; ")}</div>` : ""}</div>`; }).join("")}</div>` : "";
+    const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the scenarios: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
     const thesis = core.thesis || hz ? `${core.thesis ? core.thesis.split(/\n+/).map((pp) => `<p class="prose">${fundCites(pp, idx)}</p>`).join("") : ""}
       ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
       ${core.strategy ? `<div class="small"><b>How it's run:</b> ${fundCites(core.strategy, idx)}</div>` : ""}
-      ${hz ? `<h3>1M–12M calls</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
+      ${hz ? `<h3>What drives each window</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
     const thesisSec = sec("fund-thesis", "Analysis", "four analysts at once on the fund's dossier; every claim cites it", thesis);
     // ---- fit and plans
     const fitSec = sec("fund-fit", "Fit for each investor type", "the weighted score, moved at most 5 points for judgment", `<div class="dims">${["income", "conservative", "growth", "aggressive"].map((t) => {
@@ -5696,10 +5746,11 @@ a.btnlink:hover { border-color: var(--accent); }
     let lookSec = "";
     if (L?.n) {
       const sc = (t) => { const x = L.scores[t]; const g = gradeOf(x.v); return kpi(`${t[0].toUpperCase() + t.slice(1)} score`, isNum(x.v) ? `${Math.round(x.v)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—", t === L.best ? "best fit" : ""); };
-      const hzc = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, main = x.lean || x.call;
-        return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${CALLC(main)}">${esc(main || "—")}</span></div>${isNum(x.expected) ? `<div class="hz-num"><span class="v">${pts(x.expected)}</span><span class="small muted">middle of the strategists' ranges${isNum(x.p_up) ? `, ${Math.round(x.p_up)}% chance up` : ""}</span></div>` : ""}
+      const hzc = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, sp = PRnow?.[h];
+        return `<div class="box hz"><div class="dim-head"><b>${esc(Outlook.HZ_LABEL[h])}</b>${sp ? `<span class="pill ${Outlook.cls(sp.call)}">${Outlook.SIGN[sp.call] > 0 ? "▲" : "▼"} ${esc(Outlook.label(sp.call))}</span>` : ""}</div>
+          <div class="small muted">its industries' outlooks, weighted by the fund</div>
           <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--sunk)"><i style="width:${(100 * x.dist.up / tot).toFixed(1)}%;background:var(--pos)"></i><i style="width:${(100 * x.dist.flat / tot).toFixed(1)}%;background:var(--bench)"></i><i style="width:${(100 * x.dist.down / tot).toFixed(1)}%;background:var(--neg)"></i></div>
-          <div class="small muted">${pct(x.dist.up / tot, false, 0)} up · ${pct(x.dist.flat / tot, false, 0)} neutral · ${pct(x.dist.down / tot, false, 0)} down</div></div>`; }).join("");
+          <div class="small muted">${pct(x.dist.up / tot, false, 0)} of the covered weight bullish · ${pct(x.dist.down / tot, false, 0)} bearish</div></div>`; }).join("");
       const ctr = (list) => list.map((x) => `<li><b>${esc(x.industry)}</b> <span class="muted">${pct(x.weight, false, 1)} × ${pts(x.expected)}</span> = <b class="${x.pts >= 0 ? "up" : "down"}">${pts(x.pts, 2)}</b>${x.kind === "quant" ? ` <span class="small muted">(code-only)</span>` : ""}</li>`).join("");
       const plus = L.contrib.slice(0, 5).filter((x) => x.pts > 0), minus = L.contrib.slice(-5).reverse().filter((x) => x.pts < 0);
       lookSec = sec("fund-look", "Calls and scores through its industries", `${L.n} industr${L.n === 1 ? "y" : "ies"} · ${pct(L.on, false, 0)} of the fund`, `${R("look", "context")}
@@ -5758,10 +5809,10 @@ a.btnlink:hover { border-color: var(--accent); }
       ${calls.plans && Object.keys(calls.plans).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Investor</th><th class="n">Size</th><th>Entry</th><th>Hedge</th><th>Review</th></tr></thead><tbody>${["income", "conservative", "growth", "aggressive"].filter((k) => calls.plans[k]).map((k) => { const x = calls.plans[k];
         return `<tr><td><b>${k[0].toUpperCase() + k.slice(1)}</b></td><td class="n">${isNum(x.size_pct) ? x.size_pct + "%" : "—"}</td><td class="wr small">${fundCites(x.entry, idx)}</td><td class="wr small">${fundCites(x.hedge, idx)}</td><td class="wr small">${fundCites(x.review, idx)}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="small muted">${fd.writing ? "The plans are being written…" : "The plans come with the analysis."}</div>`}`) : "";
     // ---- track record
-    const TR = fd.track, trk = sec("fund-track", "Track record", "this page's past 1M-12M calls on the fund, scored against its price", TR?.rows?.length ? `${R("track", "calls")}<div class="kpis">${[kpi("Scored calls", String(TR.done), `${TR.rows.length - TR.done} still open`), kpi("Direction right", pct(TR.hit, false, 0)), kpi("Inside the range", pct(TR.in_range, false, 0))].join("")}</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Made</th><th>Window</th><th>Call</th><th class="n">Range</th><th class="n">Move so far</th><th>Result</th></tr></thead><tbody>${TR.rows.slice(0, 24).map((r) => `<tr><td class="mono">${esc(r.date)}</td><td>${r.h} <span class="small muted">to ${esc(r.end)}</span></td><td><span class="pill ${CALLC(r.call)}">${esc(r.call)}</span></td><td class="n">${isNum(num(r.lo)) ? `${r.lo > 0 ? "+" : ""}${r.lo}% to ${r.hi > 0 ? "+" : ""}${r.hi}%` : "—"}</td>
-        <td class="n ${cls(num(r.ret))}">${pts(r.ret)}</td><td>${r.done ? `${r.hit ? `<span class="pill pos">right way</span>` : `<span class="pill neg">wrong way</span>`}${r.in_range === true ? ` <span class="pill pos">in range</span>` : r.in_range === false ? ` <span class="pill warn">outside range</span>` : ""}` : `<span class="small muted">open</span>`}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="small muted">No calls logged yet. Each time the analysis is written, its 1M-12M calls are logged with the day's price and scored once each window has passed.</div>`);
+    const TR = fd.track, trk = sec("fund-track", "Track record", "this page's past 1M-12M calls on the fund, scored against its price", TR?.rows?.length ? `${R("track", "calls")}<div class="kpis">${[kpi("Scored calls", String(TR.done), `${TR.rows.length - TR.done} still open`), kpi("Right direction", pct(TR.hit, false, 0)), kpi("Strength held", pct(TR.strength, false, 0), "slightly: inside a normal move · plain: half a normal move or more · strongly: a full one")].join("")}</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Made</th><th>Window</th><th>Call</th><th class="n">Normal move</th><th class="n">Move so far</th><th>Result</th></tr></thead><tbody>${TR.rows.slice(0, 24).map((r) => `<tr><td class="mono">${esc(r.date)}</td><td>${r.h} <span class="small muted">to ${esc(r.end)}</span></td><td><span class="pill ${Outlook.cls(r.call) || CALLC(r.call)}">${esc(Outlook.label(r.call) || r.call)}</span></td><td class="n">${isNum(num(r.sigma)) ? "±" + r.sigma + "%" : "—"}</td>
+        <td class="n ${cls(num(r.ret))}">${pts(r.ret)}</td><td>${r.done ? `${r.hit ? `<span class="pill pos">right way</span>` : `<span class="pill neg">wrong way</span>`}${r.strength === true ? ` <span class="pill pos">strength held</span>` : r.strength === false ? ` <span class="pill warn">strength off</span>` : ""}` : `<span class="small muted">open</span>`}</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="small muted">No calls logged yet. Each time the calls are made, they're logged with the day's price and a normal move for each window, and scored once the window has passed.</div>`);
     // ---- timeframe patterns: the company page's panel, on the fund's prices
     let tech = "";
     if (fd.tech3) { const save = S.coTf; S.coTf = S.fundTf || "D"; try { tech = coTech({ tech: fd.tech3, pm: fd.pm, sym: fd.sym }).replace('id="co-tech"', 'id="fund-tech"').replace(/data-co-tf=/g, "data-fund-tf="); } catch { tech = ""; } S.coTf = save;
@@ -7113,7 +7164,8 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundWrite(S.fund, { force: true }); return; }
     if (t.dataset.fundRet) { S.fundRet = t.dataset.fundRet; renderFund(); return; }
     if (t.dataset.fundTf) { S.fundTf = t.dataset.fundTf; renderFund(); return; }
-    if (t.dataset.fundStop) { S.fund?.ctl?.abort(); return; }
+    if (t.dataset.fundStop) { S.fund?.ctl?.abort(); S.fund?.leanCtl?.abort(); return; }
+    if (t.dataset.fundLean) { if (S.fund?.sym === t.dataset.fundLean) fundLean(S.fund); return; }
     if (t.dataset.fundFill) { if (S.fund?.sym === t.dataset.fundFill) fillFund(S.fund, { limit: 20, minWeight: 0 }); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }

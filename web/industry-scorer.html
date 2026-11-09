@@ -9907,6 +9907,7 @@ Reply with JSON only, in this shape:
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
   const lc = (s) => String(s || "").toLowerCase();
   const P = typeof module !== "undefined" && module.exports ? require("./portfolio.js") : root.Portfolio;
+  const O = typeof module !== "undefined" && module.exports ? require("./outlook.js") : root.Outlook;
   const HZ = ["1M", "3M", "6M", "12M"];
   const f1 = (v, d = 1) => (isNum(v) ? Number(v).toFixed(d) : "n/a");
   const pc = (v, d = 1) => (isNum(v) ? (v * 100).toFixed(d) + "%" : "n/a");
@@ -9986,27 +9987,89 @@ Reply with JSON only, in this shape:
     return { s30: w30 > 0 ? s30 / w30 : NaN, s90: w90 > 0 ? s90 / w90 : NaN, on: w30, rows: rows.sort((x, y) => y.weight - x.weight) };
   }
   /**
-   * The fund's 1M-12M calls, logged each time the analysis is written ({date, h, call, lo, hi, px}), scored once each
-   * window has passed: the direction (a neutral call is right when the move stays within ±2%) and whether the move
-   * landed in the range. Open calls are marked to market.
+   * The track record: each window's outlook call (six levels, no neutral), logged with the day's price and a normal move
+   * for the window (one sigma), scored once the window has passed. Direction: higher or lower, as called. Strength:
+   * "slightly" holds if the move stayed inside one sigma, plain "bullish"/"bearish" if it went at least half a sigma the
+   * called way, "strongly" if it went a full sigma or more. Open calls are marked to market.
    */
   const HD = { "1M": 30, "3M": 91, "6M": 182, "12M": 365 };
-  function trackLog(log, calls, date, px) {
+  function trackLog(log, calls, date, px, sigmas = {}) {
     const out = [...(log || [])];
     for (const h of HZ) { const x = calls?.[h]; if (!x?.call || !isNum(px)) continue; if (out.some((e) => e.date === date && e.h === h)) continue;
-      out.push({ date, h, call: x.call, lo: x.expected_move?.[0] ?? null, hi: x.expected_move?.[1] ?? null, p_up: x.probability_up ?? null, px }); }
+      out.push({ date, h, call: x.call, px, sigma: isNum(n(sigmas[h])) ? n(sigmas[h]) : null }); }
     return out.slice(-200);
   }
   function trackEval(log, ser, today) {
-    const d = ser?.dates || [], c = ser?.closes || []; if (!d.length) return { rows: [], done: 0, hit: NaN, in_range: NaN };
+    const d = ser?.dates || [], c = ser?.closes || []; if (!d.length) return { rows: [], done: 0, hit: NaN, strength: NaN };
     const at = (date) => { let i = -1; for (let k = 0; k < d.length && d[k] <= date; k++) i = k; return i >= 0 ? c[i] : NaN; };
     const rows = (log || []).map((e) => { const end = new Date(Date.parse(e.date) + HD[e.h] * 864e5).toISOString().slice(0, 10), done = end <= today;
-      const p1 = done ? at(end) : c[c.length - 1], ret = e.px > 0 && p1 > 0 ? (p1 / e.px - 1) * 100 : NaN, cn = P.callNum(e.call);
-      const hit = !isNum(ret) || !isNum(cn) ? null : cn === 0 ? Math.abs(ret) <= 2 : Math.sign(ret) === Math.sign(cn);
-      const inR = isNum(ret) && isNum(n(e.lo)) && isNum(n(e.hi)) ? ret >= e.lo && ret <= e.hi : null;
-      return { ...e, end, done, ret, hit, in_range: inR }; }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : HZ.indexOf(a.h) - HZ.indexOf(b.h)));
-    const dn = rows.filter((r) => r.done && r.hit !== null), rg = dn.filter((r) => r.in_range !== null);
-    return { rows, done: dn.length, hit: dn.length ? dn.filter((r) => r.hit).length / dn.length : NaN, in_range: rg.length ? rg.filter((r) => r.in_range).length / rg.length : NaN };
+      const p1 = done ? at(end) : c[c.length - 1], ret = e.px > 0 && p1 > 0 ? (p1 / e.px - 1) * 100 : NaN, sg = Math.sign(O.SIGN[e.call] || 0), lvl = Math.abs(O.SIGN[e.call] || 0);
+      const hit = !isNum(ret) || !sg ? null : Math.sign(ret) === sg;
+      const z = isNum(ret) && e.sigma > 0 ? (ret * sg) / e.sigma : NaN;
+      const strength = !isNum(z) ? null : lvl === 1 ? Math.abs(ret) / e.sigma <= 1 : lvl === 2 ? z >= 0.5 : z >= 1;
+      return { ...e, end, done, ret, hit, strength }; }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : HZ.indexOf(a.h) - HZ.indexOf(b.h)));
+    const dn = rows.filter((r) => r.done && r.hit !== null), st = dn.filter((r) => r.strength !== null);
+    return { rows, done: dn.length, hit: dn.length ? dn.filter((r) => r.hit).length / dn.length : NaN, strength: st.length ? st.filter((r) => r.strength).length / st.length : NaN };
+  }
+
+  // ============================================================= the outlook: the company page's engine, for a fund
+  /** The components the outlook weighs, one entry each, in this order (the fund's version of the company's sixteen). */
+  const FUND_INPUTS = [
+    ["industries", "Its industries' outlooks"], ["verdict", "The fund write-up's verdict"], ["holdings", "Holdings & concentration"], ["earnings", "Earnings & estimate revisions"],
+    ["valuation", "Valuation & what's priced in"], ["quality", "Quality of what it holds"], ["street", "Wall Street on its holdings"], ["momentum", "Momentum & price action"],
+    ["history", "Past setups like today"], ["catalysts", "Dated catalysts ahead"], ["macro", "Macro & rates"], ["world", "World events & trade"],
+    ["regulation", "Regulation & legal"], ["benchmark", "Its tilt against the benchmark"], ["coverage", "Coverage & blind spots"], ["risks", "Risks & red flags"],
+  ];
+  /** An industry's outlook calls (six levels): its saved outlook, else read off its strategist's calls. */
+  function indCalls(d) {
+    const out = {};
+    for (const h of HZ) { const l = O.level(d?.lean?.[h]) || (() => { const c = d?.calls?.[h]; if (!c?.call) return null; let l0 = O.level(c.call); if (l0 && !/slight|strong/.test(lc(c.call))) l0 = O.level("slightly " + l0); if (!l0) l0 = isNum(c.p_up) && c.p_up >= 50 ? "slightly bullish" : "slightly bearish"; return l0; })();
+      if (l) out[h] = l; }
+    return out;
+  }
+  /**
+   * Each window, as the company page has it: when it ends, a normal move (one sigma from the fund's volatility), the
+   * trailing move, how often the fund was higher over that span in its own history, and the holdings reporting inside it.
+   */
+  function windows(fd, today) {
+    const ser = fd.ser, c = ser?.closes || [], vol = n(fd.g1?.vol), M = { "1M": 1, "3M": 3, "6M": 6, "12M": 12 }, TR = { "1M": "1M", "3M": "3M", "6M": "6M", "12M": "1Y" };
+    return HZ.map((h) => {
+      const end = new Date(Date.parse(today) + Math.round(M[h] * 30.44) * 864e5).toISOString().slice(0, 10), step = Math.round(M[h] * 21);
+      let up = 0, k = 0; for (let i = 0; i + step < c.length; i += 5) if (c[i] > 0) { k++; if (c[i + step] > c[i]) up++; }
+      const tr = (fd.retRows || []).find((r) => r.label === TR[h]);
+      const rep = (fd.hold || []).filter((x) => x.next && x.next >= today && x.next <= end && x.weight >= 0.01).slice(0, 8).map((x) => ({ symbol: x.ticker, date: x.next, weight: Math.round(x.weight * 1000) / 10 }));
+      return { h, end, sigma: vol > 0 ? Math.round(vol * Math.sqrt(M[h] / 12) * 1000) / 10 : null, trailing: tr ? Math.round(tr.value * 10) / 10 : null, vs_bench: tr && isNum(tr.bench) ? Math.round((tr.value - tr.bench) * 10) / 10 : null,
+        base_up: k >= 20 ? Math.round((up / k) * 100) : null, reporting: rep };
+    });
+  }
+  /**
+   * Code's starting point for each window, as the company's is built from its industry's call: the fund's industries'
+   * outlook calls weighted by the fund (-3..+3), then moved half a notch each by its own setups like today against all
+   * days, Wall Street on its holdings (6M and 12M), and an overbought or oversold month (1M only).
+   */
+  function prior(fd) {
+    const inds = (fd.cov?.industries || []).map((g) => ({ g, c: indCalls(fd.digests?.[lc(g.industry)]) })).filter((x) => Object.keys(x.c).length);
+    if (!inds.length) return null;
+    const out = {}, an = fd.analogs, st = fd.street, rsi = n(fd.tech3?.D?.last?.rsi);
+    for (const h of HZ) {
+      let w = 0, s0 = 0; for (const { g, c } of inds) if (c[h]) { w += g.weight; s0 += g.weight * O.SIGN[c[h]]; }
+      if (!w) continue;
+      const base = s0 / w, parts = [{ label: `its industries' outlooks, weighted by the fund (${inds.length} industries, ${Math.round(w * 100)}% of the fund)`, adj: Math.round(base * 100) / 100 }];
+      let sc = base; const dir = Math.sign(base) || 1;
+      const e = an?.horizons?.[h], a = an?.all?.[h];
+      if (e?.n >= 15 && isNum(e.pos) && isNum(a?.pos)) { const d = e.pos - a.pos, adj = d >= 0.1 ? 0.5 : d <= -0.1 ? -0.5 : 0; if (adj) { parts.push({ label: `its own setups like today were up ${Math.round(e.pos * 100)}% of the time vs ${Math.round(a.pos * 100)}% for all days`, adj }); sc += adj; } }
+      if ((h === "6M" || h === "12M") && st?.n >= 3 && isNum(st.upside) && isNum(st.buy_share)) { const adj = st.upside >= 0.15 && st.buy_share >= 0.65 ? 0.5 : st.upside <= 0 ? -0.5 : 0; if (adj) { parts.push({ label: `Wall Street sees ${Math.round(st.upside * 100)}% upside on its biggest holdings, ${Math.round(st.buy_share * 100)}% buy`, adj }); sc += adj; } }
+      if (h === "1M" && isNum(rsi)) { const adj = rsi >= 70 ? -0.5 : rsi <= 30 ? 0.5 : 0; if (adj) { parts.push({ label: `daily RSI ${Math.round(rsi)} (${rsi >= 70 ? "overbought" : "oversold"})`, adj }); sc += adj; } }
+      const sg = Math.sign(sc) || dir, m = Math.abs(sc);
+      out[h] = { call: `${m < 1.5 ? "slightly " : m >= 2.5 ? "strongly " : ""}${sg > 0 ? "bullish" : "bearish"}`, score: Math.round(sc * 100) / 100, parts };
+    }
+    return Object.keys(out).length ? out : null;
+  }
+  const priorText = (Pr) => Object.entries(Pr || {}).map(([h, x]) => `${h}: ${x.call} (score ${x.score > 0 ? "+" : ""}${x.score}: ${x.parts.map((p, i) => `${p.label}${i ? ` ${p.adj > 0 ? "+" : ""}${p.adj}` : ""}`).join("; ")})`).join("\n");
+  /** Until the outlook is made: provisional, read off code's starting point (no Claude). */
+  function provisional(pr, today) {
+    if (!pr) return null;
+    return { v: 3, date: today, provisional: true, headline: "Provisional: code's starting point, from its industries' outlooks. The outlook is made with the analysis.", calls: Object.fromEntries(Object.entries(pr).map(([h, x]) => [h, { call: x.call, basis: "code's starting point" }])), evidence: [], checks: [] };
   }
 
   // ============================================================= the dossier the four analysts and the outlook write from
@@ -10060,7 +10123,7 @@ Reply with JSON only, in this shape:
     const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}. ${se.rows.slice(0, 6).map((r) => `${r.ticker} ${f1(r.s30, 2)} (${r.n30} articles)`).join(", ")}.`);
     (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`));
     const dv = fd.dist; if (dv?.paying) put(tl, "D1", "Distributions", `Distributions: ${pc(dv.yield, 2)} trailing yield (${f1(dv.annual, 2)} a share a year, ${String(dv.freq || "").toLowerCase()}); 5-year growth ${spf(dv.cagr5)} a year${dv.cut5 ? "; cut in the last five years" : ""}${dv.next ? `; next ex-date ${dv.next.ex}` : ""}.`);
-    const tr = fd.track; if (tr?.done) put(tl, "K1", "Track record", `This page's past calls on the fund: ${tr.done} scored, direction right ${pc(tr.hit, 0)}, inside the range ${pc(tr.in_range, 0)}.`);
+    const tr = fd.track; if (tr?.done) put(tl, "K1", "Track record", `This page's past calls on the fund: ${tr.done} scored, direction right ${pc(tr.hit, 0)}, strength held ${pc(tr.strength, 0)}.`);
     B.tech = tl.join("\n");
     // D: the industries' own drivers and risks (for the context analyst)
     const dl = [`## WHAT EACH BIG INDUSTRY'S STRATEGIST SAYS DRIVES IT`];
@@ -10094,12 +10157,12 @@ Reply with JSON only, in this shape:
  ${READ(PANELS.core)},
  "confidence": "high | medium | low"}
 Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items. Fit adjust moves the weighted score by at most 5 points either way.`,
-    calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries", "move": [8, 14]}, "base": {...}, "bear": {...}},
- "horizons": {${HZ.map((h) => `"${h}": {"call": "${CALLS}", "expected_move": [-3, 5], "probability_up": 58, "vs_benchmark": "outperform | in line | underperform", "drivers": "4-6 sentences, cited, with numbers: what moves the fund in this window, which dated events land in it, and how the industries' calls add up for this fund", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
- "plans": {"income": {"size_pct": 0, "entry": "when or at what to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
- "change_mind": ["what would change the call, with a level or a date"],
+    calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries and holdings", "triggers": ["what would set it off"]}, "base": {...}, "bear": {...}},
+ "horizons": {${HZ.map((h) => `"${h}": {"vs_benchmark": "outperform | in line | underperform", "drivers": "4-6 sentences, cited, with numbers: what moves the fund in this window, which dated events land in it, and how its industries' outlooks add up for this fund", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
+ "plans": {"income": {"size_pct": 0, "entry": "when or at what level to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "change_mind": ["what would change the view, with a level or a date"],
  ${READ(PANELS.calls)}}
-Probabilities add to 100. Moves are % price moves over 12 months for the scenarios and over each window for the horizons, ranges low to high. The 12M call must agree with the scenarios.`,
+Probabilities add to 100. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
     context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
  "industries": [{"id": "I1", "effect": "helps | hurts | mixed", "why": "one sentence: what this industry's analysis means for the fund at its weight"}],
  "macro": {"regime": "supportive | mixed | headwind", "headline": "one sentence on the macro for this fund", "horizons": {${HZ.map((h) => `"${h}": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}`).join(", ")}}, "flip": "what would flip it, with levels",
@@ -10137,17 +10200,50 @@ ${BLOCKS[part].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
 Reply with ONLY this JSON:
 ${SCHEMA[part]}`;
   }
-  /** The outlook: where the fund is likely to go over each window and why, for and against (one call, like the industry's). */
-  function leanPrompt(fd, dz, today) {
-    return `You are the fund strategist. Today is ${today}. Give your outlook for this fund over the next 1, 3, 6 and 12 months: which way it's likely to go and why, with the best arguments for and against. Start from the industries' calls weighted by the fund (F4), the base rates (V6), the scenarios (F3), the fund's own trend and risk (P lines) and the dated events (E lines), and say where you differ from the weighted calls.
-Use only the facts below; cite IDs in square brackets.
+  /**
+   * The outlook prompt: the company page's (one call on the finished write-up, the industries' outlooks, the fund's
+   * numbers, each window's facts and code's starting point), with the fund's sixteen components and the same rules.
+   */
+  function outlookPrompt(fd, dz, today, write) {
+    const t = write || {}, c = t.core || {}, k = t.calls || {}, x = t.context || {}, e = t.exposures || {}, sym = fd.sym, name = fd.facts?.name || sym;
+    const w = [c.headline ? `Headline: ${trim(c.headline, 260)}` : "", c.verdict?.call ? `Verdict: ${c.verdict.call}: ${trim(c.verdict.summary, 500)}` : "", c.thesis ? `Thesis: ${trim(c.thesis, 1500)}` : "",
+      c.vs_benchmark?.call ? `Vs ${fd.bench?.symbol}: ${c.vs_benchmark.call}: ${trim(c.vs_benchmark.why, 300)}` : "", c.valuation?.read ? `Valuation: ${trim(c.valuation.read, 400)}` : "", c.street?.summary ? `Vs Wall Street: ${c.street.stance || ""}: ${trim(c.street.summary, 360)}` : "",
+      c.quality ? `Quality: ${trim(c.quality, 260)}` : "", c.strategy ? `How it's run: ${trim(c.strategy, 260)}` : "",
+      ["bull", "base", "bear"].some((q) => k.scenarios?.[q]) ? `Scenarios (12M): ${["bull", "base", "bear"].filter((q) => k.scenarios?.[q]).map((q) => `${q} ${k.scenarios[q].probability ?? "?"}%: ${trim(k.scenarios[q].narrative, 160)}`).join("; ")}` : "",
+      ...HZ.filter((h) => k.horizons?.[h]?.drivers).map((h) => `${h} drivers: ${trim(k.horizons[h].drivers, 260)}`),
+      (c.risks || []).length ? `Risks: ${c.risks.slice(0, 5).map((r) => trim(r.risk, 120)).join("; ")}` : "", (c.catalysts || []).length ? `Catalysts: ${c.catalysts.slice(0, 5).map((y) => `${y.date} ${trim(y.event, 100)}`).join("; ")}` : "",
+      x.macro?.headline ? `Macro for it: ${x.macro.regime || ""}: ${trim(x.macro.headline, 240)}` : "", e.trade_overall?.summary ? `Trade for it: ${trim(e.trade_overall.summary, 300)}` : "", e.reg_overall?.summary ? `Regulation for it: ${trim(e.reg_overall.summary, 300)}` : ""].filter(Boolean).join("\n");
+    const inds = (fd.cov?.industries || []).slice(0, 14).map((g) => { const ic = indCalls(fd.digests?.[lc(g.industry)]); return Object.keys(ic).length ? `${g.industry} (${pc(g.weight)} of the fund): ${HZ.filter((h) => ic[h]).map((h) => `${h} ${ic[h]}`).join(", ")}` : `${g.industry} (${pc(g.weight)}): no outlook (${g.status === "quant" ? "code-only" : "not covered"})`; }).join("\n");
+    const W = windows(fd, today), pr = prior(fd);
+    return `You are the analyst covering the fund ${name} (${sym}). Today is ${today}. The fund holds US industries your team has analyzed one by one; each has its own outlook. Use ALL of the work below to say WHERE ${sym} IS GOING over the next month, 3 months, 6 months and 12 months, and why.
 
-${["base", "perf", "val", "cal", "tech"].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
+## ITS INDUSTRIES' OUTLOOKS (biggest first)
+${inds || "(none)"}
 
-Reply with ONLY this JSON:
-{"headline": "one sentence: where the fund is likely to go and the main reason",
- "calls": {${HZ.map((h) => `"${h}": {"call": "${CALLS}", "why": "2-3 sentences, cited", "for": ["the 2-3 strongest reasons it goes up"], "against": ["the 2-3 strongest reasons it goes down"]}`).join(", ")}}}`;
+${w ? `## THE FUND WRITE-UP\n${w}\n` : ""}
+## ${sym}: THE FUND, ITS HOLDINGS AND ITS NUMBERS (code)
+${trim([dz.blocks.base, dz.blocks.hold, dz.blocks.perf, dz.blocks.val, dz.blocks.tech].filter(Boolean).join("\n\n"), 22000)}
+
+## EACH WINDOW (code)
+${W.map((y) => `${y.h}: to ${y.end}; a normal move is ±${y.sigma ?? "?"}%; trailing ${y.h} ${y.trailing ?? "?"}%${y.vs_bench !== null ? ` (${y.vs_bench > 0 ? "+" : ""}${y.vs_bench} vs ${fd.bench?.symbol})` : ""}; in its own history higher ${y.base_up ?? "?"}% of the time over this span; ${y.reporting.length ? `holdings reporting: ${y.reporting.map((r) => `${r.symbol} ${r.date} (${r.weight}%)`).join(", ")}` : "no big holding reports in the window"}`).join("\n")}
+${pr ? `\n## CODE'S STARTING POINT FOR EACH WINDOW\nIts industries' outlooks weighted by the fund, moved by its own setups like today, Wall Street on its holdings and an overbought or oversold month:\n${priorText(pr)}` : ""}
+${(fd.news || []).length ? `\n## RECENT NEWS ON ITS BIGGEST HOLDINGS\n${fd.news.slice(0, 12).map((y) => `${y.date} ${y.symbol ? y.symbol + ": " : ""}${trim(y.title, 150)}`).join("\n")}` : ""}
+
+HOW TO MAKE THE CALLS
+- Each call is ${sym}'S OWN DIRECTION: will it be higher or lower at the end of the window? Nothing else.
+- Six levels, no neutral. "slightly": a close call that tips one way. Plain "bullish" / "bearish": the evidence clearly points that way. "strongly": most components point the same way, decisively; rare. If it's close, pick the side it tips toward and say "slightly".
+- First weigh EVERY component, one entry each, in this order: ${FUND_INPUTS.map(([q]) => q).join(", ")}. For each: does it push ${sym} up or down over the next year ("up" / "down" / "mixed"), how much it matters (weight 1 = minor, 2 = material, 3 = decisive), and why in one sentence with the number. Nothing to go on: "mixed", weight 1.
+- Then the four calls, from that evidence. Near-term windows lean on momentum, positioning, macro and dated events; longer ones on earnings, the cycle, valuation and the scenarios. A call that flips direction from one window to the next must say what changes in between.
+- For each call, put the strongest case against it in "against" and say why it loses. Square the calls with its own history (setups like today, how often it was higher); where you go against them, say why.
+- Start from its industries' outlooks, then say where ${sym} departs from them and why.${pr ? `
+- Each window starts at code's starting point above. Keep it unless the evidence gives a concrete reason to move; when your call differs from the starting point, the window's "why" must say in one clause what moves it off (for example "one notch more bearish than the starting point because ...").` : ""}
+- Plain words, specific numbers, no hedging filler. No price targets or % ranges.
+
+Reply with ONLY this JSON (all four windows):
+${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's verdict")}`;
   }
+  /** The outlook's answer, cleaned and checked by the company page's code (the same levels, tally and checks). */
+  const cleanOutlook = (raw, today) => O.clean(raw, { today, inputs: FUND_INPUTS });
 
   // ============================================================= cleaning and checks
   const ENUM = { verdict: ["attractive", "neutral", "unattractive"], vs: ["outperform", "in line", "underperform"], lvl: ["high", "medium", "low"], fit: ["strong", "good", "weak", "poor"],
@@ -10178,9 +10274,8 @@ Reply with ONLY this JSON:
         catalysts: rows(o.catalysts, (x) => ({ date: String(x?.date || "").slice(0, 10), event: t(x?.event, 200), why: t(x?.why, 300), ids: ids(x?.ids) }), "event").slice(0, 8),
         watch: (Array.isArray(o.watch) ? o.watch : []).map((x) => t(typeof x === "string" ? x : x?.text, 300)).filter(Boolean).slice(0, 6), fit, reads: reads(o.reads), confidence: en(o.confidence, ENUM.lvl) };
     } else if (part === "calls") {
-      const scen = {}; for (const k of ["bull", "base", "bear"]) { const x = o.scenarios?.[k]; if (x) scen[k] = { probability: n(x.probability), narrative: t(x.narrative, 600), move: rng(x.move) }; }
-      const hz = {}; for (const h of HZ) { const x = o.horizons?.[h]; if (!x) continue; hz[h] = { call: en(x.call, CALLV), expected_move: rng(x.expected_move), probability_up: Math.max(0, Math.min(100, n(x.probability_up))),
-        vs_benchmark: en(x.vs_benchmark, ENUM.vs), drivers: t(x.drivers, 1400), decisions: rows(x.decisions, (d) => ({ date: String(d?.date || "").slice(0, 10), event: t(d?.event, 200) }), "event").slice(0, 6) }; }
+      const scen = {}; for (const k of ["bull", "base", "bear"]) { const x = o.scenarios?.[k]; if (x) scen[k] = { probability: n(x.probability), narrative: t(x.narrative, 600), triggers: (Array.isArray(x.triggers) ? x.triggers : []).map((y) => t(y, 200)).filter(Boolean).slice(0, 4) }; }
+      const hz = {}; for (const h of HZ) { const x = o.horizons?.[h]; if (!x) continue; hz[h] = { vs_benchmark: en(x.vs_benchmark, ENUM.vs), drivers: t(x.drivers, 1400), decisions: rows(x.decisions, (d) => ({ date: String(d?.date || "").slice(0, 10), event: t(d?.event, 200) }), "event").slice(0, 6) }; }
       const plans = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.plans?.[k]; if (x) plans[k] = { size_pct: n(x.size_pct), entry: t(x.entry, 240), hedge: t(x.hedge, 240), review: t(x.review, 200) }; }
       w = { scenarios: scen, horizons: hz, plans, change_mind: (Array.isArray(o.change_mind) ? o.change_mind : []).map((x) => t(x, 300)).filter(Boolean).slice(0, 6), reads: reads(o.reads) };
     } else if (part === "context") {
@@ -10196,36 +10291,20 @@ Reply with ONLY this JSON:
         reg_overall: o.reg_overall ? { stance: en(o.reg_overall.stance, ENUM.stance), summary: t(o.reg_overall.summary, 700), biggest: t(o.reg_overall.biggest, 300) } : null,
         regulation: rows(o.regulation, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), materiality: en(x?.materiality, ENUM.lvl), why: t(x?.why, 400) }), "id"),
         outside: rows(o.outside, (x) => ({ id: rowId(x), matters: en(x?.matters, ENUM.lvl), why: t(x?.why, 400) }), "id"), reads: reads(o.reads) };
-    } else if (part === "lean") {
-      w = { headline: t(o.headline, 300), calls: Object.fromEntries(HZ.map((h) => { const x = o.calls?.[h]; return [h, x ? { call: en(x.call, CALLV), why: t(x.why, 600), for: (x.for || []).map((y) => t(y, 240)).filter(Boolean).slice(0, 4), against: (x.against || []).map((y) => t(y, 240)).filter(Boolean).slice(0, 4) } : null]; }).filter(([, v]) => v)) };
     }
     return { w, dropped: C.dropped() };
   }
-  /**
-   * Checks across the parts: scenario probabilities add to 100, the 12M call agrees with the scenario-weighted move,
-   * each window's range holds its call's direction, ranges widen with time. Returns {expected, issues: [text]}.
-   */
+  /** Checks on the write-up's calls part: the scenario probabilities add to 100 (the six-level calls have the outlook's own checks). */
   function checks(a) {
-    const issues = [], S = a.scenarios || {}, H = a.horizons || {};
+    const issues = [], S = a.scenarios || {};
     const ps = ["bull", "base", "bear"].map((k) => n(S[k]?.probability)), sum = ps.reduce((x, y) => x + (isNum(y) ? y : 0), 0);
     if (ps.every(isNum) && Math.abs(sum - 100) > 2) issues.push(`the scenario probabilities add to ${sum}%, not 100%`);
-    const mid = (r) => (r ? (r[0] + r[1]) / 2 : NaN);
-    const exp = ps.every(isNum) && sum > 0 ? ["bull", "base", "bear"].reduce((x, k, i) => x + (ps[i] / sum) * mid(S[k]?.move), 0) : NaN;
-    const c12 = P.callNum(H["12M"]?.call);
-    if (isNum(exp) && isNum(c12) && ((c12 > 0 && exp < -1) || (c12 < 0 && exp > 1))) issues.push(`the 12M call (${H["12M"].call}) disagrees with the scenarios' expected ${sp(exp)}`);
-    for (const h of HZ) { const x = H[h]; if (!x?.expected_move) continue; const c = P.callNum(x.call), m = mid(x.expected_move);
-      if (isNum(c) && c > 0 && x.expected_move[1] <= 0) issues.push(`${h}: a bullish call with a range entirely below zero`);
-      if (isNum(c) && c < 0 && x.expected_move[0] >= 0) issues.push(`${h}: a bearish call with a range entirely above zero`);
-      if (isNum(x.probability_up) && isNum(c) && ((c > 0 && x.probability_up < 45) || (c < 0 && x.probability_up > 55))) issues.push(`${h}: ${x.probability_up}% chance up doesn't match a ${x.call} call`);
-      void m; }
-    const width = HZ.map((h) => (H[h]?.expected_move ? H[h].expected_move[1] - H[h].expected_move[0] : NaN)).filter(isNum);
-    for (let i = 1; i < width.length; i++) if (width[i] < width[i - 1] * 0.8) { issues.push("the ranges narrow as the window gets longer"); break; }
-    return { expected: exp, issues };
+    return { issues };
   }
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, leanPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  const FundAn = { FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -15237,33 +15316,72 @@ Reply with ONLY this JSON:
     const rec = fd.full !== undefined ? fd.full : await idbGet("fundFull:" + fd.sym).catch(() => null);
     const fp = Portfolio.fingerprint(fd), why = Portfolio.changes(rec?.fp, fp);
     fd.full = rec || null; fd.fullWhy = why;
-    if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) { if (S.fund === fd) renderFund(); return; }
+    if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) {
+      if (S.fund === fd) renderFund();
+      // A write-up from before the calls were made the company page's way: just make the calls (one call).
+      if (rec && !rec.outlook && S.sample && fd.look?.n && S.fund === fd) fundLean(fd);
+      return;
+    }
     const ctl = new AbortController(); fd.ctl = ctl; fd.writing = true; fd.fullErr = null; fd.partial = {}; fd.writeStart = Date.now(); renderFund();
     const dz = FundAn.dossier(fd, today()), raw = {}; let last = 0;
     const show = () => { if (S.fund !== fd || Date.now() - last < 800) return; last = Date.now(); renderFund(); };
     const one = async (part) => {
-      const prompt = part === "lean" ? FundAn.leanPrompt(fd, dz, today()) : FundAn.partPrompt(fd, dz, part, today());
-      const out = await sampleJson(prompt, { modelTier: "complex", signal: ctl.signal, cache: false,
+      const out = await sampleJson(FundAn.partPrompt(fd, dz, part, today()), { modelTier: "complex", signal: ctl.signal, cache: false,
         onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { fd.partial[part] = FundAn.cleanPart(part, v, dz.idx).w; show(); } } });
       raw[part] = FundAn.cleanPart(part, out, dz.idx); fd.partial[part] = raw[part].w; show(); return raw[part];
     };
     try {
-      const parts = [...FundAn.PARTS, "lean"], res = await Promise.allSettled(parts.map(one));
+      const parts = FundAn.PARTS, res = await Promise.allSettled(parts.map(one));
       if (res.every((r) => r.status === "rejected")) throw res[0].reason;
       const P0 = Object.fromEntries(parts.map((p, i) => [p, res[i].status === "fulfilled" ? res[i].value.w : rec?.parts?.[p] || null]));
       const failed = parts.filter((p, i) => res[i].status === "rejected");
       const r = jsonSafe({ sym: fd.sym, at: new Date().toISOString(), fp, parts: P0, idx: dz.idx, dropped: parts.reduce((a, p) => a + (raw[p]?.dropped || 0), 0),
-        checks: FundAn.checks(P0.calls || {}), secs: Math.round((Date.now() - fd.writeStart) / 1000), reasons: why, failed });
+        checks: FundAn.checks(P0.calls || {}), secs: Math.round((Date.now() - fd.writeStart) / 1000), reasons: why, failed, outlook: rec?.outlook || null, outlook_history: rec?.outlook_history || [] });
       await idbPut("fundFull:" + fd.sym, r).catch(() => {});
       fd.full = r; fd.fullWhy = [];
-      // The track record: each window's call, logged with today's price, scored once the window has passed.
-      const px = fd.ser?.closes?.[fd.ser.closes.length - 1];
-      if (P0.calls?.horizons && isNum(px)) { fd.trackLog = FundAn.trackLog(fd.trackLog || [], P0.calls.horizons, today(), px);
-        await idbPut("fundCalls:" + fd.sym, fd.trackLog).catch(() => {}); fd.track = FundAn.trackEval(fd.trackLog, fd.ser, today()); }
       if (failed.length) fd.fullErr = `${failed.join(", ")} didn't finish (${sampleErr(res[parts.indexOf(failed[0])].reason)}); Rewrite to try again`;
     } catch (e) { fd.fullErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { fd.writing = false; fd.partial = null; fd.ctl = null; }
     if (S.fund === fd) renderFund();
+    // Then the 1M-12M calls, made the company page's way on the finished write-up.
+    if (S.fund === fd && fd.full && !fd.fullErr?.startsWith("Stopped")) await fundLean(fd);
+  }
+  /** What the calls were made on: code's starting point for each window (its industries' outlooks, weighted). */
+  const fundIndSnap = (fd) => { const pr = FundAn.prior(fd); return pr ? Object.fromEntries(Object.entries(pr).map(([h, x]) => [h, x.call])) : null; };
+  /** Why the calls are out of step: code's starting point has moved in some window since they were made. */
+  function fundStale(fd) {
+    const o = fd.full?.outlook, now = fundIndSnap(fd); if (!o?.ind_snap || !now) return [];
+    return Outlook.HZ.filter((h) => o.ind_snap[h] && now[h] && o.ind_snap[h] !== now[h]).map((h) => `the ${h} starting point from its industries moved from ${o.ind_snap[h]} to ${now[h]}`);
+  }
+  /**
+   * The fund's 1M-12M calls (six levels, its own direction, with the reasons): the company page's outlook, on the fund's
+   * finished write-up, its industries' outlooks and its numbers; one small repair call only if code finds a contradiction.
+   */
+  async function fundLean(fd) {
+    if (fd.leanBusy || !S.sample || fd.stage !== "ready") return;
+    fd.leanBusy = true; fd.leanErr = null; fd.leanStage = "Weighing every component and making the four calls"; if (S.fund === fd) renderFund();
+    const ctl = new AbortController(); fd.leanCtl = ctl;
+    const call = (p) => sampleJson(p, { modelTier: "complex", cache: false, signal: ctl.signal });
+    try {
+      const dz = FundAn.dossier(fd, today());
+      let o = FundAn.cleanOutlook(await call(FundAn.outlookPrompt(fd, dz, today(), fd.full?.parts)), today());
+      if (!o) throw new Error("no usable calls came back; try again");
+      if (!o.consistent) {
+        fd.leanStage = "Code found contradictions: one small fix"; if (S.fund === fd) renderFund();
+        const o2 = FundAn.cleanOutlook(await call(Outlook.repairPrompt(`${fd.facts?.name || fd.sym} (${fd.sym})`, today(), o, o.checks, FundAn.FUND_INPUTS)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }), today());
+        if (o2) { o2.repaired = o.checks; o = o2; }
+      }
+      const ser = fd.ser; if (ser?.closes?.length) o.mark = { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] };
+      const pr = FundAn.prior(fd); o.prior = pr ? jsonSafe(pr) : null; o.ind_snap = fundIndSnap(fd); o.saved_at = new Date().toISOString();
+      const cur = (await idbGet("fundFull:" + fd.sym).catch(() => null)) || fd.full || { sym: fd.sym };
+      const h0 = Outlook.histOf(cur.outlook), hist = [...(h0 ? [h0] : []), ...(cur.outlook_history || [])].slice(0, 12);
+      fd.full = jsonSafe({ ...cur, outlook: o, outlook_history: hist }); await idbPut("fundFull:" + fd.sym, fd.full).catch(() => {});
+      // The track record: each window's call, logged with the day's price and a normal move, scored once the window has passed.
+      const W = FundAn.windows(fd, today()), px = o.mark?.px;
+      if (isNum(px)) { fd.trackLog = FundAn.trackLog(fd.trackLog || [], o.calls, today(), px, Object.fromEntries(W.map((w) => [w.h, w.sigma])));
+        await idbPut("fundCalls:" + fd.sym, fd.trackLog).catch(() => {}); fd.track = FundAn.trackEval(fd.trackLog, fd.ser, today()); }
+    } catch (e) { fd.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" || ctl.signal.aborted ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
+    finally { fd.leanBusy = false; fd.leanStage = null; fd.leanCtl = null; if (S.fund === fd) renderFund(); }
   }
   async function openFund(q, { refresh = false } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
@@ -15322,7 +15440,7 @@ Reply with ONLY this JSON:
   function fundView(fd) {
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
-    const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, lean = P.lean || {};
+    const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, OL = fd.full?.outlook || FundAn.provisional(FundAn.prior(fd), today());
     const R = (k, part) => fundReadBox((P[part] || {}).reads?.[k], idx);
     const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
     const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: four analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
@@ -15333,11 +15451,12 @@ Reply with ONLY this JSON:
     const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? ` Out of date: ${esc(fd.fullWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
     const btn = !fd.writing && S.sample && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
     // ---- snapshot: the hero, our prediction
-    const lc12 = (h) => lean.calls?.[h]?.call || calls.horizons?.[h]?.call || L?.calls?.[h]?.lean || L?.calls?.[h]?.call || "";
+    const lc12 = (h) => OL?.calls?.[h]?.call || "";
+    const callStrip = (pfx) => `<div class="strip">${Outlook.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}${pfx}</span>${x ? `<span class="pill ${Outlook.cls(x)} lean-pill">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</div>`; }).join("")}</div>`;
     const pred = core.headline || core.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${core.verdict?.call ? `<span class="pill ${VC[core.verdict.call]}">${esc(core.verdict.call)}</span>` : ""}${core.vs_benchmark?.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)} vs ${esc(fd.bench.symbol)}</span>` : ""}${core.confidence ? `<span class="small muted">${esc(core.confidence)} confidence</span>` : ""}</div>
       ${core.headline ? `<b class="headline">${fundCites(core.headline, idx)}</b>` : ""}${core.verdict?.summary ? `<div class="small">${fundCites(core.verdict.summary, idx)}</div>` : ""}
-      <div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h}</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`
-      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div><div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h} (industries)</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`;
+      ${callStrip(OL?.provisional ? " (provisional)" : "")}<div class="small muted">The full analysis is next: <a href="#fund-lean">where it's going and why</a>, then <a href="#fund-thesis">the thesis</a>.</div></div>`
+      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div>${callStrip(" (provisional)")}</div>`;
     const snap = `<section class="panel" id="fund-snap"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(f.type)}${f.family ? " · " + esc(f.family) : ""}${f.category ? " · " + esc(f.category) : ""}</span><h1 style="font-size:26px">${esc(f.name)} <span class="mono muted" style="font-size:.6em">${esc(f.symbol)}</span></h1>
       ${fd.lv ? `<div class="mono"><span style="font-size:22px;font-weight:600">${fix(fd.lv.px, 2)}</span> <span class="small muted">${esc(fd.ser.dates[fd.ser.dates.length - 1])}</span></div>` : ""}</div>
       <div class="kpis">${[kpi("Covered by your analysis", pct(c.covered, false, 0), `${pct(c.covered_full, false, 0)} full${B.quant > 0.0005 ? `, ${pct(B.quant, false, 0)} code-only` : ""}`),
@@ -15347,30 +15466,40 @@ Reply with ONLY this JSON:
       ${pred}${writing}${fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span></div>` : ""}${fill}${leftNote}${skipNote}
       <div class="actions" style="align-items:center"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}" ${busy() ? "disabled" : ""}>Fetch again</button>${btn}${status}</div>
       <div class="small muted">Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}; prices from FMP. Fetched ${esc(ago(fd.raw.fetched_at))}.</div></section>`;
-    // ---- where it's going: the outlook, against the industries' weighted calls
-    const leanSec = sec("fund-lean", "Where it's going", "the fund strategist's outlook, next to its industries' calls weighted by the fund", `${lean.headline ? `<p class="headline" style="margin:0">${fundCites(lean.headline, idx)}</p>` : ""}
-      <div class="hz-grid hz2">${Portfolio.HZ.map((h) => { const x = lean.calls?.[h], w = L?.calls?.[h];
-        return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x?.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${w ? `<span class="small muted">industries: ${esc(w.lean || w.call || "—")}${isNum(w.expected) ? `, ${pts(w.expected)}` : ""}</span>` : ""}</div>
-          ${x?.why ? `<p class="small" style="margin:0">${fundCites(x.why, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`}
-          ${x?.for?.length ? `<div class="small"><b class="up">For:</b><ul class="dlist small">${x.for.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}
-          ${x?.against?.length ? `<div class="small"><b class="down">Against:</b><ul class="dlist small">${x.against.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("")}</div>`);
+    // ---- where it's going: the company page's outlook card, on the fund
+    const W5 = (() => { try { return FundAn.windows(fd, today()); } catch { return []; } })(), PR = OL?.prior || null, PRnow = FundAn.prior(fd);
+    const leanNums = (h) => { const w = W5.find((y) => y.h === h), sp = (PR || PRnow)?.[h], mine = OL?.calls?.[h]?.call, ic = L?.calls?.[h];
+      const iA = Outlook.LEVELS.indexOf(sp?.call), iB = Outlook.LEVELS.indexOf(mine), moved = iA >= 0 && iB >= 0 ? iB - iA : 0;
+      return `<div class="lean-nums small">
+        ${sp ? `<div><span class="muted">Its industries, weighted (code's starting point${PR ? "" : ", today"}):</span> <span class="${Outlook.cls(sp.call)}-t">${esc(Outlook.label(sp.call))}</span>${mine && PR && !OL.provisional ? (moved ? ` · <b>moved ${Math.abs(moved)} notch${Math.abs(moved) === 1 ? "" : "es"} ${moved > 0 ? "more bullish" : "more bearish"}</b>` : " · kept") : ""}</div>` : ""}
+        ${sp?.parts?.length > 1 ? `<div class="muted">${sp.parts.slice(1).map((p) => `${esc(p.label)} ${p.adj > 0 ? "+" : ""}${p.adj}`).join(" · ")}</div>` : ""}
+        ${ic ? `<div><span class="muted">Share of its covered weight:</span> ${pct(ic.dist.up / (ic.dist.up + ic.dist.flat + ic.dist.down || 1), false, 0)} bullish · ${pct(ic.dist.down / (ic.dist.up + ic.dist.flat + ic.dist.down || 1), false, 0)} bearish</div>` : ""}
+        ${w ? `<div><span class="muted">Last ${esc(h)}:</span> <b class="${w.trailing > 0 ? "pos-t" : w.trailing < 0 ? "neg-t" : ""}">${sgP(w.trailing)}</b>${w.vs_bench !== null ? ` (${sgP(w.vs_bench)} vs ${esc(fd.bench.symbol)})` : ""} · a normal ${esc(h)} move is ±${w.sigma ?? "—"}%</div>` : ""}
+        ${isNum(num(w?.base_up)) ? `<div><span class="muted">Its own history:</span> higher ${w.base_up}% of the time over ${esc(h)}</div>` : ""}
+        ${w ? `<div><span class="muted">In this window:</span> ${w.reporting.length ? w.reporting.slice(0, 4).map((r) => `${esc(r.symbol)} reports ${esc(fmtDate(r.date))} (${r.weight}%)`).join(" · ") : "no big holding reports"}</div>` : ""}</div>`; };
+    let since = "";
+    if (OL?.mark?.px > 0 && fd.ser?.closes?.length && fd.ser.dates[fd.ser.dates.length - 1] > (OL.mark.date || "")) { const ri = Math.round((fd.ser.closes[fd.ser.closes.length - 1] / OL.mark.px - 1) * 1000) / 10; since = `<div class="small">Since these calls (${esc(fmtDate(OL.date))}): ${esc(fd.sym)} is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`; }
+    const stl = fundStale(fd), canLean = S.sample && !fd.writing && !fd.leanBusy && L?.n;
+    const leanBtn = `<button class="${!fd.full?.outlook ? "primary " : ""}sm" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"} title="One Claude call on the fund's write-up, its industries' outlooks and its numbers">${fd.leanBusy ? "Making the calls…" : fd.full?.outlook ? "Redo the calls" : "Make the calls"}</button>`;
+    const leanHead = `<div class="callout-head"><span class="eyebrow">Where ${esc(fd.sym)} is going</span>${OL?.date && !OL.provisional ? `<span class="small muted">as of ${esc(fmtDate(OL.date))}</span>` : ""}<span style="margin-left:auto">${leanBtn}</span></div>`;
+    const leanStatus = (fd.leanBusy ? leanSteps(fd.leanStage) : fd.leanErr ? `<div class="notice err small">${esc(fd.leanErr)}</div>` : "")
+      + (stl.length && !fd.leanBusy && fd.full?.outlook ? `<div class="notice warn small stale-note"><span><b>Out of step with its industries:</b> since these calls, ${esc(stl.join("; "))}.</span><button class="sm primary" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"}>Redo the calls</button></div>` : "");
+    const leanSec = OL ? sec("fund-lean", `Where ${fd.sym} is going`, "", callsCard(OL, { head: leanHead, status: leanStatus, nums: leanNums, since, history: fd.full?.outlook_history || [], verdict: "the fund write-up's verdict", verdictCall: core.verdict?.call || "" }))
+      : sec("fund-lean", `Where ${fd.sym} is going`, "", `<div class="callout lean-card">${leanHead}${leanStatus}<div class="small muted">${fd.writing ? "The calls are made right after the analysis." : "No calls yet: none of its industries has an outlook to start from."}</div></div>`);
     // ---- the analysis: thesis, calls, scenarios
-    const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
-    const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], w = L?.calls?.[h];
-      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
-        <div class="hz-num"><span class="v">${esc(rng(x.expected_move))}</span><span class="small muted">expected move${isNum(x.probability_up) ? ` · ${x.probability_up}% chance it's higher` : ""}</span></div>
-        ${w ? `<div class="small"><span class="muted">Industries, weighted:</span> ${esc(w.call || "—")}${isNum(w.expected) ? ` · ${pts(w.expected)}` : ""}${isNum(fd.ext?.base?.[h]?.v) ? ` · base rate ${pct(fd.ext.base[h].v, false, 0)} up` : ""}</div>` : ""}
+    const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], oc = OL?.calls?.[h]?.call, sp = (PR || PRnow)?.[h];
+      return `<div class="box hz"><div class="dim-head"><b>${esc(Outlook.HZ_LABEL[h])}</b>${oc ? `<span class="pill ${Outlook.cls(oc)}">${Outlook.SIGN[oc] > 0 ? "▲" : "▼"} ${esc(Outlook.label(oc))}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
+        ${sp ? `<div class="small"><span class="muted">Its industries, weighted:</span> <span class="${Outlook.cls(sp.call)}-t">${esc(Outlook.label(sp.call))}</span>${isNum(fd.ext?.base?.[h]?.v) ? ` · their past setups like today were up ${pct(fd.ext.base[h].v, false, 0)} of the time` : ""}</div>` : ""}
         ${x.drivers ? `<p class="small" style="margin:0">${fundCites(x.drivers, idx)}</p>` : ""}
         ${x.decisions?.length ? `<div class="small"><span class="eyebrow">In the window</span><ul class="dlist small">${x.decisions.map((d) => `<li><span class="mono">${esc(d.date)}</span> ${fundCites(d.event, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("");
     const SC = { bull: "pos", base: "neu", bear: "neg" };
     const scen = calls.scenarios && Object.keys(calls.scenarios).length ? `<h3>12-month scenarios</h3><div class="hcards">${["bull", "base", "bear"].filter((k) => calls.scenarios[k]).map((k) => { const x = calls.scenarios[k];
-      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k}</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b><span class="mono small">${esc(rng(x.move))}</span></div><div class="small">${fundCites(x.narrative, idx)}</div></div>`; }).join("")}</div>
-      ${isNum(fd.full?.checks?.expected) ? `<div class="small muted">Probability-weighted: ${pts(fd.full.checks.expected)} over 12 months (the industries' own, weighted: ${pts(L?.exp12?.v)}).</div>` : ""}` : "";
-    const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the calls: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
+      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k} case</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b></div><div class="meter"><i style="width:${isNum(x.probability) ? x.probability : 0}%;background:${k === "bull" ? "var(--pos)" : k === "bear" ? "var(--neg)" : "var(--accent)"}"></i></div><div class="small">${fundCites(x.narrative, idx)}</div>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${x.triggers.map((y) => fundCites(y, idx)).join("; ")}</div>` : ""}</div>`; }).join("")}</div>` : "";
+    const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the scenarios: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
     const thesis = core.thesis || hz ? `${core.thesis ? core.thesis.split(/\n+/).map((pp) => `<p class="prose">${fundCites(pp, idx)}</p>`).join("") : ""}
       ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
       ${core.strategy ? `<div class="small"><b>How it's run:</b> ${fundCites(core.strategy, idx)}</div>` : ""}
-      ${hz ? `<h3>1M–12M calls</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
+      ${hz ? `<h3>What drives each window</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
     const thesisSec = sec("fund-thesis", "Analysis", "four analysts at once on the fund's dossier; every claim cites it", thesis);
     // ---- fit and plans
     const fitSec = sec("fund-fit", "Fit for each investor type", "the weighted score, moved at most 5 points for judgment", `<div class="dims">${["income", "conservative", "growth", "aggressive"].map((t) => {
@@ -15450,10 +15579,11 @@ Reply with ONLY this JSON:
     let lookSec = "";
     if (L?.n) {
       const sc = (t) => { const x = L.scores[t]; const g = gradeOf(x.v); return kpi(`${t[0].toUpperCase() + t.slice(1)} score`, isNum(x.v) ? `${Math.round(x.v)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—", t === L.best ? "best fit" : ""); };
-      const hzc = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, main = x.lean || x.call;
-        return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${CALLC(main)}">${esc(main || "—")}</span></div>${isNum(x.expected) ? `<div class="hz-num"><span class="v">${pts(x.expected)}</span><span class="small muted">middle of the strategists' ranges${isNum(x.p_up) ? `, ${Math.round(x.p_up)}% chance up` : ""}</span></div>` : ""}
+      const hzc = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, sp = PRnow?.[h];
+        return `<div class="box hz"><div class="dim-head"><b>${esc(Outlook.HZ_LABEL[h])}</b>${sp ? `<span class="pill ${Outlook.cls(sp.call)}">${Outlook.SIGN[sp.call] > 0 ? "▲" : "▼"} ${esc(Outlook.label(sp.call))}</span>` : ""}</div>
+          <div class="small muted">its industries' outlooks, weighted by the fund</div>
           <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--sunk)"><i style="width:${(100 * x.dist.up / tot).toFixed(1)}%;background:var(--pos)"></i><i style="width:${(100 * x.dist.flat / tot).toFixed(1)}%;background:var(--bench)"></i><i style="width:${(100 * x.dist.down / tot).toFixed(1)}%;background:var(--neg)"></i></div>
-          <div class="small muted">${pct(x.dist.up / tot, false, 0)} up · ${pct(x.dist.flat / tot, false, 0)} neutral · ${pct(x.dist.down / tot, false, 0)} down</div></div>`; }).join("");
+          <div class="small muted">${pct(x.dist.up / tot, false, 0)} of the covered weight bullish · ${pct(x.dist.down / tot, false, 0)} bearish</div></div>`; }).join("");
       const ctr = (list) => list.map((x) => `<li><b>${esc(x.industry)}</b> <span class="muted">${pct(x.weight, false, 1)} × ${pts(x.expected)}</span> = <b class="${x.pts >= 0 ? "up" : "down"}">${pts(x.pts, 2)}</b>${x.kind === "quant" ? ` <span class="small muted">(code-only)</span>` : ""}</li>`).join("");
       const plus = L.contrib.slice(0, 5).filter((x) => x.pts > 0), minus = L.contrib.slice(-5).reverse().filter((x) => x.pts < 0);
       lookSec = sec("fund-look", "Calls and scores through its industries", `${L.n} industr${L.n === 1 ? "y" : "ies"} · ${pct(L.on, false, 0)} of the fund`, `${R("look", "context")}
@@ -15512,10 +15642,10 @@ Reply with ONLY this JSON:
       ${calls.plans && Object.keys(calls.plans).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Investor</th><th class="n">Size</th><th>Entry</th><th>Hedge</th><th>Review</th></tr></thead><tbody>${["income", "conservative", "growth", "aggressive"].filter((k) => calls.plans[k]).map((k) => { const x = calls.plans[k];
         return `<tr><td><b>${k[0].toUpperCase() + k.slice(1)}</b></td><td class="n">${isNum(x.size_pct) ? x.size_pct + "%" : "—"}</td><td class="wr small">${fundCites(x.entry, idx)}</td><td class="wr small">${fundCites(x.hedge, idx)}</td><td class="wr small">${fundCites(x.review, idx)}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="small muted">${fd.writing ? "The plans are being written…" : "The plans come with the analysis."}</div>`}`) : "";
     // ---- track record
-    const TR = fd.track, trk = sec("fund-track", "Track record", "this page's past 1M-12M calls on the fund, scored against its price", TR?.rows?.length ? `${R("track", "calls")}<div class="kpis">${[kpi("Scored calls", String(TR.done), `${TR.rows.length - TR.done} still open`), kpi("Direction right", pct(TR.hit, false, 0)), kpi("Inside the range", pct(TR.in_range, false, 0))].join("")}</div>
-      <div class="tbl-wrap"><table><thead><tr><th>Made</th><th>Window</th><th>Call</th><th class="n">Range</th><th class="n">Move so far</th><th>Result</th></tr></thead><tbody>${TR.rows.slice(0, 24).map((r) => `<tr><td class="mono">${esc(r.date)}</td><td>${r.h} <span class="small muted">to ${esc(r.end)}</span></td><td><span class="pill ${CALLC(r.call)}">${esc(r.call)}</span></td><td class="n">${isNum(num(r.lo)) ? `${r.lo > 0 ? "+" : ""}${r.lo}% to ${r.hi > 0 ? "+" : ""}${r.hi}%` : "—"}</td>
-        <td class="n ${cls(num(r.ret))}">${pts(r.ret)}</td><td>${r.done ? `${r.hit ? `<span class="pill pos">right way</span>` : `<span class="pill neg">wrong way</span>`}${r.in_range === true ? ` <span class="pill pos">in range</span>` : r.in_range === false ? ` <span class="pill warn">outside range</span>` : ""}` : `<span class="small muted">open</span>`}</td></tr>`).join("")}</tbody></table></div>`
-      : `<div class="small muted">No calls logged yet. Each time the analysis is written, its 1M-12M calls are logged with the day's price and scored once each window has passed.</div>`);
+    const TR = fd.track, trk = sec("fund-track", "Track record", "this page's past 1M-12M calls on the fund, scored against its price", TR?.rows?.length ? `${R("track", "calls")}<div class="kpis">${[kpi("Scored calls", String(TR.done), `${TR.rows.length - TR.done} still open`), kpi("Right direction", pct(TR.hit, false, 0)), kpi("Strength held", pct(TR.strength, false, 0), "slightly: inside a normal move · plain: half a normal move or more · strongly: a full one")].join("")}</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Made</th><th>Window</th><th>Call</th><th class="n">Normal move</th><th class="n">Move so far</th><th>Result</th></tr></thead><tbody>${TR.rows.slice(0, 24).map((r) => `<tr><td class="mono">${esc(r.date)}</td><td>${r.h} <span class="small muted">to ${esc(r.end)}</span></td><td><span class="pill ${Outlook.cls(r.call) || CALLC(r.call)}">${esc(Outlook.label(r.call) || r.call)}</span></td><td class="n">${isNum(num(r.sigma)) ? "±" + r.sigma + "%" : "—"}</td>
+        <td class="n ${cls(num(r.ret))}">${pts(r.ret)}</td><td>${r.done ? `${r.hit ? `<span class="pill pos">right way</span>` : `<span class="pill neg">wrong way</span>`}${r.strength === true ? ` <span class="pill pos">strength held</span>` : r.strength === false ? ` <span class="pill warn">strength off</span>` : ""}` : `<span class="small muted">open</span>`}</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="small muted">No calls logged yet. Each time the calls are made, they're logged with the day's price and a normal move for each window, and scored once the window has passed.</div>`);
     // ---- timeframe patterns: the company page's panel, on the fund's prices
     let tech = "";
     if (fd.tech3) { const save = S.coTf; S.coTf = S.fundTf || "D"; try { tech = coTech({ tech: fd.tech3, pm: fd.pm, sym: fd.sym }).replace('id="co-tech"', 'id="fund-tech"').replace(/data-co-tf=/g, "data-fund-tf="); } catch { tech = ""; } S.coTf = save;
@@ -16867,7 +16997,8 @@ Reply with ONLY this JSON:
     if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundWrite(S.fund, { force: true }); return; }
     if (t.dataset.fundRet) { S.fundRet = t.dataset.fundRet; renderFund(); return; }
     if (t.dataset.fundTf) { S.fundTf = t.dataset.fundTf; renderFund(); return; }
-    if (t.dataset.fundStop) { S.fund?.ctl?.abort(); return; }
+    if (t.dataset.fundStop) { S.fund?.ctl?.abort(); S.fund?.leanCtl?.abort(); return; }
+    if (t.dataset.fundLean) { if (S.fund?.sym === t.dataset.fundLean) fundLean(S.fund); return; }
     if (t.dataset.fundFill) { if (S.fund?.sym === t.dataset.fundFill) fillFund(S.fund, { limit: 20, minWeight: 0 }); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }

@@ -22,19 +22,16 @@ const fd = { sym: "FCNTX", facts: P.facts("FCNTX", [{ name: "Fidelity Contrafund
 const dz = A.dossier(fd, "2026-11-09");
 for (const id of ["F1", "I1", "H1", "P1", "P2", "S1", "MF1", "V1", "V6"]) assert(dz.idx[id], `dossier has ${id}`);
 for (const part of A.PARTS) { const pr = A.partPrompt(fd, dz, part, "2026-11-09"); assert(pr.length < 70000, `${part} prompt ${pr.length}`); assert(pr.includes("Reply with ONLY this JSON")); }
-assert(A.leanPrompt(fd, dz, "2026-11-09").includes('"12M"'));
 // cleaning
 const core = A.cleanPart("core", { headline: "Chips [I1] and [ZZ9]", verdict: { call: "Attractive" }, fit: { growth: { fit: "Strong", adjust: 12 } }, risks: [{ risk: "Taiwan [C1]", likelihood: "High", ids: ["C1", "Q1"] }], reads: { holdings: "Top 10 [H1]" } }, dz.idx);
 assert.strictEqual(core.w.headline, "Chips [I1] and"); assert.strictEqual(core.w.verdict.call, "attractive"); assert.strictEqual(core.w.fit.growth.adjust, 5); assert.deepStrictEqual(core.w.risks[0].ids, ["C1"]); assert.strictEqual(core.dropped, 2);
-const calls = A.cleanPart("calls", { scenarios: { bull: { probability: 30, move: [20, 10] }, base: { probability: 50, move: [0, 4] }, bear: { probability: 20, move: [-25, -15] } },
-  horizons: { "1M": { call: "Slightly Bullish", expected_move: [-2, 4], probability_up: 56 }, "12M": { call: "bearish", expected_move: [1, 9], probability_up: 70 } } }, dz.idx);
-assert.deepStrictEqual(calls.w.scenarios.bull.move, [10, 20], "ranges are ordered low to high");
-const ck = A.checks(calls.w);
-assert(ck.issues.some((x) => /12M call/.test(x)) && ck.issues.some((x) => /bearish call with a range entirely above zero/.test(x)), ck.issues.join("; "));
+const calls = A.cleanPart("calls", { scenarios: { bull: { probability: 30, narrative: "x", triggers: ["a"], move: [20, 10] }, base: { probability: 50 }, bear: { probability: 30 } },
+  horizons: { "1M": { call: "Slightly Bullish", expected_move: [-2, 4], probability_up: 56, drivers: "d [F4]" } } }, dz.idx);
+assert(!("move" in calls.w.scenarios.bull) && !("expected_move" in calls.w.horizons["1M"]) && !("call" in calls.w.horizons["1M"]), "no ranges and no calls in the write-up's calls part");
+assert.deepStrictEqual(A.checks(calls.w).issues, ["the scenario probabilities add to 110%, not 100%"]);
 const ctx = A.cleanPart("context", { industries: [{ id: "I1", effect: "helps", why: "x" }, { id: "I999", effect: "hurts" }], macro: { regime: "Headwind", factors: [{ id: "MF1", effect: "headwind" }] } }, dz.idx);
 assert.strictEqual(ctx.w.industries.length, 1); assert.strictEqual(ctx.w.macro.regime, "headwind"); assert.strictEqual(ctx.w.macro.factors[0].id, "MF1");
-const lean = A.cleanPart("lean", { headline: "Up [F4]", calls: { "1M": { call: "neutral", for: ["a [I1]"], against: ["b"] } } }, dz.idx);
-assert.strictEqual(lean.w.calls["1M"].call, "neutral");
+assert(!A.leanPrompt, "the old outlook prompt is gone");
 
 // Wall Street, sentiment, the track record
 const hh = [{ ticker: "AAA", weight: 0.6, px: 100 }, { ticker: "BBB", weight: 0.4, px: 50 }];
@@ -42,12 +39,25 @@ const stl = A.streetLook(hh, { AAA: { buy: 8, hold: 2, sell: 0, target: 120, con
 assert(Math.abs(stl.buy_share - (0.6 * 0.8 + 0.4 * 0.25)) < 1e-9 && Math.abs(stl.upside - (0.6 * 0.2 + 0.4 * -0.1)) < 1e-9);
 const sl = A.sentimentLook(hh, { AAA: [{ date: "2026-11-01", count: 10, normalized: 0.5 }, { date: "2026-08-20", count: 10, normalized: -0.5 }] }, "2026-11-09");
 assert(Math.abs(sl.s30 - 0.5) < 1e-9 && Math.abs(sl.s90 - 0) < 1e-9);
+// the outlook, like the company page's: six levels, the fund's sixteen components, code's starting point
+const pr = A.prior(fd);
+assert(pr && pr["12M"] && /^(slightly |strongly )?(bullish|bearish)$/.test(pr["12M"].call), JSON.stringify(pr && pr["12M"]));
+assert(pr["12M"].parts[0].label.includes("industries' outlooks"));
+const op = A.outlookPrompt({ ...fd, ser: { dates: ["2026-01-02", "2026-11-06"], closes: [100, 110] } }, dz, "2026-11-09", { core: { headline: "h", verdict: { call: "neutral", summary: "s" } } });
+assert(op.includes("Six levels, no neutral") && op.includes("CODE'S STARTING POINT") && op.includes('"industries | verdict | holdings'), "the company page's rules and the fund's components");
+const raw = { headline: "Up", evidence: A.FUND_INPUTS.map(([k], i) => ({ input: k, points: i % 3 ? "up" : "down", weight: 2, why: "w" })),
+  calls: { "1M": { call: "slightly bearish", why: "then it rebounds" }, "3M": { call: "bullish", why: "after earnings" }, "6M": { call: "bullish", why: "y" }, "12M": { call: "Strongly Bullish", why: "z" } }, verdict: { agrees: true, why: "v" } };
+const oc = A.cleanOutlook(raw, "2026-11-09");
+assert.strictEqual(oc.calls["12M"].call, "strongly bullish"); assert.strictEqual(oc.evidence.length, 16); assert(oc.tally.score > 0);
+assert(A.cleanOutlook({ calls: { "1M": { call: "neutral" } } }, "x") === null, "neutral isn't a level");
+assert.strictEqual(A.provisional(pr, "2026-11-09").calls["12M"].call, pr["12M"].call);
+// the track record, on six-level calls: direction, and strength against a normal move
 const ser = { dates: ["2026-01-02", "2026-02-01", "2026-04-02", "2026-11-06"], closes: [100, 104, 99, 110] };
-const lg = A.trackLog([], { "1M": { call: "slightly bullish", expected_move: [-2, 6] }, "3M": { call: "bearish", expected_move: [-8, -1] }, "12M": { call: "neutral" } }, "2026-01-02", 100);
+const lg = A.trackLog([], { "1M": { call: "slightly bullish" }, "3M": { call: "strongly bearish" }, "12M": { call: "bullish" } }, "2026-01-02", 100, { "1M": 5, "3M": 8, "12M": 18 });
 assert.strictEqual(lg.length, 3); assert.strictEqual(A.trackLog(lg, { "1M": { call: "bearish" } }, "2026-01-02", 100).length, 3, "a day's calls are logged once");
 const te = A.trackEval(lg, ser, "2026-11-09");
 const r1 = te.rows.find((r) => r.h === "1M"), r3 = te.rows.find((r) => r.h === "3M"), r12 = te.rows.find((r) => r.h === "12M");
-assert(r1.done && r1.hit === true && r1.in_range === true, "1M: +4% on a bullish call, inside -2..+6");
-assert(r3.done && r3.hit === true, "3M: -1% on a bearish call"); assert(!r12.done, "12M is still open");
-assert.strictEqual(te.done, 2); assert.strictEqual(te.hit, 1);
+assert(r1.done && r1.hit === true && r1.strength === true, "1M: +4% on slightly bullish, inside one sigma");
+assert(r3.done && r3.hit === true && r3.strength === false, "3M: -1% on strongly bearish: right way, not strong");
+assert(!r12.done, "12M is still open"); assert.strictEqual(te.done, 2); assert.strictEqual(te.hit, 1); assert.strictEqual(te.strength, 0.5);
 console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3), eff: +conc.effective_n.toFixed(1), cal: cal.length, prompts: A.PARTS.map((p) => A.partPrompt(fd, dz, p, "2026-11-09").length) }));
