@@ -122,7 +122,7 @@
     const eodBy = new Map((eodH || []).map((h) => [tick(h.ticker), h]));
     const find = lookup(cos);
     return base.filter((h) => isNum(h.weight) && h.weight > 0).map((h) => {
-      const kind = kindOf(h), out = { ticker: h.ticker, name: h.name, weight: h.weight, kind, industry: null, sector: null, slug: null, via: null, top50: false, rank: null };
+      const kind = kindOf(h), out = { ticker: h.ticker, name: h.name, weight: h.weight, px: isNum(h.value) && h.shares > 0 ? h.value / h.shares : NaN, kind, industry: null, sector: null, slug: null, via: null, top50: false, rank: null };
       if (kind !== "stock") return out;
       const r = find(h);
       if (r) return { ...out, industry: r.c.industry, sector: r.c.sector || null, slug: r.c.slug, via: r.via, top50: true, rank: r.c.rank ?? null, run_symbol: r.c.symbol };

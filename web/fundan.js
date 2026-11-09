@@ -29,7 +29,7 @@
     return mapped.filter((h) => h.kind === "stock").sort((a, b) => b.weight - a.weight).slice(0, k).map((h) => {
       const d = h.industry ? digests[lc(h.industry)] : null, sym = P.tick(h.run_symbol || h.ticker);
       const c = d?.cos?.find((x) => P.tick(x.symbol) === sym) || null;
-      return { ticker: h.ticker, name: h.name, weight: h.weight / tot, industry: h.industry, sector: h.sector, kind: d?.kind || null, inTop50: !!c, rank: c?.rank ?? null, ind_n: d?.cos?.length || null,
+      return { ticker: h.ticker, name: h.name, weight: h.weight / tot, px: h.px, industry: h.industry, sector: h.sector, kind: d?.kind || null, inTop50: !!c, rank: c?.rank ?? null, ind_n: d?.cos?.length || null,
         pe: c?.pe ?? NaN, r1y: c?.r1y ?? NaN, r3m: c?.r3m ?? NaN, div: c?.div ?? NaN, opm: c?.opm ?? NaN, g: c?.g ?? NaN, beta: c?.beta ?? NaN, next: c?.next || null, beats: c?.beats || null,
         call12: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "", exp12: d?.expected12 ?? null };
     });
@@ -67,6 +67,52 @@
       const k = e.date + "|" + P.titleKey(e.title); const x = ev.get(k) || { date: e.date, kind: e.section || "event", title: e.title, importance: e.importance, detail: e.detail, w: 0, industries: [] }; x.w += g.weight; x.industries.push(g.industry); ev.set(k, x); } }
     out.push(...[...ev.values()].filter((x) => x.w >= 0.01 || x.importance === "high"));
     return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.w - a.w)).slice(0, 40);
+  }
+  // ============================================================= Wall Street, news, technicals, history and the track record
+  /**
+   * Wall Street's view of the fund through its biggest holdings, weighted: the share of analysts at buy, and the upside
+   * to the consensus target from the price in the holdings file. street: {TICKER: {buy, hold, sell, consensus, target}}.
+   */
+  function streetLook(hold, street) {
+    let w = 0, buy = 0, wt = 0, up = 0, n0 = 0; const rows = [];
+    for (const h of hold) { const s = street[P.tick(h.ticker)]; if (!s) continue;
+      const tot = (s.buy || 0) + (s.hold || 0) + (s.sell || 0), b = tot > 0 ? s.buy / tot : NaN, u = isNum(n(s.target)) && h.px > 0 ? n(s.target) / h.px - 1 : NaN;
+      if (isNum(b)) { w += h.weight; buy += h.weight * b; n0++; } if (isNum(u)) { wt += h.weight; up += h.weight * u; }
+      rows.push({ ticker: h.ticker, name: h.name, weight: h.weight, consensus: s.consensus || "", buy: s.buy || 0, hold: s.hold || 0, sell: s.sell || 0, buy_share: b, target: n(s.target), px: h.px, upside: u }); }
+    return { n: n0, on: w, buy_share: w > 0 ? buy / w : NaN, upside: wt > 0 ? up / wt : NaN, upside_on: wt, rows };
+  }
+  /** News sentiment of the biggest holdings, weighted (EODHD's daily scores, -1 to +1). sent: {TICKER: [{date, count, normalized}]}. */
+  function sentimentLook(hold, sent, today) {
+    const day = (k) => new Date(Date.parse(today) - k * 864e5).toISOString().slice(0, 10);
+    const avg = (rows, from) => { const xs = (rows || []).filter((r) => r.date >= from && r.count > 0); const c = xs.reduce((a, r) => a + r.count, 0); return c ? { v: xs.reduce((a, r) => a + r.count * n(r.normalized), 0) / c, count: c } : null; };
+    const rows = []; let w30 = 0, s30 = 0, w90 = 0, s90 = 0;
+    for (const h of hold) { const r = sent[P.tick(h.ticker)]; if (!r?.length) continue; const a = avg(r, day(30)), b = avg(r, day(90));
+      if (a) { w30 += h.weight; s30 += h.weight * a.v; } if (b) { w90 += h.weight; s90 += h.weight * b.v; }
+      rows.push({ ticker: h.ticker, weight: h.weight, s30: a?.v ?? NaN, n30: a?.count || 0, s90: b?.v ?? NaN }); }
+    return { s30: w30 > 0 ? s30 / w30 : NaN, s90: w90 > 0 ? s90 / w90 : NaN, on: w30, rows: rows.sort((x, y) => y.weight - x.weight) };
+  }
+  /**
+   * The fund's 1M-12M calls, logged each time the analysis is written ({date, h, call, lo, hi, px}), scored once each
+   * window has passed: the direction (a neutral call is right when the move stays within ±2%) and whether the move
+   * landed in the range. Open calls are marked to market.
+   */
+  const HD = { "1M": 30, "3M": 91, "6M": 182, "12M": 365 };
+  function trackLog(log, calls, date, px) {
+    const out = [...(log || [])];
+    for (const h of HZ) { const x = calls?.[h]; if (!x?.call || !isNum(px)) continue; if (out.some((e) => e.date === date && e.h === h)) continue;
+      out.push({ date, h, call: x.call, lo: x.expected_move?.[0] ?? null, hi: x.expected_move?.[1] ?? null, p_up: x.probability_up ?? null, px }); }
+    return out.slice(-200);
+  }
+  function trackEval(log, ser, today) {
+    const d = ser?.dates || [], c = ser?.closes || []; if (!d.length) return { rows: [], done: 0, hit: NaN, in_range: NaN };
+    const at = (date) => { let i = -1; for (let k = 0; k < d.length && d[k] <= date; k++) i = k; return i >= 0 ? c[i] : NaN; };
+    const rows = (log || []).map((e) => { const end = new Date(Date.parse(e.date) + HD[e.h] * 864e5).toISOString().slice(0, 10), done = end <= today;
+      const p1 = done ? at(end) : c[c.length - 1], ret = e.px > 0 && p1 > 0 ? (p1 / e.px - 1) * 100 : NaN, cn = P.callNum(e.call);
+      const hit = !isNum(ret) || !isNum(cn) ? null : cn === 0 ? Math.abs(ret) <= 2 : Math.sign(ret) === Math.sign(cn);
+      const inR = isNum(ret) && isNum(n(e.lo)) && isNum(n(e.hi)) ? ret >= e.lo && ret <= e.hi : null;
+      return { ...e, end, done, ret, hit, in_range: inR }; }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : HZ.indexOf(a.h) - HZ.indexOf(b.h)));
+    const dn = rows.filter((r) => r.done && r.hit !== null), rg = dn.filter((r) => r.in_range !== null);
+    return { rows, done: dn.length, hit: dn.length ? dn.filter((r) => r.hit).length / dn.length : NaN, in_range: rg.length ? rg.filter((r) => r.in_range).length / rg.length : NaN };
   }
 
   // ============================================================= the dossier the four analysts and the outlook write from
@@ -109,6 +155,19 @@
     const e = [`## THE CALENDAR (next ~4 months)`];
     (fd.cal || []).slice(0, 25).forEach((x, i) => put(e, "E" + (i + 1), `${x.date} ${x.title}`, `${x.date} · ${x.title} (${x.kind}${x.importance ? ", " + x.importance : ""}): ${pc(x.w, 1)} of the fund${x.industries?.length ? ` (${[...new Set(x.industries)].slice(0, 4).join(", ")})` : ""}${x.detail ? `. ${trim(x.detail, 160)}` : ""}.`));
     B.cal = e.join("\n");
+    // T: technicals, the pattern match, past setups like today; N: Wall Street and news; D: distributions; K: the track record
+    const tl = [`## TECHNICALS, HISTORY, WALL STREET AND NEWS`];
+    const T = fd.tech3?.D?.last; if (T) put(tl, "T1", "Technicals", `Daily: close ${f1(T.close, 2)}, SMA 20/50/200 ${f1(T.sma20)}/${f1(T.sma50)}/${f1(T.sma200)}, RSI ${f1(T.rsi, 0)}, MACD ${f1(T.macd, 2)} vs signal ${f1(T.signal, 2)}. Signals: ${(fd.tech3.D.signals || []).map((x) => x.t).join("; ") || "none"}.`);
+    const Wk = fd.tech3?.W?.last; if (Wk) put(tl, "T2", "Weekly trend", `Weekly: RSI ${f1(Wk.rsi, 0)}; signals: ${(fd.tech3.W.signals || []).map((x) => x.t).join("; ") || "none"}.`);
+    if (fd.pm) put(tl, "T3", "Pattern match", `Pattern match (last ${fd.pm.win} days against its own and SPY's history): ${pc(fd.pm.win_rate, 0)} of the ${fd.pm.n} closest past paths were up ${fd.pm.fwd} days later (base rate ${pc(fd.pm.base_win_rate, 0)}), median ${spf(fd.pm.median)}.`);
+    const an = fd.analogs; if (an) put(tl, "T4", "Times like this", `The ${an.n} past days most like today (1M ${spf(an.now.r1m)}, 3M ${spf(an.now.r3m)}, 12M ${spf(an.now.r12m)}, ${spf(an.now.vs200)} vs the 200-day): ${HZ.map((h) => `${h} later median ${spf(an.horizons[h]?.median)}, ${pc(an.horizons[h]?.pos, 0)} up (all days: ${spf(an.all[h]?.median)}, ${pc(an.all[h]?.pos, 0)} up)`).join("; ")}.`);
+    if (fd.levels) put(tl, "T5", "Price levels", `Levels: 52-week high ${f1(fd.levels.high52, 2)}, low ${f1(fd.levels.low52, 2)}, 3-month swing high ${f1(fd.levels.swing_high, 2)}, swing low ${f1(fd.levels.swing_low, 2)}, 50-day ${f1(fd.levels.sma50, 2)}, 200-day ${f1(fd.levels.sma200, 2)}.`);
+    const st = fd.street; if (st?.n) put(tl, "N1", "Wall Street on its holdings", `Wall Street on the ${st.n} biggest holdings (${pc(st.on, 0)} of the fund): ${pc(st.buy_share, 0)} of ratings are buy, weighted; consensus targets ${spf(st.upside)} above the holdings' prices. Biggest: ${st.rows.slice(0, 6).map((r) => `${r.ticker} ${r.consensus || "n/a"} (${pc(r.buy_share, 0)} buy, target ${spf(r.upside)})`).join("; ")}.`);
+    const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}. ${se.rows.slice(0, 6).map((r) => `${r.ticker} ${f1(r.s30, 2)} (${r.n30} articles)`).join(", ")}.`);
+    (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`));
+    const dv = fd.dist; if (dv?.paying) put(tl, "D1", "Distributions", `Distributions: ${pc(dv.yield, 2)} trailing yield (${f1(dv.annual, 2)} a share a year, ${String(dv.freq || "").toLowerCase()}); 5-year growth ${spf(dv.cagr5)} a year${dv.cut5 ? "; cut in the last five years" : ""}${dv.next ? `; next ex-date ${dv.next.ex}` : ""}.`);
+    const tr = fd.track; if (tr?.done) put(tl, "K1", "Track record", `This page's past calls on the fund: ${tr.done} scored, direction right ${pc(tr.hit, 0)}, inside the range ${pc(tr.in_range, 0)}.`);
+    B.tech = tl.join("\n");
     // D: the industries' own drivers and risks (for the context analyst)
     const dl = [`## WHAT EACH BIG INDUSTRY'S STRATEGIST SAYS DRIVES IT`];
     fd.cov.industries.slice(0, 12).forEach((g) => { const d = fd.digests?.[lc(g.industry)]; if (d?.drivers?.length || d?.risks?.length) dl.push(`${g.industry} (${pc(g.weight)}): drivers: ${d.drivers.join("; ") || "n/a"}. Risks: ${d.risks.join("; ") || "n/a"}.`); });
@@ -121,8 +180,8 @@
   const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
   const PANELS = {
     core: { holdings: "the holdings and their concentration", industries: "the industry mix and how the industries are rated", valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
-    calls: { perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead" },
-    context: { stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores" },
+    calls: { perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead", plan: "the price levels and when to buy", times: "past setups like today and what came next", track: "how this page's past calls on the fund have done" },
+    context: { stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions" },
     exposures: { trade: "trade and supply chains", regulation: "regulation", outside: "the holdings the analysis can't see" },
   };
   const SCHEMA = {
@@ -133,6 +192,7 @@
  "strategy": "2-3 sentences: how the fund is run (index or active, concentration, turnover, fees) and whether that's worth paying for",
  "valuation": {"read": "2-3 sentences: valuation against history and what's priced in"},
  "quality": "2 sentences on the quality of what it holds (margins, returns, balance sheets)",
+ "street": {"stance": "agree | more bullish | more bearish", "summary": "2-3 sentences: where you land against Wall Street's view of the biggest holdings (N1) and why"},
  "risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "ids": ["W1"]}],
  "catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "...", "ids": ["E1"]}],
  "watch": ["what to watch, with IDs"],
@@ -161,7 +221,7 @@ Sizes: 4-7 drivers; one entry for EVERY industry I, every factor MF and every wo
  ${READ(PANELS.exposures)}}
 Sizes: one entry for EVERY country C, rule R and outside holding O listed.`,
   };
-  const BLOCKS = { core: ["base", "hold", "val"], calls: ["base", "perf", "val", "cal"], context: ["base", "perf", "ind"], exposures: ["base", "hold"] };
+  const BLOCKS = { core: ["base", "hold", "val", "tech"], calls: ["base", "perf", "val", "cal", "tech"], context: ["base", "perf", "ind", "tech"], exposures: ["base", "hold"] };
   const INTRO = {
     core: "You write part one of a four-part analysis of this fund; colleagues write the calls, the context and the exposures at the same time. Write ONLY: the verdict, the thesis, the benchmark view, strategy, valuation, quality, risks, catalysts, watch, fit and your panel reads.",
     calls: "You write part two of a four-part analysis: the 12-month scenarios, the fund's 1M-12M calls, the plans per investor type and your panel reads. Colleagues write the rest at the same time.",
@@ -188,7 +248,7 @@ ${SCHEMA[part]}`;
     return `You are the fund strategist. Today is ${today}. Give your outlook for this fund over the next 1, 3, 6 and 12 months: which way it's likely to go and why, with the best arguments for and against. Start from the industries' calls weighted by the fund (F4), the base rates (V6), the scenarios (F3), the fund's own trend and risk (P lines) and the dated events (E lines), and say where you differ from the weighted calls.
 Use only the facts below; cite IDs in square brackets.
 
-${["base", "perf", "val", "cal"].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
+${["base", "perf", "val", "cal", "tech"].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
 
 Reply with ONLY this JSON:
 {"headline": "one sentence: where the fund is likely to go and the main reason",
@@ -219,7 +279,7 @@ Reply with ONLY this JSON:
       const fit = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.fit?.[k] || {};
         fit[k] = { fit: en(x.fit, ENUM.fit), conviction: en(x.conviction, ENUM.lvl), adjust: Math.max(-5, Math.min(5, Math.round(n(x.adjust) || 0))), why: t(x.why, 400), watch: t(x.watch, 200), what_changes: t(x.what_changes, 240) }; }
       w = { headline: t(o.headline, 300), verdict: { call: en(o.verdict?.call, ENUM.verdict), summary: t(o.verdict?.summary, 600) }, thesis: t(o.thesis, 3000),
-        vs_benchmark: { call: en(o.vs_benchmark?.call, ENUM.vs), why: t(o.vs_benchmark?.why, 600) }, strategy: t(o.strategy, 600), valuation: { read: t(o.valuation?.read, 600) }, quality: t(o.quality, 400),
+        vs_benchmark: { call: en(o.vs_benchmark?.call, ENUM.vs), why: t(o.vs_benchmark?.why, 600) }, strategy: t(o.strategy, 600), valuation: { read: t(o.valuation?.read, 600) }, quality: t(o.quality, 400), street: o.street ? { stance: en(o.street.stance, ["agree", "more bullish", "more bearish"]), summary: t(o.street.summary, 600) } : null,
         risks: rows(o.risks, (x) => ({ risk: t(x?.risk, 300), likelihood: en(x?.likelihood, ENUM.lvl), impact: en(x?.impact, ENUM.lvl), ids: ids(x?.ids) }), "risk").slice(0, 8),
         catalysts: rows(o.catalysts, (x) => ({ date: String(x?.date || "").slice(0, 10), event: t(x?.event, 200), why: t(x?.why, 300), ids: ids(x?.ids) }), "event").slice(0, 8),
         watch: (Array.isArray(o.watch) ? o.watch : []).map((x) => t(typeof x === "string" ? x : x?.text, 300)).filter(Boolean).slice(0, 6), fit, reads: reads(o.reads), confidence: en(o.confidence, ENUM.lvl) };
@@ -271,7 +331,7 @@ Reply with ONLY this JSON:
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { holdings, concentration, extras, calendar, dossier, partPrompt, leanPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  const FundAn = { streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, leanPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);

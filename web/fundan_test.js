@@ -35,4 +35,19 @@ const ctx = A.cleanPart("context", { industries: [{ id: "I1", effect: "helps", w
 assert.strictEqual(ctx.w.industries.length, 1); assert.strictEqual(ctx.w.macro.regime, "headwind"); assert.strictEqual(ctx.w.macro.factors[0].id, "MF1");
 const lean = A.cleanPart("lean", { headline: "Up [F4]", calls: { "1M": { call: "neutral", for: ["a [I1]"], against: ["b"] } } }, dz.idx);
 assert.strictEqual(lean.w.calls["1M"].call, "neutral");
+
+// Wall Street, sentiment, the track record
+const hh = [{ ticker: "AAA", weight: 0.6, px: 100 }, { ticker: "BBB", weight: 0.4, px: 50 }];
+const stl = A.streetLook(hh, { AAA: { buy: 8, hold: 2, sell: 0, target: 120, consensus: "Buy" }, BBB: { buy: 1, hold: 3, sell: 0, target: 45 } });
+assert(Math.abs(stl.buy_share - (0.6 * 0.8 + 0.4 * 0.25)) < 1e-9 && Math.abs(stl.upside - (0.6 * 0.2 + 0.4 * -0.1)) < 1e-9);
+const sl = A.sentimentLook(hh, { AAA: [{ date: "2026-11-01", count: 10, normalized: 0.5 }, { date: "2026-08-20", count: 10, normalized: -0.5 }] }, "2026-11-09");
+assert(Math.abs(sl.s30 - 0.5) < 1e-9 && Math.abs(sl.s90 - 0) < 1e-9);
+const ser = { dates: ["2026-01-02", "2026-02-01", "2026-04-02", "2026-11-06"], closes: [100, 104, 99, 110] };
+const lg = A.trackLog([], { "1M": { call: "slightly bullish", expected_move: [-2, 6] }, "3M": { call: "bearish", expected_move: [-8, -1] }, "12M": { call: "neutral" } }, "2026-01-02", 100);
+assert.strictEqual(lg.length, 3); assert.strictEqual(A.trackLog(lg, { "1M": { call: "bearish" } }, "2026-01-02", 100).length, 3, "a day's calls are logged once");
+const te = A.trackEval(lg, ser, "2026-11-09");
+const r1 = te.rows.find((r) => r.h === "1M"), r3 = te.rows.find((r) => r.h === "3M"), r12 = te.rows.find((r) => r.h === "12M");
+assert(r1.done && r1.hit === true && r1.in_range === true, "1M: +4% on a bullish call, inside -2..+6");
+assert(r3.done && r3.hit === true, "3M: -1% on a bearish call"); assert(!r12.done, "12M is still open");
+assert.strictEqual(te.done, 2); assert.strictEqual(te.hit, 1);
 console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3), eff: +conc.effective_n.toFixed(1), cal: cal.length, prompts: A.PARTS.map((p) => A.partPrompt(fd, dz, p, "2026-11-09").length) }));
