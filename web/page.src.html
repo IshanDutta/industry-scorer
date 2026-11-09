@@ -5527,7 +5527,7 @@ a.btnlink:hover { border-color: var(--accent); }
     return fd.hist;
   }
   /**
-   * The full analysis: four analysts at once on their slices of one dossier (core, calls, context, exposures), then
+   * The full analysis: five analysts at once on their slices of one dossier (core, calls, markets, context, exposures), then
    * the outlook alongside. Kept per fund with what it was written on; rewritten only when the look-through moves
    * (Portfolio.changes) or on "Rewrite".
    */
@@ -5701,14 +5701,22 @@ a.btnlink:hover { border-color: var(--accent); }
    * A panel's read, as the company page shows it: ours on top, then what the fund's biggest industries' own reports say
    * about the same panel (each with its weight in the fund). The industries' reads show even before ours is written.
    */
-  function fundPanelRead(fd, text, idx, key, writing) {
-    const keys = FundAn.PANEL_IND[key] || [], ir = keys.flatMap((k) => FundAn.indReads(fd.cov, fd.digests, k, 3).map((x) => ({ ...x, k })));
-    const seen = new Set(), rows = ir.filter((x) => { const id = x.industry + "|" + x.k; if (seen.has(id)) return false; seen.add(id); return true; }).slice(0, keys.length > 1 ? 5 : 3);
-    const indL = rows.length ? `<div class="small muted" style="margin-top:6px;display:grid;gap:3px"><b>What its biggest industries' reports say${keys.length === 1 ? ` (${esc(FundAn.IND_READ_LABEL[keys[0]])})` : ""}:</b>${rows.map((x) => `<div><b>${x.slug ? "" : ""}${esc(x.industry)}</b> <span class="mono">${pct(x.weight, false, 1)}</span>${keys.length > 1 ? ` · ${esc(FundAn.IND_READ_LABEL[x.k])}` : ""}${x.kind === "quant" ? " · code-only" : ""}: ${esc(x.text)}</div>`).join("")}</div>` : "";
-    if (text) return `<div class="coread" data-read="${esc(key)}"><span class="eyebrow">Our read</span><p>${fundCites(text, idx)}</p>${indL}</div>`;
+  function fundPanelRead(fd, r, idx, key, writing) {
+    const x = typeof r === "string" ? { text: r } : r || null, has = !!(x?.text || x?.points?.length);
+    const keys = FundAn.PANEL_IND[key] || [], ir = keys.flatMap((k) => FundAn.indReads(fd.cov, fd.digests, k, 3).map((y) => ({ ...y, k })));
+    const seen = new Set(), rows = ir.filter((y) => { const id = y.industry + "|" + y.k; if (seen.has(id)) return false; seen.add(id); return true; }).slice(0, keys.length > 1 ? 5 : 3);
+    const head = `What its biggest industries' reports say${keys.length === 1 ? ` (${esc(FundAn.IND_READ_LABEL[keys[0]])})` : ""}`;
+    const list = rows.map((y) => `<div><b>${esc(y.industry)}</b> <span class="mono">${pct(y.weight, false, 1)}</span>${keys.length > 1 ? ` · ${esc(FundAn.IND_READ_LABEL[y.k])}` : ""}${y.kind === "quant" ? " · code-only" : ""}: ${esc(y.text)}</div>`).join("");
+    // Under our own read the industries' reads fold away; before it's written they show open.
+    const indL = !rows.length ? "" : has ? `<details class="small muted" style="margin-top:6px"><summary><b>${head}</b></summary><div style="display:grid;gap:3px;margin-top:4px">${list}</div></details>`
+      : `<div class="small muted" style="margin-top:6px;display:grid;gap:3px"><b>${head}:</b>${list}</div>`;
+    if (has) return `<div class="coread" data-read="${esc(key)}"><span class="eyebrow">Our read</span>${x.text ? `<p>${fundCites(x.text, idx)}</p>` : ""}
+      ${x.points?.length ? `<ul class="dlist small">${x.points.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul>` : ""}
+      ${x.means ? `<p class="small" style="margin:4px 0 0"><b>What it means:</b> ${fundCites(x.means, idx)}</p>` : ""}${x.watch ? `<p class="small muted" style="margin:2px 0 0"><b>Watch:</b> ${fundCites(x.watch, idx)}</p>` : ""}${indL}</div>`;
     if (!indL) return "";
     return `<div class="coread pending" data-read="${esc(key)}"><span class="eyebrow">Our read</span><p class="small muted">${writing ? "Being written…" : "Comes with the analysis."}</p>${indL}</div>`;
   }
+
   const FEFF = { helps: "pos", hurts: "neg", mixed: "warn", none: "neu", tailwind: "pos", headwind: "neg", neutral: "neu", supportive: "pos" };
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
@@ -5725,9 +5733,12 @@ a.btnlink:hover { border-color: var(--accent); }
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
     const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, OL = fd.full?.outlook || FundAn.provisional(FundAn.prior(fd), today());
-    const R = (k, part) => fundPanelRead(fd, (P[part] || {}).reads?.[k], idx, k, fd.writing);
+    // A panel's read, from whichever analyst wrote it (older saved analyses had it elsewhere).
+    const R = (k) => { const own = Object.keys(FundAn.PANELS).find((pp) => k in FundAn.PANELS[pp]); let r = P[own]?.reads?.[k] || null;
+      if (!r) for (const pp of Object.values(P)) if (pp?.reads?.[k]) { r = pp.reads[k]; break; } return fundPanelRead(fd, r, idx, k, fd.writing); };
+    const MK = P.markets || {};
     const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
-    const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: four analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
+    const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: five analysts at once, plus the market historian and the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
     const fill = S.fundFill?.sym === fd.sym ? `<div class="notice info"><span>Filling the industries no run covers, code only (data and scores, no Claude): ${S.fundFill.done} of ${S.fundFill.n} done${S.fundFill.now ? `, now ${esc(S.fundFill.now)}` : ""}.</span></div>` : "";
     const left = c.industries.filter((g) => g.status === "not_analyzed" && !(fd.fillSkip || {})[g.industry]);
     const leftNote = !S.fundFill && left.length ? `<div class="notice warn"><span>${left.length} industr${left.length === 1 ? "y" : "ies"} (${pct(left.reduce((a, g) => a + g.weight, 0), false, 1)} of the fund) not covered yet.</span><button class="sm" data-fund-fill="${esc(fd.sym)}" ${busy() || !S.mcp ? "disabled" : ""}>Fill ${Math.min(left.length, 20)} more, code only</button></div>` : "";
@@ -5784,7 +5795,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
       ${core.strategy ? `<div class="small"><b>How it's run:</b> ${fundCites(core.strategy, idx)}</div>` : ""}
       ${hz ? `<h3>What drives each window</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
-    const thesisSec = sec("fund-thesis", "Analysis", "four analysts at once on the fund's dossier; every claim cites it", thesis);
+    const thesisSec = sec("fund-thesis", "Analysis", "five analysts at once on the fund's dossier; every claim cites it", thesis);
     // ---- scores and fit: the company page's scorecard, on the fund
     const card = fundCard(fd, core.fit || null), PK = FundMore.TYPES, PL = (k) => Score.PILLAR_LABELS[k] || k;
     const fmtOwn = (i) => (["beta", "shp"].includes(i.key) ? fix(i.value, 2) : ["dy", "exp"].includes(i.key) ? pct(i.value, false, 2) : /^ex/.test(i.key) || i.key === "mdd" ? pct(i.value) : pct(i.value, false, 0));
@@ -5814,9 +5825,10 @@ a.btnlink:hover { border-color: var(--accent); }
     })() : "";
     // ---- holdings
     const cn = fd.conc || {};
-    const hrows = (fd.hold || []).map((h) => `<tr><td><span class="tick">${esc(h.ticker)}</span><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="n"><b>${pct(h.weight, false, 2)}</b></td><td class="wr small">${esc(h.industry || "—")}${h.inTop50 ? ` <span class="muted">#${h.rank}</span>` : h.industry ? ` <span class="muted">(outside top 50)</span>` : ""}</td>
+    const HN = new Map((core.holdings_notes || []).map((x) => [String(idx[x.id] || "").split(" ")[0], x])), HST = { tailwind: "pos", neutral: "neu", headwind: "neg" };
+    const hrows = (fd.hold || []).map((h) => { const hn = HN.get(h.ticker); return `<tr><td class="wr"><span class="tick">${esc(h.ticker)}</span><div class="small muted">${esc(trimC(h.name || "", 34))}</div>${hn ? `<div class="small" style="min-width:220px;max-width:360px;margin-top:3px">${hn.stance ? `<span class="pill ${HST[hn.stance]}">${esc(hn.stance)}</span> ` : ""}${hn.bet ? `<b>${esc(hn.bet)}.</b> ` : ""}${fundCites(hn.view, idx)}</div>` : ""}</td><td class="n"><b>${pct(h.weight, false, 2)}</b></td><td class="wr small">${esc(h.industry || "—")}${h.inTop50 ? ` <span class="muted">#${h.rank}</span>` : h.industry ? ` <span class="muted">(outside top 50)</span>` : ""}</td>
       <td class="n">${fix(h.pe, 1)}</td><td class="n ${cls(num(h.r1y))}">${pct(h.r1y)}</td><td class="n">${isNum(num(h.div)) ? pct(h.div, false, 1) : "—"}</td><td class="n">${pct(h.opm, false, 0)}</td><td class="mono small">${esc(h.next || "")}</td>
-      <td>${h.call12 ? `<span class="pill ${CALLC(h.call12)}">${esc(h.call12)}</span>` : ""}</td><td class="small">${h.co ? `<button class="linkbtn" data-co="${esc(h.ticker)}" title="${esc(h.co)}">its analysis</button>` : `<button class="linkbtn" data-co="${esc(h.ticker)}">open</button>`}</td></tr>`).join("");
+      <td>${h.call12 ? `<span class="pill ${CALLC(h.call12)}">${esc(h.call12)}</span>` : ""}</td><td class="small">${h.co ? `<button class="linkbtn" data-co="${esc(h.ticker)}" title="${esc(h.co)}">its analysis</button>` : `<button class="linkbtn" data-co="${esc(h.ticker)}">open</button>`}</td></tr>`; }).join("");
     const holdSec = sec("fund-hold", "Holdings", `${cn.n || 0} stocks · top 10 ${pct(cn.top10, false, 0)} · effective ${fix(cn.effective_n, 0)} holdings`, `${R("holdings", "core")}
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>Industry (rank by size)</th><th class="n">P/E</th><th class="n">1Y</th><th class="n">Yield</th><th class="n">Op. margin</th><th>Reports</th><th>Industry 12M</th><th></th></tr></thead><tbody>${hrows}</tbody></table></div>
       <div class="small muted">Each company's figures are from its industry's top-50 table as of that industry's run. "Its analysis" opens the company's own saved analysis.</div>`);
@@ -5834,7 +5846,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const rows = A.rows.filter((r) => Math.abs(r.active) >= 0.003).slice(0, 18).map((r) => `<tr><td class="wr"><b>${esc(r.industry)}</b><div class="small muted">${esc(r.sector || "")}</div></td><td class="n">${pct(r.fund, false, 1)}</td><td class="n muted">${pct(r.bench, false, 1)}</td>
         <td class="n"><b class="${r.active >= 0 ? "up" : "down"}">${pct(r.active, true, 1)}</b></td><td>${r.call12 ? `<span class="pill ${CALLC(r.call12)}">${esc(r.call12)}</span>` : `<span class="small muted">${r.analyzed ? "—" : "not covered"}</span>`}</td><td class="n">${isNum(num(r.expected)) ? pts(r.expected) : "—"}</td>
         <td class="small">${isNum(r.callNum) && r.callNum !== 0 ? (Math.sign(r.callNum) === Math.sign(r.active) ? `<span class="pill pos">with the view</span>` : `<span class="pill warn">against the view</span>`) : ""}</td></tr>`).join("");
-      actSec = sec("fund-active", `Against ${esc(fd.bench.symbol)}`, esc(fd.bench.why), `${core.vs_benchmark?.why ? fundReadBox(core.vs_benchmark.why, idx, `Our read: ${core.vs_benchmark.call || ""}`) : ""}<div class="kpis">${[kpi("Overlap", pct(A.overlap, false, 0), `active share ${pct(A.active_share, false, 0)}, by industry`),
+      actSec = sec("fund-active", `Against ${esc(fd.bench.symbol)}`, esc(fd.bench.why), `${core.vs_benchmark?.why ? fundReadBox(core.vs_benchmark.why, idx, `Our call against ${esc(fd.bench.symbol)}: ${core.vs_benchmark.call || ""}`) : ""}${R("active")}<div class="kpis">${[kpi("Overlap", pct(A.overlap, false, 0), `active share ${pct(A.active_share, false, 0)}, by industry`),
           kpi("What the tilts add", pts(A.tilt, 2), "expected 12-month points from over- and underweights", A.tilt >= 0 ? "up" : "down"),
           kpi("Leaning with the analysis", isNum(A.aligned) ? pct(A.aligned, false, 0) : "—", "of the active weight where the industry has a 12-month call")].join("")}</div>
         <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Fund</th><th class="n">${esc(fd.bench.symbol)}</th><th class="n">Active</th><th>12-month call</th><th class="n">Expected</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -5861,7 +5873,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const lines = [[fd.sym, fd.ser, "var(--accent)"], ...(fd.bser && fd.bench.symbol !== "SPY" ? [[fd.bench.symbol, fd.bser, "var(--c3)"]] : []), ["SPY", fd.spy, "var(--bench)"]].map(([name, s, color]) => ({ name, color, ...norm(s) })).filter((x) => x.dates?.length);
       const chart = lines.length ? `<div class="chart">${lineChart(lines.map((x, i) => ({ ...x, dash: i > 0 && x.name === "SPY" })), { height: 240, width: 900, fmtY: (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`, zeroLine: false, baseLine: 0 })}<div class="tip" hidden></div>
         <div class="legend">${lines.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>` : "";
-      perfSec = sec("fund-perf", "Returns", `dividend-adjusted, against ${esc(fd.bench.symbol)}${fd.bench.symbol !== "SPY" ? " and SPY" : ""}`, `${R("perf", "calls")}<div class="retgrid" role="group" aria-label="Return period">${cards}</div>${chart}`);
+      perfSec = sec("fund-perf", "Returns", `dividend-adjusted, against ${esc(fd.bench.symbol)}${fd.bench.symbol !== "SPY" ? " and SPY" : ""}`, `${MK.returns?.summary ? fundReadBox(MK.returns.summary, idx, "How it has done, and why") : ""}${R("perf", "calls")}<div class="retgrid" role="group" aria-label="Return period">${cards}</div>${chart}`);
     }
     // ---- risk
     let riskSec = "";
@@ -5869,7 +5881,8 @@ a.btnlink:hover { border-color: var(--accent); }
       const G = [["1 year", fd.g1], ["3 years", fd.g3], ["5 years", fd.g5]].filter(([, x]) => x);
       const row = (l, k, fmt) => `<tr><td>${l}</td>${G.map(([, x]) => `<td class="n">${fmt(x[k])}</td>`).join("")}</tr>`;
       const pf = (v) => pct(v), p0 = (v) => pct(v, false, 0), f2 = (v) => fix(v, 2);
-      riskSec = sec("fund-risk", "Risk", `against ${esc(fd.bench.symbol)}, from daily returns`, `${R("risk", "calls")}<div class="tbl-wrap"><table><thead><tr><th></th>${G.map(([l]) => `<th class="n">${l}</th>`).join("")}</tr></thead><tbody>
+      const RP = MK.risk_profile;
+      riskSec = sec("fund-risk", "Risk", `against ${esc(fd.bench.symbol)}, from daily returns`, `${RP?.summary ? `<div class="callout"><div class="callout-head"><span class="eyebrow">What kind of ride it is</span>${RP.level ? fLvl(RP.level === "moderate" ? "medium" : RP.level, "risk") : ""}</div><div class="small">${fundCites(RP.summary, idx)}</div>${RP.worst_case ? `<div class="small"><b>A realistic bad stretch:</b> ${fundCites(RP.worst_case, idx)}</div>` : ""}</div>` : ""}${R("risk", "calls")}<div class="tbl-wrap"><table><thead><tr><th></th>${G.map(([l]) => `<th class="n">${l}</th>`).join("")}</tr></thead><tbody>
         ${row(`Beta to ${esc(fd.bench.symbol)}`, "beta", f2)}${row("Correlation", "corr", f2)}${row("Alpha (a year)", "alpha", pf)}${row("Volatility", "vol", (v) => pct(v, false))}${row("Downside volatility", "downside_vol", (v) => pct(v, false))}
         ${row("Sharpe", "sharpe", f2)}${row("Sortino", "sortino", f2)}${row("Tracking error", "tracking_error", (v) => pct(v, false))}${row("Information ratio", "info_ratio", f2)}${row("Up capture", "up_capture", p0)}${row("Down capture", "down_capture", p0)}
         ${row("Max drawdown", "max_dd", pf)}${row("1-day 95% VaR", "var95", (v) => pct(v, false, 2))}${row("Annual return", "ann_return", pf)}</tbody></table></div>
@@ -5968,7 +5981,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (fd.tech3) { const save = S.coTf; S.coTf = S.fundTf || "D"; try { tech = coTech({ tech: fd.tech3, pm: fd.pm, sym: fd.sym }).replace('id="co-tech"', 'id="fund-tech"').replace(/data-co-tf=/g, "data-fund-tf="); } catch { tech = ""; } S.coTf = save;
       const rd = R("tech", "context"); if (rd) tech = tech.replace(/(<\/div><\/div>)/, `$1${rd}`); }
     // ---- Wall Street on the biggest holdings
-    const ST2 = fd.street, street = ST2?.rows?.length ? sec("fund-street", "Wall Street on its holdings", `the ${ST2.n} biggest holdings with analyst coverage · ${pct(ST2.on, false, 0)} of the fund`, `${core.street?.summary ? fundReadBox(core.street.summary, idx, `Our view against Wall Street${core.street.stance ? ": " + core.street.stance : ""}`) : ""}${R("street", "context")}
+    const ST2 = fd.street, street = ST2?.rows?.length ? sec("fund-street", "Wall Street on its holdings", `the ${ST2.n} biggest holdings with analyst coverage · ${pct(ST2.on, false, 0)} of the fund`, `${core.street?.summary ? fundReadBox(core.street.summary, idx, `Our view against Wall Street${core.street.stance ? ": " + core.street.stance : ""}`) : ""}${MK.street?.summary ? fundReadBox(MK.street.summary, idx, "What the ratings and targets say for the fund") : ""}${R("street", "context")}
       <div class="kpis">${[kpi("Buy ratings, weighted", pct(ST2.buy_share, false, 0), "of analysts on the biggest holdings"), kpi("Upside to consensus targets", pct(ST2.upside), "weighted, from the holdings file's prices", cls(num(ST2.upside)))].join("")}</div>
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th>Consensus</th><th class="n">Buy / hold / sell</th><th class="n">Target</th><th class="n">Upside</th></tr></thead><tbody>${ST2.rows.map((r) => `<tr><td><span class="tick">${esc(r.ticker)}</span></td><td class="n">${pct(r.weight, false, 2)}</td><td>${esc(r.consensus || "—")}</td><td class="n">${r.buy} / ${r.hold} / ${r.sell}</td><td class="n">${fix(r.target, 2)}</td><td class="n ${cls(num(r.upside))}">${pct(r.upside)}</td></tr>`).join("")}</tbody></table></div>`)
       : fd.netDone ? "" : sec("fund-street", "Wall Street on its holdings", "", `<div class="small muted">${S.mcp ? "Reading the analysts' ratings and targets for the biggest holdings…" : "Open this page in Claude to read the analysts' views."}</div>`);
@@ -6003,7 +6016,7 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Weight</th><th>Cycle</th><th>Pricing power</th><th>Its key KPIs</th></tr></thead><tbody>${CY.rows.slice(0, 14).map((r) => `<tr><td class="wr"><b>${esc(r.industry)}</b>${r.text ? `<div class="small muted">${esc(r.text)}</div>` : ""}</td><td class="n">${pct(r.weight, false, 1)}</td><td>${r.position ? `<span class="pill neu">${esc(r.position)}</span>` : "—"}</td><td>${esc(r.pricing || "—")}${r.oplev ? `<div class="small muted">operating leverage ${esc(r.oplev)}</div>` : ""}</td><td class="wr small">${(r.kpis || []).map((k) => `<div><b>${esc(k.name)}</b>: ${esc(k.value)}${k.vs_cycle ? ` <span class="muted">${esc(k.vs_cycle)}</span>` : ""}</div>`).join("")}</td></tr>`).join("")}</tbody></table></div>
       ${CY.next.some((x) => x.date >= today()) ? `<h3>KPI events ahead</h3><ul class="dlist small">${CY.next.filter((x) => x.date >= today()).slice(0, 10).map((x) => `<li><span class="mono">${esc(x.date)}</span> <b>${esc(x.event)}</b> <span class="muted">${esc(x.industry)} · ${pct(x.weight, false, 1)}${x.names?.length ? " · " + esc(x.names.join(", ")) : ""}</span></li>`).join("")}</ul>` : ""}`) : "";
     // ---- earnings season: the biggest holdings' last and next reports
-    const ES = fd.season, seasonSec = ES ? sec("fund-season", "Earnings season", `the ${ES.n} biggest holdings · ${pct(ES.on, false, 0)} of the fund`, `${R("season", "calls")}
+    const ES = fd.season, seasonSec = ES ? sec("fund-season", "Earnings season", `the ${ES.n} biggest holdings · ${pct(ES.on, false, 0)} of the fund`, `${MK.season?.summary ? fundReadBox(MK.season.summary, idx, "This season, for the fund") : ""}${R("season", "calls")}
       <div class="kpis">${[kpi("Reported this season", pct(ES.reported, false, 0), "of the fund, in the last 75 days"), kpi("Beat EPS estimates", pct(ES.beat_share, false, 0), "by weight, of those that reported"), kpi("Median EPS surprise", pct(ES.median_surprise), "", isNum(ES.median_surprise) ? (ES.median_surprise >= 0 ? "up" : "down") : ""), kpi("Reporting in 30 days", pct(ES.next30, false, 0), `${pct(ES.next60, false, 0)} within 60 days`)].join("")}</div>
       ${ES.weeks.length ? `<div class="chart"><h3>Share of the fund reporting, by week</h3>${barsChart(ES.weeks.map((w) => ({ label: fmtDate(w.week), a: Math.round(w.weight * 1000) / 10 })), { fmtY: (v) => v.toFixed(1) + "%", colorA: "var(--accent)", height: 160 })}<div class="small muted">${ES.weeks.map((w) => `${esc(fmtDate(w.week))}: ${esc(w.names.join(", "))}`).join(" · ")}</div></div>` : ""}
       <div class="two"><div class="box"><b>Reported</b>${ES.recent.length ? `<table><tbody>${ES.recent.slice(0, 10).map((r) => `<tr><td><span class="tick">${esc(r.ticker)}</span> <span class="small muted">${pct(r.weight, false, 1)}</span></td><td class="mono small">${esc(r.last)}</td><td class="n">${isNum(r.surprise) ? `<span class="${r.surprise >= 0 ? "up" : "down"}">${pct(r.surprise)}</span>` : "—"}</td><td>${r.beat === true ? `<span class="pill pos">beat</span>` : r.beat === false ? `<span class="pill neg">missed</span>` : ""}</td></tr>`).join("")}</tbody></table>` : `<div class="small muted">None of the biggest holdings has reported in the last 75 days.</div>`}</div>

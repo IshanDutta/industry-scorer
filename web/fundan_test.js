@@ -93,3 +93,17 @@ console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3
   assert(A.FUND_INPUTS.some(([k]) => k === "cycle") && A.FUND_INPUTS.some(([k]) => k === "season"));
 }
 console.log("fundan ok (phases 3-4)");
+// fleshed-out reads: a note per panel (text, findings, what it means, what to watch); a fifth analyst on the markets
+{
+  assert.deepStrictEqual(A.PARTS, ["core", "calls", "markets", "context", "exposures"]);
+  const keys = Object.values(A.PANELS).flatMap((x) => Object.keys(x));
+  for (const k of ["score", "peers", "holdings", "industries", "valuation", "fundamentals", "income", "coverage", "debates", "calendar", "plan", "times", "perf", "risk", "stress", "tech", "street", "news", "dist", "season", "cycle", "sens", "look", "world", "active", "trade", "regulation", "outside"]) assert(keys.includes(k), "a read for " + k);
+  assert.strictEqual(new Set(keys).size, keys.length, "each panel read by one analyst");
+  const mk = A.cleanPart("markets", { returns: { summary: "Lagged SPY [P1]." }, risk_profile: { level: "High", summary: "Beta 1.1 [P2].", worst_case: "-31% in 2020 [S1]." },
+    reads: { risk: { text: "Riskier than SPY [P2] [ZZ1].", points: ["Beta 1.1 [P2]", { text: "Max drawdown -18% [P2]" }], means: "Size it smaller.", watch: "Beta above 1.2" }, perf: "Old-style string [P1]." } }, dz.idx);
+  assert.strictEqual(mk.w.risk_profile.level, "high"); assert.strictEqual(mk.w.reads.risk.points.length, 2); assert.strictEqual(mk.w.reads.risk.text, "Riskier than SPY [P2]."); assert.strictEqual(mk.w.reads.perf.text, "Old-style string [P1].");
+  assert(A.partPrompt(fd, dz, "markets", "2026-11-09").includes('"risk": {"text": "5-7 sentences'));
+  const hn = A.cleanPart("core", { holdings_notes: [{ id: "H1", bet: "AI chips", view: "18% of the fund [H1].", stance: "Tailwind" }, { id: "H99", view: "x" }] }, dz.idx);
+  assert.deepStrictEqual(hn.w.holdings_notes.map((x) => [x.id, x.stance]), [["H1", "tailwind"]]);
+  console.log("fundan ok (fleshed-out reads)");
+}

@@ -4,7 +4,7 @@
  * holdings joined to their industries' company rows, concentration, the fundamentals and what's priced in seen through
  * the industries, base rates, the dated calendar (holdings' earnings and the industries' events), and the fund's
  * own price-based facts handed in by the page (returns, risk against its benchmark and SPY, crises, measured macro
- * sensitivities). Then the write-up: four analysts at once (core, calls, context, exposures) plus the outlook, each
+ * sensitivities). Then the write-up: five analysts at once (core, calls, markets, context, exposures) plus the outlook, each
  * on its own slice of one ID'd dossier, and the code that cleans and checks what they write.
  */
 (function (root) {
@@ -156,7 +156,7 @@
     return { v: 3, date: today, provisional: true, headline: "Provisional: code's starting point, from its industries' outlooks. The outlook is made with the analysis.", calls: Object.fromEntries(Object.entries(pr).map(([h, x]) => [h, { call: x.call, basis: "code's starting point" }])), evidence: [], checks: [] };
   }
 
-  // ============================================================= the dossier the four analysts and the outlook write from
+  // ============================================================= the dossier the five analysts and the outlook write from
   /**
    * fd: the page's fund state ({sym, facts, cov, look, act, bench, digests, flags, mapped, hold, conc, ext, cal, perf
    * (CoFacts.performance), g1/g3/g5 (risk against the benchmark), gS (against SPY), ep (crises), sens (measured)}).
@@ -231,13 +231,19 @@
     return { blocks: B, idx };
   }
 
-  // ============================================================= the four parts and the outlook
+  // ============================================================= the five parts and the outlook
   const CALLS = "bullish | slightly bullish | neutral | slightly bearish | bearish";
-  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund, set against what its biggest industries' own reports say on the same panel (more or less, and why), and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
+  // Each panel's read is a short analyst's note, not a caption: what the numbers say, set against its industries' own
+  // reports, the specific findings behind it, what it means for an owner, and what would change it.
+  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": {"text": "5-7 sentences on ${v}: what the numbers say about this fund (the figures, cited), how that compares with its biggest industries' own reports on the same panel and with its benchmark (more or less, and why), and the judgment you draw", "points": ["4-6 specific findings, each one sentence with a number and an ID"], "means": "2 sentences: what it means for someone who owns the fund now, and for someone thinking of buying it", "watch": "the one number or date that would change this read, with the level"}`).join(", ")}}`;
   const PANELS = {
-    core: { score: "the scorecard: which pillars lift or hold back each investor's score, the fund's own numbers against its industries'", peers: "how the fund stacks up against its peer funds on return, risk and cost", holdings: "the holdings and their concentration", industries: "the industry mix and how the industries are rated", valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
-    calls: { season: "the holdings' earnings season: who reported, how it went and who's next", debates: "the industries' debates and which side the fund is on", perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead", plan: "the price levels and when to buy", times: "the past months most like today (macro and the fund's own setup) and what came next (cite HE)" },
-    context: { cycle: "where its industries are in their cycles and what their KPIs say", stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions", world: "the world events that reach the fund" },
+    core: { score: "the scorecard: which pillars lift or hold back each investor's score, the fund's own numbers against its industries'", peers: "how the fund stacks up against its peer funds on return, risk and cost",
+      holdings: "the holdings and their concentration: what the biggest positions are betting on and how much rides on them", industries: "the industry mix and how the industries are rated",
+      valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
+    calls: { debates: "the industries' debates and which side the fund is on", calendar: "the dated events ahead and which ones matter most at the fund's weights", plan: "the price levels and when to buy", times: "the past months most like today (macro and the fund's own setup) and what came next (cite HE)" },
+    markets: { perf: "the fund's returns against its benchmark and SPY, by period, and what drove the gap", risk: "risk: beta, volatility, drawdowns, capture, tracking error, and how they've shifted", stress: "how the fund held up in past crises and booms and what that says about the next one",
+      tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions", season: "the holdings' earnings season: who reported, how it went and who's next" },
+    context: { cycle: "where its industries are in their cycles and what their KPIs say", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", world: "the world events that reach the fund", active: "its bets against the benchmark: the over- and underweights, whether they line up with the industries' calls, and what they add" },
     exposures: { trade: "trade and supply chains", regulation: "regulation", outside: "the holdings the analysis can't see" },
   };
   const SCHEMA = {
@@ -252,11 +258,12 @@
  "risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "ids": ["W1"]}],
  "catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "...", "ids": ["E1"]}],
  "watch": ["what to watch, with IDs"],
+ "holdings_notes": [{"id": "H1", "bet": "what this position is a bet on, in a few words", "view": "2 sentences at its weight: the case for and against, cited (its industry's call, its own analysis, its valuation, its next report)", "stance": "tailwind | neutral | headwind"}],
  "peers": {"stance": "best in group | competitive | lagging", "summary": "2 sentences: how it compares with its peer funds (PR1) and whether it's the one to own"},
  "fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2 sentences for this investor: what they get and what they give up", "watch": "the number to track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  ${READ(PANELS.core)},
  "confidence": "high | medium | low"}
-Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items. Your fit judgment moves code's score for that investor (SC1): strong +5, good +2, weak -2, poor -5; judge each from the pillars and everything else, not from the score alone.`,
+Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, one holdings_notes entry for each of the 10 biggest holdings (H1-H10). Your fit judgment moves code's score for that investor (SC1): strong +5, good +2, weak -2, poor -5; judge each from the pillars and everything else, not from the score alone.`,
     calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries and holdings", "triggers": ["what would set it off"]}, "base": {...}, "bear": {...}},
  "horizons": {${HZ.map((h) => `"${h}": {"vs_benchmark": "outperform | in line | underperform", "drivers": "4-6 sentences, cited, with numbers: what moves the fund in this window, which dated events land in it, and how its industries' outlooks add up for this fund", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
  "plans": {"income": {"size_pct": 0, "entry": "when or at what level to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
@@ -264,6 +271,11 @@ Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items. Your fit judgment moves code's
  "debates": [{"id": "DB1", "side": "bull | bear | split", "why": "one or two sentences: which side the fund is on at its weights and holdings, cited"}],
  ${READ(PANELS.calls)}}
 Probabilities add to 100. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
+    markets: `{"returns": {"summary": "3-4 sentences: how the fund has done over every period against its benchmark and SPY, and why (which industries and holdings drove the gap), cited"},
+ "risk_profile": {"level": "low | moderate | high", "summary": "3-4 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
+ "street": {"summary": "2-3 sentences: what Wall Street's ratings and targets on its biggest holdings say for the fund, and how much to trust them"},
+ "season": {"summary": "2-3 sentences: what this earnings season has shown so far for the fund and what the next reports must show"},
+ ${READ(PANELS.markets)}}`,
     context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
  "industries": [{"id": "I1", "effect": "helps | hurts | mixed", "why": "one sentence: what this industry's analysis means for the fund at its weight"}],
  "macro": {"regime": "supportive | mixed | headwind", "headline": "one sentence on the macro for this fund", "horizons": {${HZ.map((h) => `"${h}": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}`).join(", ")}}, "flip": "what would flip it, with levels",
@@ -281,7 +293,7 @@ Sizes: 4-7 drivers; one entry for EVERY industry I, every factor MF and every wo
 Sizes: one entry for EVERY country C, rule R and outside holding O listed.`,
   };
   /** The industry report reads each fund panel sits next to (the keys of each digest's "reads"). */
-  const PANEL_IND = { score: ["fit"], cycle: ["cycle"], season: ["calls", "earn"], debates: [], holdings: ["fit"], industries: ["cycle"], valuation: ["val"], fundamentals: ["fund", "health", "earn"], income: ["div"], perf: ["perf"], risk: ["risk"], calendar: ["calls"],
+  const PANEL_IND = { active: [], score: ["fit"], cycle: ["cycle"], season: ["calls", "earn"], debates: [], holdings: ["fit"], industries: ["cycle"], valuation: ["val"], fundamentals: ["fund", "health", "earn"], income: ["div"], perf: ["perf"], risk: ["risk"], calendar: ["calls"],
     times: ["stress"], stress: ["stress"], sens: ["macro"], look: ["fit"], tech: ["tech"], street: ["street"], news: ["news"], dist: ["div"], trade: ["trade"], regulation: ["reg"], world: ["world"] };
   const IND_READ_LABEL = { fit: "fit by investor type", cycle: "the cycle", val: "valuation", fund: "fundamentals", health: "financial health", earn: "earnings", div: "income", perf: "performance", risk: "risk",
     calls: "earnings calls", stress: "drawdowns and base rates", macro: "macro", tech: "trend and positioning", street: "the street", news: "news flow", trade: "trade", reg: "regulation", world: "world events" };
@@ -297,12 +309,13 @@ Sizes: one entry for EVERY country C, rule R and outside holding O listed.`,
     const lines = keys.map((k) => { const r = indReads(fd.cov, fd.digests, k, 2); return r.length ? `${IND_READ_LABEL[k]}: ${r.map((x) => `${x.industry} (${pc(x.weight)} of the fund): ${trim(x.text, 220)}`).join(" | ")}` : ""; }).filter(Boolean);
     return lines.length ? `## WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY, PANEL BY PANEL (set your reads against these)\n${lines.join("\n")}` : "";
   }
-  const BLOCKS = { core: ["base", "score", "hold", "val", "tech"], calls: ["base", "score", "perf", "val", "cal", "deb", "tech"], context: ["base", "perf", "ind", "cyc", "tech"], exposures: ["base", "hold"] };
+  const BLOCKS = { core: ["base", "score", "hold", "val", "tech"], calls: ["base", "score", "perf", "val", "cal", "deb", "tech"], markets: ["base", "score", "hold", "perf", "cal", "tech"], context: ["base", "perf", "ind", "cyc", "tech"], exposures: ["base", "hold"] };
   const INTRO = {
-    core: "You write part one of a four-part analysis of this fund; colleagues write the calls, the context and the exposures at the same time. Write ONLY: the verdict, the thesis, the benchmark view, strategy, valuation, quality, the peer view, risks, catalysts, watch, fit and your panel reads.",
-    calls: "You write part two of a four-part analysis: the 12-month scenarios, what drives each window, the plans per investor type, which side of each industry debate the fund is on and your panel reads. Colleagues write the rest at the same time.",
-    context: "You write part three of a four-part analysis: what drives the fund, each industry row, the macro (with the fund's own measured sensitivities), each world event, its industries' cycle, and your panel reads. Colleagues write the rest at the same time.",
-    exposures: "You write part four of a four-part analysis: trade, regulation and the holdings the analysis can't see, row by row, and your panel reads. Colleagues write the rest at the same time.",
+    core: "You write part one of a five-part analysis of this fund; colleagues write the calls, the context and the exposures at the same time. Write ONLY: the verdict, the thesis, the benchmark view, strategy, valuation, quality, the peer view, risks, catalysts, watch, fit and your panel reads.",
+    markets: "You write the markets part of a five-part analysis: the fund's returns, its risk profile and how it behaves in crises, its trend, Wall Street's view of its holdings, the news, the distributions and the earnings season, and your panel reads. Colleagues write the rest at the same time.",
+    calls: "You write part two of a five-part analysis: the 12-month scenarios, what drives each window, the plans per investor type, which side of each industry debate the fund is on and your panel reads. Colleagues write the rest at the same time.",
+    context: "You write part three of a five-part analysis: what drives the fund, each industry row, the macro (with the fund's own measured sensitivities), each world event, its industries' cycle, and your panel reads. Colleagues write the rest at the same time.",
+    exposures: "You write part four of a five-part analysis: trade, regulation and the holdings the analysis can't see, row by row, and your panel reads. Colleagues write the rest at the same time.",
   };
   /** The prompt for one part ("core" | "calls" | "context" | "exposures"). dz: dossier(). */
   function partPrompt(fd, dz, part, today) {
@@ -312,6 +325,7 @@ Rules:
 - Use only the facts and numbers below. Don't invent figures, holdings, events or dates; every number you use must appear below.
 - Cite the lines you rely on with their IDs in square brackets, e.g. [I1][H3][P2]. Every claim needs at least one ID.
 - Plain, direct sentences. Say what the fund is betting on and what that means for an owner.
+- Write like a senior analyst who has read everything below: specific, numerate and opinionated. Every read makes a judgment and backs it with the figures; no filler, no restating a table without saying what it means.
 - Be honest about coverage: private companies, foreign listings and code-only industries limit how sure you can be.
 
 ${BLOCKS[part].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
@@ -329,7 +343,7 @@ ${SCHEMA[part]}`;
     const t = write || {}, c = t.core || {}, k = t.calls || {}, x = t.context || {}, e = t.exposures || {}, sym = fd.sym, name = fd.facts?.name || sym;
     const w = [c.headline ? `Headline: ${trim(c.headline, 260)}` : "", c.verdict?.call ? `Verdict: ${c.verdict.call}: ${trim(c.verdict.summary, 500)}` : "", c.thesis ? `Thesis: ${trim(c.thesis, 1500)}` : "",
       c.vs_benchmark?.call ? `Vs ${fd.bench?.symbol}: ${c.vs_benchmark.call}: ${trim(c.vs_benchmark.why, 300)}` : "", c.valuation?.read ? `Valuation: ${trim(c.valuation.read, 400)}` : "", c.street?.summary ? `Vs Wall Street: ${c.street.stance || ""}: ${trim(c.street.summary, 360)}` : "",
-      c.quality ? `Quality: ${trim(c.quality, 260)}` : "", c.strategy ? `How it's run: ${trim(c.strategy, 260)}` : "",
+      c.quality ? `Quality: ${trim(c.quality, 260)}` : "", t.markets?.returns?.summary ? `Returns: ${trim(t.markets.returns.summary, 300)}` : "", t.markets?.risk_profile?.summary ? `Risk profile (${t.markets.risk_profile.level || "?"}): ${trim(t.markets.risk_profile.summary, 300)}` : "", t.markets?.season?.summary ? `Earnings season: ${trim(t.markets.season.summary, 260)}` : "", c.strategy ? `How it's run: ${trim(c.strategy, 260)}` : "",
       ["bull", "base", "bear"].some((q) => k.scenarios?.[q]) ? `Scenarios (12M): ${["bull", "base", "bear"].filter((q) => k.scenarios?.[q]).map((q) => `${q} ${k.scenarios[q].probability ?? "?"}%: ${trim(k.scenarios[q].narrative, 160)}`).join("; ")}` : "",
       ...HZ.filter((h) => k.horizons?.[h]?.drivers).map((h) => `${h} drivers: ${trim(k.horizons[h].drivers, 260)}`),
       (c.risks || []).length ? `Risks: ${c.risks.slice(0, 5).map((r) => trim(r.risk, 120)).join("; ")}` : "", (c.catalysts || []).length ? `Catalysts: ${c.catalysts.slice(0, 5).map((y) => `${y.date} ${trim(y.event, 100)}`).join("; ")}` : "",
@@ -380,7 +394,10 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     const rng = (r) => (Array.isArray(r) && r.length === 2 && isNum(n(r[0])) && isNum(n(r[1])) ? [Math.min(n(r[0]), n(r[1])), Math.max(n(r[0]), n(r[1]))] : null);
     const rows = (a, f, need) => (Array.isArray(a) ? a : []).map(f).filter((x) => x && (!need || x[need]));
     const rowId = (x) => (known(x?.id) ? x.id : (x?.id && dropped++, null));
-    const reads = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, t(v, 600)]).filter(([, v]) => v));
+    // A read is {text, points, means, watch}; older answers (and a plain string) keep just the text.
+    const reads = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => { if (typeof v === "string") return [k, t(v, 900) ? { text: t(v, 900), points: [], means: "", watch: "" } : null];
+      const x = { text: t(v?.text ?? v?.read, 1600), points: (Array.isArray(v?.points) ? v.points : []).map((y) => t(typeof y === "string" ? y : y?.text, 300)).filter(Boolean).slice(0, 7), means: t(v?.means, 500), watch: t(v?.watch, 260) };
+      return [k, x.text || x.points.length ? x : null]; }).filter(([, v]) => v));
     return { t, ids, en, rng, rows, rowId, reads, dropped: () => dropped };
   }
   /** One part's answer, cleaned: only IDs the dossier has, known enums, ranges low to high (the fit's points come from the fit word). */
@@ -392,6 +409,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
         fit[k] = { fit: en(x.fit, ENUM.fit), conviction: en(x.conviction, ENUM.lvl), why: t(x.why, 400), watch: t(x.watch, 200), what_changes: t(x.what_changes, 240) }; }
       w = { headline: t(o.headline, 300), verdict: { call: en(o.verdict?.call, ENUM.verdict), summary: t(o.verdict?.summary, 600) }, thesis: t(o.thesis, 3000),
         vs_benchmark: { call: en(o.vs_benchmark?.call, ENUM.vs), why: t(o.vs_benchmark?.why, 600) }, strategy: t(o.strategy, 600), valuation: { read: t(o.valuation?.read, 600) }, quality: t(o.quality, 400), street: o.street ? { stance: en(o.street.stance, ["agree", "more bullish", "more bearish"]), summary: t(o.street.summary, 600) } : null,
+        holdings_notes: rows(o.holdings_notes, (x) => ({ id: rowId(x), bet: t(x?.bet, 120), view: t(x?.view, 500), stance: en(x?.stance, ["tailwind", "neutral", "headwind"]) }), "id").slice(0, 12),
         peers: o.peers ? { stance: en(o.peers.stance, ["best in group", "competitive", "lagging"]), summary: t(o.peers.summary, 500) } : null,
         risks: rows(o.risks, (x) => ({ risk: t(x?.risk, 300), likelihood: en(x?.likelihood, ENUM.lvl), impact: en(x?.impact, ENUM.lvl), ids: ids(x?.ids) }), "risk").slice(0, 8),
         catalysts: rows(o.catalysts, (x) => ({ date: String(x?.date || "").slice(0, 10), event: t(x?.event, 200), why: t(x?.why, 300), ids: ids(x?.ids) }), "event").slice(0, 8),
@@ -402,6 +420,10 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
       const plans = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.plans?.[k]; if (x) plans[k] = { size_pct: n(x.size_pct), entry: t(x.entry, 240), hedge: t(x.hedge, 240), review: t(x.review, 200) }; }
       const debates = rows(o.debates, (x) => ({ id: rowId(x), side: en(x?.side, ["bull", "bear", "split"]), why: t(x?.why, 500) }), "id");
       w = { scenarios: scen, horizons: hz, plans, debates, change_mind: (Array.isArray(o.change_mind) ? o.change_mind : []).map((x) => t(x, 300)).filter(Boolean).slice(0, 6), reads: reads(o.reads) };
+    } else if (part === "markets") {
+      const sm = (x, k = 900) => (x?.summary ? { summary: t(x.summary, k) } : null);
+      w = { returns: sm(o.returns), risk_profile: o.risk_profile ? { level: en(o.risk_profile.level, ["low", "moderate", "high"]), summary: t(o.risk_profile.summary, 900), worst_case: t(o.risk_profile.worst_case, 300) } : null,
+        street: sm(o.street, 700), season: sm(o.season, 700), reads: reads(o.reads) };
     } else if (part === "context") {
       w = { drivers: rows(o.drivers, (x) => ({ driver: t(x?.driver, 200), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 500), ids: ids(x?.ids) }), "driver").slice(0, 8),
         industries: rows(o.industries, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 400) }), "id"),
@@ -429,7 +451,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "markets", "context", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);
