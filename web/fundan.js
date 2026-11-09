@@ -240,11 +240,11 @@
 
   // ============================================================= the four parts and the outlook
   const CALLS = "bullish | slightly bullish | neutral | slightly bearish | bearish";
-  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
+  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund, set against what its biggest industries' own reports say on the same panel (more or less, and why), and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
   const PANELS = {
     core: { holdings: "the holdings and their concentration", industries: "the industry mix and how the industries are rated", valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
     calls: { perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead", plan: "the price levels and when to buy", times: "past setups like today and what came next", track: "how this page's past calls on the fund have done" },
-    context: { stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions" },
+    context: { stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions", world: "the world events that reach the fund" },
     exposures: { trade: "trade and supply chains", regulation: "regulation", outside: "the holdings the analysis can't see" },
   };
   const SCHEMA = {
@@ -284,6 +284,23 @@ Sizes: 4-7 drivers; one entry for EVERY industry I, every factor MF and every wo
  ${READ(PANELS.exposures)}}
 Sizes: one entry for EVERY country C, rule R and outside holding O listed.`,
   };
+  /** The industry report reads each fund panel sits next to (the keys of each digest's "reads"). */
+  const PANEL_IND = { holdings: ["fit"], industries: ["cycle"], valuation: ["val"], fundamentals: ["fund", "health", "earn"], income: ["div"], perf: ["perf"], risk: ["risk"], calendar: ["calls"],
+    times: ["stress"], stress: ["stress"], sens: ["macro"], look: ["fit"], tech: ["tech"], street: ["street"], news: ["news"], dist: ["div"], trade: ["trade"], regulation: ["reg"], world: ["world"] };
+  const IND_READ_LABEL = { fit: "fit by investor type", cycle: "the cycle", val: "valuation", fund: "fundamentals", health: "financial health", earn: "earnings", div: "income", perf: "performance", risk: "risk",
+    calls: "earnings calls", stress: "drawdowns and base rates", macro: "macro", tech: "trend and positioning", street: "the street", news: "news flow", trade: "trade", reg: "regulation", world: "world events" };
+  /** What the fund's biggest industries' reports say on one topic: [{industry, weight, text}], biggest first. */
+  function indReads(cov, digests, key, k = 3) {
+    const out = [];
+    for (const g of cov?.industries || []) { const t = digests?.[lc(g.industry)]?.reads?.[key]; if (t) out.push({ industry: g.industry, weight: g.weight, kind: digests[lc(g.industry)].kind, text: t }); if (out.length >= k) break; }
+    return out;
+  }
+  /** The industries' reads for one analyst's panels, as a prompt block. */
+  function indReadsBlock(fd, part) {
+    const keys = [...new Set(Object.keys(PANELS[part] || {}).flatMap((p) => PANEL_IND[p] || []))]; if (!keys.length) return "";
+    const lines = keys.map((k) => { const r = indReads(fd.cov, fd.digests, k, 2); return r.length ? `${IND_READ_LABEL[k]}: ${r.map((x) => `${x.industry} (${pc(x.weight)} of the fund): ${trim(x.text, 220)}`).join(" | ")}` : ""; }).filter(Boolean);
+    return lines.length ? `## WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY, PANEL BY PANEL (set your reads against these)\n${lines.join("\n")}` : "";
+  }
   const BLOCKS = { core: ["base", "hold", "val", "tech"], calls: ["base", "perf", "val", "cal", "tech"], context: ["base", "perf", "ind", "tech"], exposures: ["base", "hold"] };
   const INTRO = {
     core: "You write part one of a four-part analysis of this fund; colleagues write the calls, the context and the exposures at the same time. Write ONLY: the verdict, the thesis, the benchmark view, strategy, valuation, quality, risks, catalysts, watch, fit and your panel reads.",
@@ -302,6 +319,8 @@ Rules:
 - Be honest about coverage: private companies, foreign listings and code-only industries limit how sure you can be.
 
 ${BLOCKS[part].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
+
+${indReadsBlock(fd, part)}
 
 Reply with ONLY this JSON:
 ${SCHEMA[part]}`;
@@ -410,7 +429,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, trackLog, trackEval, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);

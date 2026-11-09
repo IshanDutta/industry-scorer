@@ -5327,7 +5327,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const sl = bySlugName.get(lc(name));
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
-        if (c && c.saved_at === r.saved_at && c.dg?.v === 2) { out[lc(name)] = c.dg; continue; }
+        if (c && c.saved_at === r.saved_at && c.dg?.v === 3) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
         const rec = await idbGet("run:" + sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
@@ -5592,6 +5592,18 @@ a.btnlink:hover { border-color: var(--accent); }
   function fundA(fd) { const r = fd.full; const p = fd.writing ? { ...(r?.parts || {}), ...Object.fromEntries(Object.entries(fd.partial || {}).filter(([, v]) => v)) } : r?.parts || {}; return { P: p, idx: fd.writing ? FundAn.dossier(fd, today()).idx : r?.idx || {} }; }
   /** A panel's written read, under its heading. */
   function fundReadBox(text, idx, label = "Our read") { return text ? `<div class="coread"><span class="eyebrow">${label}</span><p>${fundCites(text, idx)}</p></div>` : ""; }
+  /**
+   * A panel's read, as the company page shows it: ours on top, then what the fund's biggest industries' own reports say
+   * about the same panel (each with its weight in the fund). The industries' reads show even before ours is written.
+   */
+  function fundPanelRead(fd, text, idx, key, writing) {
+    const keys = FundAn.PANEL_IND[key] || [], ir = keys.flatMap((k) => FundAn.indReads(fd.cov, fd.digests, k, 3).map((x) => ({ ...x, k })));
+    const seen = new Set(), rows = ir.filter((x) => { const id = x.industry + "|" + x.k; if (seen.has(id)) return false; seen.add(id); return true; }).slice(0, keys.length > 1 ? 5 : 3);
+    const indL = rows.length ? `<div class="small muted" style="margin-top:6px;display:grid;gap:3px"><b>What its biggest industries' reports say${keys.length === 1 ? ` (${esc(FundAn.IND_READ_LABEL[keys[0]])})` : ""}:</b>${rows.map((x) => `<div><b>${x.slug ? "" : ""}${esc(x.industry)}</b> <span class="mono">${pct(x.weight, false, 1)}</span>${keys.length > 1 ? ` · ${esc(FundAn.IND_READ_LABEL[x.k])}` : ""}${x.kind === "quant" ? " · code-only" : ""}: ${esc(x.text)}</div>`).join("")}</div>` : "";
+    if (text) return `<div class="coread" data-read="${esc(key)}"><span class="eyebrow">Our read</span><p>${fundCites(text, idx)}</p>${indL}</div>`;
+    if (!indL) return "";
+    return `<div class="coread pending" data-read="${esc(key)}"><span class="eyebrow">Our read</span><p class="small muted">${writing ? "Being written…" : "Comes with the analysis."}</p>${indL}</div>`;
+  }
   const FEFF = { helps: "pos", hurts: "neg", mixed: "warn", none: "neu", tailwind: "pos", headwind: "neg", neutral: "neu", supportive: "pos" };
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
@@ -5608,7 +5620,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
     const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, OL = fd.full?.outlook || FundAn.provisional(FundAn.prior(fd), today());
-    const R = (k, part) => fundReadBox((P[part] || {}).reads?.[k], idx);
+    const R = (k, part) => fundPanelRead(fd, (P[part] || {}).reads?.[k], idx, k, fd.writing);
     const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
     const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: four analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
     const fill = S.fundFill?.sym === fd.sym ? `<div class="notice info"><span>Filling the industries no run covers, code only (data and scores, no Claude): ${S.fundFill.done} of ${S.fundFill.n} done${S.fundFill.now ? `, now ${esc(S.fundFill.now)}` : ""}.</span></div>` : "";
@@ -5781,7 +5793,7 @@ a.btnlink:hover { border-color: var(--accent); }
         ${rows ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>If this happens</th><th class="n">The fund moves</th><th class="n">Beyond the other factors</th><th class="n">Its industries, weighted</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
         <div class="small muted">Measured, not asserted: regressions of the fund's daily returns over the last year on SPY, the 10-year yield, oil, the dollar and high-yield bonds; the industries' column is their own measurement, weighted.${Object.keys(L.regimes).length ? ` The industries' macro regimes: ${Object.entries(L.regimes).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 0)}`).join(" · ")}.` : ""}</div>`); })() : "";
     const wRead = new Map((ctx.world || []).map((x) => [idx[x.id], x]));
-    const worldSec = L?.world?.length ? sec("fund-world", "World events", "the situations the industries' reports follow, by how much of the fund they reach", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Situation and what it means for the fund</th><th class="n">Reaches</th><th class="n">Adverse for</th><th class="n">Favorable for</th></tr></thead><tbody>${L.world.slice(0, 10).map((x) => { const rd = wRead.get(x.title);
+    const worldSec = L?.world?.length ? sec("fund-world", "World events", "the situations the industries' reports follow, by how much of the fund they reach", `${R("world", "context")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Situation and what it means for the fund</th><th class="n">Reaches</th><th class="n">Adverse for</th><th class="n">Favorable for</th></tr></thead><tbody>${L.world.slice(0, 10).map((x) => { const rd = wRead.get(x.title);
       return `<tr><td class="wr"><b>${esc(x.title)}</b>${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fLvl(rd.magnitude)} ${fundCites(rd.why, idx)}</div>` : ""}<div class="small muted">${esc(x.industries.slice(0, 5).join(", "))}</div></td><td class="n"><b>${pct(x.w, false, 0)}</b></td><td class="n ${x.adverse > 0.005 ? "down" : "muted"}">${pct(x.adverse, false, 0)}</td><td class="n ${x.favorable > 0.005 ? "up" : "muted"}">${pct(x.favorable, false, 0)}</td></tr>`; }).join("")}</tbody></table></div>`) : "";
     const tRead = new Map((ex.trade || []).map((x) => [idx[x.id], x])), TO = ex.trade_overall;
     const tradeSec = L?.trade?.length ? sec("fund-trade", "Trade and supply chains", "the countries the industries' trade maps name", `${TO?.summary ? `<div class="callout"><div class="callout-head">${TO.risk ? fLvl(TO.risk === "moderate" ? "medium" : TO.risk, "trade risk") : ""}</div><div class="small">${fundCites(TO.summary, idx)}</div>${TO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(TO.biggest, idx)}</div>` : ""}</div>` : ""}${R("trade", "exposures")}

@@ -231,7 +231,7 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 2, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 3, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -247,6 +247,26 @@
         opm: n(c.op_margin), g: n(c.rev_growth), beta: n(c.beta), next: c.next || null, beats: c.beats || null })),
       events: (rec?.agent?.calendar?.events || []).filter((e) => e?.title && e.dates?.[0]).sort((x, y) => (SEV[x.importance] ?? 3) - (SEV[y.importance] ?? 3)).slice(0, 8)
         .map((e) => ({ date: e.dates[0], title: String(e.title).slice(0, 120), importance: e.importance || "", section: e.section || "", detail: String(e.detail || "").slice(0, 200) })),
+      // Each panel's read in the industry's own report, short: what a fund page shows under its own read of the same panel.
+      reads: (() => { const sx = a.sections || {}, H = d.history || {}, Pz = d.positioning || {}, pxi = Pz.price || {}, kp = rep("kpi"), cl = rep("calls"), an = rec?.research?.analyst || [], se = rec?.research?.sentiment;
+        const cut0 = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
+        // Cut at a sentence end where one is near, else at a word, so a read never stops mid-word.
+        const cutAt = (t, k) => { if (t.length <= k) return t; const h = t.slice(0, k), e = Math.max(h.lastIndexOf(". "), h.lastIndexOf("; ")); return e > k * 0.55 ? h.slice(0, e + 1) : h.slice(0, h.lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
+        const cut = (x, k = 300) => cutAt(cut0(x), k);
+        const pcx = (x, k = 0) => (isNum(n(x)) ? (n(x) * 100).toFixed(k) + "%" : "n/a"), up = an.map((x) => n(x.upside)).filter(isNum).sort((x, y) => x - y);
+        const o = { perf: cut(sx.performance), risk: cut(sx.risk), fund: cut(sx.fundamentals), health: cut(sx.health), val: cut(sx.valuation), earn: cut(sx.earnings),
+          cycle: kp ? cut(`${kp.cycle_position ? `Cycle: ${kp.cycle_position}${kp.pricing_power?.level ? `, pricing power ${kp.pricing_power.level}` : ""}. ` : ""}${kp.summary || ""}`) : "",
+          macro: macro ? cut(`${macro.regime ? macro.regime + ": " : ""}${macro.headline || ""}`) : "",
+          world: (world?.dives || []).length ? cut(world.dives.slice(0, 3).map((x) => `${x.title} (${x.stance || "?"})`).join("; ")) : "",
+          trade: trade?.verdict ? cut(`${trade.verdict.rating || ""}: ${trade.verdict.headline || ""}`) : "",
+          reg: rv ? cut(`${[rv.stance, rv.intensity].filter(Boolean).join(", ")}: ${rv.headline || ""}`) : "",
+          street: an.length ? `Median target upside ${pcx(up[Math.floor(up.length / 2)])}; ${an.filter((x) => /buy/i.test(x.consensus || "")).length} of ${an.length} covered names rated Buy.` : "",
+          news: se ? `News sentiment (-1 to +1): 7 days ${isNum(n(se.last_7d)) ? n(se.last_7d).toFixed(2) : "n/a"}, 90 days ${isNum(n(se.last_90d)) ? n(se.last_90d).toFixed(2) : "n/a"}; ${se.articles_30d || "n/a"} articles in 30 days.${a.dimensions?.news?.why ? " " + cut(a.dimensions.news.why, 160) : ""}` : "",
+          stress: (H.drawdowns?.episodes || []).length ? cut(`Drawdowns since ${H.from || "?"}: ${H.drawdowns.episodes.slice(0, 3).map((e) => `${e.peak} to ${e.trough} ${pcx(e.depth)}`).join("; ")}.${H.base_prob_up ? ` Base rate of a gain: ${Object.entries(H.base_prob_up).map(([h, v]) => `${h} ${pcx(v)}`).join(", ")}.` : ""}`) : "",
+          tech: pxi.last ? `Index ${pcx(pxi.vs50, 1)} vs its 50-day, ${pcx(pxi.vs200, 1)} vs 200-day, RSI ${isNum(n(pxi.rsi14)) ? n(pxi.rsi14).toFixed(0) : "n/a"}; positioning "${Pz.label || "n/a"}".` : "",
+          div: cut(a.profiles?.income?.verdict, 260), fit: cut(["growth", "income", "conservative", "aggressive"].map((k) => a.profiles?.[k]?.fit ? `${k}: ${a.profiles[k].fit}` : "").filter(Boolean).join(", ")),
+          calls: cl?.summary?.text ? cut(`${cl.summary.direction || ""}: ${cl.summary.text}`) : "" };
+        return Object.fromEntries(Object.entries(o).filter(([, v]) => v)); })(),
       drivers: (a.drivers || []).slice(0, 4).map((x) => String(x?.driver || x?.name || x?.title || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       risks: (a.risks || []).slice(0, 3).map((x) => String(x?.risk || x?.text || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       sens: (d.sensitivity?.factors || []).map((f) => ({ key: f.key, label: f.label, shock: f.shock_label || "", effect: n(f.total?.effect), t: n(f.total?.t) })).filter((f) => f.key && isNum(f.effect)),

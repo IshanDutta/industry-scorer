@@ -60,4 +60,10 @@ const r1 = te.rows.find((r) => r.h === "1M"), r3 = te.rows.find((r) => r.h === "
 assert(r1.done && r1.hit === true && r1.strength === true, "1M: +4% on slightly bullish, inside one sigma");
 assert(r3.done && r3.hit === true && r3.strength === false, "3M: -1% on strongly bearish: right way, not strong");
 assert(!r12.done, "12M is still open"); assert.strictEqual(te.done, 2); assert.strictEqual(te.hit, 1); assert.strictEqual(te.strength, 0.5);
+// phase 2: what its biggest industries' reports say, panel by panel
+const ir = A.indReads(cov, D, "val", 3);
+assert.strictEqual(ir.length, 3); assert.strictEqual(ir[0].industry, cov.industries[0].industry, "biggest first"); assert(ir[0].text.length > 20);
+const ib = A.indReadsBlock(fd, "core");
+assert(/WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY/.test(ib) && /valuation: Semiconductors/.test(ib), ib.slice(0, 300));
+assert(A.partPrompt(fd, dz, "context", "2026-11-09").includes("world events:"), "the context analyst gets the industries' world reads");
 console.log("fundan tests passed", JSON.stringify({ top10: +conc.top10.toFixed(3), eff: +conc.effective_n.toFixed(1), cal: cal.length, prompts: A.PARTS.map((p) => A.partPrompt(fd, dz, p, "2026-11-09").length) }));
