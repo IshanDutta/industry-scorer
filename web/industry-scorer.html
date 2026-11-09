@@ -11104,7 +11104,7 @@ Reply with ONLY this JSON:
       }
       const al = Daily.allot(Object.entries(day).map(([n, v]) => ({ name: n, strength: v.strength, score: v.score, leanDue: v.leanDue })), dayMoney, { weekend: weekend && !big.big });
       for (const [n, v] of Object.entries(day)) v.plan = al.plans[n] || null;
-      dr.heldUpdates = al.held; dr.quietDay = Object.values(day).filter((v) => !v.plan).length;
+      dr.heldUpdates = al.held; dr.dayMoney = dayMoney === Infinity ? null : Math.round(dayMoney * 100) / 100; dr.quietDay = Object.values(day).filter((v) => !v.plan).length;
       if (dayMoney !== Infinity) { budget = weekend && !big.big ? 0 : Math.max(0, Math.min(al.left, big.big ? al.left : 0.2 * dayMoney)); stretch = 0; }
       const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch });
       dr.borrowed = pl.borrowed || 0;
@@ -11189,7 +11189,7 @@ Reply with ONLY this JSON:
       const r0 = await secGet(sector);
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, rows: { ...(r0.rows || {}), ...(dr.rows || {}) }, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
         daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
-          analyses_updated: dr.updated || 0, quiet_day: dr.quietDay || 0, held_updates: dr.heldUpdates || [], day_money: dr.budget, weekend: !!(new Date(today() + "T00:00:00Z").getUTCDay() % 6 === 0), leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
+          analyses_updated: dr.updated || 0, quiet_day: dr.quietDay || 0, held_updates: dr.heldUpdates || [], day_money: dr.dayMoney ?? null, weekend: !!(new Date(today() + "T00:00:00Z").getUTCDay() % 6 === 0), leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
       S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
@@ -11862,9 +11862,13 @@ Reply with ONLY this JSON:
         const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: (v.missing || []).filter((m) => !(m === "macro" && macroOk)), running: false };
         if (i >= 0) idx[i] = e; else idx.unshift(e); n++; S.savedAt[sl] = v.saved_at; }
     }
-    await idbPut("index", idx); S.saved = idx;
     // A sector too big for one file comes in parts; only the part with the sector record sets it.
     if (file.sector && file.records[secKey(file.sector)]) S.sectorRec[file.sector] = file.records[secKey(file.sector)];
+    // Sector runs save "research" as missing for every industry but the one running when the world wire came in;
+    // the wire is kept once under the sector (stored above), so clear that gap where the research is there.
+    for (const e of idx) if ((e.missing || []).includes("research") && file.records["run:" + e.slug]
+      && await researchOk(file.records["run:" + e.slug])) e.missing = e.missing.filter((k) => k !== "research");
+    await idbPut("index", idx); S.saved = idx;
     // A checkpoint from the GitHub job carries the shared library: sector runs in this browser can reuse it too.
     if (file.library?.v === 1) { libMerge(await libLoad(), file.library); await libFlush(); }
     return n;
@@ -12071,6 +12075,25 @@ Reply with ONLY this JSON:
   window.addEventListener("beforeunload", (e) => { if (busy()) { if (_saveName) flush(); e.preventDefault(); e.returnValue = ""; } });
   window.addEventListener("pagehide", () => { if (_saveName) flush(); });
 
+  /**
+   * The world wire an industry's sector run used. A sector run fetches it once for the whole sector and keeps it under
+   * the sector (its later rounds under r<n>:wire), so only the industry that was running at the time saved its own copy.
+   */
+  async function sectorWire(name, sector) {
+    if (!sector) return null;
+    const rec = S.sectorRec[sector] || (await secGet(sector).catch(() => null));
+    const r = [...(rec?.rounds || [])].reverse().find((x) => (x.names || []).includes(name));
+    for (const part of [r ? `r${r.n}:wire` : null, "wire"]) {
+      if (!part) continue;
+      const w = await secGet(sector, part).catch(() => null);
+      if (w?.world?.items) return w;
+    }
+    return null;
+  }
+  /** A saved run's "research" gap is false when its research is there and its sector holds the world wire. */
+  async function researchOk(v) {
+    return !!v?.research && (!!v.world?.items || !!(await sectorWire(v.name, v.industry?.sector)));
+  }
   /** Put a saved run back on screen (no new calls). Returns true if one was found. */
   async function restore(name) {
     const snap = await idbGet("run:" + slug(name));
@@ -12080,6 +12103,7 @@ Reply with ONLY this JSON:
     Object.assign(S.reports, snap.reports || {}); Object.assign(S.regbooks, snap.regbooks || {});
     S.teamErrors[sl] = snap.teamErrors || {}; S.regFail[sl] = snap.regFail || {};
     S.macro = snap.macro; S.macroBy[sl] = snap.macro; S.macroCat = snap.macroCat; S.world = snap.world; S.bench = snap.bench; S.usOnly = !!snap.usOnly;
+    if (!S.world?.items) { const w = await sectorWire(name, snap.industry.sector); if (w) { S.world = w.world; if (!S.macroCat) S.macroCat = w.macroCat; } }
     idbGet("calls:" + sl).then((log) => { if (log) { S.track[sl] = log; renderReport(); } }).catch(() => {});
     const sec = snap.industry.sector; if (sec && !(sec in S.sectorRec)) secGet(sec).then((r) => { S.sectorRec[sec] = r || null; renderReport(); }).catch(() => {});
     S.savedAt[sl] = snap.saved_at; S.restored = { name, saved_at: snap.saved_at, running: !!snap.running, interrupted: snap.running || missingParts(name).length > 0 };
@@ -15493,6 +15517,11 @@ Reply with ONLY this JSON:
     for (const x of S.saved) if ((x.missing || []).includes("macro")) {
       const v = await idbGet("run:" + x.slug).catch(() => null), m = v?.reports?.[`${x.slug}--macro`]?.result;
       if (m && !m.partial && v.macro?.rows?.length) { x.missing = x.missing.filter((k) => k !== "macro"); fixed++; }
+    }
+    // Likewise the false "research" gap: the research is saved and the world wire is under the sector.
+    for (const x of S.saved) if ((x.missing || []).includes("research")) {
+      const v = await idbGet("run:" + x.slug).catch(() => null);
+      if (v && await researchOk(v)) { x.missing = x.missing.filter((k) => k !== "research"); fixed++; }
     }
     if (fixed) await idbPut("index", S.saved).catch(() => {});
     const act = await idbGet("sectorActive");
