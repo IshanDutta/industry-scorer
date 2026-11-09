@@ -92,12 +92,13 @@ console.log("fundan ok (phases 3-4)");
 {
   assert.deepStrictEqual(A.PARTS, ["core", "calls", "markets", "context", "world", "exposures"]);
   const keys = Object.values(A.PANELS).flatMap((x) => Object.keys(x));
-  for (const k of ["score", "peers", "holdings", "industries", "valuation", "fundamentals", "income", "coverage", "debates", "calendar", "plan", "times", "perf", "risk", "stress", "tech", "street", "news", "dist", "season", "cycle", "sens", "look", "world", "macro_ind", "active", "trade", "regulation", "outside"]) assert(keys.includes(k), "a read for " + k);
+  for (const k of ["industries", "income", "coverage", "calendar", "plan", "times", "stress", "tech", "news", "dist", "look"]) assert(keys.includes(k), "a read for " + k);
+  for (const k of ["valuation", "risk", "perf", "street", "world", "trade", "regulation", "macro_ind", "score"]) assert(!keys.includes(k), "no second read where a field already covers " + k);
   assert.strictEqual(new Set(keys).size, keys.length, "each panel read by one analyst");
   const mk = A.cleanPart("markets", { returns: { summary: "Lagged SPY [P1]." }, risk_profile: { level: "High", summary: "Beta 1.1 [P2].", worst_case: "-31% in 2020 [S1]." },
     reads: { risk: { text: "Riskier than SPY [P2] [ZZ1].", points: ["Beta 1.1 [P2]", { text: "Max drawdown -18% [P2]" }], means: "Size it smaller.", watch: "Beta above 1.2" }, perf: "Old-style string [P1]." } }, dz.idx);
   assert.strictEqual(mk.w.risk_profile.level, "high"); assert.strictEqual(mk.w.reads.risk.points.length, 2); assert.strictEqual(mk.w.reads.risk.text, "Riskier than SPY [P2]."); assert.strictEqual(mk.w.reads.perf.text, "Old-style string [P1].");
-  assert(A.partPrompt(fd, dz, "markets", "2026-11-09").includes('"risk": {"text": "5-7 sentences'));
+  assert(A.partPrompt(fd, dz, "markets", "2026-11-09").includes('"stress": {"text": "2-3 sentences') && A.partPrompt(fd, dz, "markets", "2026-11-09").includes("never repeat them"));
   const hn = A.cleanPart("core", { holdings_notes: [{ id: "H1", bet: "AI chips", view: "18% of the fund [H1].", stance: "Tailwind" }, { id: "H99", view: "x" }] }, dz.idx);
   assert.deepStrictEqual(hn.w.holdings_notes.map((x) => [x.id, x.stance]), [["H1", "tailwind"]]);
   console.log("fundan ok (fleshed-out reads)");

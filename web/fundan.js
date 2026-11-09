@@ -239,22 +239,22 @@
   const CALLS = "bullish | slightly bullish | neutral | slightly bearish | bearish";
   // Each panel's read is a short analyst's note, not a caption: what the numbers say, set against its industries' own
   // reports, the specific findings behind it, what it means for an owner, and what would change it.
-  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": {"text": "5-7 sentences on ${v}: what the numbers say about this fund (the figures, cited), how that compares with its biggest industries' own reports on the same panel and with its benchmark (more or less, and why), and the judgment you draw", "points": ["4-6 specific findings, each one sentence with a number and an ID"], "means": "2 sentences: what it means for someone who owns the fund now, and for someone thinking of buying it", "watch": "the one number or date that would change this read, with the level"}`).join(", ")}}`;
+  // A short read only for the panels no other field covers; the industry reports carry the rest (shown next to it).
+  const READ = (panels) => (Object.keys(panels).length ? `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": {"text": "2-3 sentences on ${v}: only what the fund adds beyond its industries' own reports and the table on the page (don't restate either), cited", "points": ["at most 3 findings, each with a number and an ID"]}`).join(", ")}}` : `"reads": {}`);
   const PANELS = {
-    core: { score: "the scorecard: which pillars lift or hold back each investor's score, the fund's own numbers against its industries'", peers: "how the fund stacks up against its peer funds on return, risk and cost",
-      holdings: "the holdings and their concentration: what the biggest positions are betting on and how much rides on them", industries: "the industry mix and how the industries are rated",
-      valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
-    calls: { debates: "the industries' debates and which side the fund is on", calendar: "the dated events ahead and which ones matter most at the fund's weights", plan: "the price levels and when to buy", times: "Times like this: the past months its industries' runs found most like today (macro backdrop and their setups), what those industries, the fund and the S&P 500 did next, and what the historians say is different now (cite HE)" },
-    markets: { perf: "the fund's returns against its benchmark and SPY, by period, and what drove the gap", risk: "risk: beta, volatility, drawdowns, capture, tracking error, and how they've shifted", stress: "how the fund held up in past crises and booms and what that says about the next one",
-      tech: "trend, momentum and the pattern match", street: "Wall Street's view of the biggest holdings", news: "news and sentiment on the biggest holdings", dist: "the distributions", season: "the holdings' earnings season: who reported, how it went and who's next" },
-    context: { cycle: "where its industries are in their cycles and what their KPIs say", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores", active: "its bets against the benchmark: the over- and underweights, whether they line up with the industries' calls, and what they add" },
-    world: { macro_ind: "the macro indicators its industries' macro reports read, and what they add up to for the fund", world: "the world events that reach the fund through its industries" },
-    exposures: { trade: "trade and supply chains across its industries' trade maps", regulation: "regulation and legal across its industries' rule books", outside: "the holdings the analysis can't see" },
+    core: { industries: "the industry mix and how the industries are rated", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
+    calls: { calendar: "the dated events ahead that matter most at the fund's weights", plan: "the price levels and when to buy", times: "Times like this (cite HE)" },
+    markets: { stress: "how the fund held up in past crises and booms", tech: "trend, momentum and the pattern match", news: "news and sentiment on the biggest holdings", dist: "the distributions" },
+    context: { look: "the look-through calls and scores" },
+    world: {},
+    exposures: {},
   };
+  // The industry reports each analyst gets beside its dossier (the keys of each digest's "reads"): lean on these.
+  const PART_IND = { core: ["val", "fund", "health", "earn", "fit", "div", "cycle"], calls: ["calls", "stress", "fit"], markets: ["perf", "risk", "street", "news", "stress", "tech", "div", "earn"], context: ["cycle", "macro"], world: ["macro", "world"], exposures: ["trade", "reg"] };
   const SCHEMA = {
     core: `{"headline": "one sentence: what owning this fund means now",
  "verdict": {"call": "attractive | neutral | unattractive", "summary": "2-3 sentences: is it worth owning now, and for whom"},
- "thesis": "3 short paragraphs: what the fund really is (its industries and bets), what its industries' analysis says, and what the price already assumes",
+ "thesis": "2 short paragraphs: what the fund really is (its bets at its weights) and what its industries' reports, taken together, mean for it",
  "vs_benchmark": {"call": "outperform | in line | underperform", "why": "2-3 sentences on the tilt against the benchmark"},
  "strategy": "2-3 sentences: how the fund is run (index or active, concentration, turnover, fees) and whether that's worth paying for",
  "valuation": {"read": "2-3 sentences: valuation against history and what's priced in"},
@@ -263,44 +263,42 @@
  "risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "ids": ["W1"]}],
  "catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "...", "ids": ["E1"]}],
  "watch": ["what to watch, with IDs"],
- "holdings_notes": [{"id": "H1", "bet": "what this position is a bet on, in a few words", "view": "2 sentences at its weight: the case for and against, cited (its industry's call, its own analysis, its valuation, its next report)", "stance": "tailwind | neutral | headwind"}],
+ "holdings_notes": [{"id": "H1", "bet": "what this position is a bet on, in a few words", "view": "one sentence at its weight, cited", "stance": "tailwind | neutral | headwind"}],
  "peers": {"stance": "best in group | competitive | lagging", "summary": "2 sentences: how it compares with its peer funds (PR1) and whether it's the one to own"},
  "fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2 sentences for this investor: what they get and what they give up", "watch": "the number to track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  ${READ(PANELS.core)},
  "confidence": "high | medium | low"}
 Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, one holdings_notes entry for each of the 10 biggest holdings (H1-H10). Your fit judgment moves code's score for that investor (SC1): strong +5, good +2, weak -2, poor -5; judge each from the pillars and everything else, not from the score alone.`,
     calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries and holdings", "triggers": ["what would set it off"]}, "base": {...}, "bear": {...}},
- "horizons": {${HZ.map((h) => `"${h}": {"vs_benchmark": "outperform | in line | underperform", "drivers": "4-6 sentences, cited, with numbers: what moves the fund in this window, which dated events land in it, and how its industries' outlooks add up for this fund", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
+ "horizons": {${HZ.map((h) => `"${h}": {"vs_benchmark": "outperform | in line | underperform", "drivers": "2-3 sentences, cited: what moves the fund in this window and which dated events land in it", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
  "plans": {"income": {"size_pct": 0, "entry": "when or at what level to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  "change_mind": ["what would change the view, with a level or a date"],
  "debates": [{"id": "DB1", "side": "bull | bear | split", "why": "one or two sentences: which side the fund is on at its weights and holdings, cited"}],
  ${READ(PANELS.calls)}}
 Probabilities add to 100. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
-    markets: `{"returns": {"summary": "3-4 sentences: how the fund has done over every period against its benchmark and SPY, and why (which industries and holdings drove the gap), cited"},
- "risk_profile": {"level": "low | moderate | high", "summary": "3-4 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
- "street": {"summary": "2-3 sentences: what Wall Street's ratings and targets on its biggest holdings say for the fund, and how much to trust them"},
+    markets: `{"returns": {"summary": "2-3 sentences: how the fund has done against its benchmark and SPY, and which industries and holdings drove the gap, cited"},
+ "risk_profile": {"level": "low | moderate | high", "summary": "2-3 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
  "season": {"summary": "2-3 sentences: what this earnings season has shown so far for the fund and what the next reports must show"},
  ${READ(PANELS.markets)}}`,
     context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
  "industries": [{"id": "I1", "effect": "helps | hurts | mixed", "why": "one sentence: what this industry's analysis means for the fund at its weight"}],
- "macro": {"regime": "supportive | mixed | headwind", "headline": "one sentence on the macro for this fund", "horizons": {${HZ.map((h) => `"${h}": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}`).join(", ")}}, "flip": "what would flip it, with levels",
-   "factors": [{"id": "MF1", "effect": "tailwind | headwind | neutral", "why": "one sentence: what this sensitivity means for the fund now"}]},
+ "macro": {"factors": [{"id": "MF1", "effect": "tailwind | headwind | neutral", "why": "one sentence: what this measured sensitivity means for the fund now"}]},
  "cycle": {"phase": "early | mid | late | downturn | mixed", "summary": "2-3 sentences: where the fund's industries are in their cycles, weighted, and what that means for the next 12 months (cite CY)", "kpis_watch": ["the KPI or dated KPI event to watch, with IDs"]},
  ${READ(PANELS.context)}}
 Sizes: 4-7 drivers; one entry for EVERY industry I and every factor MF listed.`,
-    world: `{"macro_overall": {"regime": "supportive | mixed | headwind", "summary": "4-5 sentences: what the macro table says for this fund now (which indicators matter most at its weights, which way they point, where its industries disagree)", "most_important": "the one indicator that matters most for the fund now, with its level and why",
-   "pain": "4-5 sentences: how the fund suffers if the macro turns: the shock that hurts most (cite ST and the measured sensitivities), how much, which industries and holdings take it, what cushions it, and how likely it looks from the macro table now",
-   "channels": {"demand": "how the macro reaches the fund's revenue, 2 sentences", "cost": "...costs and margins", "capital": "...valuation and financing", "regulatory": "...policy"}},
- "indicators": [{"id": "MI1", "effect": "tailwind | headwind | neutral", "relevance": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "why": "2 sentences: what this reading means for the fund at its industries' weights, with the number, cited", "hit": "one sentence: what a bad move in it would do to the fund, with the size where the stress test gives one"}],
- "world_overall": {"summary": "4 sentences: the world events that matter most for this fund, how they reach it and how much of it", "biggest": "the single situation that matters most and why", "watch": ["what to watch, with IDs"]},
- "world": [{"id": "WS1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "channel": "how it reaches the fund: which industries and holdings, through which channel", "scenario": "the scenario that matters most for the fund and what it would do to it", "watch": "the signal to watch", "why": "2 sentences with the size, cited"}],
+    world: `{"macro_overall": {"regime": "supportive | mixed | headwind", "summary": "2-3 sentences: what the macro table means for this fund at its weights (not a restatement of the industries' reads)", "most_important": "the one indicator that matters most for the fund now, with its level and why",
+   "pain": "3 sentences: how the fund suffers if the macro turns: the shock that hurts most (cite ST and the measured sensitivities), how much, which industries and holdings take it, what cushions it, and how likely it looks from the macro table now",
+   "channels": {"demand": "one sentence: how the macro reaches the fund's revenue", "cost": "one sentence: costs and margins", "capital": "one sentence: valuation and financing", "regulatory": "one sentence: policy"}},
+ "indicators": [{"id": "MI1", "effect": "tailwind | headwind | neutral", "relevance": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "why": "one sentence: what this reading means for the fund at its weights, only where it differs from its industries' reads", "hit": "one sentence: what a bad move in it would do to the fund, with the size where the stress test gives one"}],
+ "world_overall": {"summary": "2-3 sentences: the world events that matter most for this fund and how much of it they reach", "biggest": "the single situation that matters most and why", "watch": ["what to watch, with IDs"]},
+ "world": [{"id": "WS1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "why": "one sentence with the size: what it means for the fund (the industries' deep dive is shown next to it; don't repeat it)"}],
  ${READ(PANELS.world)}}
 Sizes: one entry for EVERY indicator MI and every situation WS listed. Size every "hit" and the "pain" from the stress test and the measured sensitivities; never invent a number. "vs_industries": whether the fund feels it the same as its industries' reports say, more, less, or the other way (holdings, weights).`,
-    exposures: `{"trade_overall": {"risk": "low | moderate | high", "summary": "4 sentences: what its industries' trade maps and verdicts mean for this fund, where its revenue is and which countries carry the risk", "biggest": "the single country or risk that matters most, and why", "watch": ["what to watch, with IDs"]},
- "trade": [{"id": "TC1", "exposure": "high | medium | low", "effect": "helps | hurts | mixed | none", "channel": "how it reaches the fund: revenue, inputs, manufacturing, which holdings", "risk": "the risk that matters for the fund there", "freeze": "what a trade freeze would do to the fund", "why": "2 sentences with a size, cited"}],
- "reg_overall": {"stance": "tailwind | headwind | mixed", "summary": "4 sentences: the net regulatory and legal picture for the fund across its industries' rule books and verdicts", "biggest": "the single most material rule, with how much of the fund it reaches", "timeline": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "a dated regulatory or legal step ahead", "why": "what it means for the fund"}], "watch": ["what to watch, with IDs"]},
- "regulation": [{"id": "RL1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "link": "which of its industries or holdings it runs through", "cost": "how big, with a number where the rule book gives one", "timing": "when it bites", "why": "2 sentences, cited"}],
- "items": [{"id": "LI1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "next": "the next step and its date", "why": "1-2 sentences, cited"}],
+    exposures: `{"trade_overall": {"risk": "low | moderate | high", "summary": "2-3 sentences: what its industries' trade maps mean for this fund and which countries carry the risk", "biggest": "the single country or risk that matters most, and why", "watch": ["what to watch, with IDs"]},
+ "trade": [{"id": "TC1", "exposure": "high | medium | low", "effect": "helps | hurts | mixed | none", "why": "one sentence with a size: what it means for the fund (the industries' dossier is shown next to it)"}],
+ "reg_overall": {"stance": "tailwind | headwind | mixed", "summary": "2-3 sentences: the net regulatory and legal picture for the fund", "biggest": "the single most material rule, with how much of the fund it reaches", "timeline": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "a dated regulatory or legal step ahead", "why": "what it means for the fund"}], "watch": ["what to watch, with IDs"]},
+ "regulation": [{"id": "RL1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "why": "one sentence with a size: what it means for the fund (the rule book is shown next to it)"}],
+ "items": [{"id": "LI1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "why": "one sentence"}],
  "outside": [{"id": "O1", "matters": "high | medium | low", "why": "one sentence: what this holding means for the fund and what the analysis misses by not covering it"}],
  ${READ(PANELS.exposures)}}
 Sizes: one entry for EVERY country TC, rule RL, item LI and outside holding O listed.`,
@@ -318,9 +316,9 @@ Sizes: one entry for EVERY country TC, rule RL, item LI and outside holding O li
   }
   /** The industries' reads for one analyst's panels, as a prompt block. */
   function indReadsBlock(fd, part) {
-    const keys = [...new Set(Object.keys(PANELS[part] || {}).flatMap((p) => PANEL_IND[p] || []))]; if (!keys.length) return "";
+    const keys = PART_IND[part] || []; if (!keys.length) return "";
     const lines = keys.map((k) => { const r = indReads(fd.cov, fd.digests, k, 2); return r.length ? `${IND_READ_LABEL[k]}: ${r.map((x) => `${x.industry} (${pc(x.weight)} of the fund): ${trim(x.text, 220)}`).join(" | ")}` : ""; }).filter(Boolean);
-    return lines.length ? `## WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY, PANEL BY PANEL (set your reads against these)\n${lines.join("\n")}` : "";
+    return lines.length ? `## WHAT ITS BIGGEST INDUSTRIES' OWN REPORTS SAY (the page shows these next to your work: build on them, say where the fund differs, never repeat them)\n${lines.join("\n")}` : "";
   }
   const BLOCKS = { core: ["base", "score", "hold", "val", "tech"], calls: ["base", "score", "perf", "val", "cal", "deb", "tech"], markets: ["base", "score", "hold", "perf", "cal", "tech"], context: ["base", "perf", "ind", "cyc", "tech"], world: ["base", "aff_macro", "aff_world"], exposures: ["base", "hold", "aff_trade", "aff_reg"] };
   const INTRO = {
@@ -339,7 +337,8 @@ Rules:
 - Use only the facts and numbers below. Don't invent figures, holdings, events or dates; every number you use must appear below.
 - Cite the lines you rely on with their IDs in square brackets, e.g. [I1][H3][P2]. Every claim needs at least one ID.
 - Plain, direct sentences. Say what the fund is betting on and what that means for an owner.
-- Write like a senior analyst who has read everything below: specific, numerate and opinionated. Every read makes a judgment and backs it with the figures; no filler, no restating a table without saying what it means.
+- Rely on the industry reports: they are the analysis. Your job is what they mean for this fund at its weights. Don't restate an industry's view, a table or another field; say each thing once, in the field that owns it.
+- Short and specific: every sentence makes a judgment with a number. No filler.
 - Be honest about coverage: private companies, foreign listings and code-only industries limit how sure you can be.
 
 ${BLOCKS[part].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}

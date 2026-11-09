@@ -133,3 +133,13 @@ assert.deepStrictEqual(sg("", { recent: [{ sym: "SPY" }].map((x) => ({ symbol: x
 assert.strictEqual(P.suggest("x", { recent: [{ symbol: "XLK", name: "Tech" }], etfs })[0].symbol, "XLK", "a recent fund ranks first among equals");
 console.log("look-through", JSON.stringify({ on: +lt.on.toFixed(3), best: lt.best, fwd_pe: +lt.val.fwd_pe.v.toFixed(1), exp12: +lt.exp12.v.toFixed(1), calls: Object.fromEntries(P.HZ.map((h) => [h, lt.calls[h].lean || lt.calls[h].call])), overlap: +ac.overlap.toFixed(2), tilt: +ac.tilt.toFixed(2) }));
 console.log("portfolio tests passed", JSON.stringify({ covered: +cov.covered.toFixed(3), ...Object.fromEntries(Object.entries(B).map(([a, b]) => [a, +b.toFixed(3)])) }));
+// another source's industry label, as FMP's closest industry (EODHD's names differ)
+assert.strictEqual(P.toFmpIndustry("Semiconductor Equipment & Materials"), "Semiconductors");
+assert.strictEqual(P.toFmpIndustry("Software—Application"), "Software - Application");
+assert.strictEqual(P.toFmpIndustry("Utilities—Regulated Electric"), "Regulated Electric");
+assert.strictEqual(P.toFmpIndustry("Oil & Gas E&P"), "Oil & Gas Exploration & Production");
+assert.strictEqual(P.toFmpIndustry("Insurance—Property & Casualty"), "Insurance - Property & Casualty");
+assert.strictEqual(P.toFmpIndustry("Widgets"), null);
+{ const mm = P.mapHoldings([{ ticker: "AMAT", name: "Applied Materials", weight: 0.02 }], [{ ticker: "AMAT", industry: "Semiconductor Equipment & Materials", sector: "Technology" }], {});
+  assert.strictEqual(mm[0].industry, "Semiconductors"); assert(/EODHD/.test(mm[0].via)); }
+console.log("portfolio ok (industry names)");
