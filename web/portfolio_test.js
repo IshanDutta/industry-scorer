@@ -76,4 +76,30 @@ assert(sx && sx.kind === "private", "SpaceX: a top holding the analysis can't co
 // sector funds get their SPDR; Nasdaq funds QQQ
 assert.strictEqual(P.benchmark({ symbol: "VDC", name: "Vanguard Consumer Staples" }, { "Consumer Defensive": 0.98 }).symbol, "XLP");
 assert.strictEqual(P.benchmark({ symbol: "ONEQ", name: "Fidelity Nasdaq Composite Index ETF" }, { Technology: 0.5 }).symbol, "QQQ");
+
+// ---- step 2: the look-through (digests built from the real saved runs)
+assert.strictEqual(P.callNum("slightly bullish"), 1); assert.strictEqual(P.callNum("bearish"), -2); assert.strictEqual(P.callNum("neutral"), 0);
+assert.strictEqual(P.callLabel(0.7), "slightly bullish"); assert.strictEqual(P.callLabel(-1.6), "bearish");
+const lt = P.lookThrough(cov, FX.digests);
+assert(lt.on > 0.8 && lt.on <= cov.covered + 1e-9, `the look-through rests on the covered weight: ${lt.on}`);
+for (const t of ["income", "conservative", "growth", "aggressive"]) assert(lt.scores[t].v > 0 && lt.scores[t].v < 100, t);
+for (const h of P.HZ) { const c = lt.calls[h]; assert(c.call && Math.abs(c.dist.up + c.dist.flat + c.dist.down - c.lean_on) < 0.2, h); }
+assert(lt.val.fwd_pe.v > 10 && lt.val.fwd_pe.v < 60, "forward P/E in a sane range");
+// harmonic P/E: two equal halves at 10x and 30x make 15x, not 20x
+const hc = P.lookThrough({ industries: [{ industry: "A", weight: 0.5 }, { industry: "B", weight: 0.5 }] }, { a: { val: { pe: 10 }, risk: {}, calls: {}, lean: {} }, b: { val: { pe: 30 }, risk: {}, calls: {}, lean: {} } });
+assert(Math.abs(hc.val.pe.v - 15) < 1e-9);
+assert(lt.world.length && lt.world[0].w > 0.3, "the biggest world situation reaches much of the fund");
+assert(lt.trade.length && lt.sens.length && lt.contrib.length);
+assert(isFinite(lt.exp12.v));
+// against SPY
+const sm = P.mapHoldings(P.fromFmp(FX.spy_holdings), [], FX.cos), scov = P.coverage(sm, FX.runs, { now: "2026-11-09" });
+assert(scov.covered > 0.97, `SPY is covered: ${scov.covered}`);
+const ac = P.active(cov, scov, FX.digests);
+assert(ac.overlap > 0.3 && ac.overlap < 0.95, `Contrafund overlaps SPY partly: ${ac.overlap}`);
+assert(Math.abs(ac.rows.reduce((a, r) => a + r.active, 0) - (cov.us_stock - scov.us_stock)) < 0.02, "active weights net to the difference in stock weight");
+assert(isFinite(ac.tilt));
+// the code-only fill counts as covered, separately
+const qcov = P.coverage([{ kind: "stock", industry: "Widgets", weight: 1 }], {}, { now: "2026-11-09", quant: { widgets: { name: "Widgets", saved_at: "2026-11-08" } } });
+assert.strictEqual(qcov.buckets.quant, 1); assert.strictEqual(qcov.covered, 1); assert.strictEqual(qcov.covered_full, 0);
+console.log("look-through", JSON.stringify({ on: +lt.on.toFixed(3), best: lt.best, fwd_pe: +lt.val.fwd_pe.v.toFixed(1), exp12: +lt.exp12.v.toFixed(1), calls: Object.fromEntries(P.HZ.map((h) => [h, lt.calls[h].lean || lt.calls[h].call])), overlap: +ac.overlap.toFixed(2), tilt: +ac.tilt.toFixed(2) }));
 console.log("portfolio tests passed", JSON.stringify({ covered: +cov.covered.toFixed(3), ...Object.fromEntries(Object.entries(B).map(([a, b]) => [a, +b.toFixed(3)])) }));

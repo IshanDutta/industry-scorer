@@ -72,7 +72,7 @@ The **Funds** tab opens any US stock ETF or mutual fund and reads it through the
 | Step | What | Who |
 |---|---|---|
 | 1 (built) | Facts and holdings from FMP and EODHD, each holding sorted and matched to an industry, the coverage report | Code |
-| 2 | Look-through roll-ups (scores, 1M-12M calls, scenarios, valuation, macro, world, trade, regulation), active weights vs the benchmark; quant-only fill for industries not analyzed | Code |
+| 2 (built) | Look-through roll-ups (scores, 1M-12M calls, scenarios, valuation, macro, world, trade, regulation), active weights vs the benchmark; quant-only fill for industries not analyzed | Code |
 | 3 | One fund-strategist write-up per fund, rewritten only when the look-through moves | Claude |
 | 4 | Compare 2-4 funds, a watchlist, funds in the GitHub job and its export | Code |
 | 5 | Track record of the fund calls | Code |
@@ -83,6 +83,9 @@ The **Funds** tab opens any US stock ETF or mutual fund and reads it through the
 - **Coverage.** Every holding's weight falls in one bucket: analyzed (a saved run 14 days old or newer), stale, industry not analyzed, US stock with no industry, abroad, private, cash, derivative, bond. Per industry: weight, holdings, the share in the industry's top 50 and the run's age.
 - **Cross-check.** A position in EODHD's top holdings that FMP lists at a very different weight, without a ticker, or not at all is flagged (Contrafund's SpaceX lock-up shares).
 - **Benchmark.** 60%+ in one sector: that sector's SPDR; a Nasdaq fund: QQQ; anything else: SPY.
+- **Look-through (step 2).** Each industry a fund holds is reduced to a small digest (`Portfolio.digest`): its scores per investor type (from the sector overview row, so every report section counts; from the page's own scoring when there's no row), the strategist's 1M-12M calls with their ranges and odds, the newer outlook, the scenario-weighted 12-month return and the bull/base/bear moves, valuation (P/E, forward P/E, EV/EBITDA, P/S, dividend yield, EPS and revenue growth, revisions), risk (beta, volatility, drawdown), the measured macro sensitivities, the world situations with their stance, the trade map's countries (stance, threat, estimated revenue share), the supply-chain rating, the regulatory verdict and its high and critical rules. Digests are kept per run version (`indDigest`), so a saved run is opened once. The fund figure is each industry's weighted by the fund's weight in it and renormalized over the industries it applies to; P/E-type ratios are weighted as shares of earnings (harmonic); each figure says how much of the fund it rests on. World situations are matched across industries by title; countries by name.
+- **Against the benchmark.** The benchmark's own holdings (FMP) are matched to industries the same way. Per industry: fund weight, benchmark weight, active weight, the 12-month call and expected return. Overlap is the shared weight by industry; "what the tilts add" is the sum of active weight times expected return; "leaning with the analysis" is the share of active weight on the side the call points to.
+- **Code-only fill.** Industries no saved run covers get the data step of a full run (prices, statements, estimates, metrics and scores, no Claude), saved as a digest marked code-only (`quant:<slug>`, `quantIndex`). On opening a fund, the biggest 8 uncovered industries at 0.5%+ of the fund are filled straight away; a button fills up to 20 more. Code-only scores leave out the report sections. An industry FMP doesn't know by that name is listed as not filled, with why.
 - **Saving.** Each fund's raw data is kept in the browser for 20 hours (`fund:<SYM>`), with a list of recent funds (`funds`).
 
 ---
@@ -595,7 +598,7 @@ It runs **after everything else**: every specialist report, every regulatory rul
 | `regbook.js` | Rule-book search, prompts, fact-check, verdict, JSON repair |
 | `brain.js` | Lead strategist dossier, prompts, review merge, critic |
 | `agent.js` | Research tools for the lead strategist (news and M&A search) |
-| `portfolio.js` | Funds: both sources' facts and holdings, what each holding is, industry matching, coverage, cross-check, benchmark |
+| `portfolio.js` | Funds: both sources' facts and holdings, what each holding is, industry matching, coverage, cross-check, benchmark, industry digests, the look-through and active weights |
 | `insights.js` | Takeaways written by code from the numbers |
 | `build.py` | Inlines the modules into `industry-scorer.html` |
 | `runner/` | The overnight job: `run.mjs`, the viewer stand-ins (`lib/shim.js`, `lib/sampler.mjs`, `lib/mcp.mjs`), offline tests (`test/`) |
