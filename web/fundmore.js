@@ -269,9 +269,57 @@
    * which of the fund's holdings it names. IDs for the analysts: MI (indicators), WS (situations), TC (countries),
    * RL (rules), LI (policy, litigation, deals).
    */
+  /** Which measured factor an indicator moves with (the fund's regressions: market, rates, oil, dollar, credit). */
+  function factorOf(x) { const t = `${x.key || ""} ${x.label || ""}`;
+    return /treasury|10y|10-year|year10|real yield|tips|mortgage rate|term premium/i.test(t) ? "rates" : /\boil\b|wti|brent|crude|gasoline|uso\b/i.test(t) ? "oil" : /dollar|dxy|uup|usd index/i.test(t) ? "dollar"
+      : /high.?yield|hyg|credit spread|baa|junk|hy spread|corporate spread/i.test(t) ? "credit" : /s&p ?500|spy\b|vix|equity market/i.test(t) ? "market" : null; }
+  /**
+   * How the fund suffers when the macro turns (code): each measured factor (the fund's own regressions on SPY, the
+   * 10-year yield, oil, the dollar and high-yield bonds), a bad month and a severe month for that factor (its 95th and
+   * 99th percentile adverse one-month move since the series begins) and what each does to the fund and to its
+   * industries; then combined shocks from the multi-factor betas. sens: the fund's Sensitivity.measure; indSens: its
+   * industries' weighted (Portfolio.lookThrough .sens); series: {market, rates, oil, dollar, credit: {dates, values}}.
+   */
+  const KIND = { market: "ret", rates: "diff", oil: "ret", dollar: "ret", credit: "ret" };
+  function monthMoves(s, kind) { const v = s?.values || s?.closes || []; const out = []; for (let i = 21; i < v.length; i += 5) { const a = v[i - 21], b = v[i]; if (isNum(a) && isNum(b) && (kind === "diff" || a > 0)) out.push(kind === "diff" ? b - a : b / a - 1); } return out.sort((x, y) => x - y); }
+  const q = (a, p) => (a.length ? a[Math.min(a.length - 1, Math.max(0, Math.round(p * (a.length - 1))))] : NaN);
+  function macroStress({ sens, indSens = [], series = {} }) {
+    const F = sens?.factors || []; if (!F.length) return null;
+    const ind = new Map((indSens || []).map((x) => [x.key, x]));
+    const mv = {}; for (const f of F) { const m = monthMoves(series[f.key], KIND[f.key]); if (m.length >= 24) mv[f.key] = { p1: q(m, 0.01), p5: q(m, 0.05), p95: q(m, 0.95), p99: q(m, 0.99), n: m.length }; }
+    const unit = (k, x) => (KIND[k] === "diff" ? `${x > 0 ? "+" : ""}${x.toFixed(2)}pp` : `${x > 0 ? "+" : ""}${(x * 100).toFixed(1)}%`);
+    const shockOf = (k) => ({ market: 0.01, rates: 0.25, oil: 0.1, dollar: 0.05, credit: -0.02 })[k];
+    const rows = F.map((f) => { const beta = n(f.total?.beta) || (n(f.total?.effect) / shockOf(f.key)), m = mv[f.key], i = ind.get(f.key), ib = i ? n(i.effect) / shockOf(f.key) : NaN;
+      if (!m || !isNum(beta)) return { key: f.key, label: f.label, shock_label: f.shock_label, effect: n(f.total?.effect), t: n(f.total?.t), ind_effect: i ? n(i.effect) : NaN, stable: f.stable };
+      const bad = beta >= 0 ? m.p5 : m.p95, severe = beta >= 0 ? m.p1 : m.p99;
+      return { key: f.key, label: f.label, shock_label: f.shock_label, effect: n(f.total?.effect), t: n(f.total?.t), ind_effect: i ? n(i.effect) : NaN, stable: f.stable,
+        bad: { move: bad, label: unit(f.key, bad), fund: beta * bad, ind: isNum(ib) ? ib * bad : NaN }, severe: { move: severe, label: unit(f.key, severe), fund: beta * severe, ind: isNum(ib) ? ib * severe : NaN } }; })
+      .sort((a, b) => (a.bad?.fund ?? 0) - (b.bad?.fund ?? 0));
+    // Combined shocks, from the partial betas (each factor's effect holding the others fixed).
+    // (When the multi-factor fit isn't available, each factor's own beta stands in, and the shock is marked approximate.)
+    const multi = F.some((f) => isNum(n(f.partial?.beta))), pb = Object.fromEntries(F.map((f) => [f.key, multi ? n(f.partial?.beta) : n(f.total?.beta)]));
+    const SC = [["Higher for longer", "the 10-year yield up a bad month, high-yield bonds down one, the dollar up one", { rates: "p95", credit: "p5", dollar: "p95" }],
+      ["Oil shock", "oil up a severe month and yields up a bad one (an energy-led inflation scare)", { oil: "p99", rates: "p95" }],
+      ["Credit crunch", "high-yield bonds down a severe month and the S&P 500 down a bad one", { credit: "p1", market: "p5" }],
+      ["Equity selloff", "the S&P 500 down a severe month", { market: "p1" }],
+      ["Stagflation", "yields, oil and the dollar up a bad month each, high-yield bonds down one", { rates: "p95", oil: "p95", dollar: "p95", credit: "p5" }],
+      ["Soft landing", "yields down a bad month's size, high-yield bonds and the S&P 500 up a good one", { rates: "p5", credit: "p95", market: "p95" }]];
+    const scenarios = SC.map(([name, what, legs]) => { const parts = Object.entries(legs).filter(([k]) => mv[k] && isNum(pb[k])).map(([k, p]) => ({ key: k, move: mv[k][p], label: unit(k, mv[k][p]), fund: pb[k] * mv[k][p] }));
+      return parts.length ? { name, what, legs: parts, fund: parts.reduce((a, x) => a + x.fund, 0), biggest: parts.slice().sort((a, b) => a.fund - b.fund)[0]?.key, approx: !multi } : null; }).filter(Boolean)
+      .map((x, i) => ({ id: "ST" + (i + 1), ...x }));
+    return { rows, scenarios, r2: n(sens.r2), from: sens.from, to: sens.to, moves: mv };
+  }
+  /** The stress test as dossier lines (ST IDs for the combined shocks). */
+  function stressText(T, sym) {
+    if (!T) return "";
+    const p = (x) => (isNum(x) ? `${x > 0 ? "+" : ""}${(x * 100).toFixed(1)}%` : "n/a");
+    return [`## HOW ${sym} SUFFERS WHEN THE MACRO TURNS (code: the fund's own measured sensitivities, last year's daily returns, R² ${isNum(T.r2) ? Math.round(T.r2 * 100) + "%" : "n/a"}; a bad month = the factor's 95th-percentile adverse one-month move in its history, severe = 99th)`,
+      ...T.rows.map((r) => `${r.label}: ${r.shock_label} moves ${sym} ${p(r.effect)} (its industries ${p(r.ind_effect)})${r.bad ? `; a bad month (${r.bad.label}) ${p(r.bad.fund)} (industries ${p(r.bad.ind)}), a severe month (${r.severe.label}) ${p(r.severe.fund)}` : ""}${r.stable === false ? "; unstable sign" : ""}.`),
+      ...T.scenarios.map((x) => `[${x.id}] ${x.name} (${x.what}: ${x.legs.map((l) => `${l.key} ${l.label}`).join(", ")}): ${sym} ${p(x.fund)}, mostly from ${x.biggest}.`)].join("\n");
+  }
   const SEVR = { critical: 0, high: 1, medium: 2, low: 3 }, THR = { none: 0, low: 1, moderate: 2, medium: 2, elevated: 3, high: 3, severe: 4, critical: 4 }, IMP = { existential: 3, high: 2, medium: 1, low: 0 };
   const tk = (t) => lc(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 7).join(" ");
-  function affairs(cov, digests, hold = [], { nI = 24, nW = 16, nC = 16, nR = 18, nL = 14 } = {}) {
+  function affairs(cov, digests, hold = [], { nI = 40, nW = 16, nC = 16, nR = 18, nL = 14 } = {}) {
     const L = inds(cov, digests).filter((x) => x.d.lens); if (!L.length) return null;
     const on = L.reduce((a, x) => a + x.g.weight, 0);
     const held = new Map((hold || []).filter((h) => h.ticker).map((h) => [h.ticker, h.weight]));
@@ -282,11 +330,23 @@
       return [...m.values()]; };
     // Macro: each industry's regime, then every indicator its industries read (the same indicator is matched by name).
     const regimes = L.filter((x) => x.d.lens.macro?.regime || x.d.lens.macro?.headline).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.lens.macro, indicators: undefined }));
-    const indicators = merge((d) => d.lens.macro?.indicators, (x) => lc(x.label)).map((e) => { const rd = e.rows.filter((r) => r.x.ind);
-      const rel = rd.filter((r) => r.x.ind.relevance !== "low"), top = e.rows.sort((a, b) => b.weight - a.weight)[0].x;
-      return { label: top.label, group: top.group, value: top.value, unit: top.unit, prior: top.prior, prior_label: top.prior_label, date: top.date, reach: e.w, read_by: rel.reduce((a, r) => a + r.weight, 0),
-        effects: tally(rel, (r) => r.x.ind.effect), relevance: tally(rd, (r) => r.x.ind.relevance), reads: rd.sort((a, b) => b.weight - a.weight).map((r) => ({ industry: r.industry, weight: r.weight, ...r.x.ind })) }; })
+    // The full macro table: every indicator in its industries' macro tables (matched by the data series, else the name),
+    // the latest numbers, and each industry's read (relevance, effect, why it matters, what's driving it, what's next).
+    const ikey = (x) => x.key || lc(x.label);
+    const indicators = merge((d) => d.lens.macro?.rows, ikey).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), rd = rs.filter((r) => r.x.ind), rel = rd.filter((r) => r.x.ind.relevance !== "low"), top = rs[0].x;
+      const lead = (rd.find((r) => r.x.ind.relevance === "high" && r.x.ind.driver) || rd.find((r) => r.x.ind.driver) || {}).x?.ind || {};
+      return { key: ikey(top), label: top.label, group: top.group, value: top.value, unit: top.unit, prior: top.prior, prior_label: top.prior_label, estimate: top.estimate, chg_1m: top.chg_1m, chg_3m: top.chg_3m, chg_1y: top.chg_1y,
+        period: top.period, date: top.date, source: top.source, reason: top.reason, reach: e.w, read_by: rel.reduce((a, r) => a + r.weight, 0), effects: tally(rel, (r) => r.x.ind.effect), driver: lead.driver || "", next: lead.next || "",
+        factor: factorOf(top), reads: rd.map((r) => ({ industry: r.industry, weight: r.weight, ...r.x.ind })) }; })
       .sort((a, b) => b.read_by - a.read_by || b.reach - a.reach).slice(0, nI).map((x, i) => ({ id: "MI" + (i + 1), ...x }));
+    const gw = {}; for (const x of indicators) gw[x.group] = (gw[x.group] || 0) + x.read_by + x.reach / 10;
+    const groups = Object.keys(gw).sort((a, b) => gw[b] - gw[a]);
+    // What's moving and why, how the macro reaches its industries, what would flip them, and the releases ahead.
+    const byInd = new Map(indicators.map((x) => [x.key, x]));
+    const moves = merge((d) => d.lens.macro?.moves, (x) => x.key || lc(x.label)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight); return { ...rs[0].x, reach: e.w, id: byInd.get(rs[0].x.key || lc(rs[0].x.label))?.id || "", so_whats: rs.map((r) => ({ industry: r.industry, weight: r.weight, so_what: r.x.so_what })) }; }).sort((a, b) => b.reach - a.reach).slice(0, 10);
+    const channels = Object.fromEntries(["demand", "cost", "capital", "regulatory"].map((k) => [k, L.filter((x) => x.d.lens.macro?.channels?.[k]).slice(0, 3).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, text: d.lens.macro.channels[k] }))]));
+    const flips = L.flatMap(({ g, d }) => (d.lens.macro?.flip || []).map((f) => ({ ...f, industry: g.industry, weight: g.weight }))).sort((a, b) => b.weight - a.weight).slice(0, 8);
+    const watchNext = merge((d) => d.lens.macro?.watch_next, (x) => x.date + "|" + tk(x.event).split(" ").slice(0, 3).join(" ")).map((e) => ({ ...e.rows[0].x, reach: e.w, industries: e.rows.map((r) => r.industry) })).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 12);
     // World: every situation, matched by title; the fullest deep dive from the biggest industry that has one.
     const world = merge((d) => d.lens.world, (x) => tk(x.title)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), dv = (rs.find((r) => r.x.deep) || rs[0]).x;
       const st = tally(rs, (r) => r.x.stance);
@@ -310,16 +370,20 @@
       return { ...top, reach: e.w, industries: rs.map((r) => ({ industry: r.industry, weight: r.weight, direction: r.x.direction })), named_held: namesHeld(rs.flatMap((r) => r.x.names)) }; })
       .sort((a, b) => (b.named_held.length > 0) - (a.named_held.length > 0) || b.reach - a.reach).slice(0, nL).map((x, i) => ({ id: "LI" + (i + 1), ...x }));
     const regVerdicts = L.filter((x) => x.d.lens.reg?.verdict).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.lens.reg.verdict }));
-    return { on, n: L.length, regimes, regime_mix: tally(regimes, (r) => r.regime), indicators, world, trade, tradeVerdicts, trade_mix: tally(tradeVerdicts, (r) => r.rating), rules, items, regVerdicts, reg_mix: tally(regVerdicts, (r) => r.stance) };
+    return { on, n: L.length, regimes, regime_mix: tally(regimes, (r) => r.regime), indicators, groups, moves, channels, flips, watchNext, world, trade, tradeVerdicts, trade_mix: tally(tradeVerdicts, (r) => r.rating), rules, items, regVerdicts, reg_mix: tally(regVerdicts, (r) => r.stance) };
   }
   /** The tables as the analysts' dossier blocks (each row with its ID). */
   function affairsText(A) {
     if (!A) return { macro: "", world: "", trade: "", reg: "" };
     const w = (x) => pc(x, 0), mix = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${w(v / (Object.values(o).reduce((p, q) => p + q, 0) || 1))}`).join(", ") || "n/a";
     const val = (r) => `${r.value ?? "n/a"}${r.unit === "%" ? "%" : r.unit ? " " + r.unit : ""}${r.prior !== undefined && r.prior !== null ? ` (${r.prior_label || "prior"} ${r.prior}${r.unit === "%" ? "%" : ""})` : ""}${r.date ? `, ${r.date}` : ""}`;
-    const macro = [`## THE MACRO, AS ITS INDUSTRIES' MACRO REPORTS READ IT (${A.n} industries, ${w(A.on)} of the fund)`, `Regimes by fund weight: ${mix(A.regime_mix)}.`,
-      ...A.regimes.slice(0, 10).map((r) => `${r.industry} (${pc(r.weight)}): ${r.regime || "n/a"}${r.confidence ? `, ${r.confidence} confidence` : ""}. ${r.headline || ""} ${HZ.filter((h) => r.horizons?.[h]).map((h) => `${h} ${r.horizons[h].call}`).join(", ")}.`),
-      ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}. Read by industries worth ${w(x.read_by)} of the fund: ${mix(x.effects)}. ${x.reads.slice(0, 3).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${r.why || ""}`).join(" | ")}`)].join("\n");
+    const cut = (t, k) => { t = String(t || ""); return t.length > k ? t.slice(0, t.lastIndexOf(" ", k)) + "…" : t; };
+    const ch = (x) => [isNum(n(x.chg_1m)) ? `1M ${x.chg_1m > 0 ? "+" : ""}${x.chg_1m}%` : "", isNum(n(x.chg_3m)) ? `3M ${x.chg_3m > 0 ? "+" : ""}${x.chg_3m}%` : "", isNum(n(x.chg_1y)) ? `1Y ${x.chg_1y > 0 ? "+" : ""}${x.chg_1y}%` : ""].filter(Boolean).join(", ");
+    const macro = [`## THE MACRO TABLE, FROM ITS INDUSTRIES' MACRO REPORTS (${A.n} industries, ${w(A.on)} of the fund; every indicator their macro planners chose, with each strategist's read)`,
+      ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}${ch(x) ? `; ${ch(x)}` : ""}${x.estimate !== null && x.estimate !== undefined ? `; consensus ${x.estimate}` : ""}. In the macro tables of industries worth ${w(x.reach)} of the fund; relevant to ${w(x.read_by)}: ${mix(x.effects)}.${x.driver ? ` Driving it: ${cut(x.driver, 200)}` : ""}${x.next ? ` Next: ${cut(x.next, 120)}` : ""} Reads: ${x.reads.slice(0, 2).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${cut(r.why, 170)}`).join(" | ")}${x.reads.length > 2 ? ` (+${x.reads.length - 2} more industries: ${mix(Object.fromEntries(Object.entries(x.reads.slice(2).reduce((o, r) => ((o[r.effect] = (o[r.effect] || 0) + r.weight), o), {}))))})` : ""}`),
+      A.moves.length ? `What's moving and why: ${A.moves.map((x) => `${x.label}${x.id ? ` [${x.id}]` : ""}: ${x.move} Driver: ${x.driver} So what (${x.so_whats[0].industry}): ${x.so_whats[0].so_what}`).join(" || ")}` : "",
+      A.flips.length ? `What would flip its industries' macro calls: ${A.flips.map((f) => `${f.industry}: ${f.trigger} (${f.mechanism})`).join("; ")}.` : "",
+      A.watchNext.length ? `Releases ahead: ${A.watchNext.map((x) => `${x.date} ${x.event}: ${x.why}`).join("; ")}.` : ""].filter(Boolean).join("\n");
     const world = [`## WORLD EVENTS, FROM ITS INDUSTRIES' WORLD-EVENTS REPORTS`,
       ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, 6).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${x.summary || ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
     const trade = [`## TRADE, FROM ITS INDUSTRIES' TRADE MAPS AND COUNTRY DOSSIERS`, `Trade verdicts by fund weight: ${mix(A.trade_mix)}. ${A.tradeVerdicts.slice(0, 6).map((v) => `${v.industry} (${pc(v.weight)}): ${v.rating || "n/a"}${v.health !== null && v.health !== undefined ? `, health ${v.health}/100` : ""}. ${v.headline || ""}`).join(" | ")}`,
@@ -330,7 +394,7 @@
     return { macro, world, trade, reg };
   }
 
-  const FundMore = { affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  const FundMore = { factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);

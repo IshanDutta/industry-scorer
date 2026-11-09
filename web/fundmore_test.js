@@ -95,3 +95,19 @@ assert.strictEqual(M.logDay(lg, { date: "2026-11-09", action: "calls" }).length,
 const fr = M.freshness({ cov, raw: { fetched_at: "2026-11-09T10:00:00Z", holdings: [{ date: "2026-09-30" }] }, ser }, { at: "2026-11-01T00:00:00Z", outlook: ol }, "2026-11-09");
 assert(fr.find((x) => x.what === "Holdings file").age === 40 && fr.find((x) => x.what === "The 1M-12M calls").age === 8);
 console.log("fundmore tests passed", JSON.stringify({ best: sc0.best, growth: Math.round(sc0.profiles.growth.base), cycle: Object.keys(cy.phase).slice(0, 3), ev: Math.round(sl.ev * 10) / 10 }));
+// ---- how the fund suffers when the macro turns (the stress test)
+{
+  const days = [...Array(1500).keys()], dates = days.map((i) => new Date(Date.UTC(2020, 0, 1) + i * 864e5).toISOString().slice(0, 10));
+  const sens = { r2: 0.8, from: "2025-11-01", to: "2026-11-01", factors: [{ key: "market", label: "Stock market (SPY)", shock_label: "+1% S&P 500", total: { beta: 1.2, t: 30, effect: 0.012 }, partial: { beta: 1.1, t: 25, effect: 0.011 } },
+    { key: "rates", label: "10-year Treasury yield", shock_label: "+0.25pp 10-year yield", total: { beta: -0.03, t: -4, effect: -0.0075 }, partial: { beta: -0.01, t: -2, effect: -0.0025 } }] };
+  const X = M.macroStress({ sens, indSens: [{ key: "market", effect: 0.011 }], series: { market: { dates, values: days.map((i) => 100 * Math.exp(0.0003 * i + 0.05 * Math.sin(i / 20))) }, rates: { dates, values: days.map((i) => 4 + Math.sin(i / 40)) } } });
+  const mk = X.rows.find((r) => r.key === "market"), rt = X.rows.find((r) => r.key === "rates");
+  assert(mk.bad.move < 0 && mk.bad.fund < 0 && mk.severe.fund <= mk.bad.fund, "the market's bad month is a fall, and it hurts");
+  assert(rt.bad.move > 0 && rt.bad.fund < 0 && /pp$/.test(rt.bad.label), "rates hurt when they rise, in points");
+  assert(X.rows[0].bad.fund <= X.rows[1].bad.fund, "the worst factor first");
+  const sel = X.scenarios.find((s) => s.name === "Equity selloff"); assert(sel && Math.abs(sel.fund - 1.1 * sel.legs[0].move) < 1e-12 && !sel.approx, "combined shocks use the partial betas");
+  assert(X.scenarios.find((s) => s.name === "Soft landing").fund > 0);
+  assert(M.stressText(X, "FCNTX").includes("[ST1]"));
+  assert.strictEqual(M.factorOf({ label: "US 10Y Treasury yield" }), "rates"); assert.strictEqual(M.factorOf({ label: "WTI crude" }), "oil"); assert.strictEqual(M.factorOf({ label: "Copper" }), null);
+  console.log("fundmore ok (stress test)");
+}

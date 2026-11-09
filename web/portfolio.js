@@ -238,9 +238,19 @@
     const L = CO().lensInputs({ name: rec.name, saved_at: rec.saved_at, industry: rec.industry, agent: rec.agent, macro: rec.macro, reports, books, lead: rec.agent?.result || null }, [], [], rec.industry?.as_of || null);
     const m = reports.macro || {}, t = (x, k) => cutW(x, k);
     return {
-      macro: { regime: m.regime ? lc(m.regime) : null, confidence: m.confidence || null, headline: t(m.headline, 260), horizons: Object.fromEntries(HZ.filter((h) => m.horizons?.[h]).map((h) => [h, { call: lc(m.horizons[h].call || ""), text: t(m.horizons[h].text, 220) }])),
-        channels: L.macroInd?.channels || {}, flip: L.macroInd?.flip || [],
-        indicators: (L.indicators || []).map((r) => ({ label: r.label, group: r.group || "", value: r.value, unit: r.unit || "", prior: r.prior, prior_label: r.prior_label || "", date: r.date || "", ind: r.ind })) },
+      // The industry's whole macro table (every indicator the macro planner chose, its numbers and the strategist's read
+      // of each), what's moving and why, how the macro reaches it, what would flip it, and the releases ahead.
+      macro: (() => { const mi = m.indicators || {}, rows = rec.macro?.rows || [], byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+        return { regime: m.regime ? lc(m.regime) : null, confidence: m.confidence || null, headline: t(m.headline, 260), summary: t(m.summary, 400), state: t(m.state_of_world, 300), as_of: rec.macro?.as_of || null, groups: rec.macro?.groups || [],
+          horizons: Object.fromEntries(HZ.filter((h) => m.horizons?.[h]).map((h) => [h, { call: lc(m.horizons[h].call || ""), text: t(m.horizons[h].text, 200) }])),
+          channels: Object.fromEntries(["demand", "cost", "capital", "regulatory"].filter((k) => m.channels?.[k]?.text).map((k) => [k, t(m.channels[k].text, 300)])),
+          flip: (m.flip || []).slice(0, 4).map((f) => ({ trigger: t(f.trigger, 150), mechanism: t(f.mechanism, 180), watch: t(f.watch, 120) })),
+          supports: (m.supports || []).slice(0, 3).map((x) => t(x.text || x, 200)), risks: (m.risks || []).slice(0, 3).map((x) => t(x.text || x, 200)),
+          moves: (m.moves || []).slice(0, 8).map((x) => ({ key: byId[x.id]?.key || "", label: byId[x.id]?.label || "", move: t(x.move, 180), driver: t(x.driver, 240), so_what: t(x.so_what, 200), situation: x.situation || "" })).filter((x) => x.label),
+          watch_next: (m.watch_next || []).slice(0, 8).map((x) => ({ date: String(x.date || "").slice(0, 10), event: t(x.event, 140), why: t(x.why, 180) })),
+          rows: rows.map((r) => { const x = mi[r.id]; return { key: r.key || "", label: r.label, group: r.group || "", value: r.value, unit: r.unit || "", prior: r.prior ?? null, prior_label: r.prior_label || "", estimate: r.estimate ?? null,
+            chg_1m: r.chg_1m ?? null, chg_3m: r.chg_3m ?? null, chg_1y: r.chg_1y ?? null, period: r.period || "", date: r.date || "", source: r.source || "", reason: t(r.reason, 140),
+            ind: x ? { relevance: x.relevance || "", effect: x.effect || "", relevance_why: t(x.relevance_why, 160), why: t(x.why_it_matters || x.why, 220), driver: t(x.driver, 220), next: t(x.next, 140) } : null }; }) }; })(),
       world: (L.situations || []).map((x) => ({ title: x.title, stance: x.stance || "", status: x.status || "", region: x.region || "", category: x.category || "", since: x.since || "", deep: !!x.deep, relevance: x.relevance || "",
         summary: t(x.summary, 280), now: t(x.now, 220), why_now: t(x.why_now, 160), trigger: t(x.trigger, 160), first_order: t(x.first_order, 180), near_term: t(x.near_term, 180), structural: t(x.structural, 160),
         developments: (x.developments || []).slice(-2).map((d) => ({ date: d.date, text: t(d.text, 150) })), channels: (x.channels || []).slice(0, 5), offsets: (x.offsets || []).slice(0, 2), watch: (x.watch || []).slice(0, 3), exposure: t(x.exposure, 300),

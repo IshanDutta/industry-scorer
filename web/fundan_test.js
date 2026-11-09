@@ -109,7 +109,7 @@ console.log("fundan ok (phases 3-4)");
   for (const id of ["MI1", "WS1", "TC1", "RL1", "LI1"]) assert(dz4.idx[id], "dossier has " + id);
   const pw = A.partPrompt(fd4, dz4, "world", "2026-11-09"), pe = A.partPrompt(fd4, dz4, "exposures", "2026-11-09");
   assert(pw.includes("[MI1]") && pw.includes("[WS1]") && pe.includes("[TC1]") && pe.includes("[RL1]") && pe.includes("[LI1]"), "each analyst gets its tables");
-  assert(pw.length < 110000 && pe.length < 110000, `prompt sizes ${pw.length} ${pe.length}`);
+  assert(pw.length < 125000 && pe.length < 110000, `prompt sizes ${pw.length} ${pe.length}`);
   const w = A.cleanPart("world", { macro_overall: { regime: "Headwind", summary: "s [MI1]" }, indicators: [{ id: "MI1", effect: "Headwind", relevance: "high", vs_industries: "stronger", why: "10Y [MI1]" }, { id: "MI999" }],
     world: [{ id: "WS1", effect: "hurts", magnitude: "high", channel: "ads", scenario: "x", watch: "y", why: "z [WS1]" }] }, dz4.idx);
   assert.strictEqual(w.w.macro_overall.regime, "headwind"); assert.deepStrictEqual(w.w.indicators.map((x) => [x.id, x.effect, x.vs_industries]), [["MI1", "headwind", "stronger"]]); assert.strictEqual(w.w.world[0].channel, "ads");

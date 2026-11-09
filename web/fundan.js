@@ -229,7 +229,8 @@
       C.next.filter((x) => x.date >= today).slice(0, 6).forEach((x, i) => put(cy, "KT" + (i + 1), `${x.date} ${trim(x.event, 60)}`, `${x.date} · ${x.event} (${x.industry}, ${pc(x.weight)} of the fund${x.names?.length ? `; ${x.names.join(", ")}` : ""}).`)); }
     B.cyc = cy.length > 1 ? cy.join("\n") : "";
     // MI, WS, TC, RL, LI: the industry reports' macro, world, trade and regulation tables, merged and weighted (FundMore.affairs).
-    if (fd.aff) { const T = M.affairsText(fd.aff); B.aff_macro = T.macro; B.aff_world = T.world; B.aff_trade = T.trade; B.aff_reg = T.reg;
+    if (fd.stress) { B.aff_macro = M.stressText(fd.stress, fd.sym); for (const x of fd.stress.scenarios) idx[x.id] = `Stress: ${x.name}`; }
+    if (fd.aff) { const T = M.affairsText(fd.aff); B.aff_macro = [T.macro, B.aff_macro].filter(Boolean).join("\n\n"); B.aff_world = T.world; B.aff_trade = T.trade; B.aff_reg = T.reg;
       for (const x of fd.aff.indicators) idx[x.id] = x.label; for (const x of fd.aff.world) idx[x.id] = x.title; for (const x of fd.aff.trade) idx[x.id] = x.country; for (const x of fd.aff.rules) idx[x.id] = x.name; for (const x of fd.aff.items) idx[x.id] = x.title; }
     return { blocks: B, idx };
   }
@@ -287,12 +288,14 @@ Probabilities add to 100. One debates entry for EVERY debate DB listed. No price
  "cycle": {"phase": "early | mid | late | downturn | mixed", "summary": "2-3 sentences: where the fund's industries are in their cycles, weighted, and what that means for the next 12 months (cite CY)", "kpis_watch": ["the KPI or dated KPI event to watch, with IDs"]},
  ${READ(PANELS.context)}}
 Sizes: 4-7 drivers; one entry for EVERY industry I and every factor MF listed.`,
-    world: `{"macro_overall": {"regime": "supportive | mixed | headwind", "summary": "4-5 sentences: what its industries' macro reports add up to for this fund, weighted (which regimes, which indicators matter most, where they disagree)", "most_important": "the one indicator that matters most for the fund now, with its level and why"},
- "indicators": [{"id": "MI1", "effect": "tailwind | headwind | neutral", "relevance": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "why": "2 sentences: what this reading means for the fund at its industries' weights, with the number, cited"}],
+    world: `{"macro_overall": {"regime": "supportive | mixed | headwind", "summary": "4-5 sentences: what the macro table says for this fund now (which indicators matter most at its weights, which way they point, where its industries disagree)", "most_important": "the one indicator that matters most for the fund now, with its level and why",
+   "pain": "4-5 sentences: how the fund suffers if the macro turns: the shock that hurts most (cite ST and the measured sensitivities), how much, which industries and holdings take it, what cushions it, and how likely it looks from the macro table now",
+   "channels": {"demand": "how the macro reaches the fund's revenue, 2 sentences", "cost": "...costs and margins", "capital": "...valuation and financing", "regulatory": "...policy"}},
+ "indicators": [{"id": "MI1", "effect": "tailwind | headwind | neutral", "relevance": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "why": "2 sentences: what this reading means for the fund at its industries' weights, with the number, cited", "hit": "one sentence: what a bad move in it would do to the fund, with the size where the stress test gives one"}],
  "world_overall": {"summary": "4 sentences: the world events that matter most for this fund, how they reach it and how much of it", "biggest": "the single situation that matters most and why", "watch": ["what to watch, with IDs"]},
  "world": [{"id": "WS1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "vs_industries": "same | stronger | weaker | opposite", "channel": "how it reaches the fund: which industries and holdings, through which channel", "scenario": "the scenario that matters most for the fund and what it would do to it", "watch": "the signal to watch", "why": "2 sentences with the size, cited"}],
  ${READ(PANELS.world)}}
-Sizes: one entry for EVERY indicator MI and every situation WS listed. "vs_industries": whether the fund feels it the same as its industries' reports say, more, less, or the other way (holdings, weights).`,
+Sizes: one entry for EVERY indicator MI and every situation WS listed. Size every "hit" and the "pain" from the stress test and the measured sensitivities; never invent a number. "vs_industries": whether the fund feels it the same as its industries' reports say, more, less, or the other way (holdings, weights).`,
     exposures: `{"trade_overall": {"risk": "low | moderate | high", "summary": "4 sentences: what its industries' trade maps and verdicts mean for this fund, where its revenue is and which countries carry the risk", "biggest": "the single country or risk that matters most, and why", "watch": ["what to watch, with IDs"]},
  "trade": [{"id": "TC1", "exposure": "high | medium | low", "effect": "helps | hurts | mixed | none", "channel": "how it reaches the fund: revenue, inputs, manufacturing, which holdings", "risk": "the risk that matters for the fund there", "freeze": "what a trade freeze would do to the fund", "why": "2 sentences with a size, cited"}],
  "reg_overall": {"stance": "tailwind | headwind | mixed", "summary": "4 sentences: the net regulatory and legal picture for the fund across its industries' rule books and verdicts", "biggest": "the single most material rule, with how much of the fund it reaches", "timeline": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "a dated regulatory or legal step ahead", "why": "what it means for the fund"}], "watch": ["what to watch, with IDs"]},
@@ -303,8 +306,8 @@ Sizes: one entry for EVERY indicator MI and every situation WS listed. "vs_indus
 Sizes: one entry for EVERY country TC, rule RL, item LI and outside holding O listed.`,
   };
   /** The industry report reads each fund panel sits next to (the keys of each digest's "reads"). */
-  const PANEL_IND = { macro_ind: ["macro"], active: [], score: ["fit"], cycle: ["cycle"], season: ["calls", "earn"], debates: [], holdings: ["fit"], industries: ["cycle"], valuation: ["val"], fundamentals: ["fund", "health", "earn"], income: ["div"], perf: ["perf"], risk: ["risk"], calendar: ["calls"],
-    times: [], stress: ["stress"], sens: ["macro"], look: ["fit"], tech: ["tech"], street: ["street"], news: ["news"], dist: ["div"], trade: ["trade"], regulation: ["reg"], world: ["world"] };
+  const PANEL_IND = { macro_ind: [], active: [], score: ["fit"], cycle: ["cycle"], season: ["calls", "earn"], debates: [], holdings: ["fit"], industries: ["cycle"], valuation: ["val"], fundamentals: ["fund", "health", "earn"], income: ["div"], perf: ["perf"], risk: ["risk"], calendar: ["calls"],
+    times: [], stress: ["stress"], sens: [], look: ["fit"], tech: ["tech"], street: ["street"], news: ["news"], dist: ["div"], trade: ["trade"], regulation: ["reg"], world: ["world"] };
   const IND_READ_LABEL = { fit: "fit by investor type", cycle: "the cycle", val: "valuation", fund: "fundamentals", health: "financial health", earn: "earnings", div: "income", perf: "performance", risk: "risk",
     calls: "earnings calls", stress: "drawdowns and base rates", macro: "macro", tech: "trend and positioning", street: "the street", news: "news flow", trade: "trade", reg: "regulation", world: "world events" };
   /** What the fund's biggest industries' reports say on one topic: [{industry, weight, text}], biggest first. */
@@ -445,8 +448,9 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
         cycle: o.cycle ? { phase: en(o.cycle.phase, ["early", "mid", "late", "downturn", "mixed"]), summary: t(o.cycle.summary, 700), kpis_watch: (Array.isArray(o.cycle.kpis_watch) ? o.cycle.kpis_watch : []).map((y) => t(y, 240)).filter(Boolean).slice(0, 5) } : null, reads: reads(o.reads) };
     } else if (part === "world") {
       const VS = ["same", "stronger", "weaker", "opposite"], wl = (a) => (Array.isArray(a) ? a : []).map((y) => t(y, 240)).filter(Boolean).slice(0, 5);
-      w = { macro_overall: o.macro_overall ? { regime: en(o.macro_overall.regime, ENUM.macro), summary: t(o.macro_overall.summary, 1000), most_important: t(o.macro_overall.most_important, 400) } : null,
-        indicators: rows(o.indicators, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.fac), relevance: en(x?.relevance, ENUM.lvl), vs_industries: en(x?.vs_industries, VS), why: t(x?.why, 500) }), "id"),
+      const chn = (c) => Object.fromEntries(["demand", "cost", "capital", "regulatory"].map((k) => [k, t(c?.[k], 400)]).filter(([, v]) => v));
+      w = { macro_overall: o.macro_overall ? { regime: en(o.macro_overall.regime, ENUM.macro), summary: t(o.macro_overall.summary, 1000), most_important: t(o.macro_overall.most_important, 400), pain: t(o.macro_overall.pain, 1100), channels: chn(o.macro_overall.channels) } : null,
+        indicators: rows(o.indicators, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.fac), relevance: en(x?.relevance, ENUM.lvl), vs_industries: en(x?.vs_industries, VS), why: t(x?.why, 500), hit: t(x?.hit, 300) }), "id"),
         world_overall: o.world_overall ? { summary: t(o.world_overall.summary, 1000), biggest: t(o.world_overall.biggest, 400), watch: wl(o.world_overall.watch) } : null,
         world: rows(o.world, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), magnitude: en(x?.magnitude, ENUM.lvl), vs_industries: en(x?.vs_industries, VS), channel: t(x?.channel, 300), scenario: t(x?.scenario, 300), watch: t(x?.watch, 200), why: t(x?.why, 500) }), "id"), reads: reads(o.reads) };
     } else if (part === "exposures") {
