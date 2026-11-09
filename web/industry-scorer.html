@@ -9639,13 +9639,24 @@ Reply with ONLY this JSON:
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 1, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 2, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
       val: { pe: n(F.pe), fwd_pe: n(W.fwd_pe ?? row?.fwd_pe), ps: n(F.ps), ev_ebitda: n(F.ev_ebitda), div_yield: n(F.div_yield), eps_growth: n(W.ntm_eps_growth), rev_growth: n(W.fy1_rev_growth ?? F.rev_growth),
         rev30: n(W.rev30 ?? row?.rev30), pe_hist_pct: n(F.pe_hist_pct), cap: n(S0.total_market_cap ?? d.universe?.total_market_cap) },
       risk: { beta: n(S0.beta), vol: n(S0.vol_1y), max_dd: n(S0.max_dd_1y), sharpe: n(S0.sharpe_1y), r1y: n(S0.ret_cw_1Y) },
+      // For the full fund analysis: fundamentals, what's priced in, base rates, and the companies themselves.
+      fund: { gross_margin: n(F.gross_margin), op_margin: n(F.op_margin), net_margin: n(F.net_margin), roe: n(F.roe), roic: n(F.roic), de: n(F.de), fcf_margin: n(F.fcf_margin), nd_ebitda: n(F.nd_ebitda),
+        beat_rate: n(F.beat_rate), eps_surprise: n(F.eps_surprise_median), pe_vs_hist: n(F.pe_vs_hist), buyback_yield: n(F.buyback_yield), fcf_div_cover: n(F.fcf_div_cover), ni_growth: n(F.ni_growth) },
+      priced: d.priced_in ? { implied_eps_growth: n(d.priced_in.implied_eps_growth), consensus_growth: n(d.priced_in.consensus_ntm_growth), verdict: d.priced_in.verdict || null } : null,
+      base_up: d.history?.base_prob_up ? Object.fromEntries(HZ.map((h) => [h, n(d.history.base_prob_up[h])])) : null,
+      cos: (d.constituents || []).map((c) => ({ symbol: c.symbol, name: String(c.name || "").slice(0, 60), rank: c.rank ?? null, w: n(c.weight), pe: n(c.pe), r1y: n(c.ret_1Y), r3m: n(c.ret_3M), div: n(c.div_yield),
+        opm: n(c.op_margin), g: n(c.rev_growth), beta: n(c.beta), next: c.next || null, beats: c.beats || null })),
+      events: (rec?.agent?.calendar?.events || []).filter((e) => e?.title && e.dates?.[0]).sort((x, y) => (SEV[x.importance] ?? 3) - (SEV[y.importance] ?? 3)).slice(0, 8)
+        .map((e) => ({ date: e.dates[0], title: String(e.title).slice(0, 120), importance: e.importance || "", section: e.section || "", detail: String(e.detail || "").slice(0, 200) })),
+      drivers: (a.drivers || []).slice(0, 4).map((x) => String(x?.driver || x?.name || x?.title || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
+      risks: (a.risks || []).slice(0, 3).map((x) => String(x?.risk || x?.text || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       sens: (d.sensitivity?.factors || []).map((f) => ({ key: f.key, label: f.label, shock: f.shock_label || "", effect: n(f.total?.effect), t: n(f.total?.t) })).filter((f) => f.key && isNum(f.effect)),
       positioning: d.positioning?.label || row?.positioning || null,
       macro: macro ? { regime: macro.regime || null } : null,
@@ -9839,6 +9850,284 @@ Reply with JSON only, in this shape:
   const Portfolio = { dossier, writePrompt, cleanWriteup, fingerprint, changes, digest, lookThrough, active, callNum, callLabel, titleKey, HZ, nameKey, tick, tickRoot, isForeign, kindOf, fromFmp, fromEodEtf, eodTop, facts, lookup, mapHoldings, needProfiles, coverage, crossCheck, benchmark, sectorName, SPDR };
   if (typeof module !== "undefined" && module.exports) module.exports = Portfolio;
   else root.Portfolio = Portfolio;
+})(typeof window !== "undefined" ? window : globalThis);
+
+/* Industry Scorer: the full analysis of one ETF or mutual fund, as deep as a company's.
+ *
+ * Code only (no I/O). Builds on portfolio.js (holdings matched to industries, the look-through): the fund's own
+ * holdings joined to their industries' company rows, concentration, the fundamentals and what's priced in seen through
+ * the industries, base rates, the dated calendar (holdings' earnings and the industries' events), and the fund's
+ * own price-based facts handed in by the page (returns, risk against its benchmark and SPY, crises, measured macro
+ * sensitivities). Then the write-up: four analysts at once (core, calls, context, exposures) plus the outlook, each
+ * on its own slice of one ID'd dossier, and the code that cleans and checks what they write.
+ */
+(function (root) {
+  "use strict";
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
+  const lc = (s) => String(s || "").toLowerCase();
+  const P = typeof module !== "undefined" && module.exports ? require("./portfolio.js") : root.Portfolio;
+  const HZ = ["1M", "3M", "6M", "12M"];
+  const f1 = (v, d = 1) => (isNum(v) ? Number(v).toFixed(d) : "n/a");
+  const pc = (v, d = 1) => (isNum(v) ? (v * 100).toFixed(d) + "%" : "n/a");
+  const sp = (v, d = 1) => (isNum(v) ? (v > 0 ? "+" : "") + Number(v).toFixed(d) + "%" : "n/a");
+  const spf = (v, d = 1) => (isNum(v) ? (v > 0 ? "+" : "") + (v * 100).toFixed(d) + "%" : "n/a");
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+
+  /**
+   * The fund's holdings joined to their industries' company rows (rank in the industry, P/E, returns, yield, margin,
+   * growth, next report), biggest first. mapped: Portfolio.mapHoldings(); digests: {industry (lower case): digest}.
+   */
+  function holdings(mapped, digests, k = 30) {
+    const tot = mapped.reduce((a, h) => a + h.weight, 0) || 1;
+    return mapped.filter((h) => h.kind === "stock").sort((a, b) => b.weight - a.weight).slice(0, k).map((h) => {
+      const d = h.industry ? digests[lc(h.industry)] : null, sym = P.tick(h.run_symbol || h.ticker);
+      const c = d?.cos?.find((x) => P.tick(x.symbol) === sym) || null;
+      return { ticker: h.ticker, name: h.name, weight: h.weight / tot, industry: h.industry, sector: h.sector, kind: d?.kind || null, inTop50: !!c, rank: c?.rank ?? null, ind_n: d?.cos?.length || null,
+        pe: c?.pe ?? NaN, r1y: c?.r1y ?? NaN, r3m: c?.r3m ?? NaN, div: c?.div ?? NaN, opm: c?.opm ?? NaN, g: c?.g ?? NaN, beta: c?.beta ?? NaN, next: c?.next || null, beats: c?.beats || null,
+        call12: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "", exp12: d?.expected12 ?? null };
+    });
+  }
+  /** Concentration of the stock holdings: top 10 and top 25 weight, the effective number of holdings, the largest. */
+  function concentration(mapped) {
+    const w = mapped.filter((h) => h.kind === "stock").map((h) => h.weight).sort((a, b) => b - a), tot = mapped.reduce((a, h) => a + h.weight, 0) || 1;
+    const s = w.map((x) => x / tot), hhi = s.reduce((a, x) => a + x * x, 0);
+    return { n: s.length, top1: s[0] || 0, top10: s.slice(0, 10).reduce((a, x) => a + x, 0), top25: s.slice(0, 25).reduce((a, x) => a + x, 0), effective_n: hhi > 0 ? 1 / hhi : NaN };
+  }
+  /**
+   * The fundamentals, what's priced in, positioning and base rates, seen through the industries (weighted by the
+   * fund's weight in each and renormalized over the industries each applies to). cov: Portfolio.coverage().
+   */
+  function extras(cov, digests) {
+    const inds = cov.industries.map((g) => ({ g, d: digests[lc(g.industry)] })).filter((x) => x.d);
+    const ws = (f) => { let w = 0, s = 0; for (const { g, d } of inds) { const v = f(d); if (isNum(v)) { w += g.weight; s += g.weight * v; } } return { v: w > 0 ? s / w : NaN, on: w }; };
+    const F = {}; for (const k of ["gross_margin", "op_margin", "net_margin", "roe", "roic", "de", "fcf_margin", "nd_ebitda", "beat_rate", "eps_surprise", "pe_vs_hist", "buyback_yield", "ni_growth"]) F[k] = ws((d) => d.fund?.[k]);
+    const priced = { implied: ws((d) => d.priced?.implied_eps_growth), consensus: ws((d) => d.priced?.consensus_growth) };
+    const verdicts = {}; for (const { g, d } of inds) if (d.priced?.verdict) verdicts[d.priced.verdict] = (verdicts[d.priced.verdict] || 0) + g.weight;
+    const pos = {}; for (const { g, d } of inds) if (d.positioning) pos[d.positioning] = (pos[d.positioning] || 0) + g.weight;
+    const base = Object.fromEntries(HZ.map((h) => [h, ws((d) => d.base_up?.[h])]));
+    const opp = {}; for (const { g, d } of inds) if (d.opportunity) opp[d.opportunity] = (opp[d.opportunity] || 0) + g.weight;
+    return { F, priced, verdicts, pos, base, opp };
+  }
+  /**
+   * The dated calendar: the holdings' next earnings (from their industries' company rows) and the industries' own
+   * dated events, each with the fund weight it touches; from today, soonest first.
+   */
+  function calendar(hold, cov, digests, today, { days = 120 } = {}) {
+    const end = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), out = [];
+    for (const h of hold) if (h.next && h.next >= today && h.next <= end && h.weight >= 0.004) out.push({ date: h.next, kind: "earnings", title: `${h.ticker} reports`, w: h.weight, detail: h.beats ? `beat ${h.beats} of the last reports` : "", industries: [h.industry] });
+    const ev = new Map();
+    for (const g of cov.industries) { const d = digests[lc(g.industry)]; for (const e of d?.events || []) { if (!(e.date >= today && e.date <= end)) continue;
+      const k = e.date + "|" + P.titleKey(e.title); const x = ev.get(k) || { date: e.date, kind: e.section || "event", title: e.title, importance: e.importance, detail: e.detail, w: 0, industries: [] }; x.w += g.weight; x.industries.push(g.industry); ev.set(k, x); } }
+    out.push(...[...ev.values()].filter((x) => x.w >= 0.01 || x.importance === "high"));
+    return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.w - a.w)).slice(0, 40);
+  }
+
+  // ============================================================= the dossier the four analysts and the outlook write from
+  /**
+   * fd: the page's fund state ({sym, facts, cov, look, act, bench, digests, flags, mapped, hold, conc, ext, cal, perf
+   * (CoFacts.performance), g1/g3/g5 (risk against the benchmark), gS (against SPY), ep (crises), sens (measured)}).
+   * Returns {blocks: {name: text}, idx: {ID: label}}: each analyst gets the blocks its fields draw on.
+   */
+  function dossier(fd, today) {
+    const base = P.dossier(fd), idx = { ...base.idx }, B = {};
+    const put = (lines, id, label, line) => { idx[id] = label; lines.push(`[${id}] ${line}`); };
+    B.base = base.text;
+    // H: the holdings
+    const h = [`## THE BIGGEST HOLDINGS (rank and figures from their industry's top 50)`];
+    (fd.hold || []).slice(0, 25).forEach((x, i) => put(h, "H" + (i + 1), `${x.ticker} ${x.name}`, `${x.ticker} ${trim(x.name, 40)}: ${pc(x.weight, 2)} of the fund; ${x.industry || "no industry"}${x.inTop50 ? `, #${x.rank} of ${x.ind_n} by size` : x.industry ? ", outside its industry's top 50" : ""}${x.kind === "quant" ? " (code-only industry)" : ""}. P/E ${f1(x.pe)}, 1Y ${spf(x.r1y)}, 3M ${spf(x.r3m)}, yield ${pc(x.div, 2)}, op margin ${pc(x.opm)}, revenue growth ${spf(x.g)}, beta ${f1(x.beta, 2)}${x.next ? `, next report ${x.next}` : ""}${x.beats ? `, beat ${x.beats}` : ""}. Its industry's 12-month call: ${x.call12 || "n/a"} (expected ${sp(x.exp12)}).${x.co ? ` Its own analysis: ${x.co}` : ""}`));
+    const c = fd.conc; if (c) h.push(`Concentration: ${c.n} stock holdings; top 1 ${pc(c.top1)}, top 10 ${pc(c.top10)}, top 25 ${pc(c.top25)}; effective number of holdings ${f1(c.effective_n, 0)}.`);
+    B.hold = h.join("\n");
+    // P: price-based facts (the fund's own)
+    const p = [`## THE FUND'S OWN PRICE HISTORY (dividend-adjusted)`], pf = fd.perf || {}, bs = fd.bench?.symbol || "the benchmark";
+    if (fd.retRows?.length) put(p, "P1", "Returns", `Returns: ${fd.retRows.map((r) => `${r.label} ${sp(r.value)}${r.ann ? " a year" : ""}${isNum(r.bench) ? ` (${bs} ${sp(r.bench)}, SPY ${sp(r.spy)})` : ""}`).join("; ")}.`);
+    const g = (x, lab) => (x ? `${lab}: beta to ${bs} ${f1(x.beta, 2)}, correlation ${f1(x.corr, 2)}, alpha ${pc(x.alpha)} a year, volatility ${pc(x.vol)}, downside volatility ${pc(x.downside_vol)}, Sharpe ${f1(x.sharpe, 2)}, tracking error ${pc(x.tracking_error)}, information ratio ${f1(x.info_ratio, 2)}, up capture ${pc(x.up_capture, 0)}, down capture ${pc(x.down_capture, 0)}, max drawdown ${pc(x.max_dd)}, 1-day 95% VaR ${pc(x.var95, 2)}` : "");
+    for (const [id, x, lab] of [["P2", fd.g1, "1 year"], ["P3", fd.g3, "3 years"], ["P4", fd.g5, "5 years"]]) if (x) put(p, id, `Risk over ${lab}`, g(x, `Over ${lab}`) + ".");
+    if (fd.gS && fd.bench?.symbol !== "SPY") put(p, "P5", "Against SPY", `Against SPY over 1 year: beta ${f1(fd.gS.beta, 2)}, correlation ${f1(fd.gS.corr, 2)}, alpha ${pc(fd.gS.alpha)}, up capture ${pc(fd.gS.up_capture, 0)}, down capture ${pc(fd.gS.down_capture, 0)}.`);
+    if (fd.tech) put(p, "P6", "Trend", `Trend: ${fd.tech}.`);
+    (fd.ep || []).slice(0, 10).forEach((e, i) => put(p, "S" + (i + 1), e.label, `${e.label} (${e.kind}, ${e.from} to ${e.to}): fund ${spf(e.ret)}${e.estimated ? " (estimated from beta: it didn't trade then)" : ""}, SPY ${spf(e.spy)}, max drawdown ${pc(e.dd)}, capture ${isNum(n(e.capture)) ? (e.capture * 100).toFixed(0) + "%" : "n/a"}.`));
+    (fd.sens?.factors || []).forEach((x, i) => put(p, "MF" + (i + 1), `Fund: ${x.label}`, `Measured on the fund's own daily returns (last year): ${x.shock_label} moves the fund ${pc(x.total?.effect, 2)} in total (t ${f1(x.total?.t, 1)}), ${pc(x.partial?.effect, 2)} beyond the other factors${x.stable === false ? "; not stable across the two half-years" : ""}.`));
+    B.perf = p.join("\n");
+    // V: fundamentals, priced in, income, positioning, base rates (through the industries)
+    const v = [`## FUNDAMENTALS, VALUATION AND INCOME THROUGH THE INDUSTRIES`], X = fd.ext, L = fd.look;
+    if (X && L?.n) {
+      put(v, "V1", "Profitability", `Margins and returns: gross ${pc(X.F.gross_margin.v)}, operating ${pc(X.F.op_margin.v)}, net ${pc(X.F.net_margin.v)}, FCF ${pc(X.F.fcf_margin.v)}, ROE ${pc(X.F.roe.v)}, ROIC ${pc(X.F.roic.v)}; net income growth ${spf(X.F.ni_growth.v)}.`);
+      put(v, "V2", "Balance sheet", `Debt/equity ${f1(X.F.de.v, 2)}, net debt/EBITDA ${f1(X.F.nd_ebitda.v, 2)}, buyback yield ${pc(X.F.buyback_yield.v, 2)}.`);
+      put(v, "V3", "Valuation", `Forward P/E ${f1(L.val.fwd_pe.v)} (trailing ${f1(L.val.pe.v)}, EV/EBITDA ${f1(L.val.ev_ebitda.v)}, P/S ${f1(L.val.ps.v, 2)}); P/E vs the industries' own 5-year history ${spf(X.F.pe_vs_hist.v)}, at the ${pc(L.val.pe_hist_pct.v, 0)} percentile. Priced in: ${pc(X.priced.implied.v)} a year of EPS growth vs consensus ${pc(X.priced.consensus.v)}; verdicts by weight: ${Object.entries(X.verdicts).map(([k, w]) => `${k} ${pc(w, 0)}`).join(", ") || "n/a"}.`);
+      put(v, "V4", "Earnings", `NTM EPS growth ${pc(L.val.eps_growth.v)}, revenue growth ${pc(L.val.rev_growth.v)}, 30-day revisions ${pc(L.val.rev30.v)}; beat rate ${pc(X.F.beat_rate.v, 0)}, median EPS surprise ${pc(X.F.eps_surprise.v)}.`);
+      put(v, "V5", "Income", `Dividend yield through the industries ${pc(L.val.div_yield.v, 2)}; the fund's own yield ${pc(fd.facts?.yield, 2)}; expense ratio ${pc(fd.facts?.expense, 2)}.`);
+      put(v, "V6", "Positioning and base rates", `Positioning by weight: ${Object.entries(X.pos).map(([k, w]) => `${k} ${pc(w, 0)}`).join(", ") || "n/a"}. Base rates (share of past days like today, by industry history, that were up after): ${HZ.map((h) => `${h} ${pc(X.base[h].v, 0)}`).join(", ")}. Opportunity verdicts by weight: ${Object.entries(X.opp).map(([k, w]) => `${k} ${pc(w, 0)}`).join(", ") || "n/a"}.`);
+    }
+    B.val = v.join("\n");
+    // E: the dated calendar
+    const e = [`## THE CALENDAR (next ~4 months)`];
+    (fd.cal || []).slice(0, 25).forEach((x, i) => put(e, "E" + (i + 1), `${x.date} ${x.title}`, `${x.date} · ${x.title} (${x.kind}${x.importance ? ", " + x.importance : ""}): ${pc(x.w, 1)} of the fund${x.industries?.length ? ` (${[...new Set(x.industries)].slice(0, 4).join(", ")})` : ""}${x.detail ? `. ${trim(x.detail, 160)}` : ""}.`));
+    B.cal = e.join("\n");
+    // D: the industries' own drivers and risks (for the context analyst)
+    const dl = [`## WHAT EACH BIG INDUSTRY'S STRATEGIST SAYS DRIVES IT`];
+    fd.cov.industries.slice(0, 12).forEach((g) => { const d = fd.digests?.[lc(g.industry)]; if (d?.drivers?.length || d?.risks?.length) dl.push(`${g.industry} (${pc(g.weight)}): drivers: ${d.drivers.join("; ") || "n/a"}. Risks: ${d.risks.join("; ") || "n/a"}.`); });
+    B.ind = dl.join("\n");
+    return { blocks: B, idx };
+  }
+
+  // ============================================================= the four parts and the outlook
+  const CALLS = "bullish | slightly bullish | neutral | slightly bearish | bearish";
+  const READ = (panels) => `"reads": {${Object.entries(panels).map(([k, v]) => `"${k}": "2-3 sentences on ${v}: what the numbers say about this fund and what it means for an owner (cite IDs, use the figures)"`).join(", ")}}`;
+  const PANELS = {
+    core: { holdings: "the holdings and their concentration", industries: "the industry mix and how the industries are rated", valuation: "valuation and what's priced in", fundamentals: "profitability, earnings and the balance sheet seen through the industries", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
+    calls: { perf: "the fund's returns against its benchmark and SPY", risk: "risk: beta, volatility, drawdowns, capture, tracking error", calendar: "the dated events ahead" },
+    context: { stress: "how the fund held up in past crises and booms", sens: "the fund's measured macro sensitivities against its industries'", look: "the look-through calls and scores" },
+    exposures: { trade: "trade and supply chains", regulation: "regulation", outside: "the holdings the analysis can't see" },
+  };
+  const SCHEMA = {
+    core: `{"headline": "one sentence: what owning this fund means now",
+ "verdict": {"call": "attractive | neutral | unattractive", "summary": "2-3 sentences: is it worth owning now, and for whom"},
+ "thesis": "3 short paragraphs: what the fund really is (its industries and bets), what its industries' analysis says, and what the price already assumes",
+ "vs_benchmark": {"call": "outperform | in line | underperform", "why": "2-3 sentences on the tilt against the benchmark"},
+ "strategy": "2-3 sentences: how the fund is run (index or active, concentration, turnover, fees) and whether that's worth paying for",
+ "valuation": {"read": "2-3 sentences: valuation against history and what's priced in"},
+ "quality": "2 sentences on the quality of what it holds (margins, returns, balance sheets)",
+ "risks": [{"risk": "...", "likelihood": "high | medium | low", "impact": "high | medium | low", "ids": ["W1"]}],
+ "catalysts": [{"date": "YYYY-MM-DD or YYYY-MM", "event": "...", "why": "...", "ids": ["E1"]}],
+ "watch": ["what to watch, with IDs"],
+ "fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "adjust": 0, "why": "2 sentences for this investor: what they get and what they give up", "watch": "the number to track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ ${READ(PANELS.core)},
+ "confidence": "high | medium | low"}
+Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items. Fit adjust moves the weighted score by at most 5 points either way.`,
+    calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries", "move": [8, 14]}, "base": {...}, "bear": {...}},
+ "horizons": {${HZ.map((h) => `"${h}": {"call": "${CALLS}", "expected_move": [-3, 5], "probability_up": 58, "vs_benchmark": "outperform | in line | underperform", "drivers": "4-6 sentences, cited, with numbers: what moves the fund in this window, which dated events land in it, and how the industries' calls add up for this fund", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
+ "plans": {"income": {"size_pct": 0, "entry": "when or at what to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "change_mind": ["what would change the call, with a level or a date"],
+ ${READ(PANELS.calls)}}
+Probabilities add to 100. Moves are % price moves over 12 months for the scenarios and over each window for the horizons, ranges low to high. The 12M call must agree with the scenarios.`,
+    context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
+ "industries": [{"id": "I1", "effect": "helps | hurts | mixed", "why": "one sentence: what this industry's analysis means for the fund at its weight"}],
+ "macro": {"regime": "supportive | mixed | headwind", "headline": "one sentence on the macro for this fund", "horizons": {${HZ.map((h) => `"${h}": {"call": "supportive | mixed | headwind", "why": "1-2 sentences"}`).join(", ")}}, "flip": "what would flip it, with levels",
+   "factors": [{"id": "MF1", "effect": "tailwind | headwind | neutral", "why": "one sentence: what this sensitivity means for the fund now"}]},
+ "world": [{"id": "W1", "effect": "helps | hurts | mixed | none", "magnitude": "high | medium | low", "why": "one sentence: how it reaches the fund and how much of it"}],
+ ${READ(PANELS.context)}}
+Sizes: 4-7 drivers; one entry for EVERY industry I, every factor MF and every world event W listed.`,
+    exposures: `{"trade_overall": {"risk": "low | moderate | high", "summary": "3 sentences: what the industries' trade maps mean for this fund", "biggest": "the single country or risk that matters most, and why"},
+ "trade": [{"id": "C1", "exposure": "high | medium | low", "effect": "helps | hurts | mixed | none", "why": "one sentence with a size"}],
+ "reg_overall": {"stance": "tailwind | headwind | mixed", "summary": "3 sentences: the net regulatory picture for the fund", "biggest": "the single most material rule, with how much of the fund it reaches"},
+ "regulation": [{"id": "R1", "effect": "helps | hurts | mixed", "materiality": "high | medium | low", "why": "one sentence"}],
+ "outside": [{"id": "O1", "matters": "high | medium | low", "why": "one sentence: what this holding means for the fund and what the analysis misses by not covering it"}],
+ ${READ(PANELS.exposures)}}
+Sizes: one entry for EVERY country C, rule R and outside holding O listed.`,
+  };
+  const BLOCKS = { core: ["base", "hold", "val"], calls: ["base", "perf", "val", "cal"], context: ["base", "perf", "ind"], exposures: ["base", "hold"] };
+  const INTRO = {
+    core: "You write part one of a four-part analysis of this fund; colleagues write the calls, the context and the exposures at the same time. Write ONLY: the verdict, the thesis, the benchmark view, strategy, valuation, quality, risks, catalysts, watch, fit and your panel reads.",
+    calls: "You write part two of a four-part analysis: the 12-month scenarios, the fund's 1M-12M calls, the plans per investor type and your panel reads. Colleagues write the rest at the same time.",
+    context: "You write part three of a four-part analysis: what drives the fund, each industry row, the macro (with the fund's own measured sensitivities), each world event, and your panel reads. Colleagues write the rest at the same time.",
+    exposures: "You write part four of a four-part analysis: trade, regulation and the holdings the analysis can't see, row by row, and your panel reads. Colleagues write the rest at the same time.",
+  };
+  /** The prompt for one part ("core" | "calls" | "context" | "exposures"). dz: dossier(). */
+  function partPrompt(fd, dz, part, today) {
+    return `You are a fund analyst on an investment research team. Today is ${today}. The team has analyzed US industries one at a time (each with a lead strategist's 1M-12M calls, scenarios, macro, world-events, trade and regulation reports), and code has mapped this fund's holdings onto those industries and weighted every figure by the fund's weights. ${INTRO[part]}
+
+Rules:
+- Use only the facts and numbers below. Don't invent figures, holdings, events or dates; every number you use must appear below.
+- Cite the lines you rely on with their IDs in square brackets, e.g. [I1][H3][P2]. Every claim needs at least one ID.
+- Plain, direct sentences. Say what the fund is betting on and what that means for an owner.
+- Be honest about coverage: private companies, foreign listings and code-only industries limit how sure you can be.
+
+${BLOCKS[part].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
+
+Reply with ONLY this JSON:
+${SCHEMA[part]}`;
+  }
+  /** The outlook: where the fund is likely to go over each window and why, for and against (one call, like the industry's). */
+  function leanPrompt(fd, dz, today) {
+    return `You are the fund strategist. Today is ${today}. Give your outlook for this fund over the next 1, 3, 6 and 12 months: which way it's likely to go and why, with the best arguments for and against. Start from the industries' calls weighted by the fund (F4), the base rates (V6), the scenarios (F3), the fund's own trend and risk (P lines) and the dated events (E lines), and say where you differ from the weighted calls.
+Use only the facts below; cite IDs in square brackets.
+
+${["base", "perf", "val", "cal"].map((b) => dz.blocks[b]).filter(Boolean).join("\n\n")}
+
+Reply with ONLY this JSON:
+{"headline": "one sentence: where the fund is likely to go and the main reason",
+ "calls": {${HZ.map((h) => `"${h}": {"call": "${CALLS}", "why": "2-3 sentences, cited", "for": ["the 2-3 strongest reasons it goes up"], "against": ["the 2-3 strongest reasons it goes down"]}`).join(", ")}}}`;
+  }
+
+  // ============================================================= cleaning and checks
+  const ENUM = { verdict: ["attractive", "neutral", "unattractive"], vs: ["outperform", "in line", "underperform"], lvl: ["high", "medium", "low"], fit: ["strong", "good", "weak", "poor"],
+    eff: ["helps", "hurts", "mixed", "none"], macro: ["supportive", "mixed", "headwind"], fac: ["tailwind", "headwind", "neutral"], risk: ["low", "moderate", "high"], stance: ["tailwind", "headwind", "mixed"] };
+  const CALLV = ["bullish", "slightly bullish", "neutral", "slightly bearish", "bearish"];
+  function cleaner(idx) {
+    let dropped = 0;
+    const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
+    const t = (s, k = 900) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1"), k);
+    const ids = (a) => (Array.isArray(a) ? a : []).filter((id) => known(id) || (dropped++, false));
+    const en = (v, list) => { const x = lc(v).trim(); return list.includes(x) ? x : null; };
+    const rng = (r) => (Array.isArray(r) && r.length === 2 && isNum(n(r[0])) && isNum(n(r[1])) ? [Math.min(n(r[0]), n(r[1])), Math.max(n(r[0]), n(r[1]))] : null);
+    const rows = (a, f, need) => (Array.isArray(a) ? a : []).map(f).filter((x) => x && (!need || x[need]));
+    const rowId = (x) => (known(x?.id) ? x.id : (x?.id && dropped++, null));
+    const reads = (o) => Object.fromEntries(Object.entries(o || {}).map(([k, v]) => [k, t(v, 600)]).filter(([, v]) => v));
+    return { t, ids, en, rng, rows, rowId, reads, dropped: () => dropped };
+  }
+  /** One part's answer, cleaned: only IDs the dossier has, known enums, ranges low to high, fit adjust within ±5. */
+  function cleanPart(part, o, idx) {
+    const C = cleaner(idx), { t, ids, en, rng, rows, rowId, reads } = C; o = o || {};
+    let w = {};
+    if (part === "core") {
+      const fit = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.fit?.[k] || {};
+        fit[k] = { fit: en(x.fit, ENUM.fit), conviction: en(x.conviction, ENUM.lvl), adjust: Math.max(-5, Math.min(5, Math.round(n(x.adjust) || 0))), why: t(x.why, 400), watch: t(x.watch, 200), what_changes: t(x.what_changes, 240) }; }
+      w = { headline: t(o.headline, 300), verdict: { call: en(o.verdict?.call, ENUM.verdict), summary: t(o.verdict?.summary, 600) }, thesis: t(o.thesis, 3000),
+        vs_benchmark: { call: en(o.vs_benchmark?.call, ENUM.vs), why: t(o.vs_benchmark?.why, 600) }, strategy: t(o.strategy, 600), valuation: { read: t(o.valuation?.read, 600) }, quality: t(o.quality, 400),
+        risks: rows(o.risks, (x) => ({ risk: t(x?.risk, 300), likelihood: en(x?.likelihood, ENUM.lvl), impact: en(x?.impact, ENUM.lvl), ids: ids(x?.ids) }), "risk").slice(0, 8),
+        catalysts: rows(o.catalysts, (x) => ({ date: String(x?.date || "").slice(0, 10), event: t(x?.event, 200), why: t(x?.why, 300), ids: ids(x?.ids) }), "event").slice(0, 8),
+        watch: (Array.isArray(o.watch) ? o.watch : []).map((x) => t(typeof x === "string" ? x : x?.text, 300)).filter(Boolean).slice(0, 6), fit, reads: reads(o.reads), confidence: en(o.confidence, ENUM.lvl) };
+    } else if (part === "calls") {
+      const scen = {}; for (const k of ["bull", "base", "bear"]) { const x = o.scenarios?.[k]; if (x) scen[k] = { probability: n(x.probability), narrative: t(x.narrative, 600), move: rng(x.move) }; }
+      const hz = {}; for (const h of HZ) { const x = o.horizons?.[h]; if (!x) continue; hz[h] = { call: en(x.call, CALLV), expected_move: rng(x.expected_move), probability_up: Math.max(0, Math.min(100, n(x.probability_up))),
+        vs_benchmark: en(x.vs_benchmark, ENUM.vs), drivers: t(x.drivers, 1400), decisions: rows(x.decisions, (d) => ({ date: String(d?.date || "").slice(0, 10), event: t(d?.event, 200) }), "event").slice(0, 6) }; }
+      const plans = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.plans?.[k]; if (x) plans[k] = { size_pct: n(x.size_pct), entry: t(x.entry, 240), hedge: t(x.hedge, 240), review: t(x.review, 200) }; }
+      w = { scenarios: scen, horizons: hz, plans, change_mind: (Array.isArray(o.change_mind) ? o.change_mind : []).map((x) => t(x, 300)).filter(Boolean).slice(0, 6), reads: reads(o.reads) };
+    } else if (part === "context") {
+      w = { drivers: rows(o.drivers, (x) => ({ driver: t(x?.driver, 200), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 500), ids: ids(x?.ids) }), "driver").slice(0, 8),
+        industries: rows(o.industries, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 400) }), "id"),
+        macro: o.macro ? { regime: en(o.macro.regime, ENUM.macro), headline: t(o.macro.headline, 300), flip: t(o.macro.flip, 300),
+          horizons: Object.fromEntries(HZ.map((h) => [h, o.macro.horizons?.[h] ? { call: en(o.macro.horizons[h].call, ENUM.macro), why: t(o.macro.horizons[h].why, 300) } : null]).filter(([, v]) => v)),
+          factors: rows(o.macro.factors, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.fac), why: t(x?.why, 300) }), "id") } : null,
+        world: rows(o.world, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), magnitude: en(x?.magnitude, ENUM.lvl), why: t(x?.why, 400) }), "id"), reads: reads(o.reads) };
+    } else if (part === "exposures") {
+      w = { trade_overall: o.trade_overall ? { risk: en(o.trade_overall.risk, ENUM.risk), summary: t(o.trade_overall.summary, 700), biggest: t(o.trade_overall.biggest, 300) } : null,
+        trade: rows(o.trade, (x) => ({ id: rowId(x), exposure: en(x?.exposure, ENUM.lvl), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 400) }), "id"),
+        reg_overall: o.reg_overall ? { stance: en(o.reg_overall.stance, ENUM.stance), summary: t(o.reg_overall.summary, 700), biggest: t(o.reg_overall.biggest, 300) } : null,
+        regulation: rows(o.regulation, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), materiality: en(x?.materiality, ENUM.lvl), why: t(x?.why, 400) }), "id"),
+        outside: rows(o.outside, (x) => ({ id: rowId(x), matters: en(x?.matters, ENUM.lvl), why: t(x?.why, 400) }), "id"), reads: reads(o.reads) };
+    } else if (part === "lean") {
+      w = { headline: t(o.headline, 300), calls: Object.fromEntries(HZ.map((h) => { const x = o.calls?.[h]; return [h, x ? { call: en(x.call, CALLV), why: t(x.why, 600), for: (x.for || []).map((y) => t(y, 240)).filter(Boolean).slice(0, 4), against: (x.against || []).map((y) => t(y, 240)).filter(Boolean).slice(0, 4) } : null]; }).filter(([, v]) => v)) };
+    }
+    return { w, dropped: C.dropped() };
+  }
+  /**
+   * Checks across the parts: scenario probabilities add to 100, the 12M call agrees with the scenario-weighted move,
+   * each window's range holds its call's direction, ranges widen with time. Returns {expected, issues: [text]}.
+   */
+  function checks(a) {
+    const issues = [], S = a.scenarios || {}, H = a.horizons || {};
+    const ps = ["bull", "base", "bear"].map((k) => n(S[k]?.probability)), sum = ps.reduce((x, y) => x + (isNum(y) ? y : 0), 0);
+    if (ps.every(isNum) && Math.abs(sum - 100) > 2) issues.push(`the scenario probabilities add to ${sum}%, not 100%`);
+    const mid = (r) => (r ? (r[0] + r[1]) / 2 : NaN);
+    const exp = ps.every(isNum) && sum > 0 ? ["bull", "base", "bear"].reduce((x, k, i) => x + (ps[i] / sum) * mid(S[k]?.move), 0) : NaN;
+    const c12 = P.callNum(H["12M"]?.call);
+    if (isNum(exp) && isNum(c12) && ((c12 > 0 && exp < -1) || (c12 < 0 && exp > 1))) issues.push(`the 12M call (${H["12M"].call}) disagrees with the scenarios' expected ${sp(exp)}`);
+    for (const h of HZ) { const x = H[h]; if (!x?.expected_move) continue; const c = P.callNum(x.call), m = mid(x.expected_move);
+      if (isNum(c) && c > 0 && x.expected_move[1] <= 0) issues.push(`${h}: a bullish call with a range entirely below zero`);
+      if (isNum(c) && c < 0 && x.expected_move[0] >= 0) issues.push(`${h}: a bearish call with a range entirely above zero`);
+      if (isNum(x.probability_up) && isNum(c) && ((c > 0 && x.probability_up < 45) || (c < 0 && x.probability_up > 55))) issues.push(`${h}: ${x.probability_up}% chance up doesn't match a ${x.call} call`);
+      void m; }
+    const width = HZ.map((h) => (H[h]?.expected_move ? H[h].expected_move[1] - H[h].expected_move[0] : NaN)).filter(isNum);
+    for (let i = 1; i < width.length; i++) if (width[i] < width[i - 1] * 0.8) { issues.push("the ranges narrow as the window gets longer"); break; }
+    return { expected: exp, issues };
+  }
+  /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
+  const changes = (a, b) => P.changes(a, b);
+
+  const FundAn = { holdings, concentration, extras, calendar, dossier, partPrompt, leanPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "context", "exposures"], CALLV };
+  if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
+  else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);
 
 </script>
@@ -14692,7 +14981,7 @@ Reply with JSON only, in this shape:
       const sl = bySlugName.get(lc(name));
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
-        if (c && c.saved_at === r.saved_at && c.dg?.v === 1) { out[lc(name)] = c.dg; continue; }
+        if (c && c.saved_at === r.saved_at && c.dg?.v === 2) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
         const rec = await idbGet("run:" + sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
@@ -14703,7 +14992,7 @@ Reply with JSON only, in this shape:
         continue;
       }
       const qsl = Object.keys(qi).find((k) => lc(qi[k].name) === lc(name));
-      if (qsl) { const q = await idbGet("quant:" + qsl).catch(() => null); if (q?.v === 1) out[lc(name)] = q; }
+      if (qsl) { const q = await idbGet("quant:" + qsl).catch(() => null); if (q?.v >= 1) out[lc(name)] = q; }
     }
     if (dirty) await idbPut("indDigest", cache).catch(() => {});
     return out;
@@ -14744,7 +15033,7 @@ Reply with JSON only, in this shape:
     finally { S.fundFill = null; }
     if (S.fund === fd) await fundAnalyze(fd, { quiet: true });
     renderAll();
-    if (S.fund === fd && !fd.writing && fd.view !== undefined) fundThesis(fd);
+    if (S.fund === fd && !fd.writing && fd.full !== undefined) fundWrite(fd);
   }
   /** Coverage, digests, the look-through and the benchmark comparison, from the fund's raw data. */
   async function fundAnalyze(fd, { quiet = false } = {}) {
@@ -14762,31 +15051,68 @@ Reply with JSON only, in this shape:
     catch (e) { if (FATAL.has(e?.code)) throw e; bnote = e?.message || String(e); }
     const names = [...new Set([...cov.industries, ...(bcov?.industries || [])].filter((g) => g.status !== "not_analyzed").map((g) => g.industry))];
     const digests = await fundDigests(names, ci, step);
-    Object.assign(fd, { stage: "ready", facts, mapped, cov, bcov, bnote, digests, eodHoldings, bench, flags: Portfolio.crossCheck(mapped, Portfolio.eodTop(fd.raw.eod)),
+    Object.assign(fd, { facts, mapped, cov, bcov, bnote, digests, eodHoldings, bench, flags: Portfolio.crossCheck(mapped, Portfolio.eodTop(fd.raw.eod)),
       look: Portfolio.lookThrough(cov, digests), act: bcov ? Portfolio.active(cov, bcov, digests) : null });
+    await fundFacts(fd);
+    if (!fd.ser || !quiet) { step("Reading the fund's price history since 2007…"); await fundPrices(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; }); }
+    fd.stage = "ready";
+  }
+  /** The fund's own price-based facts (code): returns against its benchmark and SPY, risk, crises, trend, measured macro sensitivities. */
+  async function fundPrices(fd) {
+    const from = "2007-01-02", bsym = fd.bench?.symbol;
+    const [ser, bser, spy] = await Promise.all([trackSeries(fd.sym, from).catch(() => null), bsym && bsym !== "SPY" ? trackSeries(bsym, from).catch(() => null) : Promise.resolve(null), trackSeries("SPY", from).catch(() => null)]);
+    fd.ser = ser?.dates?.length > 20 ? ser : null; fd.spy = spy?.dates?.length ? spy : null; fd.bser = bsym === "SPY" ? fd.spy : bser?.dates?.length ? bser : null;
+    if (!fd.ser) return;
+    const bench = S.bench?.factors ? S.bench : await optional(() => refreshBenchmark(), null);
+    const rfDaily = E.toDailyRf(bench?.rf || [], fd.spy?.dates || fd.ser.dates, 0.04), vs = fd.bser || fd.spy;
+    const R = coReturnsCalc(fd.ser), RB = fd.bser ? coReturnsCalc(fd.bser) : null, RS = fd.spy ? coReturnsCalc(fd.spy) : null;
+    fd.retRows = (R || []).filter((r) => r.value !== null).map((r) => ({ ...r, bench: RB?.find((x) => x.label === r.label)?.value ?? null, spy: RS?.find((x) => x.label === r.label)?.value ?? null }));
+    for (const [k, m] of [["g1", 12], ["g3", 36], ["g5", 60]]) fd[k] = vs ? CoFacts.riskGreeks(fd.ser, { spy: vs, etf: fd.spy, rfDaily, months: m }) : null;
+    fd.gS = fd.spy && vs !== fd.spy ? CoFacts.riskGreeks(fd.ser, { spy: fd.spy, rfDaily, months: 12 }) : null;
+    const beta = num(fd.gS?.beta ?? fd.g1?.beta);
+    fd.ep = fd.spy ? CoFacts.episodes(fd.ser, fd.spy, isNum(beta) ? beta : 1) : [];
+    const lv = CoFacts.levels(fd.ser); fd.lv = lv;
+    fd.tech = lv ? `${pct(lv.vs_ma50)} vs the 50-day average, ${pct(lv.vs_ma200)} vs the 200-day, ${pct(lv.off_high)} from the 52-week high (at ${pct(lv.in_range, false, 0)} of the 52-week range)` : "";
+    fd.sens = null; const fac = bench?.factors;
+    if (fac && fd.spy && fd.ser.dates.length > 200) try { fd.sens = Sensitivity.measure({ dates: fd.ser.dates, levels: fd.ser.closes }, { market: { dates: fd.spy.dates, values: fd.spy.closes }, ...Object.fromEntries(Object.entries(fac).map(([k, v]) => [k, { dates: v.dates, values: v.values }])) }); } catch { fd.sens = null; }
+  }
+  /** Holdings, concentration, the industries' fundamentals and the calendar (code), plus each top holding's own saved analysis, if any. */
+  async function fundFacts(fd) {
+    fd.hold = FundAn.holdings(fd.mapped, fd.digests); fd.conc = FundAn.concentration(fd.mapped); fd.ext = FundAn.extras(fd.cov, fd.digests); fd.cal = FundAn.calendar(fd.hold, fd.cov, fd.digests, today());
+    for (const h of fd.hold.slice(0, 25)) { const r = await idbGet("co:" + h.ticker).catch(() => null), t = r?.thesis;
+      if (t?.headline) h.co = `${t.verdict?.call ? `opportunity ${t.verdict.call}; ` : ""}${trimC(stripCites(t.headline), 200)} (written ${String(r.at || "").slice(0, 10)})`; }
   }
   /**
-   * Step 3: the fund strategist's read (one Claude call). Kept per fund; rewritten only when the look-through has moved
-   * (a call changed, the expected return moved 1.5 points, coverage 5 points, holdings turned over, a big industry was
-   * re-analyzed), or on "Rewrite".
+   * The full analysis: four analysts at once on their slices of one dossier (core, calls, context, exposures), then
+   * the outlook alongside. Kept per fund with what it was written on; rewritten only when the look-through moves
+   * (Portfolio.changes) or on "Rewrite".
    */
-  async function fundThesis(fd, { force = false } = {}) {
+  async function fundWrite(fd, { force = false } = {}) {
     if (fd.stage !== "ready" || fd.writing) return;
-    const rec = fd.view !== undefined ? fd.view : await idbGet("fundView:" + fd.sym).catch(() => null);
+    const rec = fd.full !== undefined ? fd.full : await idbGet("fundFull:" + fd.sym).catch(() => null);
     const fp = Portfolio.fingerprint(fd), why = Portfolio.changes(rec?.fp, fp);
-    fd.view = rec || null; fd.viewWhy = why;
+    fd.full = rec || null; fd.fullWhy = why;
     if ((!force && rec && !why.length) || !S.sample || !fd.look?.n) { if (S.fund === fd) renderFund(); return; }
-    const ctl = new AbortController(); fd.ctl = ctl; fd.writing = true; fd.viewErr = null; fd.partial = null; const t0 = Date.now(); renderFund();
-    const { idx } = Portfolio.dossier(fd); let last = 0;
+    const ctl = new AbortController(); fd.ctl = ctl; fd.writing = true; fd.fullErr = null; fd.partial = {}; fd.writeStart = Date.now(); renderFund();
+    const dz = FundAn.dossier(fd, today()), raw = {}; let last = 0;
+    const show = () => { if (S.fund !== fd || Date.now() - last < 800) return; last = Date.now(); renderFund(); };
+    const one = async (part) => {
+      const prompt = part === "lean" ? FundAn.leanPrompt(fd, dz, today()) : FundAn.partPrompt(fd, dz, part, today());
+      const out = await sampleJson(prompt, { modelTier: "complex", signal: ctl.signal, cache: false,
+        onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object") { fd.partial[part] = FundAn.cleanPart(part, v, dz.idx).w; show(); } } });
+      raw[part] = FundAn.cleanPart(part, out, dz.idx); fd.partial[part] = raw[part].w; show(); return raw[part];
+    };
     try {
-      const out = await sampleJson(Portfolio.writePrompt(fd, today()), { modelTier: "complex", cache: false, signal: ctl.signal,
-        onText: ({ text }) => { const v = RegBook.repairJson(text); if (v && typeof v === "object" && S.fund === fd && Date.now() - last > 700) { last = Date.now(); fd.partial = Portfolio.cleanWriteup(v, idx).w; renderFund(); } } });
-      const { w, dropped } = Portfolio.cleanWriteup(out, idx);
-      if (!w.headline && !w.summary) throw { code: "empty_completion" };
-      const r = jsonSafe({ sym: fd.sym, at: new Date().toISOString(), fp, w, idx, dropped, secs: Math.round((Date.now() - t0) / 1000), reasons: why });
-      await idbPut("fundView:" + fd.sym, r).catch(() => {});
-      fd.view = r; fd.viewWhy = [];
-    } catch (e) { fd.viewErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+      const parts = [...FundAn.PARTS, "lean"], res = await Promise.allSettled(parts.map(one));
+      if (res.every((r) => r.status === "rejected")) throw res[0].reason;
+      const P0 = Object.fromEntries(parts.map((p, i) => [p, res[i].status === "fulfilled" ? res[i].value.w : rec?.parts?.[p] || null]));
+      const failed = parts.filter((p, i) => res[i].status === "rejected");
+      const r = jsonSafe({ sym: fd.sym, at: new Date().toISOString(), fp, parts: P0, idx: dz.idx, dropped: parts.reduce((a, p) => a + (raw[p]?.dropped || 0), 0),
+        checks: FundAn.checks(P0.calls || {}), secs: Math.round((Date.now() - fd.writeStart) / 1000), reasons: why, failed });
+      await idbPut("fundFull:" + fd.sym, r).catch(() => {});
+      fd.full = r; fd.fullWhy = [];
+      if (failed.length) fd.fullErr = `${failed.join(", ")} didn't finish (${sampleErr(res[parts.indexOf(failed[0])].reason)}); Rewrite to try again`;
+    } catch (e) { fd.fullErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { fd.writing = false; fd.partial = null; fd.ctl = null; }
     if (S.fund === fd) renderFund();
   }
@@ -14806,7 +15132,7 @@ Reply with JSON only, in this shape:
     if (S.fund === fd) renderFund();
     // Industries no run covers get the code-only fill straight away (the biggest 8 of those at 0.5%+ of the fund),
     // then the strategist's read is written, or kept if nothing material has moved since.
-    if (fd.stage === "ready") { await fillFund(fd); if (S.fund === fd) fundThesis(fd); }
+    if (fd.stage === "ready") { await fillFund(fd); if (S.fund === fd) fundWrite(fd); }
   }
 
   // ------------------------------------------------------------- render: Funds tab
@@ -14822,112 +15148,212 @@ Reply with JSON only, in this shape:
   const CALLC = (c) => (/bull/.test(c) ? "pos" : /bear/.test(c) ? "neg" : "neu");
   const pts = (v, d = 1) => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}%` : "—");
   /** Text with its [ID] citations shown as chips naming what they point to. */
-  function fundCites(s, idx) { return esc(s || "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (idx?.[id] ? `<span class="cite" title="${esc(idx[id])}">${id}</span>` : "")); }
-  function fundRead(fd) {
-    const r = fd.view, w = fd.writing ? fd.partial : r?.w, idx = fd.writing ? Portfolio.dossier(fd).idx : r?.idx || {}, L = fd.look;
-    const btns = fd.writing ? `<button class="sm" data-fund-stop="1">Stop</button>` : S.sample && L?.n ? `<button class="sm" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${r ? "Rewrite" : "Write the read"}</button>` : "";
-    const status = fd.writing ? `<span class="small muted">Writing… (one Claude call)</span>` : r ? `<span class="small muted">Written ${esc(ago(r.at))}${r.secs ? ` in ${r.secs}s` : ""}${r.dropped ? ` · ${r.dropped} citation${r.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.viewWhy?.length ? ` Out of date: ${esc(fd.viewWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
-    const err = fd.viewErr ? `<div class="notice err"><span>The read didn't finish: ${esc(fd.viewErr)}</span></div>` : "";
-    if (!w) return sec("fund-read", "The fund strategist's read", "", `<div class="actions" style="align-items:center">${btns}${status}</div>${err}${!S.sample ? `<div class="small muted">Open this page in Claude to have the read written.</div>` : !L?.n ? `<div class="small muted">Nothing in this fund is covered by your analysis yet, so there's nothing to read through.</div>` : ""}`);
-    const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" };
-    const fit = w.fit ? `<div class="kpis">${["income", "conservative", "growth", "aggressive"].map((t) => { const x = w.fit[t] || {}, base = L?.scores?.[t]?.v, adj = isNum(base) ? base + (x.adjust || 0) : NaN, g = gradeOf(adj);
-      return `<div class="kpi"><span class="eyebrow">${t}</span><span class="v">${isNum(adj) ? `${Math.round(adj)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—"}</span><span class="small muted">${x.fit ? esc(x.fit) + " fit" : ""}${x.adjust ? ` · ${x.adjust > 0 ? "+" : ""}${x.adjust} from ${Math.round(base)}` : ""}</span>${x.why ? `<span class="small">${fundCites(x.why, idx)}</span>` : ""}</div>`; }).join("")}</div>` : "";
-    const li = (a) => (a || []).map((x) => `<li>${fundCites(x.text, idx)}${(x.ids || []).filter((id) => !(x.text || "").includes(`[${id}]`)).map((id) => idx[id] ? ` <span class="cite" title="${esc(idx[id])}">${id}</span>` : "").join("")}</li>`).join("");
-    const box = (title, a, cls = "") => (a?.length ? `<div class="box ${cls}"><b>${title}</b><ul class="dlist small">${li(a)}</ul></div>` : "");
-    return sec("fund-read", "The fund strategist's read", "one Claude call, on the look-through below", `
-      <div class="callout"><div class="callout-head">${w.verdict?.call ? `<span class="pill ${VC[w.verdict.call]}">${esc(w.verdict.call)}</span>` : ""}<b class="headline">${fundCites(w.headline, idx)}</b></div>
-        ${w.verdict?.why ? `<div class="small">${fundCites(w.verdict.why, idx)}</div>` : ""}</div>
-      ${w.summary ? `<p class="prose">${fundCites(w.summary, idx)}</p>` : ""}${fit}
-      <div class="two">${box("The fund's main bets", w.bets)}${box("What moves it over 12 months", w.drivers)}${box("Risks", w.risks, "cool")}${w.watch?.length ? box("Watch", w.watch.map((t) => ({ text: t }))) : ""}</div>
-      ${w.vs_benchmark ? `<div class="small"><b>Against ${esc(fd.bench?.symbol || "the benchmark")}:</b> ${fundCites(w.vs_benchmark, idx)}</div>` : ""}
-      ${w.blind_spots ? `<div class="small"><b>What the analysis can't see:</b> ${fundCites(w.blind_spots, idx)}</div>` : ""}
-      <div class="actions" style="align-items:center">${btns}${status}</div>${err}
-      <div class="small muted">Fit starts from the weighted score and moves at most 5 points for the strategist's judgment. Citations: F fund, I industries, A benchmark, W world events, C countries, M macro, R rules, O holdings outside the analysis.</div>`);
+  function fundCites(s, idx) { return esc(s || "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (idx?.[id] ? `<span class="cite" title="${esc(idx[id])}">${id}</span>` : "")); }
+  const idChips = (ids, idx, text = "") => (ids || []).filter((id) => idx?.[id] && !String(text).includes(`[${id}]`)).map((id) => ` <span class="cite" title="${esc(idx[id])}">${id}</span>`).join("");
+  /** The analysis being shown: the one being written (as it streams in), else the saved one. */
+  function fundA(fd) { const r = fd.full; const p = fd.writing ? { ...(r?.parts || {}), ...Object.fromEntries(Object.entries(fd.partial || {}).filter(([, v]) => v)) } : r?.parts || {}; return { P: p, idx: fd.writing ? FundAn.dossier(fd, today()).idx : r?.idx || {} }; }
+  /** A panel's written read, under its heading. */
+  function fundReadBox(text, idx, label = "Our read") { return text ? `<div class="coread"><span class="eyebrow">${label}</span><p>${fundCites(text, idx)}</p></div>` : ""; }
+  const FEFF = { helps: "pos", hurts: "neg", mixed: "warn", none: "neu", tailwind: "pos", headwind: "neg", neutral: "neu", supportive: "pos" };
+  const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
+  const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
+  function fundGroups(fd) {
+    return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-fit", "Fit & plans"]] },
+      { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"]] },
+      { label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"]] },
+      { label: "Through its industries", items: [["fund-look", "Calls & scores"], ["fund-val", "Valuation & fundamentals"]] },
+      { label: "Foreign Affairs", items: [["fund-macro", "Macro"], ["fund-world", "World events"], ["fund-trade", "Trade"], ["fund-reg", "Regulation"]] },
+      { label: "Outlook", items: [["fund-drivers", "Drivers & risks"], ["fund-cal", "Calendar"]] }];
   }
   function fundView(fd) {
     if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.sym)}: ${esc(fd.step || "")}</span></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't open ${esc(fd.sym)}: ${esc(fd.err)}.</span></div>`;
-    const f = fd.facts, c = fd.cov, B = c.buckets, mix = f.mix, L = fd.look, A = fd.act;
-    const fill = S.fundFill?.sym === fd.sym ? `<div class="notice info"><span>Filling the industries no run covers, code only (data and scores, no Claude): ${S.fundFill.done} of ${S.fundFill.n} done${S.fundFill.now ? `, now ${esc(S.fundFill.now)}` : ""}. The look-through updates when it finishes.</span></div>` : "";
+    const f = fd.facts, c = fd.cov, B = c.buckets, L = fd.look, A = fd.act, { P, idx } = fundA(fd), core = P.core || {}, calls = P.calls || {}, ctx = P.context || {}, ex = P.exposures || {}, lean = P.lean || {};
+    const R = (k, part) => fundReadBox((P[part] || {}).reads?.[k], idx);
+    const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
+    const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: four analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
+    const fill = S.fundFill?.sym === fd.sym ? `<div class="notice info"><span>Filling the industries no run covers, code only (data and scores, no Claude): ${S.fundFill.done} of ${S.fundFill.n} done${S.fundFill.now ? `, now ${esc(S.fundFill.now)}` : ""}.</span></div>` : "";
     const left = c.industries.filter((g) => g.status === "not_analyzed" && !(fd.fillSkip || {})[g.industry]);
     const leftNote = !S.fundFill && left.length ? `<div class="notice warn"><span>${left.length} industr${left.length === 1 ? "y" : "ies"} (${pct(left.reduce((a, g) => a + g.weight, 0), false, 1)} of the fund) not covered yet.</span><button class="sm" data-fund-fill="${esc(fd.sym)}" ${busy() || !S.mcp ? "disabled" : ""}>Fill ${Math.min(left.length, 20)} more, code only</button></div>` : "";
     const skipped = Object.entries(fd.fillSkip || {}); const skipNote = skipped.length ? `<div class="small muted">Couldn't fill: ${skipped.map(([k, w]) => `${esc(k)} (${esc(String(w).replace(/\.$/, ""))})`).join("; ")}.</div>` : "";
-    const head = `<section class="hero"><span class="eyebrow">${esc(f.type)}${f.family ? " · " + esc(f.family) : ""}${f.category ? " · " + esc(f.category) : ""}</span><h1>${esc(f.name)} <span class="muted mono" style="font-size:.6em">${esc(f.symbol)}</span></h1>
-      <div class="kpis">${[kpi("Covered by your analysis", pct(c.covered, false, 0), `${pct(c.covered_full, false, 0)} with the full analysis${B.quant > 0.0005 ? `, ${pct(B.quant, false, 0)} code-only` : ""}`),
+    const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? ` Out of date: ${esc(fd.fullWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
+    const btn = !fd.writing && S.sample && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
+    // ---- snapshot: the hero, our prediction
+    const lc12 = (h) => lean.calls?.[h]?.call || calls.horizons?.[h]?.call || L?.calls?.[h]?.lean || L?.calls?.[h]?.call || "";
+    const pred = core.headline || core.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${core.verdict?.call ? `<span class="pill ${VC[core.verdict.call]}">${esc(core.verdict.call)}</span>` : ""}${core.vs_benchmark?.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)} vs ${esc(fd.bench.symbol)}</span>` : ""}${core.confidence ? `<span class="small muted">${esc(core.confidence)} confidence</span>` : ""}</div>
+      ${core.headline ? `<b class="headline">${fundCites(core.headline, idx)}</b>` : ""}${core.verdict?.summary ? `<div class="small">${fundCites(core.verdict.summary, idx)}</div>` : ""}
+      <div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h}</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`
+      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div><div class="strip">${Portfolio.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${h} (industries)</span>${x ? `<span class="pill ${CALLC(x)}">${esc(x)}</span>` : "—"}</div>`; }).join("")}</div></div>`;
+    const snap = `<section class="panel" id="fund-snap"><div style="display:grid;gap:4px"><span class="eyebrow">${esc(f.type)}${f.family ? " · " + esc(f.family) : ""}${f.category ? " · " + esc(f.category) : ""}</span><h1 style="font-size:26px">${esc(f.name)} <span class="mono muted" style="font-size:.6em">${esc(f.symbol)}</span></h1>
+      ${fd.lv ? `<div class="mono"><span style="font-size:22px;font-weight:600">${fix(fd.lv.px, 2)}</span> <span class="small muted">${esc(fd.ser.dates[fd.ser.dates.length - 1])}</span></div>` : ""}</div>
+      <div class="kpis">${[kpi("Covered by your analysis", pct(c.covered, false, 0), `${pct(c.covered_full, false, 0)} full${B.quant > 0.0005 ? `, ${pct(B.quant, false, 0)} code-only` : ""}`),
         kpi("Expense ratio", isNum(f.expense) ? pct(f.expense, false, 2) : "—", isNum(f.turnover) ? `turnover ${pct(f.turnover, false, 0)} a year` : ""),
         kpi("Assets", cap(f.aum), f.holdings_count ? `${f.holdings_count} holdings` : ""), kpi("Yield", isNum(f.yield) ? pct(f.yield, false, 2) : "—", f.inception ? `since ${esc(String(f.inception).slice(0, 4))}` : ""),
-        kpi("1-year return", isNum(f.perf?.ret_1y) ? pct(f.perf.ret_1y) : "—", isNum(f.perf?.ret_3y) ? `3Y ${pct(f.perf.ret_3y)} a year · 5Y ${pct(f.perf.ret_5y)}` : "", ""),
-        kpi("Benchmark", esc(fd.bench.symbol), esc(fd.bench.why))].join("")}</div>
-      <div class="actions"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}" ${busy() ? "disabled" : ""}>Fetch again</button><span class="small muted">Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}. Fetched ${esc(ago(fd.raw.fetched_at))}.</span></div>${fill}${leftNote}${skipNote}${fd.fillErr ? `<div class="notice err"><span>The fill stopped: ${esc(fd.fillErr)}</span></div>` : ""}</section>`;
-    // ---- the look-through
-    let lookSec = "";
-    if (L?.n) {
-      const sc = (t) => { const x = L.scores[t]; const g = gradeOf(x.v); return kpi(`${t[0].toUpperCase() + t.slice(1)} score`, isNum(x.v) ? `${Math.round(x.v)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—", t === L.best ? "best fit" : ""); };
-      const kp = [sc("income"), sc("conservative"), sc("growth"), sc("aggressive"),
-        kpi("Expected 12 months, by scenario", pts(L.exp12.v), isNum(L.scen.bull.move) ? `bull ${pts(L.scen.bull.move, 0)} · bear ${pts(L.scen.bear.move, 0)}` : "", isNum(L.exp12.v) ? (L.exp12.v >= 0 ? "up" : "down") : ""),
-        kpi("Forward P/E", fix(L.val.fwd_pe.v, 1), `trailing ${fix(L.val.pe.v, 1)} · EV/EBITDA ${fix(L.val.ev_ebitda.v, 1)}`),
-        kpi("Next-12-month EPS growth", isNum(L.val.eps_growth.v) ? pct(L.val.eps_growth.v) : "—", isNum(L.val.rev30.v) ? `estimates ${pct(L.val.rev30.v)} in 30 days` : ""),
-        kpi("Dividend yield", isNum(L.val.div_yield.v) ? pct(L.val.div_yield.v, false, 2) : "—", isNum(L.risk.beta.v) ? `beta ${fix(L.risk.beta.v, 2)}` : "")].join("");
-      const hz = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, main = x.lean || x.call;
-        return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${CALLC(main)}">${esc(main || "—")}</span></div>
-          <div class="small muted">${x.lean && x.call && x.lean !== x.call ? `outlook ${esc(x.lean)} · strategist ${esc(x.call)}` : x.lean ? "the outlook" : "the strategist's call"}</div>
-          ${isNum(x.expected) ? `<div class="hz-num"><span class="v">${pts(x.expected)}</span><span class="small muted">middle of the strategists' ranges${isNum(x.p_up) ? `, ${Math.round(x.p_up)}% chance up` : ""}</span></div>` : ""}
-          <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--sunk)" title="Share of the covered fund by call"><i style="width:${(100 * x.dist.up / tot).toFixed(1)}%;background:var(--pos)"></i><i style="width:${(100 * x.dist.flat / tot).toFixed(1)}%;background:var(--bench)"></i><i style="width:${(100 * x.dist.down / tot).toFixed(1)}%;background:var(--neg)"></i></div>
-          <div class="small muted">${pct(x.dist.up / tot, false, 0)} up · ${pct(x.dist.flat / tot, false, 0)} neutral · ${pct(x.dist.down / tot, false, 0)} down</div></div>`; }).join("");
-      const ctr = (list) => list.map((x) => `<li><b>${esc(x.industry)}</b> <span class="muted">${pct(x.weight, false, 1)} × ${pts(x.expected)}</span> = <b class="${x.pts >= 0 ? "up" : "down"}">${pts(x.pts, 2)}</b>${x.kind === "quant" ? ` <span class="small muted">(code-only)</span>` : ""}</li>`).join("");
-      const plus = L.contrib.slice(0, 5).filter((x) => x.pts > 0), minus = L.contrib.slice(-5).reverse().filter((x) => x.pts < 0);
-      const contrib = plus.length || minus.length ? `<div class="two">${plus.length ? `<div class="box hot"><b>Adding most to the expected return</b><ul class="dlist small">${ctr(plus)}</ul></div>` : ""}${minus.length ? `<div class="box cool"><b>Taking most away</b><ul class="dlist small">${ctr(minus)}</ul></div>` : ""}</div>` : "";
-      lookSec = sec("fund-look", "The fund through its industries", `${L.n} industr${L.n === 1 ? "y" : "ies"} · ${pct(L.on, false, 0)} of the fund${L.full_on < L.on - 0.001 ? ` (${pct(L.full_on, false, 0)} with the full analysis)` : ""}`,
-        `<div class="kpis">${kp}</div><div class="hz-grid">${hz}</div>${contrib}
-        <div class="small muted">Code: each figure is the industries' own, weighted by the fund's weight in each and renormalized over the industries it applies to. P/E-type ratios are weighted as shares of earnings (harmonic). Scores from code-only fills leave out the report sections. The expected return is the industries' scenario-weighted 12-month price move, not the fund's.</div>`);
-    }
+        kpi("Beta to SPY", fix(fd.gS?.beta ?? (fd.bench.symbol === "SPY" ? fd.g1?.beta : NaN), 2), fd.g1 ? `volatility ${pct(fd.g1.vol, false, 0)}` : ""), kpi("Benchmark", esc(fd.bench.symbol), esc(fd.bench.why))].join("")}</div>
+      ${pred}${writing}${fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span></div>` : ""}${fill}${leftNote}${skipNote}
+      <div class="actions" style="align-items:center"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}" ${busy() ? "disabled" : ""}>Fetch again</button>${btn}${status}</div>
+      <div class="small muted">Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}; prices from FMP. Fetched ${esc(ago(fd.raw.fetched_at))}.</div></section>`;
+    // ---- where it's going: the outlook, against the industries' weighted calls
+    const leanSec = sec("fund-lean", "Where it's going", "the fund strategist's outlook, next to its industries' calls weighted by the fund", `${lean.headline ? `<p class="headline" style="margin:0">${fundCites(lean.headline, idx)}</p>` : ""}
+      <div class="hz-grid hz2">${Portfolio.HZ.map((h) => { const x = lean.calls?.[h], w = L?.calls?.[h];
+        return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x?.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${w ? `<span class="small muted">industries: ${esc(w.lean || w.call || "—")}${isNum(w.expected) ? `, ${pts(w.expected)}` : ""}</span>` : ""}</div>
+          ${x?.why ? `<p class="small" style="margin:0">${fundCites(x.why, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`}
+          ${x?.for?.length ? `<div class="small"><b class="up">For:</b><ul class="dlist small">${x.for.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}
+          ${x?.against?.length ? `<div class="small"><b class="down">Against:</b><ul class="dlist small">${x.against.map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("")}</div>`);
+    // ---- the analysis: thesis, calls, scenarios
+    const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
+    const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], w = L?.calls?.[h];
+      return `<div class="box hz"><div class="dim-head"><b>${h}</b>${x.call ? `<span class="pill ${CALLC(x.call)}">${esc(x.call)}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
+        <div class="hz-num"><span class="v">${esc(rng(x.expected_move))}</span><span class="small muted">expected move${isNum(x.probability_up) ? ` · ${x.probability_up}% chance it's higher` : ""}</span></div>
+        ${w ? `<div class="small"><span class="muted">Industries, weighted:</span> ${esc(w.call || "—")}${isNum(w.expected) ? ` · ${pts(w.expected)}` : ""}${isNum(fd.ext?.base?.[h]?.v) ? ` · base rate ${pct(fd.ext.base[h].v, false, 0)} up` : ""}</div>` : ""}
+        ${x.drivers ? `<p class="small" style="margin:0">${fundCites(x.drivers, idx)}</p>` : ""}
+        ${x.decisions?.length ? `<div class="small"><span class="eyebrow">In the window</span><ul class="dlist small">${x.decisions.map((d) => `<li><span class="mono">${esc(d.date)}</span> ${fundCites(d.event, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("");
+    const SC = { bull: "pos", base: "neu", bear: "neg" };
+    const scen = calls.scenarios && Object.keys(calls.scenarios).length ? `<h3>12-month scenarios</h3><div class="hcards">${["bull", "base", "bear"].filter((k) => calls.scenarios[k]).map((k) => { const x = calls.scenarios[k];
+      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k}</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b><span class="mono small">${esc(rng(x.move))}</span></div><div class="small">${fundCites(x.narrative, idx)}</div></div>`; }).join("")}</div>
+      ${isNum(fd.full?.checks?.expected) ? `<div class="small muted">Probability-weighted: ${pts(fd.full.checks.expected)} over 12 months (the industries' own, weighted: ${pts(L?.exp12?.v)}).</div>` : ""}` : "";
+    const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the calls: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
+    const thesis = core.thesis || hz ? `${core.thesis ? core.thesis.split(/\n+/).map((pp) => `<p class="prose">${fundCites(pp, idx)}</p>`).join("") : ""}
+      ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
+      ${core.strategy ? `<div class="small"><b>How it's run:</b> ${fundCites(core.strategy, idx)}</div>` : ""}
+      ${hz ? `<h3>1M–12M calls</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
+    const thesisSec = sec("fund-thesis", "Analysis", "four analysts at once on the fund's dossier; every claim cites it", thesis);
+    // ---- fit and plans
+    const fitSec = sec("fund-fit", "Fit for each investor type", "the weighted score, moved at most 5 points for judgment", `<div class="dims">${["income", "conservative", "growth", "aggressive"].map((t) => {
+      const x = core.fit?.[t] || {}, base = L?.scores?.[t]?.v, adj = isNum(base) ? base + (x.adjust || 0) : NaN, g = gradeOf(adj), pl = calls.plans?.[t];
+      return `<div class="dim"><div class="dim-head"><b>${t[0].toUpperCase() + t.slice(1)}</b><span>${isNum(adj) ? `${Math.round(adj)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—"}</span></div>
+        <div class="small muted">${x.fit ? esc(x.fit) + " fit" : ""}${x.conviction ? ` · ${esc(x.conviction)} conviction` : ""}${x.adjust ? ` · ${x.adjust > 0 ? "+" : ""}${x.adjust} from ${Math.round(base)}` : ""}${t === L?.best ? " · best fit by score" : ""}</div>
+        ${x.why ? `<div class="small">${fundCites(x.why, idx)}</div>` : ""}${x.watch ? `<div class="small"><b>Watch:</b> ${fundCites(x.watch, idx)}</div>` : ""}${x.what_changes ? `<div class="small muted"><b>What would change it:</b> ${fundCites(x.what_changes, idx)}</div>` : ""}
+        ${pl ? `<div class="small" style="border-top:1px dashed var(--line);padding-top:6px"><b>Plan:</b> ${isNum(pl.size_pct) ? `${pl.size_pct}% of the portfolio. ` : ""}${pl.entry ? `Entry: ${fundCites(pl.entry, idx)}. ` : ""}${pl.hedge ? `Hedge: ${fundCites(pl.hedge, idx)}. ` : ""}${pl.review ? `Review: ${fundCites(pl.review, idx)}.` : ""}</div>` : ""}</div>`; }).join("")}</div>`);
+    // ---- holdings
+    const cn = fd.conc || {};
+    const hrows = (fd.hold || []).map((h) => `<tr><td><span class="tick">${esc(h.ticker)}</span><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="n"><b>${pct(h.weight, false, 2)}</b></td><td class="wr small">${esc(h.industry || "—")}${h.inTop50 ? ` <span class="muted">#${h.rank}</span>` : h.industry ? ` <span class="muted">(outside top 50)</span>` : ""}</td>
+      <td class="n">${fix(h.pe, 1)}</td><td class="n ${cls(num(h.r1y))}">${pct(h.r1y)}</td><td class="n">${isNum(num(h.div)) ? pct(h.div, false, 1) : "—"}</td><td class="n">${pct(h.opm, false, 0)}</td><td class="mono small">${esc(h.next || "")}</td>
+      <td>${h.call12 ? `<span class="pill ${CALLC(h.call12)}">${esc(h.call12)}</span>` : ""}</td><td class="small">${h.co ? `<button class="linkbtn" data-co="${esc(h.ticker)}" title="${esc(h.co)}">its analysis</button>` : `<button class="linkbtn" data-co="${esc(h.ticker)}">open</button>`}</td></tr>`).join("");
+    const holdSec = sec("fund-hold", "Holdings", `${cn.n || 0} stocks · top 10 ${pct(cn.top10, false, 0)} · effective ${fix(cn.effective_n, 0)} holdings`, `${R("holdings", "core")}
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>Industry (rank by size)</th><th class="n">P/E</th><th class="n">1Y</th><th class="n">Yield</th><th class="n">Op. margin</th><th>Reports</th><th>Industry 12M</th><th></th></tr></thead><tbody>${hrows}</tbody></table></div>
+      <div class="small muted">Each company's figures are from its industry's top-50 table as of that industry's run. "Its analysis" opens the company's own saved analysis.</div>`);
+    // ---- industries (with the context analyst's row reads)
+    const ST = { analyzed: ["pos", "analyzed"], stale: ["warn", "stale"], quant: ["neu", "code-only"], not_analyzed: ["neu", "not covered"] };
+    const iRead = new Map((ctx.industries || []).map((x) => [idx[x.id], x]));
+    const irows = c.industries.map((g) => { const d = fd.digests?.[lc(g.industry)], c12 = d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "", rd = iRead.get(g.industry);
+      return `<tr><td class="wr"><b>${g.status === "analyzed" || g.status === "stale" ? `<button class="linkbtn" data-open-industry="${esc(g.industry)}">${esc(g.industry)}</button>` : esc(g.industry)}</b><div class="small muted">${esc(g.top.map((h) => `${h.ticker || h.name} ${pct(h.weight, false, 1)}`).join(", "))}</div>${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</td>
+      <td>${esc(g.sector || "")}</td><td class="n"><b>${pct(g.weight, false, 1)}</b></td><td>${c12 ? `<span class="pill ${CALLC(c12)}">${esc(c12)}</span>` : ""}</td><td class="n">${d && isNum(num(d.expected12)) ? pts(d.expected12) : "—"}</td>
+      <td class="n">${d?.scores && d.best ? `${Math.round(d.scores[d.best])} <span class="small muted">${esc(d.best)}</span>` : "—"}</td><td><span class="pill ${ST[g.status][0]}">${ST[g.status][1]}</span>${g.saved_at ? ` <span class="small muted">${esc(ago(g.saved_at))}</span>` : ""}</td></tr>`; }).join("");
+    const indSec = sec("fund-ind", "The industries it holds", `${c.industries.length} industries`, `${R("industries", "core")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry, its biggest holdings and what it means for the fund</th><th>Sector</th><th class="n">Weight</th><th>12-month call</th><th class="n">Expected</th><th class="n">Best score</th><th>Your analysis</th></tr></thead><tbody>${irows}</tbody></table></div>`);
     // ---- against the benchmark
     let actSec = "";
     if (A) {
       const rows = A.rows.filter((r) => Math.abs(r.active) >= 0.003).slice(0, 18).map((r) => `<tr><td class="wr"><b>${esc(r.industry)}</b><div class="small muted">${esc(r.sector || "")}</div></td><td class="n">${pct(r.fund, false, 1)}</td><td class="n muted">${pct(r.bench, false, 1)}</td>
         <td class="n"><b class="${r.active >= 0 ? "up" : "down"}">${pct(r.active, true, 1)}</b></td><td>${r.call12 ? `<span class="pill ${CALLC(r.call12)}">${esc(r.call12)}</span>` : `<span class="small muted">${r.analyzed ? "—" : "not covered"}</span>`}</td><td class="n">${isNum(num(r.expected)) ? pts(r.expected) : "—"}</td>
         <td class="small">${isNum(r.callNum) && r.callNum !== 0 ? (Math.sign(r.callNum) === Math.sign(r.active) ? `<span class="pill pos">with the view</span>` : `<span class="pill warn">against the view</span>`) : ""}</td></tr>`).join("");
-      actSec = sec("fund-active", `Against ${esc(fd.bench.symbol)}`, esc(fd.bench.why), `<div class="kpis">${[kpi("Overlap", pct(A.overlap, false, 0), `active share ${pct(A.active_share, false, 0)}, by industry`),
+      actSec = sec("fund-active", `Against ${esc(fd.bench.symbol)}`, esc(fd.bench.why), `${core.vs_benchmark?.why ? fundReadBox(core.vs_benchmark.why, idx, `Our read: ${core.vs_benchmark.call || ""}`) : ""}<div class="kpis">${[kpi("Overlap", pct(A.overlap, false, 0), `active share ${pct(A.active_share, false, 0)}, by industry`),
           kpi("What the tilts add", pts(A.tilt, 2), "expected 12-month points from over- and underweights", A.tilt >= 0 ? "up" : "down"),
           kpi("Leaning with the analysis", isNum(A.aligned) ? pct(A.aligned, false, 0) : "—", "of the active weight where the industry has a 12-month call")].join("")}</div>
         <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Fund</th><th class="n">${esc(fd.bench.symbol)}</th><th class="n">Active</th><th>12-month call</th><th class="n">Expected</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
         <div class="small muted">Code: both funds' holdings matched to industries the same way; weights are shares of each fund's total. Overlap is by industry, not by stock.</div>`);
     } else if (fd.bnote) actSec = sec("fund-active", `Against ${esc(fd.bench.symbol)}`, "", `<div class="small muted">The benchmark couldn't be read: ${esc(fd.bnote)}.</div>`);
-    // ---- macro, world, trade, regulation
-    let expSec = "";
-    if (L?.n) {
-      const sens = L.sens.length ? `<h3>Macro: how the fund's industries move with each factor</h3><div class="tbl-wrap"><table><thead><tr><th>If this happens</th><th class="n">The fund's industries move</th><th class="n">Rests on</th></tr></thead><tbody>${L.sens.map((x) => `<tr><td>${esc(x.shock || x.label)}</td><td class="n ${x.effect >= 0 ? "up" : "down"}">${pct(x.effect, true, 2)}</td><td class="n muted">${pct(x.on, false, 0)}</td></tr>`).join("")}</tbody></table></div>
-        ${Object.keys(L.regimes).length ? `<div class="small muted">The industries' macro regimes: ${Object.entries(L.regimes).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 0)}`).join(" · ")}.</div>` : ""}` : "";
-      const world = L.world.length ? `<h3>World events that reach the most of the fund</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Situation</th><th class="n">Reaches</th><th class="n">Adverse for</th><th class="n">Favorable for</th><th class="n">Industries</th></tr></thead><tbody>${L.world.slice(0, 10).map((x) => `<tr><td class="wr">${esc(x.title)}</td><td class="n"><b>${pct(x.w, false, 0)}</b></td><td class="n ${x.adverse > 0.005 ? "down" : "muted"}">${pct(x.adverse, false, 0)}</td><td class="n ${x.favorable > 0.005 ? "up" : "muted"}">${pct(x.favorable, false, 0)}</td><td class="n muted">${x.industries.length}</td></tr>`).join("")}</tbody></table></div>` : "";
-      const trade = L.trade.length ? `<h3>Countries the fund's industries depend on</h3><div class="tbl-wrap"><table><thead><tr><th>Country</th><th class="n">Industries' revenue there</th><th class="n">Fund weight in industries naming it</th><th>Usual stance</th><th>Worst threat</th></tr></thead><tbody>${L.trade.slice(0, 12).map((x) => `<tr><td><b>${esc(x.country)}</b></td><td class="n">${x.rev > 0 ? pct(x.rev / (L.on || 1), false, 1) + " est." : "—"}</td><td class="n muted">${pct(x.w, false, 0)}</td><td>${esc(x.stance)}</td><td>${x.threat && !["none", "low"].includes(x.threat) ? `<span class="pill ${x.threat === "severe" || x.threat === "high" ? "neg" : "warn"}">${esc(x.threat)}</span>` : esc(x.threat || "")}</td></tr>`).join("")}</tbody></table></div>
-        ${Object.keys(L.tradeRating).length ? `<div class="small muted">Supply-chain verdicts: ${Object.entries(L.tradeRating).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 0)}`).join(" · ")}.</div>` : ""}` : "";
-      const reg = Object.keys(L.regStance).length || L.rules.length ? `<h3>Regulation</h3>${Object.keys(L.regStance).length ? `<div class="small">Regulatory verdicts, by fund weight: ${Object.entries(L.regStance).sort((a, b) => b[1] - a[1]).map(([k, w]) => `<span class="chip-s">${esc(k)} ${pct(w, false, 0)}</span>`).join(" ")}</div>` : ""}
-        ${L.rules.length ? `<ul class="dlist small">${L.rules.map((r) => `<li><b>${esc(r.name)}</b> <span class="pill ${r.severity === "critical" ? "neg" : "warn"}">${esc(r.severity)}</span> <span class="muted">${esc(r.body)} · ${pct(r.w, false, 0)} of the fund (${esc(r.industries.join(", "))})</span></li>`).join("")}</ul>` : ""}` : "";
-      expSec = sec("fund-exp", "What the fund is exposed to", "from the industries' macro, world, trade and regulation reports", `${sens}${world}${trade}${reg}`);
-    }
-    // ---- coverage and industries
+    // ---- coverage and what's outside
     const bar = `<div style="display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--sunk)">${FUND_BUCKETS.filter(([k]) => B[k] > 0.0005).map(([k, l, col]) => `<i title="${esc(l)}: ${pct(B[k], false, 1)}" style="display:block;width:${(B[k] * 100).toFixed(2)}%;background:${col}"></i>`).join("")}</div>`;
     const legend = `<div class="legend-list" style="max-width:640px">${FUND_BUCKETS.filter(([k]) => B[k] > 0.0005).map(([k, l, col]) => `<div><i style="background:${col}"></i><span>${esc(l)}</span><b class="mono">${pct(B[k], false, 1)}</b></div>`).join("")}</div>`;
-    const mixNote = mix ? `<div class="small muted">EODHD's asset mix: US stocks ${pct(mix.stock_us || 0, false, 1)}, non-US stocks ${pct(mix.stock_nonus || 0, false, 1)}, cash ${pct(mix.cash || 0, false, 1)}${mix.bond > 0.0005 ? `, bonds ${pct(mix.bond, false, 1)}` : ""}${mix.other > 0.0005 ? `, other ${pct(mix.other, false, 1)}` : ""}. The analysis covers US-listed stocks; everything else is shown, not analyzed.</div>` : "";
+    const mix = f.mix, mixNote = mix ? `<div class="small muted">EODHD's asset mix: US stocks ${pct(mix.stock_us || 0, false, 1)}, non-US stocks ${pct(mix.stock_nonus || 0, false, 1)}, cash ${pct(mix.cash || 0, false, 1)}${mix.bond > 0.0005 ? `, bonds ${pct(mix.bond, false, 1)}` : ""}${mix.other > 0.0005 ? `, other ${pct(mix.other, false, 1)}` : ""}. The analysis covers US-listed stocks; everything else is shown, not analyzed.</div>` : "";
     const viaNote = Object.keys(c.via).length ? `<div class="small muted">How holdings were placed in an industry: ${Object.entries(c.via).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 1)}`).join(" · ")}.</div>` : "";
-    const covSec = sec("fund-cov", "How much of the fund your analysis covers", `${c.holdings} holdings`, `${bar}${legend}${mixNote}${viaNote}`);
-    const ST = { analyzed: ["pos", "analyzed"], stale: ["warn", "stale"], quant: ["neu", "code-only"], not_analyzed: ["neu", "not covered"] };
-    const rows = c.industries.map((g) => { const d = fd.digests?.[lc(g.industry)], c12 = d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "";
-      return `<tr><td class="wr"><b>${g.status === "analyzed" || g.status === "stale" ? `<button class="linkbtn" data-open-industry="${esc(g.industry)}">${esc(g.industry)}</button>` : esc(g.industry)}</b><div class="small muted">${esc(g.top.map((h) => `${h.ticker || h.name} ${pct(h.weight, false, 1)}`).join(", "))}</div></td>
-      <td>${esc(g.sector || "")}</td><td class="n"><b>${pct(g.weight, false, 1)}</b></td><td class="n">${g.holdings}</td><td>${c12 ? `<span class="pill ${CALLC(c12)}">${esc(c12)}</span>` : ""}</td><td class="n">${d && isNum(num(d.expected12)) ? pts(d.expected12) : "—"}</td>
-      <td class="n">${d?.scores && d.best ? `${Math.round(d.scores[d.best])} <span class="small muted">${esc(d.best)}</span>` : "—"}</td>
-      <td><span class="pill ${ST[g.status][0]}">${ST[g.status][1]}</span>${g.saved_at ? ` <span class="small muted">${esc(ago(g.saved_at))}</span>` : ""}</td></tr>`; }).join("");
-    const indSec = sec("fund-ind", "The industries it holds", `${c.industries.length} industries`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry and its biggest holdings</th><th>Sector</th><th class="n">Weight</th><th class="n">Holdings</th><th>12-month call</th><th class="n">Expected</th><th class="n">Best score</th><th>Your analysis</th></tr></thead><tbody>${rows}</tbody></table></div>`);
     const KL = { foreign: "listed abroad", private: "private", cash: "cash", derivative: "derivative", bond: "bond", unmapped: "no industry found", other: "other" };
-    const out = c.outside.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>What it is</th><th class="n">Weight</th></tr></thead><tbody>${c.outside.slice(0, 15).map((h) => `<tr><td class="wr">${h.ticker ? `<span class="mono">${esc(h.ticker)}</span> ` : ""}${esc(h.name)}</td><td>${esc(KL[h.kind] || h.kind)}</td><td class="n">${pct(h.weight, false, 2)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">Every holding is a US stock in an industry.</div>`;
-    const flags = fd.flags?.length ? `<div class="callout"><div class="callout-head"><b>Where FMP and EODHD disagree</b></div><ul class="dlist small">${fd.flags.map((x) => `<li><b>${esc(x.name)}</b>: EODHD ${pct(x.eod, false, 2)}, FMP ${isNum(x.fmp) ? pct(x.fmp, false, 2) : "not listed"}. ${esc(x.note)}.</li>`).join("")}</ul><div class="small muted">FMP's holdings are refreshed daily; EODHD's mutual-fund top holdings come from the last quarterly filing${f.eod_date ? ` (${esc(f.eod_date)})` : ""}.</div></div>` : "";
-    const outSec = sec("fund-out", "What the analysis can't cover", "", `${out}${flags}`);
-    return `${head}${fundRead(fd)}${lookSec}${actSec}${expSec}${indSec}${covSec}${outSec}`;
+    const oRead = new Map((ex.outside || []).map((x) => [idx[x.id], x]));
+    const out = c.outside.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding outside the analysis</th><th>What it is</th><th class="n">Weight</th></tr></thead><tbody>${c.outside.slice(0, 15).map((h) => { const rd = oRead.get(h.name);
+      return `<tr><td class="wr">${h.ticker ? `<span class="mono">${esc(h.ticker)}</span> ` : ""}${esc(h.name)}${rd?.why ? `<div class="small">${fLvl(rd.matters, "importance")} ${fundCites(rd.why, idx)}</div>` : ""}</td><td>${esc(KL[h.kind] || h.kind)}</td><td class="n">${pct(h.weight, false, 2)}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+    const flags = fd.flags?.length ? `<div class="callout"><div class="callout-head"><b>Where FMP and EODHD disagree</b></div><ul class="dlist small">${fd.flags.map((x) => `<li><b>${esc(x.name)}</b>: EODHD ${pct(x.eod, false, 2)}, FMP ${isNum(x.fmp) ? pct(x.fmp, false, 2) : "not listed"}. ${esc(x.note)}.</li>`).join("")}</ul></div>` : "";
+    const covSec = sec("fund-cov", "How much of the fund your analysis covers", `${c.holdings} holdings`, `${R("coverage", "core")}${R("outside", "exposures")}${bar}${legend}${mixNote}${viaNote}${out}${flags}`);
+    // ---- performance: returns grid and chart against the benchmark and SPY
+    let perfSec = "";
+    if (fd.ser && fd.retRows?.length) {
+      const RR = fd.retRows; let sel = S.fundRet || "1Y"; if (!RR.find((r) => r.label === sel)) sel = RR[RR.length - 1].label;
+      const cards = RR.map((r) => { const on = r.label === sel, up = r.value > 0.05, dn = r.value < -0.05;
+        return `<button class="retcard ${up ? "up" : dn ? "down" : "flat"} ${on ? "on" : ""}" data-fund-ret="${r.label}" aria-pressed="${on}"><span class="eyebrow">${r.label}${r.ann ? ` <small>ann.</small>` : ""}</span><span class="rv">${r.value > 0 ? "+" : ""}${r.value.toFixed(1)}%</span><span class="small muted">${isNum(r.bench) && fd.bench.symbol !== "SPY" ? `${esc(fd.bench.symbol)} ${pts(r.bench)} · ` : ""}SPY ${pts(r.spy)}</span></button>`; }).join("");
+      const cur = RR.find((r) => r.label === sel), d0 = fd.ser.dates[cur.from], norm = (s) => { if (!s) return null; const i = s.dates.findIndex((x) => x >= d0); if (i < 0) return null; const b = s.closes[i]; return { dates: s.dates.slice(i), values: s.closes.slice(i).map((v) => (v / b - 1) * 100) }; };
+      const lines = [[fd.sym, fd.ser, "var(--accent)"], ...(fd.bser && fd.bench.symbol !== "SPY" ? [[fd.bench.symbol, fd.bser, "var(--c3)"]] : []), ["SPY", fd.spy, "var(--bench)"]].map(([name, s, color]) => ({ name, color, ...norm(s) })).filter((x) => x.dates?.length);
+      const chart = lines.length ? `<div class="chart">${lineChart(lines.map((x, i) => ({ ...x, dash: i > 0 && x.name === "SPY" })), { height: 240, width: 900, fmtY: (v) => `${v > 0 ? "+" : ""}${v.toFixed(1)}%`, zeroLine: false, baseLine: 0 })}<div class="tip" hidden></div>
+        <div class="legend">${lines.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>` : "";
+      perfSec = sec("fund-perf", "Returns", `dividend-adjusted, against ${esc(fd.bench.symbol)}${fd.bench.symbol !== "SPY" ? " and SPY" : ""}`, `${R("perf", "calls")}<div class="retgrid" role="group" aria-label="Return period">${cards}</div>${chart}`);
+    }
+    // ---- risk
+    let riskSec = "";
+    if (fd.g1) {
+      const G = [["1 year", fd.g1], ["3 years", fd.g3], ["5 years", fd.g5]].filter(([, x]) => x);
+      const row = (l, k, fmt) => `<tr><td>${l}</td>${G.map(([, x]) => `<td class="n">${fmt(x[k])}</td>`).join("")}</tr>`;
+      const pf = (v) => pct(v), p0 = (v) => pct(v, false, 0), f2 = (v) => fix(v, 2);
+      riskSec = sec("fund-risk", "Risk", `against ${esc(fd.bench.symbol)}, from daily returns`, `${R("risk", "calls")}<div class="tbl-wrap"><table><thead><tr><th></th>${G.map(([l]) => `<th class="n">${l}</th>`).join("")}</tr></thead><tbody>
+        ${row(`Beta to ${esc(fd.bench.symbol)}`, "beta", f2)}${row("Correlation", "corr", f2)}${row("Alpha (a year)", "alpha", pf)}${row("Volatility", "vol", (v) => pct(v, false))}${row("Downside volatility", "downside_vol", (v) => pct(v, false))}
+        ${row("Sharpe", "sharpe", f2)}${row("Sortino", "sortino", f2)}${row("Tracking error", "tracking_error", (v) => pct(v, false))}${row("Information ratio", "info_ratio", f2)}${row("Up capture", "up_capture", p0)}${row("Down capture", "down_capture", p0)}
+        ${row("Max drawdown", "max_dd", pf)}${row("1-day 95% VaR", "var95", (v) => pct(v, false, 2))}${row("Annual return", "ann_return", pf)}</tbody></table></div>
+        ${fd.gS && fd.bench.symbol !== "SPY" ? `<div class="small muted">Against SPY over 1 year: beta ${fix(fd.gS.beta, 2)}, correlation ${fix(fd.gS.corr, 2)}, up capture ${pct(fd.gS.up_capture, false, 0)}, down capture ${pct(fd.gS.down_capture, false, 0)}.</div>` : ""}${fd.tech ? `<div class="small muted">Trend: ${esc(fd.tech)}.</div>` : ""}`);
+    }
+    // ---- stress
+    const ep = fd.ep || [];
+    const stressSec = ep.length ? sec("fund-stress", "Stress test & boom test", "actual moves where the fund traded; otherwise its beta × SPY", `${R("stress", "context")}<div class="tbl-wrap"><table><thead><tr><th>Episode</th><th></th><th class="n">SPY</th><th class="n">${esc(fd.sym)}</th><th class="n">Max drawdown</th><th class="n">vs SPY</th><th class="n">Capture</th></tr></thead><tbody>${ep.map((e) => `<tr><td><b>${esc(e.label)}</b><div class="small muted mono">${esc(e.from)} → ${esc(e.to)}</div></td><td><span class="pill ${e.kind === "boom" ? "pos" : "neg"}">${e.kind}</span></td>
+      <td class="n ${cls(num(e.spy))}">${pct(e.spy)}</td><td class="n ${cls(num(e.ret))}"><b>${pct(e.ret)}</b>${e.estimated ? ` <span class="pill warn">est.</span>` : ""}</td><td class="n">${pct(e.dd)}</td><td class="n ${cls(num(e.vs_spy))}">${pct(e.vs_spy)}</td><td class="n">${isNum(num(e.capture)) ? fix(e.capture * 100, 0) + "%" : "—"}</td></tr>`).join("")}</tbody></table></div>`) : "";
+    // ---- look-through: calls and scores (code), with the read
+    let lookSec = "";
+    if (L?.n) {
+      const sc = (t) => { const x = L.scores[t]; const g = gradeOf(x.v); return kpi(`${t[0].toUpperCase() + t.slice(1)} score`, isNum(x.v) ? `${Math.round(x.v)} <span class="g ${g === "—" ? "none" : g}">${g}</span>` : "—", t === L.best ? "best fit" : ""); };
+      const hzc = Portfolio.HZ.map((h) => { const x = L.calls[h], tot = x.dist.up + x.dist.flat + x.dist.down || 1, main = x.lean || x.call;
+        return `<div class="box hz"><div class="dim-head"><b>${h}</b><span class="pill ${CALLC(main)}">${esc(main || "—")}</span></div>${isNum(x.expected) ? `<div class="hz-num"><span class="v">${pts(x.expected)}</span><span class="small muted">middle of the strategists' ranges${isNum(x.p_up) ? `, ${Math.round(x.p_up)}% chance up` : ""}</span></div>` : ""}
+          <div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--sunk)"><i style="width:${(100 * x.dist.up / tot).toFixed(1)}%;background:var(--pos)"></i><i style="width:${(100 * x.dist.flat / tot).toFixed(1)}%;background:var(--bench)"></i><i style="width:${(100 * x.dist.down / tot).toFixed(1)}%;background:var(--neg)"></i></div>
+          <div class="small muted">${pct(x.dist.up / tot, false, 0)} up · ${pct(x.dist.flat / tot, false, 0)} neutral · ${pct(x.dist.down / tot, false, 0)} down</div></div>`; }).join("");
+      const ctr = (list) => list.map((x) => `<li><b>${esc(x.industry)}</b> <span class="muted">${pct(x.weight, false, 1)} × ${pts(x.expected)}</span> = <b class="${x.pts >= 0 ? "up" : "down"}">${pts(x.pts, 2)}</b>${x.kind === "quant" ? ` <span class="small muted">(code-only)</span>` : ""}</li>`).join("");
+      const plus = L.contrib.slice(0, 5).filter((x) => x.pts > 0), minus = L.contrib.slice(-5).reverse().filter((x) => x.pts < 0);
+      lookSec = sec("fund-look", "Calls and scores through its industries", `${L.n} industr${L.n === 1 ? "y" : "ies"} · ${pct(L.on, false, 0)} of the fund`, `${R("look", "context")}
+        <div class="kpis">${[sc("income"), sc("conservative"), sc("growth"), sc("aggressive"), kpi("Expected 12 months, by scenario", pts(L.exp12.v), isNum(L.scen.bull.move) ? `bull ${pts(L.scen.bull.move, 0)} · bear ${pts(L.scen.bear.move, 0)}` : "", isNum(L.exp12.v) ? (L.exp12.v >= 0 ? "up" : "down") : "")].join("")}</div>
+        <div class="hz-grid">${hzc}</div>${plus.length || minus.length ? `<div class="two">${plus.length ? `<div class="box hot"><b>Adding most to the expected return</b><ul class="dlist small">${ctr(plus)}</ul></div>` : ""}${minus.length ? `<div class="box cool"><b>Taking most away</b><ul class="dlist small">${ctr(minus)}</ul></div>` : ""}</div>` : ""}
+        <div class="small muted">Code: each figure is the industries' own, weighted by the fund's weight in each and renormalized over the industries it applies to. Scores from code-only fills leave out the report sections.</div>`);
+    }
+    // ---- valuation, fundamentals, income
+    let valSec = "";
+    if (L?.n && fd.ext) {
+      const X = fd.ext, F = X.F;
+      valSec = sec("fund-val", "Valuation, fundamentals and income", "through the industries, weighted", `${core.valuation?.read ? fundReadBox(core.valuation.read, idx, "Our read: valuation") : ""}${R("valuation", "core")}
+        <div class="kpis">${[kpi("Forward P/E", fix(L.val.fwd_pe.v, 1), `trailing ${fix(L.val.pe.v, 1)} · EV/EBITDA ${fix(L.val.ev_ebitda.v, 1)}`), kpi("P/E vs 5-year history", pct(F.pe_vs_hist.v), `at the ${pct(L.val.pe_hist_pct.v, false, 0)} percentile`),
+          kpi("Priced-in EPS growth", pct(X.priced.implied.v), `consensus ${pct(X.priced.consensus.v)} a year`), kpi("NTM EPS growth", pct(L.val.eps_growth.v), `30-day revisions ${pct(L.val.rev30.v)}`),
+          kpi("Beat rate", pct(F.beat_rate.v, false, 0), `median surprise ${pct(F.eps_surprise.v)}`)].join("")}</div>
+        ${core.quality ? fundReadBox(core.quality, idx, "Our read: quality") : ""}${R("fundamentals", "core")}
+        <div class="kpis">${[kpi("Operating margin", pct(F.op_margin.v, false), `gross ${pct(F.gross_margin.v, false, 0)} · net ${pct(F.net_margin.v, false)}`), kpi("ROE", pct(F.roe.v, false, 0), `ROIC ${pct(F.roic.v, false, 0)}`), kpi("FCF margin", pct(F.fcf_margin.v, false)),
+          kpi("Debt / equity", fix(F.de.v, 2), `net debt/EBITDA ${fix(F.nd_ebitda.v, 2)}`), kpi("Buyback yield", pct(F.buyback_yield.v, false, 2))].join("")}</div>
+        ${R("income", "core")}<div class="kpis">${[kpi("Dividend yield (industries)", pct(L.val.div_yield.v, false, 2), isNum(f.yield) ? `the fund pays ${pct(f.yield, false, 2)}` : ""), kpi("Expense ratio", isNum(f.expense) ? pct(f.expense, false, 2) : "—"),
+          kpi("Positioning", esc(Object.entries(X.pos).sort((a, b) => b[1] - a[1])[0]?.[0] || "—"), Object.entries(X.pos).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, w]) => `${esc(k)} ${pct(w, false, 0)}`).join(" · "))].join("")}</div>`);
+    }
+    // ---- macro, world, trade, regulation
+    const macroSec = L?.n ? (() => { const M = ctx.macro, fRead = new Map((M?.factors || []).map((x) => [idx[x.id], x]));
+      const own = fd.sens?.factors || [], indK = new Map((L.sens || []).map((x) => [x.key, x]));
+      const rows = (own.length ? own : L.sens).map((x) => { const i = indK.get(x.key), rd = fRead.get(`Fund: ${x.label}`);
+        return `<tr><td><b>${esc(x.shock_label || x.shock || x.label)}</b>${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</td><td class="n ${cls(num(x.total?.effect))}">${own.length ? pct(x.total?.effect, true, 2) : "—"}</td><td class="n">${own.length ? pct(x.partial?.effect, true, 2) : "—"}</td><td class="n muted">${i ? pct(i.effect, true, 2) : "—"}</td></tr>`; }).join("");
+      return sec("fund-macro", "Macro", "the fund's own measured sensitivities, next to its industries'", `${M?.headline ? `<div class="callout"><div class="callout-head">${M.regime ? fEff(M.regime) : ""}<b>${fundCites(M.headline, idx)}</b></div>${M.horizons ? `<ul class="dlist small">${Portfolio.HZ.filter((h) => M.horizons[h]).map((h) => `<li><b>${h}</b> ${fEff(M.horizons[h].call)} ${fundCites(M.horizons[h].why, idx)}</li>`).join("")}</ul>` : ""}${M.flip ? `<div class="small muted"><b>What would flip it:</b> ${fundCites(M.flip, idx)}</div>` : ""}</div>` : ""}${R("sens", "context")}
+        ${rows ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>If this happens</th><th class="n">The fund moves</th><th class="n">Beyond the other factors</th><th class="n">Its industries, weighted</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+        <div class="small muted">Measured, not asserted: regressions of the fund's daily returns over the last year on SPY, the 10-year yield, oil, the dollar and high-yield bonds; the industries' column is their own measurement, weighted.${Object.keys(L.regimes).length ? ` The industries' macro regimes: ${Object.entries(L.regimes).sort((a, b) => b[1] - a[1]).map(([k, w]) => `${esc(k)} ${pct(w, false, 0)}`).join(" · ")}.` : ""}</div>`); })() : "";
+    const wRead = new Map((ctx.world || []).map((x) => [idx[x.id], x]));
+    const worldSec = L?.world?.length ? sec("fund-world", "World events", "the situations the industries' reports follow, by how much of the fund they reach", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Situation and what it means for the fund</th><th class="n">Reaches</th><th class="n">Adverse for</th><th class="n">Favorable for</th></tr></thead><tbody>${L.world.slice(0, 10).map((x) => { const rd = wRead.get(x.title);
+      return `<tr><td class="wr"><b>${esc(x.title)}</b>${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fLvl(rd.magnitude)} ${fundCites(rd.why, idx)}</div>` : ""}<div class="small muted">${esc(x.industries.slice(0, 5).join(", "))}</div></td><td class="n"><b>${pct(x.w, false, 0)}</b></td><td class="n ${x.adverse > 0.005 ? "down" : "muted"}">${pct(x.adverse, false, 0)}</td><td class="n ${x.favorable > 0.005 ? "up" : "muted"}">${pct(x.favorable, false, 0)}</td></tr>`; }).join("")}</tbody></table></div>`) : "";
+    const tRead = new Map((ex.trade || []).map((x) => [idx[x.id], x])), TO = ex.trade_overall;
+    const tradeSec = L?.trade?.length ? sec("fund-trade", "Trade and supply chains", "the countries the industries' trade maps name", `${TO?.summary ? `<div class="callout"><div class="callout-head">${TO.risk ? fLvl(TO.risk === "moderate" ? "medium" : TO.risk, "trade risk") : ""}</div><div class="small">${fundCites(TO.summary, idx)}</div>${TO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(TO.biggest, idx)}</div>` : ""}</div>` : ""}${R("trade", "exposures")}
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th class="n">Industries' revenue there</th><th class="n">Fund weight naming it</th><th>Usual stance</th><th>Worst threat</th></tr></thead><tbody>${L.trade.slice(0, 12).map((x) => { const rd = tRead.get(x.country);
+        return `<tr><td class="wr"><b>${esc(x.country)}</b>${rd?.why ? `<div class="small">${fLvl(rd.exposure, "exposure")} ${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</td><td class="n">${x.rev > 0 ? pct(x.rev / (L.on || 1), false, 1) + " est." : "—"}</td><td class="n muted">${pct(x.w, false, 0)}</td><td>${esc(x.stance)}</td><td>${x.threat && !["none", "low"].includes(x.threat) ? `<span class="pill ${x.threat === "severe" || x.threat === "high" ? "neg" : "warn"}">${esc(x.threat)}</span>` : esc(x.threat || "")}</td></tr>`; }).join("")}</tbody></table></div>`) : "";
+    const rRead = new Map((ex.regulation || []).map((x) => [idx[x.id], x])), RO = ex.reg_overall;
+    const regSec = L?.n && (Object.keys(L.regStance).length || L.rules.length) ? sec("fund-reg", "Regulation and legal", "the industries' regulatory verdicts and their binding rules", `${RO?.summary ? `<div class="callout"><div class="callout-head">${fEff(RO.stance)}</div><div class="small">${fundCites(RO.summary, idx)}</div>${RO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(RO.biggest, idx)}</div>` : ""}</div>` : ""}${R("regulation", "exposures")}
+      ${Object.keys(L.regStance).length ? `<div class="small">Verdicts, by fund weight: ${Object.entries(L.regStance).sort((a, b) => b[1] - a[1]).map(([k, w]) => `<span class="chip-s">${esc(k)} ${pct(w, false, 0)}</span>`).join(" ")}</div>` : ""}
+      ${L.rules.length ? `<ul class="dlist small">${L.rules.map((r) => { const rd = rRead.get(r.name); return `<li><b>${esc(r.name)}</b> <span class="pill ${r.severity === "critical" ? "neg" : "warn"}">${esc(r.severity)}</span> <span class="muted">${esc(r.body)} · ${pct(r.w, false, 0)} of the fund (${esc(r.industries.join(", "))})</span>${rd?.why ? `<div>${fEff(rd.effect)} ${fLvl(rd.materiality, "materiality")} ${fundCites(rd.why, idx)}</div>` : ""}</li>`; }).join("")}</ul>` : ""}`) : "";
+    // ---- drivers, risks, catalysts and the calendar
+    const drv = ctx.drivers?.length || core.risks?.length ? sec("fund-drivers", "Drivers, risks and catalysts", "", `<div class="two">${ctx.drivers?.length ? `<div class="box"><b>What drives it over 12 months</b><ol class="drivers small">${ctx.drivers.map((x) => `<li><div class="drv-head"><b>${esc(x.driver)}</b>${fEff(x.effect)}</div>${fundCites(x.why, idx)}${idChips(x.ids, idx, x.why)}</li>`).join("")}</ol></div>` : ""}
+      ${core.risks?.length ? `<div class="box cool"><b>Risks</b><ul class="dlist small">${core.risks.map((x) => `<li>${fundCites(x.risk, idx)}${idChips(x.ids, idx, x.risk)} ${x.likelihood ? `<span class="small muted">${esc(x.likelihood)} likelihood, ${esc(x.impact || "?")} impact</span>` : ""}</li>`).join("")}</ul></div>` : ""}
+      ${core.catalysts?.length ? `<div class="box hot"><b>Catalysts</b><ul class="dlist small">${core.catalysts.map((x) => `<li><span class="mono">${esc(x.date)}</span> <b>${fundCites(x.event, idx)}</b> ${fundCites(x.why, idx)}${idChips(x.ids, idx, x.why)}</li>`).join("")}</ul></div>` : ""}
+      ${core.watch?.length || calls.change_mind?.length ? `<div class="box"><b>Watch</b><ul class="dlist small">${(core.watch || []).map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>${calls.change_mind?.length ? `<b>What would change the call</b><ul class="dlist small">${calls.change_mind.map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>` : ""}</div>` : ""}</div>`) : "";
+    const calSec = fd.cal?.length ? sec("fund-cal", "Calendar", "the holdings' earnings and the industries' dated events, next four months", `${R("calendar", "calls")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th class="n">Fund weight</th></tr></thead><tbody>${fd.cal.map((x) => `<tr><td class="mono">${esc(x.date)}</td><td class="wr"><b>${esc(x.title)}</b> <span class="small muted">${esc(x.kind)}${x.importance ? ", " + esc(x.importance) : ""}</span>${x.detail ? `<div class="small muted">${esc(trimC(x.detail, 200))}</div>` : ""}</td><td class="n">${pct(x.w, false, 1)}</td></tr>`).join("")}</tbody></table></div>`) : "";
+    const secs = [snap, leanSec, thesisSec, fitSec, holdSec, indSec, actSec, covSec, perfSec, riskSec, stressSec, lookSec, valSec, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    return `<div class="shell">${sideNav(fundGroups(fd))}<div class="stream">${secs.filter(Boolean).join("")}</div></div>`;
   }
   function renderFund() {
     const el = $("fund"); if (!el || S.tab !== "funds") return;
     if (!S.fundList) { S.fundList = []; idbGet("funds").then((l) => { S.fundList = l || []; if (!S.fund) renderFund(); }).catch(() => {}); }
     el.innerHTML = fundSearch() + (S.fund ? fundView(S.fund) : `<div class="small muted">Open a fund to see which of your analyzed industries it holds and how much of it they cover.</div>`);
+    if (S.fund?.stage === "ready") { wireCharts(el); wireSpy(el); }
     $("fund-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openFund($("fund-q").value); });
     $("fund-q")?.addEventListener("input", (ev) => { S.fundQuery = ev.target.value; });
   }
@@ -16193,7 +16619,8 @@ Reply with JSON only, in this shape:
     if (t.dataset.fund) { openFund(t.dataset.fund); return; }
     if (t.dataset.fundRefresh) { openFund(t.dataset.fundRefresh, { refresh: true }); return; }
     if (t.dataset.fundList) { S.fund?.ctl?.abort(); S.fund = null; renderFund(); return; }
-    if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundThesis(S.fund, { force: true }); return; }
+    if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundWrite(S.fund, { force: true }); return; }
+    if (t.dataset.fundRet) { S.fundRet = t.dataset.fundRet; renderFund(); return; }
     if (t.dataset.fundStop) { S.fund?.ctl?.abort(); return; }
     if (t.dataset.fundFill) { if (S.fund?.sym === t.dataset.fundFill) fillFund(S.fund, { limit: 20, minWeight: 0 }); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }

@@ -231,13 +231,24 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 1, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 2, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
       val: { pe: n(F.pe), fwd_pe: n(W.fwd_pe ?? row?.fwd_pe), ps: n(F.ps), ev_ebitda: n(F.ev_ebitda), div_yield: n(F.div_yield), eps_growth: n(W.ntm_eps_growth), rev_growth: n(W.fy1_rev_growth ?? F.rev_growth),
         rev30: n(W.rev30 ?? row?.rev30), pe_hist_pct: n(F.pe_hist_pct), cap: n(S0.total_market_cap ?? d.universe?.total_market_cap) },
       risk: { beta: n(S0.beta), vol: n(S0.vol_1y), max_dd: n(S0.max_dd_1y), sharpe: n(S0.sharpe_1y), r1y: n(S0.ret_cw_1Y) },
+      // For the full fund analysis: fundamentals, what's priced in, base rates, and the companies themselves.
+      fund: { gross_margin: n(F.gross_margin), op_margin: n(F.op_margin), net_margin: n(F.net_margin), roe: n(F.roe), roic: n(F.roic), de: n(F.de), fcf_margin: n(F.fcf_margin), nd_ebitda: n(F.nd_ebitda),
+        beat_rate: n(F.beat_rate), eps_surprise: n(F.eps_surprise_median), pe_vs_hist: n(F.pe_vs_hist), buyback_yield: n(F.buyback_yield), fcf_div_cover: n(F.fcf_div_cover), ni_growth: n(F.ni_growth) },
+      priced: d.priced_in ? { implied_eps_growth: n(d.priced_in.implied_eps_growth), consensus_growth: n(d.priced_in.consensus_ntm_growth), verdict: d.priced_in.verdict || null } : null,
+      base_up: d.history?.base_prob_up ? Object.fromEntries(HZ.map((h) => [h, n(d.history.base_prob_up[h])])) : null,
+      cos: (d.constituents || []).map((c) => ({ symbol: c.symbol, name: String(c.name || "").slice(0, 60), rank: c.rank ?? null, w: n(c.weight), pe: n(c.pe), r1y: n(c.ret_1Y), r3m: n(c.ret_3M), div: n(c.div_yield),
+        opm: n(c.op_margin), g: n(c.rev_growth), beta: n(c.beta), next: c.next || null, beats: c.beats || null })),
+      events: (rec?.agent?.calendar?.events || []).filter((e) => e?.title && e.dates?.[0]).sort((x, y) => (SEV[x.importance] ?? 3) - (SEV[y.importance] ?? 3)).slice(0, 8)
+        .map((e) => ({ date: e.dates[0], title: String(e.title).slice(0, 120), importance: e.importance || "", section: e.section || "", detail: String(e.detail || "").slice(0, 200) })),
+      drivers: (a.drivers || []).slice(0, 4).map((x) => String(x?.driver || x?.name || x?.title || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
+      risks: (a.risks || []).slice(0, 3).map((x) => String(x?.risk || x?.text || (typeof x === "string" ? x : "")).slice(0, 160)).filter(Boolean),
       sens: (d.sensitivity?.factors || []).map((f) => ({ key: f.key, label: f.label, shock: f.shock_label || "", effect: n(f.total?.effect), t: n(f.total?.t) })).filter((f) => f.key && isNum(f.effect)),
       positioning: d.positioning?.label || row?.positioning || null,
       macro: macro ? { regime: macro.regime || null } : null,
