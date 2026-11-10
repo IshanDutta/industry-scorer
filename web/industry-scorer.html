@@ -17042,7 +17042,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     return p.holdings.map((h) => { const q = D?.quotes?.[h.ticker] || {}, i = D?.info?.[h.ticker] || {}, co = D?.cos?.[h.ticker] || {}, ser = D?.series?.[h.ticker];
       const last = ser?.closes?.length ? ser.closes[ser.closes.length - 1] : NaN, price = num(q.price) > 0 ? num(q.price) : last;
       const type = h.asset_type || i.type || "stock";
-      return { ...h, name: h.name || i.name || q.name || "", asset_type: type, sector: (type === "stock" ? h.sector || i.sector || co.sector : D?.fsec?.[h.ticker] ? Object.entries(D.fsec[h.ticker]).sort((a, b) => b[1] - a[1])[0][0] + " (top)" : h.sector) || "", price, change: num(q.changePercentage ?? q.changesPercentage),
+      return { ...h, name: h.name || i.name || q.name || "", asset_type: type, sector: (type === "stock" ? h.sector || i.sector || co.sector : D?.fsec?.[h.ticker] ? Object.entries(D.fsec[h.ticker]).sort((a, b) => b[1] - a[1])[0][0] : h.sector) || "", sectorTop: type !== "stock" && !!D?.fsec?.[h.ticker], price, change: num(q.changePercentage ?? q.changesPercentage),
         pe: num(q.pe) > 0 ? num(q.pe) : num(co.pe) > 0 ? num(co.pe) : NaN, yield: num(i.lastDiv) > 0 && price > 0 ? num(i.lastDiv) / price : num(co.div_yield) > 0 ? num(co.div_yield) : NaN }; });
   }
   /** Sector exposure: stocks at their sector, funds split by their own sector weights (look-through). */
@@ -17054,7 +17054,11 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     return Object.entries(by).map(([sector, weight]) => ({ sector, weight }));
   }
   const usd = (x) => (isNum(num(x)) ? (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString() : "—");
-  function pfDownload(name, text, type) { try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) { alert("Couldn't save the file: " + (e?.message || e)); } }
+  /** Offer a file through the artifact's downloads capability (the viewer confirms); a plain link outside claude.ai. */
+  async function pfDownload(name, text, type) {
+    const dl = await (window.claude?.use?.("downloads") || Promise.resolve(null)).catch(() => null);
+    if (dl) { try { await dl.save({ filename: name, data: new Blob([text], { type }) }); } catch (e) { if (!["declined", "rate_limited"].includes(e?.code)) alert("Couldn't save the file: " + (e?.message || e?.code || e)); } return; }
+    try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) { alert("Couldn't save the file: " + (e?.message || e)); } }
 
   // ------------------------------------------------------------- render: Portfolios tab
   function renderPortfolio() {
@@ -17120,7 +17124,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
       <div class="small muted">From daily dividend-adjusted closes (FMP). Volatility: daily standard deviation × √252. Sharpe and Sortino use the geometric annualized return less a 4% risk-free rate; Sortino divides by the downside semi-deviation. Beta, correlation and capture use calendar-month returns against SPY. VaR is the 5th-percentile daily return.</div>`) : "";
     // 6. Holdings
     const htab = sec("pf-hold", "Holdings", `${hs.length} · ${usd(total)}`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>Type</th><th>Sector</th><th class="n">Weight</th><th class="n">Shares</th><th class="n">Price</th><th class="n">1D</th><th class="n">Cost basis</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>${PMode.marketValues({ ...p, holdings: hs }).map((h) => { const cost = num(h.avg_cost) > 0 && num(h.shares) > 0 ? h.avg_cost * h.shares : NaN, gain = isNum(cost) ? h.marketValue - cost : NaN;
-      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}</td><td class="n"><b>${p2(h.weight, 1)}%</b></td><td class="n">${num(h.shares) > 0 ? fix(h.shares, 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
+      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}${h.sectorTop ? ` <span class="muted">(largest)</span>` : ""}</td><td class="n"><b>${p2(h.weight, 1)}%</b></td><td class="n">${num(h.shares) > 0 ? fix(h.shares, 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
         <td class="n">${isNum(cost) ? "$" + Math.round(cost).toLocaleString() : num(h.avg_cost) > 0 ? fix(h.avg_cost, 2) : "—"}</td><td class="n">$${Math.round(h.marketValue).toLocaleString()}</td><td class="n ${cls(gain)}">${isNum(gain) ? `${gain >= 0 ? "+" : "−"}$${Math.abs(Math.round(gain)).toLocaleString()} <span class="small">(${pp(gain / cost)})</span>` : "—"}</td></tr>`; }).join("")}</tbody></table></div>`);
     // 7. Look-through
     const lt = PMode.lookThrough(hs, D.funds || {});
