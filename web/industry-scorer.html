@@ -403,7 +403,7 @@ table.sec-ov td.ind button { all: unset; cursor: pointer; color: var(--accent); 
 .gate { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--sunk); }
 .gate .small { max-width: 80ch; }
 button.sm { padding: 5px 10px; font-size: 13px; }
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); }
 .tab { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; padding: 8px 14px; font: 700 15px var(--display); font-stretch: 85%; color: var(--muted); }
 .tab.cur { color: var(--ink); border-bottom-color: var(--accent); }
 .co-form { display: flex; gap: 8px; } .co-form input { flex: 1; }
@@ -467,6 +467,7 @@ a.btnlink:hover { border-color: var(--accent); }
   <div id="report" style="display:grid;gap:18px"></div>
   <div id="company" style="display:grid;gap:18px" hidden></div>
   <div id="fund" style="display:grid;gap:18px" hidden></div>
+  <div id="pf" style="display:grid;gap:18px" hidden></div>
 
   <section class="method">
     <h3 style="color:var(--ink)">How the numbers are built</h3>
@@ -10972,6 +10973,209 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/* Industry Scorer: Portfolio mode, the quantitative engine (code only, no I/O, no Claude).
+ *
+ * A portfolio is a list of holdings (stocks, ETFs, mutual funds) with target weights and an investment amount. From
+ * each holding's daily dividend-adjusted closes this builds the synthetic NAV (buy-and-hold from the start of the
+ * period, re-weighted to the new targets at each rebalance), and computes the institutional risk and return
+ * measures: annualized volatility, max drawdown, geometric Sharpe, Sortino, Calmar, monthly beta and correlation to
+ * SPY, alpha, up and down capture, 1-day VaR 95%, effective number of holdings, sector HHI, linear attribution
+ * (weight x return = contribution, summing exactly to the portfolio's return), a 0-100 health score, the rebalance
+ * order sheet and the look-through to the single stocks inside its funds.
+ */
+(function (root) {
+  "use strict";
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
+  const RF = 0.04;
+  const r1 = (x, d = 1) => (isNum(x) ? Math.round(x * 10 ** d) / 10 ** d : null);
+
+  // ------------------------------------------------------------------ portfolios and weights
+  const SEED = () => ({ id: "portfolio_seed_1", name: "Growth & Value Core", description: "A starter portfolio: edit it or make your own.", totalInvestment: 100000,
+    holdings: [{ ticker: "QQQ", name: "Invesco QQQ Trust", weight: 30, asset_type: "etf" }, { ticker: "SPY", name: "SPDR S&P 500 ETF", weight: 30, asset_type: "etf" },
+      { ticker: "AAPL", name: "Apple Inc.", weight: 15, asset_type: "stock", sector: "Technology" }, { ticker: "MSFT", name: "Microsoft Corp.", weight: 15, asset_type: "stock", sector: "Technology" },
+      { ticker: "SCHD", name: "Schwab US Dividend Equity", weight: 10, asset_type: "etf" }],
+    rebalanceEvents: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+  /** Weights scaled to add to 100 (one decimal). */
+  function normalizeWeights(holdings) {
+    const total = holdings.reduce((s, h) => s + (n(h.weight) || 0), 0); if (total <= 0) return holdings;
+    return holdings.map((h) => ({ ...h, weight: Math.round(((n(h.weight) || 0) / total) * 1000) / 10 }));
+  }
+  /** Dollar amounts to weights (of the investment amount, else of their sum). */
+  function weightsFromDollars(items, totalInvestment) {
+    const total = totalInvestment > 0 ? totalInvestment : items.reduce((s, i) => s + (n(i.dollar) || 0), 0);
+    return items.map((i) => ({ ticker: String(i.ticker || "").toUpperCase(), marketValue: n(i.dollar) || 0, weight: total > 0 ? Math.round(((n(i.dollar) || 0) / total) * 1000) / 10 : 0 }));
+  }
+  /** Each holding's market value: shares x price when both are known, else its weight of the investment amount. */
+  function marketValues(p) {
+    const hs = p.holdings || [], byShares = hs.every((h) => n(h.shares) > 0 && n(h.price) > 0);
+    return hs.map((h) => ({ ...h, marketValue: byShares ? h.shares * h.price : (p.totalInvestment || 0) * ((n(h.weight) || 0) / 100) }));
+  }
+
+  // ------------------------------------------------------------------ the NAV
+  /** A daily close series as a date map. ser: {dates, closes|values}. */
+  const mapOf = (ser) => { const m = new Map(), v = ser?.closes || ser?.values || []; (ser?.dates || []).forEach((d, i) => { if (n(v[i]) > 0) m.set(d, n(v[i])); }); return m; };
+  /**
+   * The synthetic NAV from `from` (or the first day every holding trades): NAV_t = sum w_i P_i,t / P_i,0, rebased to
+   * `start` dollars; at each rebalance event the weights reset to its targets (applied to that day's NAV).
+   * series: {TICKER: {dates, closes}}; holdings: [{ticker, weight}]; events: [{date, trades: [{ticker, newWeight}]}].
+   * Returns {dates, values, from, missing: [tickers with no prices], late: [{ticker, first}]}.
+   */
+  function nav(series, holdings, { from = null, start = 10000, events = [], calendar = null } = {}) {
+    const hs = holdings.filter((h) => n(h.weight) > 0), maps = {}, missing = [];
+    for (const h of hs) { const m = mapOf(series[h.ticker]); if (m.size) maps[h.ticker] = m; else missing.push(h.ticker); }
+    const live = hs.filter((h) => maps[h.ticker]); if (!live.length) return { dates: [], values: [], from: null, missing, late: [] };
+    const firsts = live.map((h) => ({ ticker: h.ticker, first: [...maps[h.ticker].keys()].sort()[0] }));
+    const common = firsts.reduce((a, x) => (x.first > a ? x.first : a), "0000");
+    const days = (calendar || [...new Set(live.flatMap((h) => [...maps[h.ticker].keys()]))]).filter((d) => d >= common && (!from || d >= from)).sort();
+    if (!days.length) return { dates: [], values: [], from: null, missing, late: [] };
+    const last = {}; const px = (t, d) => { const v = maps[t].get(d); if (v > 0) last[t] = v; return last[t]; };
+    // Prime each holding's last known price at or before the first day.
+    for (const h of live) { const ks = [...maps[h.ticker].keys()].filter((d) => d <= days[0]).sort(); if (ks.length) last[h.ticker] = maps[h.ticker].get(ks[ks.length - 1]); }
+    const evs = (events || []).filter((e) => e?.date && e.date > days[0]).sort((a, b) => (a.date < b.date ? -1 : 1));
+    let w = Object.fromEntries(live.map((h) => [h.ticker, n(h.weight) / 100])), tw = Object.values(w).reduce((a, x) => a + x, 0);
+    for (const k of Object.keys(w)) w[k] /= tw;
+    // Units held of each holding per dollar of NAV.
+    let value = start, units = {}; for (const t of Object.keys(w)) units[t] = (value * w[t]) / px(t, days[0]);
+    const dates = [], values = []; let ei = 0;
+    for (const d of days) {
+      let v = 0; for (const t of Object.keys(units)) v += units[t] * (px(t, d) || 0);
+      if (ei < evs.length && d >= evs[ei].date) {
+        const tgt = {}; for (const tr of evs[ei].trades || []) if (maps[tr.ticker] && n(tr.newWeight) > 0) tgt[tr.ticker] = n(tr.newWeight) / 100;
+        const s0 = Object.values(tgt).reduce((a, x) => a + x, 0); if (s0 > 0) { units = {}; for (const t of Object.keys(tgt)) { const p = px(t, d); if (p > 0) units[t] = (v * tgt[t] / s0) / p; } }
+        ei++;
+      }
+      dates.push(d); values.push(v);
+    }
+    return { dates, values, from: days[0], missing, late: firsts.filter((x) => x.first > (from || "0000")).map((x) => x) };
+  }
+  /** The start date of a period ending at `end`: 1M, 3M, 6M, YTD, 1Y, 3Y, 5Y. */
+  function periodStart(end, p) {
+    const t = new Date(end + "T00:00:00Z");
+    if (p === "YTD") return `${end.slice(0, 4)}-01-01`;
+    const m = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12, "3Y": 36, "5Y": 60 }[p] || 12; t.setUTCMonth(t.getUTCMonth() - m); return t.toISOString().slice(0, 10);
+  }
+
+  // ------------------------------------------------------------------ the measures
+  const rets = (v) => { const out = []; for (let i = 1; i < v.length; i++) if (v[i - 1] > 0) out.push(v[i] / v[i - 1] - 1); return out; };
+  const mean = (a) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
+  const sdev = (a) => { if (a.length < 2) return NaN; const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) ** 2, 0) / (a.length - 1)); };
+  function maxDrawdown(v) { let peak = v[0], mdd = 0; for (const x of v) { if (x > peak) peak = x; const dd = (peak - x) / peak; if (dd > mdd) mdd = dd; } return mdd * 100; }
+  function var95(r) { if (!r.length) return NaN; const s = [...r].sort((a, b) => a - b); return Math.abs(s[Math.floor(s.length * 0.05)]) * 100; }
+  /** Calendar-month returns from a daily series aligned on dates. */
+  function monthly(dates, values) { const out = new Map(); let prevEnd = null; for (let i = 0; i < dates.length; i++) { const m = dates[i].slice(0, 7), next = dates[i + 1]?.slice(0, 7); if (next !== m) { if (prevEnd !== null && prevEnd > 0) out.set(m, values[i] / prevEnd - 1); prevEnd = values[i]; } } return out; }
+  /**
+   * Every measure for a NAV against SPY over the same days. nv: {dates, values}; spy: {dates, closes|values}.
+   * Returns the QuantitativeMetrics fields (volatility, VaR and drawdown in %; returns as fractions).
+   */
+  function metrics(nv, spy, { rf = RF } = {}) {
+    const v = nv.values, N = v.length - 1; if (N < 5) return null;
+    const r = rets(v), vol = sdev(r) * Math.sqrt(252) * 100;
+    const total = v[v.length - 1] / v[0] - 1, ann = Math.pow(1 + total, 252 / N) - 1;
+    const sharpe = vol > 0 ? (ann - rf) / (vol / 100) : NaN;
+    const semi = Math.sqrt(r.reduce((s, x) => s + Math.min(0, x) ** 2, 0) / (r.length || 1)) * Math.sqrt(252), sortino = semi > 0 ? (ann - rf) / semi : NaN;
+    const mdd = maxDrawdown(v), calmar = mdd > 0 ? ann / (mdd / 100) : NaN;
+    // Monthly against SPY.
+    const sm = mapOf(spy), sv = nv.dates.map((d) => sm.get(d)), sOk = sv.filter((x) => x > 0).length > N * 0.8;
+    let beta = NaN, corr = NaN, up = NaN, down = NaN, alpha = NaN, spyAnn = NaN, spyTotal = NaN;
+    if (sOk) {
+      let lastS = null; const sFill = sv.map((x) => (x > 0 ? (lastS = x) : lastS));
+      const pm = monthly(nv.dates, v), smm = monthly(nv.dates, sFill), ks = [...pm.keys()].filter((k) => smm.has(k));
+      const a = ks.map((k) => pm.get(k)), b = ks.map((k) => smm.get(k));
+      if (ks.length >= 6) { const ma = mean(a), mb = mean(b); let cv = 0, va = 0, vb = 0; for (let i = 0; i < a.length; i++) { cv += (a[i] - ma) * (b[i] - mb); va += (a[i] - ma) ** 2; vb += (b[i] - mb) ** 2; }
+        cv /= a.length - 1; va /= a.length - 1; vb /= a.length - 1; beta = vb > 0 ? cv / vb : NaN; corr = va > 0 && vb > 0 ? cv / Math.sqrt(va * vb) : NaN;
+        const upI = b.map((x, i) => (x > 0 ? i : -1)).filter((i) => i >= 0), dnI = b.map((x, i) => (x < 0 ? i : -1)).filter((i) => i >= 0);
+        if (upI.length) up = (mean(upI.map((i) => a[i])) / mean(upI.map((i) => b[i]))) * 100; if (dnI.length) down = (mean(dnI.map((i) => a[i])) / mean(dnI.map((i) => b[i]))) * 100; }
+      const s0 = sFill.find((x) => x > 0), s1 = sFill[sFill.length - 1]; spyTotal = s0 > 0 ? s1 / s0 - 1 : NaN; spyAnn = isNum(spyTotal) ? Math.pow(1 + spyTotal, 252 / N) - 1 : NaN;
+      if (isNum(beta) && isNum(spyAnn)) alpha = ann - (rf + beta * (spyAnn - rf));
+    }
+    return { days: N, totalReturn: total, annReturn: ann, volatility: vol, maxDrawdown: mdd, sharpeRatio: sharpe, sortinoRatio: sortino, calmarRatio: calmar, beta, correlationToSPY: corr,
+      upsideCapture: up, downsideCapture: down, alpha, var95: var95(r), spyReturn: spyTotal, spyAnnReturn: spyAnn };
+  }
+  /** Inverse Herfindahl: the effective number of holdings (weights in %). */
+  const effectiveHoldings = (ws) => { const s = ws.reduce((a, w) => a + (w / 100) ** 2, 0); return s > 0 ? 1 / s : 0; };
+  /** Sector HHI on weights in % (0-10,000): under 1,500 diversified, 1,500-2,500 moderate, above highly concentrated. */
+  function sectorHHI(holdings) { const by = {}; for (const h of holdings) { const k = h.sector || "Other"; by[k] = (by[k] || 0) + (n(h.weight) || 0); } const tot = Object.values(by).reduce((a, x) => a + x, 0) || 1;
+    return { hhi: Object.values(by).reduce((a, w) => a + ((100 * w) / tot) ** 2, 0), sectors: Object.fromEntries(Object.entries(by).map(([k, w]) => [k, (100 * w) / tot]).sort((a, b) => b[1] - a[1])) }; }
+  const hhiLabel = (h) => (h < 1500 ? "Diversified" : h <= 2500 ? "Moderate" : "Highly concentrated");
+  /**
+   * Linear attribution over the NAV's period: each holding's contribution = its weight at the start x its return, so
+   * the contributions add to the buy-and-hold return exactly. Between rebalances the weights reset, so with events
+   * each segment's contributions are compounded into the total by the portfolio's value at the segment start.
+   */
+  function contributions(series, holdings, nv, events = []) {
+    if (!nv.dates.length) return { rows: [], total: 0 };
+    const from = nv.dates[0], to = nv.dates[nv.dates.length - 1], cut = [from, ...(events || []).map((e) => e.date).filter((d) => d > from && d < to).sort(), to];
+    const pxAt = (t, d) => { const m = mapOf(series[t]); let best = null; for (const [k, v] of m) if (k <= d && (!best || k > best[0])) best = [k, v]; return best ? best[1] : NaN; };
+    const navAt = (d) => { let best = 0; for (let i = 0; i < nv.dates.length; i++) if (nv.dates[i] <= d) best = i; return nv.values[best]; };
+    const acc = {}; let wts = Object.fromEntries(holdings.filter((h) => n(h.weight) > 0).map((h) => [h.ticker, n(h.weight)]));
+    for (let s = 0; s < cut.length - 1; s++) {
+      if (s > 0) { const e = events.find((x) => x.date === cut[s]); if (e) wts = Object.fromEntries((e.trades || []).filter((t) => n(t.newWeight) > 0).map((t) => [t.ticker, n(t.newWeight)])); }
+      const tw = Object.values(wts).reduce((a, x) => a + x, 0) || 1, scale = navAt(cut[s]) / nv.values[0];
+      for (const [t, w] of Object.entries(wts)) { const p0 = pxAt(t, cut[s]), p1 = pxAt(t, cut[s + 1]); if (!(p0 > 0 && p1 > 0)) continue; const ret = p1 / p0 - 1; (acc[t] ||= { contribution: 0, ret: 1 }); acc[t].contribution += (w / tw) * ret * scale; acc[t].ret *= 1 + ret; }
+    }
+    const meta = Object.fromEntries(holdings.map((h) => [h.ticker, h]));
+    const rows = Object.entries(acc).map(([t, x]) => ({ ticker: t, weight: n(meta[t]?.weight) || 0, return: x.ret - 1, contribution: x.contribution, sector: meta[t]?.sector || null })).sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+    return { rows, total: rows.reduce((a, r) => a + r.contribution, 0) };
+  }
+  /** A 0-100 health score from the measures (risk-adjusted return, drawdown, diversification, capture asymmetry). */
+  function healthScore(m, effN, count, hhi) {
+    if (!m) return null; const c = (x) => Math.max(0, Math.min(1, x));
+    const parts = [["Risk-adjusted return (Sharpe)", 25, isNum(m.sharpeRatio) ? c(m.sharpeRatio / 1.5) : 0.5], ["Drawdown control", 20, isNum(m.maxDrawdown) ? c(1 - m.maxDrawdown / 40) : 0.5],
+      ["Holdings diversification", 20, count > 0 ? c(effN / Math.min(10, count)) : 0], ["Sector diversification", 20, isNum(hhi) ? c((4000 - hhi) / 2500) : 0.5],
+      ["Up vs down capture", 15, isNum(m.upsideCapture) && isNum(m.downsideCapture) ? c(0.5 + (m.upsideCapture - m.downsideCapture) / 40) : 0.5]];
+    return { score: Math.round(parts.reduce((a, [, w, x]) => a + w * x, 0)), parts: parts.map(([l, w, x]) => ({ label: l, weight: w, score: Math.round(100 * x) })) };
+  }
+  /** Where a measure stands against its target: "good" | "ok" | "bad". */
+  function stance(key, v, ctx = {}) {
+    if (!isNum(v)) return null;
+    switch (key) {
+      case "volatility": return v < 16 ? "good" : v < 22 ? "ok" : "bad";
+      case "var95": return v < 1.8 ? "good" : v < 2.5 ? "ok" : "bad";
+      case "sharpeRatio": return v > 1 ? "good" : v > 0.5 ? "ok" : "bad";
+      case "sortinoRatio": return v > 1.5 ? "good" : v > 0.8 ? "ok" : "bad";
+      case "calmarRatio": return v > 1 ? "good" : v > 0.5 ? "ok" : "bad";
+      case "beta": return v >= 0.8 && v <= 1.0 ? "good" : v >= 0.6 && v <= 1.2 ? "ok" : "bad";
+      case "correlationToSPY": return v < 0.85 ? "good" : v < 0.95 ? "ok" : "bad";
+      case "capture": return ctx.up > ctx.down ? "good" : ctx.up > ctx.down - 5 ? "ok" : "bad";
+      case "effectiveHoldings": return ctx.count ? (v > 0.6 * ctx.count ? "good" : v > 0.4 * ctx.count ? "ok" : "bad") : null;
+      case "hhi": return v < 1500 ? "good" : v <= 2500 ? "ok" : "bad";
+      default: return null;
+    }
+  }
+  /** The order sheet to move from current weights to targets: [{ticker, current, target, deltaUsd, action, shares}]. */
+  function rebalanceTrades(holdings, targets, totalValue) {
+    const cur = Object.fromEntries(holdings.map((h) => [h.ticker, n(h.weight) || 0])), all = [...new Set([...Object.keys(cur), ...Object.keys(targets)])];
+    return all.map((t) => { const c = cur[t] || 0, tg = n(targets[t]) || 0, d = totalValue * ((tg - c) / 100), px = n(holdings.find((h) => h.ticker === t)?.price);
+      return { ticker: t, current: c, target: tg, deltaUsd: d, action: Math.abs(d) < 0.5 ? "HOLD" : d > 0 ? "BUY" : "SELL", shares: px > 0 ? d / px : null }; }).sort((a, b) => Math.abs(b.deltaUsd) - Math.abs(a.deltaUsd));
+  }
+  /**
+   * Look-through: the single stocks behind the portfolio. direct holdings count at their weight; each fund's holdings
+   * at the fund's weight x their weight in it. funds: {TICKER: [{ticker, name, weight (0-1)}]}.
+   */
+  function lookThrough(holdings, funds) {
+    const agg = new Map();
+    const add = (t, name, w, via) => { if (!t || !(w > 0)) return; const e = agg.get(t) || { ticker: t, name: name || "", direct: 0, viaFunds: 0, via: [] }; if (via) { e.viaFunds += w; e.via.push({ fund: via, weight: w }); } else e.direct += w; if (!e.name && name) e.name = name; agg.set(t, e); };
+    let covered = 0;
+    for (const h of holdings) { const w = (n(h.weight) || 0) / 100, fx = funds[h.ticker];
+      if (fx?.length) { for (const x of fx) add(String(x.ticker || "").toUpperCase(), x.name, w * (n(x.weight) || 0), h.ticker); covered += w * fx.reduce((a, x) => a + (n(x.weight) || 0), 0); }
+      else add(h.ticker, h.name, w, null); }
+    const rows = [...agg.values()].map((e) => ({ ...e, total: e.direct + e.viaFunds })).sort((a, b) => b.total - a.total);
+    return { rows, overlap: rows.filter((r) => r.direct > 0 && r.viaFunds > 0), covered };
+  }
+  /** Weighted average of a per-holding figure over the holdings that have it (P/E: harmonic, as earnings yield). */
+  function weighted(holdings, key, { harmonic = false } = {}) {
+    let w = 0, s = 0; for (const h of holdings) { const v = n(h[key]), ww = n(h.weight) || 0; if (!isNum(v) || ww <= 0 || (harmonic && v <= 0)) continue; w += ww; s += harmonic ? ww / v : ww * v; }
+    return w > 0 ? (harmonic ? w / s : s / w) : NaN;
+  }
+  /** Holdings as CSV (for export). */
+  function toCsv(p) { const head = "ticker,name,asset_type,sector,weight,shares,avg_cost,price,market_value"; return [head, ...marketValues(p).map((h) => [h.ticker, `"${String(h.name || "").replace(/"/g, "'")}"`, h.asset_type || "", `"${h.sector || ""}"`, h.weight ?? "", h.shares ?? "", h.avg_cost ?? "", h.price ?? "", r1(h.marketValue, 2) ?? ""].join(","))].join("\n"); }
+
+  const PMode = { RF, SEED, normalizeWeights, weightsFromDollars, marketValues, nav, periodStart, rets, maxDrawdown, var95, monthly, metrics, effectiveHoldings, sectorHHI, hhiLabel, contributions, healthScore, stance, rebalanceTrades, lookThrough, weighted, toCsv };
+  if (typeof module !== "undefined" && module.exports) module.exports = PMode;
+  else root.PMode = PMode;
+})(typeof window !== "undefined" ? window : globalThis);
+
 </script>
 <script>
 (() => {
@@ -13937,7 +14141,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
 
   // ------------------------------------------------------------- charts
   const chartData = {};
-  function lineChart(series, { height = 220, fmtY, zeroLine = false, area = null, xLabels = null, band = null, width = 640, marker = null, baseLine = null } = {}) {
+  function lineChart(series, { height = 220, fmtY, zeroLine = false, area = null, xLabels = null, band = null, width = 640, marker = null, markers = null, baseLine = null } = {}) {
     const W = width, H = height, P = { l: 48, r: 12, t: 10, b: 24 };
     const all = [...series.flatMap((s) => s.values.filter(isNum)), ...(band ? [...band.lo, ...band.hi].filter(isNum) : [])];
     if (!all.length) return `<div class="muted small">No data.</div>`;
@@ -13972,8 +14176,9 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     const id = "c" + Math.random().toString(36).slice(2, 8);
     chartData[id] = { series, dates, x, W, P, fmtY, xName: series[0].xName };
     const mk = marker && marker.i >= 0 && marker.i < n ? `<line x1="${x(marker.i)}" x2="${x(marker.i)}" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/><text x="${x(marker.i) + 4}" y="${P.t + 10}" class="mk-label">${esc(marker.label || "")}</text>` : "";
+    const mks = (markers || []).filter((m2) => m2.i >= 0 && m2.i < n).map((m2) => `<line x1="${x(m2.i)}" x2="${x(m2.i)}" y1="${P.t}" y2="${H - P.b}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 3"><title>${esc(m2.label || "")}</title></line><circle cx="${x(m2.i)}" cy="${P.t + 4}" r="4" fill="var(--accent)"><title>${esc(m2.label || "")}</title></circle>`).join("");
     const bl = isNum(baseLine) && baseLine > lo && baseLine < hi ? `<line x1="${P.l}" x2="${W - P.r}" y1="${y(baseLine)}" y2="${y(baseLine)}" stroke="var(--faint)" stroke-width="1"/>` : "";
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" data-chart="${id}">${grid}${xl}${bl}${mk}${bandP}${paths}<line class="cross" x1="0" x2="0" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-width="1" opacity="0"/><rect x="${P.l}" y="${P.t}" width="${W - P.l - P.r}" height="${H - P.t - P.b}" fill="transparent"/></svg><div class="tip" hidden></div>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" data-chart="${id}">${grid}${xl}${bl}${mk}${mks}${bandP}${paths}<line class="cross" x1="0" x2="0" y1="${P.t}" y2="${H - P.b}" stroke="var(--muted)" stroke-width="1" opacity="0"/><rect x="${P.l}" y="${P.t}" width="${W - P.l - P.r}" height="${H - P.t - P.b}" fill="transparent"/></svg><div class="tip" hidden></div>`;
   }
   function wireCharts(root) {
     root.querySelectorAll("svg[data-chart]").forEach((svg) => {
@@ -15313,7 +15518,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
-  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); keepAwake(); }
+  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); renderPortfolio(); keepAwake(); }
 
   // ============================================================= Companies tab: one company, on top of its industry's analysis
   /**
@@ -16779,11 +16984,227 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   }
 
   // ------------------------------------------------------------- render: Companies tab
+  // ============================================================= Portfolios tab: the quantitative portfolio mode (no Claude)
+  /**
+   * Portfolio mode: the user's own portfolios (stocks, ETFs, mutual funds with weights or dollar amounts), kept in this
+   * browser (IndexedDB "portfolios"; a starter portfolio when there are none). Code only: daily dividend-adjusted prices
+   * (FMP) build the synthetic NAV; PMode computes every measure, the attribution, the rebalance order sheet and the
+   * look-through to the stocks inside its funds.
+   */
+  const PF_PERIODS = ["1M", "3M", "6M", "YTD", "1Y", "3Y", "5Y"];
+  const pfId = () => "pf_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  async function pfStore() {
+    if (S.pfStore) return S.pfStore;
+    let st = await idbGet("portfolios").catch(() => null);
+    if (!st?.list?.length) st = { list: [PMode.SEED()], activeId: "portfolio_seed_1" };
+    S.pfStore = st; return st;
+  }
+  async function pfSave() { const st = S.pfStore; if (st) await idbPut("portfolios", jsonSafe(st)).catch(() => {}); }
+  const pfActive = () => { const st = S.pfStore; return st ? st.list.find((p) => p.id === st.activeId) || st.list[0] : null; };
+  /** One ticker's facts (FMP profile and quote), kept a week: name, type, sector, dividend; price and day change are fresh. */
+  async function pfInfo(sym) {
+    const k = "tkInfo:" + sym; let x = await idbGet(k).catch(() => null);
+    if (!x || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
+      const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0] || {};
+      x = jsonSafe({ at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", type: p.isEtf ? "etf" : p.isFund ? "fund" : p.companyName ? "stock" : "", lastDiv: num(p.lastDividend), cap: num(p.marketCap) });
+      await idbPut(k, x).catch(() => {});
+    }
+    return x;
+  }
+  /** Everything the analysis needs for the active portfolio: prices since 5+ years back, quotes, facts, funds' holdings. */
+  async function pfLoad({ force = false } = {}) {
+    const p = pfActive(); if (!p || !S.mcp) { renderPortfolio(); return; }
+    const syms = [...new Set(p.holdings.map((h) => h.ticker).filter(Boolean))], key = syms.join(",");
+    if (!force && S.pfData?.key === key && S.pfData.day === today()) return;
+    S.pfLoading = "Reading prices, quotes and facts…"; S.pfErr = null; renderPortfolio();
+    try {
+      const from = Horizon.addDays(today(), -(5 * 366 + 20)), series = {};
+      await pool([...syms, "SPY"], 4, async (sym) => { series[sym] = await trackSeries(sym, from).catch(() => null); }, null);
+      const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
+      const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
+      // Funds: their holdings and sector weights (the fund page's own fetch, kept 20 hours).
+      const funds = {}, fsec = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
+      await pool(syms.filter((s) => info[s]?.type === "etf" || info[s]?.type === "fund"), 2, async (sym) => { const raw = await fundRaw(sym).catch(() => null); if (!raw) return;
+        funds[sym] = (raw.holdings || []).filter((h) => h.ticker || h.name).map((h) => ({ ticker: h.ticker || "", name: h.name, weight: h.weight }));
+        const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name;
+        // Sector weights: FMP's own sector weighting for the fund, else EODHD's, else its holdings' sectors (coIndex).
+        const sw = (await optional(() => fmp("etfAndMutualFunds", { endpoint: "sector-weighting", symbol: sym }), [])) || [], fw = {};
+        for (const r of sw) { const w = num(r?.weightPercentage); if (r?.sector && w > 0.05 && !/cash/i.test(r.sector)) fw[r.sector] = (fw[r.sector] || 0) + w / 100; }
+        if (!Object.keys(fw).length) Object.assign(fw, f.sectors || {});
+        if (!Object.keys(fw).length && ci0) for (const h of funds[sym]) { const sc = ci0.cos?.[h.ticker]?.sector; if (sc && num(h.weight) > 0) fw[sc] = (fw[sc] || 0) + num(h.weight); }
+        fsec[sym] = Object.keys(fw).length ? fw : null; }, null);
+      S.pfData = { key, day: today(), series, quotes, info, funds, fsec, cos: ci0?.cos || {} };
+    } catch (e) { S.pfErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    finally { S.pfLoading = null; renderPortfolio(); }
+  }
+  /** The active portfolio's holdings with prices, facts and look-through sectors filled in (code). */
+  function pfHoldings(p, D) {
+    return p.holdings.map((h) => { const q = D?.quotes?.[h.ticker] || {}, i = D?.info?.[h.ticker] || {}, co = D?.cos?.[h.ticker] || {}, ser = D?.series?.[h.ticker];
+      const last = ser?.closes?.length ? ser.closes[ser.closes.length - 1] : NaN, price = num(q.price) > 0 ? num(q.price) : last;
+      const type = h.asset_type || i.type || "stock";
+      return { ...h, name: h.name || i.name || q.name || "", asset_type: type, sector: (type === "stock" ? h.sector || i.sector || co.sector : D?.fsec?.[h.ticker] ? Object.entries(D.fsec[h.ticker]).sort((a, b) => b[1] - a[1])[0][0] + " (top)" : h.sector) || "", price, change: num(q.changePercentage ?? q.changesPercentage),
+        pe: num(q.pe) > 0 ? num(q.pe) : num(co.pe) > 0 ? num(co.pe) : NaN, yield: num(i.lastDiv) > 0 && price > 0 ? num(i.lastDiv) / price : num(co.div_yield) > 0 ? num(co.div_yield) : NaN }; });
+  }
+  /** Sector exposure: stocks at their sector, funds split by their own sector weights (look-through). */
+  function pfSectors(hs, D) {
+    const by = {};
+    for (const h of hs) { const w = num(h.weight) || 0, fs = D?.fsec?.[h.ticker];
+      if (fs && Object.keys(fs).length) { const tot = Object.values(fs).reduce((a, x) => a + x, 0) || 1; for (const [k, v] of Object.entries(fs)) by[k] = (by[k] || 0) + (w * v) / tot; }
+      else { const k = h.sector || (h.asset_type === "stock" ? "Other" : "Funds (sectors unknown)"); by[k] = (by[k] || 0) + w; } }
+    return Object.entries(by).map(([sector, weight]) => ({ sector, weight }));
+  }
+  const usd = (x) => (isNum(num(x)) ? (x < 0 ? "−$" : "$") + Math.round(Math.abs(x)).toLocaleString() : "—");
+  function pfDownload(name, text, type) { try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) { alert("Couldn't save the file: " + (e?.message || e)); } }
+
+  // ------------------------------------------------------------- render: Portfolios tab
+  function renderPortfolio() {
+    const el = $("pf"); if (!el || S.tab !== "portfolios") return;
+    if (!S.pfStore) { el.innerHTML = `<div class="small muted">Opening your portfolios…</div>`; pfStore().then(() => { renderPortfolio(); pfLoad(); }); return; }
+    const st = S.pfStore, p = pfActive(), mode = S.pfMode || "analysis";
+    const sw = `<select id="pf-sel" aria-label="Portfolio" style="max-width:100%">${st.list.map((x) => `<option value="${esc(x.id)}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`;
+    const D = S.pfData && S.pfData.key === [...new Set(p.holdings.map((h) => h.ticker).filter(Boolean))].join(",") ? S.pfData : null;
+    const hs = pfHoldings(p, D), mv = PMode.marketValues({ ...p, holdings: hs }), total = mv.reduce((a, h) => a + (h.marketValue || 0), 0);
+    const head = `<section class="panel" id="pf-head"><div class="panel-head" style="flex-wrap:wrap"><div style="display:grid;gap:4px;min-width:0;max-width:100%"><span class="eyebrow">Portfolio mode · quantitative, no AI</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${sw}<button class="sm" data-pf="new">+ New</button><button class="sm" data-pf="dup">Duplicate</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete</button>` : ""}</div>
+        <h1 style="font-size:24px;margin:2px 0">${esc(p.name)}</h1><div class="mono"><span style="font-size:22px;font-weight:600">${esc(usd(total))}</span> <span class="small muted">${hs.length} holdings${p.description ? " · " + esc(p.description) : ""}</span></div></div>
+        <div class="actions" style="align-items:center;flex-wrap:wrap;max-width:100%"><div class="seg" role="group" aria-label="Mode"><button class="sm" aria-pressed="${mode === "analysis"}" data-pf="mode-analysis">Analysis</button><button class="sm" aria-pressed="${mode === "editor"}" data-pf="mode-editor">Editor</button></div>
+        <button class="sm" data-pf="rebal">Rebalance</button><button class="sm" data-pf="add">Add holding</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch again</button></div></div>
+      ${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}</section>`;
+    el.innerHTML = head + (S.pfRebal ? pfRebalView(p, hs, total) : "") + (mode === "editor" ? pfEditorView(p, hs) : pfAnalysisView(p, hs, D, total));
+    wireCharts(el); wireSpy(el); pfBind(el);
+  }
+  function pfAnalysisView(p, hs, D, total) {
+    if (!hs.length) return `<section class="panel"><div class="small muted">No holdings yet. Switch to the Editor to add some.</div></section>`;
+    if (!D) return `<section class="panel"><div class="small muted">${S.pfLoading ? "Loading…" : S.mcp ? "Press Fetch again to load prices." : ""}</div></section>`;
+    const per = S.pfPeriod || "1Y", ser = D.series, last = (ser.SPY?.dates || []).slice(-1)[0] || today(), from = PMode.periodStart(last, per);
+    const start = p.totalInvestment > 0 ? p.totalInvestment : 10000, evs = p.rebalanceEvents || [];
+    const nv = PMode.nav(ser, hs, { from, start, events: evs, calendar: ser.SPY?.dates || null }), m = nv.dates.length > 5 ? PMode.metrics(nv, ser.SPY) : null;
+    const spyNav = PMode.nav({ SPY: ser.SPY }, [{ ticker: "SPY", weight: 100 }], { from, start, calendar: ser.SPY?.dates || null }), ms = spyNav.dates.length > 5 ? PMode.metrics(spyNav, ser.SPY) : null;
+    const ws = hs.map((h) => num(h.weight) || 0), effN = PMode.effectiveHoldings(ws), secs = pfSectors(hs, D), sh = PMode.sectorHHI(secs), hsc = PMode.healthScore(m, effN, hs.length, sh.hhi);
+    const pe = PMode.weighted(hs, "pe", { harmonic: true }), yl = PMode.weighted(hs, "yield");
+    const p2 = (x, d = 2) => (isNum(num(x)) ? Number(x).toFixed(d) : "—"), pp = (x, d = 1) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "—");
+    const STC = { good: "pos", ok: "warn", bad: "neg" };
+    // 1. Hero metrics
+    const hero = sec("pf-hero", "Summary", `${esc(per)} · ${esc(fmtDate(nv.from))} to ${esc(fmtDate(nv.dates[nv.dates.length - 1]))}`, `<div class="strip grid4">
+      ${[["Return", pp(m?.totalReturn), ms ? `SPY ${pp(ms.totalReturn)}` : ""], ["Beta (monthly, vs SPY)", p2(m?.beta), `correlation ${p2(m?.correlationToSPY)}`], ["P/E (weighted)", p2(pe, 1), "harmonic, where known"], ["Dividend yield", isNum(yl) ? pct(yl, false, 2) : "—", "weighted, where known"],
+        ["Volatility", isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—", ms ? `SPY ${ms.volatility.toFixed(1)}%` : ""], ["Sharpe", p2(m?.sharpeRatio), `geometric, Rf ${PMode.RF * 100}%`], ["Max drawdown", isNum(m?.maxDrawdown) ? "−" + m.maxDrawdown.toFixed(1) + "%" : "—", ms ? `SPY −${ms.maxDrawdown.toFixed(1)}%` : ""],
+        ["Health score", hsc ? `${hsc.score}<span class="small muted">/100</span>` : "—", hsc ? hsc.parts.map((x) => `${x.label.split(" ")[0]} ${x.score}`).join(" · ") : ""]].map(([l, v, s]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span>${s ? `<span class="small muted">${s}</span>` : ""}</div>`).join("")}</div>
+      ${nv.missing.length ? `<div class="notice warn small"><span>No prices for ${esc(nv.missing.join(", "))}: left out of the numbers.</span></div>` : ""}${nv.late.filter((x) => x.first > from).length ? `<div class="small muted">The period starts ${esc(fmtDate(nv.from))}, when every holding trades (${esc(nv.late.filter((x) => x.first > from).map((x) => x.ticker).join(", "))} started later).</div>` : ""}`);
+    // 2. Performance chart
+    const up = (m?.totalReturn ?? 0) >= 0, col = up ? "#22c55e" : "#ef4444";
+    const evIdx = evs.map((e) => ({ i: nv.dates.findIndex((d) => d >= e.date), label: e.label || "Rebalance" })).filter((x) => x.i > 0);
+    const perf = sec("pf-perf", "Performance", `the portfolio's value from ${esc(usd(start))}, against SPY`, `<div class="actions" role="group" aria-label="Period">${PF_PERIODS.map((x) => `<button class="sm ${x === per ? "primary" : ""}" data-pf-per="${x}">${x}</button>`).join("")}</div>
+      <div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: spyNav.dates, values: spyNav.values }, { name: p.name, color: col, dates: nv.dates, values: nv.values }], { height: 260, width: 1100, area: col, fmtY: (v) => "$" + Math.round(v).toLocaleString(), markers: evIdx })}
+      <div class="legend"><span><i style="background:${col}"></i>${esc(p.name)} ${pp(m?.totalReturn)}</span><span><i style="background:var(--bench)"></i>SPY ${pp(ms?.totalReturn)}</span>${evIdx.length ? `<span class="muted">┊ rebalances</span>` : ""}</div></div>`);
+    // 3. Attribution
+    const ct = PMode.contributions(ser, hs, nv, evs), rows = ct.rows;
+    const attr = rows.length ? sec("pf-attr", "Attribution", "weight × the holding's return = its contribution", `<div class="chart" style="max-width:820px">${barsChart(rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => ({ label: r.ticker, a: r.contribution * 100 })), { fmtY: (v) => v.toFixed(1) + "%", height: 200, labelW: 7 })}</div>
+      <div class="small"><span class="pill ${Math.abs(ct.total - (m?.totalReturn ?? ct.total)) < 1e-6 ? "pos" : "warn"}">Sum of contributions ${pp(ct.total, 2)} = portfolio return ${pp(m?.totalReturn, 2)}</span></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th class="n">Return</th><th class="n">Contribution</th><th>Sector</th></tr></thead><tbody>${rows.map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b></td><td class="n">${p2(r.weight, 1)}%</td><td class="n ${cls(r.return)}">${pp(r.return)}</td><td class="n ${cls(r.contribution)}"><b>${pp(r.contribution, 2)}</b></td><td class="small">${esc(r.sector || "")}</td></tr>`).join("")}</tbody></table></div>`) : "";
+    // 4. Allocation
+    const types = {}; for (const h of hs) types[h.asset_type] = (types[h.asset_type] || 0) + (num(h.weight) || 0);
+    const topS = Object.entries(sh.sectors)[0];
+    const alloc = sec("pf-alloc", "Allocation & diversification", "sectors through the funds' own holdings", `<div class="fmix"><div class="box"><h3 style="margin:0 0 6px">Sectors</h3>${donut(Object.entries(sh.sectors).map(([k, v]) => ({ name: k, value: v })), { center: topS ? topS[0].split(" ")[0] : "" })}</div>
+      <div class="box"><div class="kpis">${[kpi("Effective holdings", effN.toFixed(1), `of ${hs.length} (inverse HHI)`, STC[PMode.stance("effectiveHoldings", effN, { count: hs.length })] === "pos" ? "up" : ""), kpi("Sector HHI", Math.round(sh.hhi).toLocaleString(), PMode.hhiLabel(sh.hhi), sh.hhi > 2500 ? "down" : ""),
+        kpi("Top sector", topS ? esc(topS[0]) : "—", topS ? `${topS[1].toFixed(1)}%` : ""), kpi("Largest holding", esc(hs.slice().sort((a, b) => b.weight - a.weight)[0]?.ticker || "—"), `${p2(Math.max(...ws), 1)}%`)].join("")}</div>
+        <h3 style="margin:10px 0 6px">By type</h3><div style="display:grid;gap:6px">${Object.entries(types).map(([k, v]) => `<div class="fbar"><span>${esc(k === "etf" ? "ETFs" : k === "fund" ? "Mutual funds" : "Stocks")}</span><b class="mono" style="text-align:right">${v.toFixed(1)}%</b><div class="meter"><i style="width:${Math.min(100, v)}%;background:var(--accent)"></i></div></div>`).join("")}</div></div></div>`);
+    // 5. Risk table (4 cards, against SPY on the same days)
+    const rowM = (l, v, sv, fmt, st, target) => `<tr><td>${l}<div class="small muted">${target}</div></td><td class="n"><b>${fmt(v)}</b></td><td class="n muted">${fmt(sv)}</td><td>${st ? `<span class="pill ${STC[st]}">${st}</span>` : ""}</td></tr>`;
+    const f1p = (v) => (isNum(num(v)) ? v.toFixed(1) + "%" : "—"), f2 = (v) => p2(v), f0p = (v) => (isNum(num(v)) ? Math.round(v) + "%" : "—");
+    const card = (title, body) => `<div class="box"><h3 style="margin:0 0 6px">${title}</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th><th class="n">Portfolio</th><th class="n">SPY</th><th></th></tr></thead><tbody>${body}</tbody></table></div></div>`;
+    const risk = m ? sec("pf-risk", "Risk & ratios", "against SPY over the same days", `<div class="two" style="grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr))">
+      ${card("Risk / volatility", rowM("Annualized volatility", m.volatility, ms?.volatility, f1p, PMode.stance("volatility", m.volatility), "target under 16%") + rowM("1-day VaR (95%)", m.var95, ms?.var95, (v) => (isNum(num(v)) ? v.toFixed(2) + "%" : "—"), PMode.stance("var95", m.var95), "target under 1.8%") + rowM("Max drawdown", m.maxDrawdown, ms?.maxDrawdown, (v) => (isNum(num(v)) ? "−" + v.toFixed(1) + "%" : "—"), null, "peak to trough"))}
+      ${card("Risk-adjusted returns", rowM("Sharpe", m.sharpeRatio, ms?.sharpeRatio, f2, PMode.stance("sharpeRatio", m.sharpeRatio), "target above 1.0") + rowM("Sortino", m.sortinoRatio, ms?.sortinoRatio, f2, PMode.stance("sortinoRatio", m.sortinoRatio), "target above 1.5") + rowM("Calmar", m.calmarRatio, ms?.calmarRatio, f2, PMode.stance("calmarRatio", m.calmarRatio), "annual return / max drawdown") + rowM("Annualized return", m.annReturn, ms?.annReturn, (v) => pp(v), null, "geometric"))}
+      ${card("Benchmark (vs SPY, monthly)", rowM("Beta", m.beta, 1, f2, PMode.stance("beta", m.beta), "target 0.8-1.0") + rowM("Correlation", m.correlationToSPY, 1, f2, PMode.stance("correlationToSPY", m.correlationToSPY), "lower diversifies more") + rowM("Upside capture", m.upsideCapture, 100, f0p, PMode.stance("capture", 0, { up: m.upsideCapture, down: m.downsideCapture }), "above downside capture") + rowM("Downside capture", m.downsideCapture, 100, f0p, null, "") + rowM("Alpha (a year)", m.alpha, 0, (v) => pp(v), isNum(m.alpha) ? (m.alpha > 0 ? "good" : "bad") : null, "CAPM, Rf 4%"))}
+      ${card("Concentration", rowM("Effective holdings", effN, null, (v) => (isNum(num(v)) ? v.toFixed(1) : "—"), PMode.stance("effectiveHoldings", effN, { count: hs.length }), `target above 60% of ${hs.length}`) + rowM("Sector HHI", sh.hhi, null, (v) => (isNum(num(v)) ? Math.round(v).toLocaleString() : "—"), PMode.stance("hhi", sh.hhi), "under 1,500 diversified"))}</div>
+      <div class="small muted">From daily dividend-adjusted closes (FMP). Volatility: daily standard deviation × √252. Sharpe and Sortino use the geometric annualized return less a 4% risk-free rate; Sortino divides by the downside semi-deviation. Beta, correlation and capture use calendar-month returns against SPY. VaR is the 5th-percentile daily return.</div>`) : "";
+    // 6. Holdings
+    const htab = sec("pf-hold", "Holdings", `${hs.length} · ${usd(total)}`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>Type</th><th>Sector</th><th class="n">Weight</th><th class="n">Shares</th><th class="n">Price</th><th class="n">1D</th><th class="n">Cost basis</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>${PMode.marketValues({ ...p, holdings: hs }).map((h) => { const cost = num(h.avg_cost) > 0 && num(h.shares) > 0 ? h.avg_cost * h.shares : NaN, gain = isNum(cost) ? h.marketValue - cost : NaN;
+      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}</td><td class="n"><b>${p2(h.weight, 1)}%</b></td><td class="n">${num(h.shares) > 0 ? fix(h.shares, 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
+        <td class="n">${isNum(cost) ? "$" + Math.round(cost).toLocaleString() : num(h.avg_cost) > 0 ? fix(h.avg_cost, 2) : "—"}</td><td class="n">$${Math.round(h.marketValue).toLocaleString()}</td><td class="n ${cls(gain)}">${isNum(gain) ? `${gain >= 0 ? "+" : "−"}$${Math.abs(Math.round(gain)).toLocaleString()} <span class="small">(${pp(gain / cost)})</span>` : "—"}</td></tr>`; }).join("")}</tbody></table></div>`);
+    // 7. Look-through
+    const lt = PMode.lookThrough(hs, D.funds || {});
+    const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Direct</th><th class="n">Through funds</th><th class="n">Total</th><th>Via</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b><div class="small muted">${esc(trimC(r.name || "", 34))}</div></td><td class="n">${r.direct ? pct(r.direct, false, 2) : "—"}</td><td class="n">${r.viaFunds ? pct(r.viaFunds, false, 2) : "—"}</td><td class="n"><b>${pct(r.total, false, 2)}</b></td><td class="small muted">${r.via.slice(0, 4).map((v) => `${esc(v.fund)} ${pct(v.weight, false, 2)}`).join(" · ")}</td></tr>`).join("")}</tbody></table></div>
+      ${lt.overlap.length ? `<div class="small"><b>Held both directly and through funds:</b> ${lt.overlap.slice(0, 8).map((r) => `<span class="chip-s">${esc(r.ticker)} ${pct(r.total, false, 1)}</span>`).join(" ")}</div>` : ""}<div class="small muted">Effective exposure = direct weight + Σ fund weight × its weight in the fund (each fund's full holdings list from FMP).</div>`) : "";
+    const evList = evs.length ? sec("pf-events", "Rebalances", `${evs.length}`, `<ul class="dlist small">${evs.slice().reverse().map((e) => `<li><b class="mono">${esc(e.date)}</b> ${esc(e.label || "Rebalance")}: ${(e.trades || []).filter((t) => Math.abs(t.amountUsd) >= 1).map((t) => `<span class="pill ${t.amountUsd > 0 ? "pos" : "neg"}">${t.amountUsd > 0 ? "BUY" : "SELL"} ${esc(t.ticker)} $${Math.abs(Math.round(t.amountUsd)).toLocaleString()}</span>`).join(" ")}</li>`).join("")}</ul>`) : "";
+    return hero + perf + attr + alloc + risk + htab + look + evList;
+  }
+  function pfEditorView(p, hs) {
+    const dr = S.pfDraft || (S.pfDraft = { name: p.name, description: p.description || "", totalInvestment: p.totalInvestment || 10000, rows: p.holdings.map((h) => ({ ...h })) }), entry = S.pfEntry || "pct";
+    const sum = dr.rows.reduce((a, r) => a + (num(r.weight) || 0), 0);
+    const rows = dr.rows.map((r, i) => `<tr><td><input data-pfr="${i}" data-k="ticker" value="${esc(r.ticker || "")}" list="pf-sug" placeholder="Ticker" style="width:90px;text-transform:uppercase"></td><td class="small muted">${esc(trimC(r.name || "", 30))}</td>
+      <td>${entry === "pct" ? `<input data-pfr="${i}" data-k="weight" type="number" step="0.1" min="0" value="${isNum(num(r.weight)) ? r.weight : ""}" style="width:80px"> %` : `$ <input data-pfr="${i}" data-k="dollar" type="number" step="1" min="0" value="${Math.round((num(r.weight) || 0) * dr.totalInvestment / 100)}" style="width:110px"> <span class="small muted">${p2v(r.weight)}%</span>`}</td>
+      <td><input data-pfr="${i}" data-k="shares" type="number" step="any" min="0" value="${num(r.shares) > 0 ? r.shares : ""}" style="width:90px" placeholder="optional"></td><td><input data-pfr="${i}" data-k="avg_cost" type="number" step="any" min="0" value="${num(r.avg_cost) > 0 ? r.avg_cost : ""}" style="width:90px" placeholder="optional"></td>
+      <td><button class="sm" data-pf="rm-${i}" aria-label="Remove">✕</button></td></tr>`).join("");
+    return `<section class="panel" id="pf-editor"><div class="panel-head"><h2>Editor</h2><div class="seg" role="group" aria-label="Entry"><button class="sm" aria-pressed="${entry === "pct"}" data-pf="entry-pct">% weight</button><button class="sm" aria-pressed="${entry === "usd"}" data-pf="entry-usd">$ amount</button></div></div>
+      <div class="kpis" style="margin-bottom:10px"><label class="kpi"><span class="eyebrow">Name</span><input id="pf-name" value="${esc(dr.name)}"></label><label class="kpi"><span class="eyebrow">Description</span><input id="pf-desc" value="${esc(dr.description)}"></label><label class="kpi"><span class="eyebrow">Total investment ($)</span><input id="pf-total" type="number" min="0" step="100" value="${dr.totalInvestment}"></label></div>
+      <datalist id="pf-sug">${(S.pfSug || []).map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join("")}</datalist>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Ticker</th><th>Name</th><th>${entry === "pct" ? "Weight" : "Amount"}</th><th>Shares</th><th>Avg cost</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="actions" style="align-items:center"><button class="sm" data-pf="row-add">+ Add row</button><button class="sm" data-pf="norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Weights add to ${sum.toFixed(1)}%</span>
+        <span style="margin-left:auto"></span><button class="sm" data-pf="cancel">Discard changes</button><button class="sm primary" data-pf="save">Save</button></div>
+      <div class="small muted">Enter weights in % or dollar amounts (of the total investment); shares and average cost are optional and give the holdings table its cost basis and gains. Normalize scales the weights to 100%.</div></section>`;
+  }
+  const p2v = (x) => (isNum(num(x)) ? Number(x).toFixed(1) : "—");
+  function pfRebalView(p, hs, total) {
+    const tg = S.pfRebal.targets, tr = PMode.rebalanceTrades(hs.map((h) => ({ ...h, weight: num(h.weight) || 0 })), tg, total), sum = Object.values(tg).reduce((a, x) => a + (num(x) || 0), 0);
+    return `<section class="panel" id="pf-rebal"><div class="panel-head"><h2>Rebalance</h2><span class="small muted">set target weights; the order sheet follows</span></div>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Current</th><th>Target</th><th>Action</th><th class="n">Amount</th><th class="n">Shares</th></tr></thead><tbody>${tr.map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td><input data-pft="${esc(t.ticker)}" type="number" step="0.1" min="0" value="${num(tg[t.ticker]) || 0}" style="width:80px"> %</td>
+        <td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : `$${Math.abs(Math.round(t.deltaUsd)).toLocaleString()}`}</td><td class="n">${isNum(num(t.shares)) && t.action !== "HOLD" ? fix(Math.abs(t.shares), 2) : "—"}</td></tr>`).join("")}</tbody></table></div>
+      <div class="actions" style="align-items:center"><button class="sm" data-pf="rb-equal">Equal weight</button><button class="sm" data-pf="rb-norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Targets add to ${sum.toFixed(1)}%</span><span style="margin-left:auto"></span><button class="sm" data-pf="rb-cancel">Close</button><button class="sm primary" data-pf="rb-apply" ${Math.abs(sum - 100) < 0.5 ? "" : "disabled"}>Record the rebalance</button></div>
+      <div class="small muted">Δ value = total value × (target − current) / 100: positive is a BUY, negative a SELL. Recording it sets the new weights and pins today's date on the performance chart.</div></section>`;
+  }
+  /** Inputs on the Portfolios tab (the page's click handler only sees buttons). */
+  function pfBind(el) {
+    $("pf-sel")?.addEventListener("change", (ev) => { S.pfStore.activeId = ev.target.value; S.pfDraft = null; S.pfRebal = null; pfSave(); renderPortfolio(); pfLoad(); });
+    for (const [id, k] of [["pf-name", "name"], ["pf-desc", "description"], ["pf-total", "totalInvestment"]]) $(id)?.addEventListener("input", (ev) => { if (S.pfDraft) S.pfDraft[k] = k === "totalInvestment" ? num(ev.target.value) || 0 : ev.target.value; });
+    el.querySelectorAll("input[data-pfr]").forEach((inp) => inp.addEventListener("change", () => { const r = S.pfDraft?.rows?.[+inp.dataset.pfr]; if (!r) return; const k = inp.dataset.k, v = inp.value;
+      if (k === "ticker") { r.ticker = v.trim().toUpperCase(); r.name = ""; r.asset_type = ""; r.sector = ""; }
+      else if (k === "dollar") r.weight = S.pfDraft.totalInvestment > 0 ? Math.round(((num(v) || 0) / S.pfDraft.totalInvestment) * 1000) / 10 : 0;
+      else r[k] = v === "" ? null : num(v);
+      renderPortfolio(); }));
+    el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => inp.addEventListener("input", () => { clearTimeout(S.pfSugT); const q = inp.value.trim(); if (q.length < 1 || !S.mcp) return;
+      S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
+        const dl = $("pf-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); }));
+    el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
+    if (!el.dataset.bound) { el.dataset.bound = "1"; el.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-pf], button[data-pf-per]"); if (b) pfClick(b); }); }
+  }
+  async function pfClick(b) {
+    const st = S.pfStore, p = pfActive(); if (!st || !p) return;
+    if (b.dataset.pfPer) { S.pfPeriod = b.dataset.pfPer; renderPortfolio(); return; }
+    const a = b.dataset.pf, now = new Date().toISOString();
+    if (a === "mode-analysis") { S.pfMode = "analysis"; S.pfDraft = null; renderPortfolio(); return; }
+    if (a === "mode-editor") { S.pfMode = "editor"; renderPortfolio(); return; }
+    if (a === "add") { S.pfMode = "editor"; renderPortfolio(); S.pfDraft.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
+    if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; S.pfMode = "editor"; S.pfDraft = null; await pfSave(); renderPortfolio(); return; }
+    if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
+    if (a === "del") { if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return; st.list = st.list.filter((x) => x.id !== p.id); st.activeId = st.list[0]?.id || null; await pfSave(); S.pfDraft = null; renderPortfolio(); pfLoad(); return; }
+    if (a === "refresh") { pfLoad({ force: true }); return; }
+    if (a === "csv") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.csv`, PMode.toCsv({ ...p, holdings: pfHoldings(p, S.pfData) }), "text/csv"); return; }
+    if (a === "json") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.json`, JSON.stringify(p, null, 2), "application/json"); return; }
+    if (a === "entry-pct" || a === "entry-usd") { S.pfEntry = a === "entry-pct" ? "pct" : "usd"; renderPortfolio(); return; }
+    if (a === "row-add") { S.pfDraft?.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
+    if (a.startsWith("rm-")) { S.pfDraft?.rows.splice(+a.slice(3), 1); renderPortfolio(); return; }
+    if (a === "norm") { if (S.pfDraft) S.pfDraft.rows = PMode.normalizeWeights(S.pfDraft.rows); renderPortfolio(); return; }
+    if (a === "cancel") { S.pfDraft = null; S.pfMode = "analysis"; renderPortfolio(); return; }
+    if (a === "save") { const dr = S.pfDraft; if (!dr) return; const rows = dr.rows.filter((r) => r.ticker);
+      Object.assign(p, { name: dr.name || "Untitled", description: dr.description, totalInvestment: dr.totalInvestment > 0 ? dr.totalInvestment : 10000, holdings: rows.map((r) => ({ ticker: r.ticker, name: r.name || "", weight: num(r.weight) || 0, shares: num(r.shares) > 0 ? num(r.shares) : undefined, avg_cost: num(r.avg_cost) > 0 ? num(r.avg_cost) : undefined, asset_type: r.asset_type || undefined, sector: r.sector || undefined })), updatedAt: now });
+      S.pfDraft = null; S.pfMode = "analysis"; await pfSave(); renderPortfolio(); pfLoad(); return; }
+    if (a === "rebal") { S.pfRebal = { targets: Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])) }; renderPortfolio(); $("pf-rebal")?.scrollIntoView?.({ behavior: "smooth" }); return; }
+    if (a === "rb-cancel") { S.pfRebal = null; renderPortfolio(); return; }
+    if (a === "rb-equal") { const k = p.holdings.length; for (const h of p.holdings) S.pfRebal.targets[h.ticker] = Math.round((1000 / k)) / 10; renderPortfolio(); return; }
+    if (a === "rb-norm") { const ws = PMode.normalizeWeights(Object.entries(S.pfRebal.targets).map(([ticker, weight]) => ({ ticker, weight }))); S.pfRebal.targets = Object.fromEntries(ws.map((x) => [x.ticker, x.weight])); renderPortfolio(); return; }
+    if (a === "rb-apply") { const hs = pfHoldings(p, S.pfData), total = PMode.marketValues({ ...p, holdings: hs }).reduce((s, h) => s + (h.marketValue || 0), 0), tr = PMode.rebalanceTrades(hs, S.pfRebal.targets, total);
+      const evDate = (S.pfData?.series?.SPY?.dates || []).slice(-1)[0] || today(), ev = { id: pfId(), date: evDate, label: `Rebalance ${evDate}`, trades: tr.map((t) => ({ ticker: t.ticker, amountUsd: Math.round(t.deltaUsd * 100) / 100, newWeight: t.target })) };
+      p.rebalanceEvents = [...(p.rebalanceEvents || []), ev]; p.holdings = p.holdings.map((h) => ({ ...h, weight: num(S.pfRebal.targets[h.ticker]) || 0, shares: undefined })).filter((h) => h.weight > 0);
+      for (const t of Object.keys(S.pfRebal.targets)) if (!p.holdings.some((h) => h.ticker === t) && num(S.pfRebal.targets[t]) > 0) p.holdings.push({ ticker: t, weight: num(S.pfRebal.targets[t]) });
+      p.updatedAt = now; S.pfRebal = null; await pfSave(); renderPortfolio(); return; }
+  }
+
   function renderTabs() {
     const el = $("tabs"); if (!el) return;
-    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
+    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["portfolios", "Portfolios"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
     el.innerHTML = T.map(([k, l]) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}">${l}</button>`).join("");
-    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
+    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["pf", cur === "portfolios"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
   }
   function companySearch() {
     const ci = S.coIdx;

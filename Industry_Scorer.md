@@ -107,6 +107,32 @@ The **Funds** tab opens any US stock ETF or mutual fund and reads it through the
 
 ---
 
+## 1d. Portfolios: the quantitative portfolio mode (no AI)
+
+The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs and mutual funds. Everything is code (`web/pmode.js`, tested in `pmode_test.js`); no model is called.
+
+- **Portfolios** are kept in this browser (IndexedDB key `portfolios`), with a starter portfolio (QQQ, SPY, AAPL, MSFT, SCHD) when there are none. You can make, duplicate, delete and switch between them, and export each as CSV or JSON.
+- **Editor**: enter weights in % or as dollar amounts of the total investment. Shares and average cost are optional and give the cost basis and gain. Normalize scales the weights to 100%. Ticker suggestions come from FMP search.
+- **Prices**: daily dividend-adjusted closes from FMP for every holding and SPY, going back 5+ years, plus batch quotes and profiles. Profiles tell stock, ETF and fund apart and are kept for a week.
+- **NAV**: buy-and-hold units bought at the start weights and reset at each recorded rebalance. Prices are forward-filled. The period starts on the first day every holding trades. Periods: 1M, 3M, 6M, YTD, 1Y, 3Y, 5Y. Rebalances appear as pins on the chart.
+- **Measures**:
+  - Total and geometric annualized return.
+  - Volatility: daily standard deviation × √252.
+  - Max drawdown.
+  - Sharpe and Sortino: geometric return minus a 4% risk-free rate; Sortino divides by the downside semi-deviation.
+  - Calmar.
+  - 1-day VaR at 95%: the 5th-percentile daily return.
+  - Monthly beta, correlation, upside and downside capture, and CAPM alpha against SPY.
+  - Each measure is shown next to SPY over the same days, with a good/ok/bad stance.
+- **Attribution**: contribution = weight × the holding's return, segmented at rebalances and scaled so the sum equals the portfolio's return exactly.
+- **Diversification**:
+  - Effective holdings: 1 / Σw².
+  - Sector HHI: Σ (sector %)². Below 1,500 is diversified; above 2,500 is highly concentrated.
+  - Funds are split by FMP's sector weighting for the fund, with EODHD's or their holdings' sectors as fallbacks.
+  - A 0–100 health score built from risk-adjusted return, drawdown, holdings, sectors and capture.
+- **Rebalance**: set target weights (or equal weight). The order sheet shows BUY, SELL or HOLD for each holding, in dollars (total value × Δweight) and shares. Recording it saves the new weights and adds a dated event.
+- **Look-through**: each fund's full holdings list from FMP. A stock's effective exposure = its direct weight + Σ (fund weight × its weight in the fund). Names held both directly and through funds are flagged.
+
 ## 2. Report sections
 
 1. **Overview:** the lead strategist's verdict. See §6.
