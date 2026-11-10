@@ -36,6 +36,8 @@ assert.strictEqual(M.maxDrawdown([100, 120, 90, 130, 65]), 50);
 assert.strictEqual(M.var95([...Array(100).keys()].map((i) => (i - 50) / 1000)), 4.5);
 const self = M.metrics({ dates, values: SPY.closes }, SPY); assert(near(self.beta, 1, 1e-9) && near(self.correlationToSPY, 1, 1e-9) && near(self.upsideCapture, 100) && near(self.alpha, 0, 1e-12), "SPY against itself");
 
+const short = M.metrics({ dates: dates.slice(0, 60), values: nv.values.slice(0, 60) }, SPY); assert(isFinite(short.beta) && short.betaBasis === "daily", "short periods get a daily beta");
+assert.strictEqual(m.betaBasis, "monthly");
 // concentration
 assert(near(M.effectiveHoldings(Array(10).fill(10)), 10)); assert(near(M.effectiveHoldings([91, ...Array(9).fill(1)]), 1 / (0.91 ** 2 + 9 * 0.0001)));
 const sh = M.sectorHHI([{ sector: "Tech", weight: 70 }, { sector: "Health", weight: 30 }]); assert(near(sh.hhi, 70 ** 2 + 30 ** 2)); assert.strictEqual(M.hhiLabel(sh.hhi), "Highly concentrated");

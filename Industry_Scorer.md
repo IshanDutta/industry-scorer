@@ -123,6 +123,8 @@ The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs a
   - Calmar.
   - 1-day VaR at 95%: the 5th-percentile daily return.
   - Monthly beta, correlation, upside and downside capture, and CAPM alpha against SPY.
+  - Periods under six months (1M, 3M) have too few monthly returns, so beta, correlation and capture use daily returns there, and the page says so.
+  - P/E and dividend yield are trailing twelve months, weighted by holding. Stocks use FMP's TTM ratios. A fund's P/E is the harmonic average of the holdings the industry runs know, used only when those cover half its weight. Each tile says how much of the portfolio it covers.
   - Each measure is shown next to SPY over the same days, with a good/ok/bad stance.
 - **Attribution**: contribution = weight × the holding's return, segmented at rebalances and scaled so the sum equals the portfolio's return exactly.
 - **Diversification**:

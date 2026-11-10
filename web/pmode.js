@@ -106,12 +106,14 @@
     const mdd = maxDrawdown(v), calmar = mdd > 0 ? ann / (mdd / 100) : NaN;
     // Monthly against SPY.
     const sm = mapOf(spy), sv = nv.dates.map((d) => sm.get(d)), sOk = sv.filter((x) => x > 0).length > N * 0.8;
-    let beta = NaN, corr = NaN, up = NaN, down = NaN, alpha = NaN, spyAnn = NaN, spyTotal = NaN;
+    let beta = NaN, corr = NaN, up = NaN, down = NaN, alpha = NaN, spyAnn = NaN, spyTotal = NaN, basis = "monthly";
     if (sOk) {
       let lastS = null; const sFill = sv.map((x) => (x > 0 ? (lastS = x) : lastS));
       const pm = monthly(nv.dates, v), smm = monthly(nv.dates, sFill), ks = [...pm.keys()].filter((k) => smm.has(k));
-      const a = ks.map((k) => pm.get(k)), b = ks.map((k) => smm.get(k));
-      if (ks.length >= 6) { const ma = mean(a), mb = mean(b); let cv = 0, va = 0, vb = 0; for (let i = 0; i < a.length; i++) { cv += (a[i] - ma) * (b[i] - mb); va += (a[i] - ma) ** 2; vb += (b[i] - mb) ** 2; }
+      let a = ks.map((k) => pm.get(k)), b = ks.map((k) => smm.get(k));
+      // Under six months of data: daily returns instead, so short periods still get a beta (marked basis "daily").
+      if (ks.length < 6 && N >= 15) { a = r; b = rets(sFill); basis = "daily"; }
+      if (a.length >= 6) { const ma = mean(a), mb = mean(b); let cv = 0, va = 0, vb = 0; for (let i = 0; i < a.length; i++) { cv += (a[i] - ma) * (b[i] - mb); va += (a[i] - ma) ** 2; vb += (b[i] - mb) ** 2; }
         cv /= a.length - 1; va /= a.length - 1; vb /= a.length - 1; beta = vb > 0 ? cv / vb : NaN; corr = va > 0 && vb > 0 ? cv / Math.sqrt(va * vb) : NaN;
         const upI = b.map((x, i) => (x > 0 ? i : -1)).filter((i) => i >= 0), dnI = b.map((x, i) => (x < 0 ? i : -1)).filter((i) => i >= 0);
         if (upI.length) up = (mean(upI.map((i) => a[i])) / mean(upI.map((i) => b[i]))) * 100; if (dnI.length) down = (mean(dnI.map((i) => a[i])) / mean(dnI.map((i) => b[i]))) * 100; }
@@ -119,7 +121,7 @@
       if (isNum(beta) && isNum(spyAnn)) alpha = ann - (rf + beta * (spyAnn - rf));
     }
     return { days: N, totalReturn: total, annReturn: ann, volatility: vol, maxDrawdown: mdd, sharpeRatio: sharpe, sortinoRatio: sortino, calmarRatio: calmar, beta, correlationToSPY: corr,
-      upsideCapture: up, downsideCapture: down, alpha, var95: var95(r), spyReturn: spyTotal, spyAnnReturn: spyAnn };
+      upsideCapture: up, downsideCapture: down, alpha, betaBasis: basis, var95: var95(r), spyReturn: spyTotal, spyAnnReturn: spyAnn };
   }
   /** Inverse Herfindahl: the effective number of holdings (weights in %). */
   const effectiveHoldings = (ws) => { const s = ws.reduce((a, w) => a + (w / 100) ** 2, 0); return s > 0 ? 1 / s : 0; };

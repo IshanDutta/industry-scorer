@@ -6320,9 +6320,11 @@ a.btnlink:hover { border-color: var(--accent); }
   /** One ticker's facts (FMP profile and quote), kept a week: name, type, sector, dividend; price and day change are fresh. */
   async function pfInfo(sym) {
     const k = "tkInfo:" + sym; let x = await idbGet(k).catch(() => null);
-    if (!x || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
-      const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0] || {};
-      x = jsonSafe({ at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", type: p.isEtf ? "etf" : p.isFund ? "fund" : p.companyName ? "stock" : "", lastDiv: num(p.lastDividend), cap: num(p.marketCap) });
+    if (!x || x.v !== 2 || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
+      const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0] || {}, type = p.isEtf ? "etf" : p.isFund ? "fund" : p.companyName ? "stock" : "";
+      const rt = type === "stock" ? (await optional(() => fmp("statements", { endpoint: "metrics-ratios-ttm", symbol: sym }), []))?.[0] || {} : {};
+      x = jsonSafe({ v: 2, at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", type, lastDiv: num(p.lastDividend), cap: num(p.marketCap), beta: num(p.beta),
+        pe: num(rt.priceToEarningsRatioTTM), divYield: num(rt.dividendYieldTTM) });
       await idbPut(k, x).catch(() => {});
     }
     return x;
@@ -6339,7 +6341,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
       const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
       // Funds: their holdings and sector weights (the fund page's own fetch, kept 20 hours).
-      const funds = {}, fsec = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
+      const funds = {}, fsec = {}, fpe = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
       await pool(syms.filter((s) => info[s]?.type === "etf" || info[s]?.type === "fund"), 2, async (sym) => { const raw = await fundRaw(sym).catch(() => null); if (!raw) return;
         funds[sym] = (raw.holdings || []).filter((h) => h.ticker || h.name).map((h) => ({ ticker: h.ticker || "", name: h.name, weight: h.weight }));
         const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name;
@@ -6348,8 +6350,11 @@ a.btnlink:hover { border-color: var(--accent); }
         for (const r of sw) { const w = num(r?.weightPercentage); if (r?.sector && w > 0.05 && !/cash/i.test(r.sector)) fw[r.sector] = (fw[r.sector] || 0) + w / 100; }
         if (!Object.keys(fw).length) Object.assign(fw, f.sectors || {});
         if (!Object.keys(fw).length && ci0) for (const h of funds[sym]) { const sc = ci0.cos?.[h.ticker]?.sector; if (sc && num(h.weight) > 0) fw[sc] = (fw[sc] || 0) + num(h.weight); }
-        fsec[sym] = Object.keys(fw).length ? fw : null; }, null);
-      S.pfData = { key, day: today(), series, quotes, info, funds, fsec, cos: ci0?.cos || {} };
+        fsec[sym] = Object.keys(fw).length ? fw : null;
+        // The fund's P/E through its holdings: harmonic, over the holdings whose P/E the industry runs know (half its weight or more).
+        let wk = 0, inv = 0; for (const h of funds[sym]) { const pe = num(ci0?.cos?.[h.ticker]?.pe), w = num(h.weight); if (pe > 0 && w > 0) { wk += w; inv += w / pe; } }
+        const wt = funds[sym].reduce((a, h) => a + (num(h.weight) || 0), 0); if (inv > 0 && wt > 0 && wk / wt >= 0.5) fpe[sym] = wk / inv; }, null);
+      S.pfData = { key, day: today(), series, quotes, info, funds, fsec, fpe, cos: ci0?.cos || {} };
     } catch (e) { S.pfErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { S.pfLoading = null; renderPortfolio(); }
   }
@@ -6359,7 +6364,8 @@ a.btnlink:hover { border-color: var(--accent); }
       const last = ser?.closes?.length ? ser.closes[ser.closes.length - 1] : NaN, price = num(q.price) > 0 ? num(q.price) : last;
       const type = h.asset_type || i.type || "stock";
       return { ...h, name: h.name || i.name || q.name || "", asset_type: type, sector: (type === "stock" ? h.sector || i.sector || co.sector : D?.fsec?.[h.ticker] ? Object.entries(D.fsec[h.ticker]).sort((a, b) => b[1] - a[1])[0][0] : h.sector) || "", sectorTop: type !== "stock" && !!D?.fsec?.[h.ticker], price, change: num(q.changePercentage ?? q.changesPercentage),
-        pe: num(q.pe) > 0 ? num(q.pe) : num(co.pe) > 0 ? num(co.pe) : NaN, yield: num(i.lastDiv) > 0 && price > 0 ? num(i.lastDiv) / price : num(co.div_yield) > 0 ? num(co.div_yield) : NaN }; });
+        pe: num(i.pe) > 0 ? num(i.pe) : num(q.pe) > 0 ? num(q.pe) : num(co.pe) > 0 ? num(co.pe) : D?.fpe?.[h.ticker] > 0 ? D.fpe[h.ticker] : NaN,
+        yield: num(i.divYield) >= 0 && type === "stock" && isNum(num(i.divYield)) ? num(i.divYield) : num(i.lastDiv) > 0 && price > 0 ? num(i.lastDiv) / price : num(co.div_yield) > 0 ? num(co.div_yield) : type === "stock" ? 0 : NaN }; });
   }
   /** Sector exposure: stocks at their sector, funds split by their own sector weights (look-through). */
   function pfSectors(hs, D) {
@@ -6406,7 +6412,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const STC = { good: "pos", ok: "warn", bad: "neg" };
     // 1. Hero metrics
     const hero = sec("pf-hero", "Summary", `${esc(per)} · ${esc(fmtDate(nv.from))} to ${esc(fmtDate(nv.dates[nv.dates.length - 1]))}`, `<div class="strip grid4">
-      ${[["Return", pp(m?.totalReturn), ms ? `SPY ${pp(ms.totalReturn)}` : ""], ["Beta (monthly, vs SPY)", p2(m?.beta), `correlation ${p2(m?.correlationToSPY)}`], ["P/E (weighted)", p2(pe, 1), "harmonic, where known"], ["Dividend yield", isNum(yl) ? pct(yl, false, 2) : "—", "weighted, where known"],
+      ${[["Return", pp(m?.totalReturn), ms ? `SPY ${pp(ms.totalReturn)}` : ""], [`Beta (${m?.betaBasis || "monthly"}, vs SPY)`, p2(m?.beta), `correlation ${p2(m?.correlationToSPY)}`], ["P/E (weighted)", p2(pe, 1), `harmonic · covers ${Math.round(hs.filter((h) => h.pe > 0).reduce((a, h) => a + (num(h.weight) || 0), 0))}% of it`], ["Dividend yield", isNum(yl) ? pct(yl, false, 2) : "—", `TTM, weighted · covers ${Math.round(hs.filter((h) => isNum(num(h.yield))).reduce((a, h) => a + (num(h.weight) || 0), 0))}%`],
         ["Volatility", isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—", ms ? `SPY ${ms.volatility.toFixed(1)}%` : ""], ["Sharpe", p2(m?.sharpeRatio), `geometric, Rf ${PMode.RF * 100}%`], ["Max drawdown", isNum(m?.maxDrawdown) ? "−" + m.maxDrawdown.toFixed(1) + "%" : "—", ms ? `SPY −${ms.maxDrawdown.toFixed(1)}%` : ""],
         ["Health score", hsc ? `${hsc.score}<span class="small muted">/100</span>` : "—", hsc ? hsc.parts.map((x) => `${x.label.split(" ")[0]} ${x.score}`).join(" · ") : ""]].map(([l, v, s]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span>${s ? `<span class="small muted">${s}</span>` : ""}</div>`).join("")}</div>
       ${nv.missing.length ? `<div class="notice warn small"><span>No prices for ${esc(nv.missing.join(", "))}: left out of the numbers.</span></div>` : ""}${nv.late.filter((x) => x.first > from).length ? `<div class="small muted">The period starts ${esc(fmtDate(nv.from))}, when every holding trades (${esc(nv.late.filter((x) => x.first > from).map((x) => x.ticker).join(", "))} started later).</div>` : ""}`);
@@ -6414,11 +6420,11 @@ a.btnlink:hover { border-color: var(--accent); }
     const up = (m?.totalReturn ?? 0) >= 0, col = up ? "#22c55e" : "#ef4444";
     const evIdx = evs.map((e) => ({ i: nv.dates.findIndex((d) => d >= e.date), label: e.label || "Rebalance" })).filter((x) => x.i > 0);
     const perf = sec("pf-perf", "Performance", `the portfolio's value from ${esc(usd(start))}, against SPY`, `<div class="actions" role="group" aria-label="Period">${PF_PERIODS.map((x) => `<button class="sm ${x === per ? "primary" : ""}" data-pf-per="${x}">${x}</button>`).join("")}</div>
-      <div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: spyNav.dates, values: spyNav.values }, { name: p.name, color: col, dates: nv.dates, values: nv.values }], { height: 260, width: 1100, area: col, fmtY: (v) => "$" + Math.round(v).toLocaleString(), markers: evIdx })}
+      <div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: spyNav.dates, values: spyNav.values }, { name: p.name, color: col, dates: nv.dates, values: nv.values }], { height: innerWidth < 720 ? 300 : 260, width: innerWidth < 720 ? 520 : 1100, area: col, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : Math.round(v / 1000) + "k"), markers: evIdx })}
       <div class="legend"><span><i style="background:${col}"></i>${esc(p.name)} ${pp(m?.totalReturn)}</span><span><i style="background:var(--bench)"></i>SPY ${pp(ms?.totalReturn)}</span>${evIdx.length ? `<span class="muted">┊ rebalances</span>` : ""}</div></div>`);
     // 3. Attribution
     const ct = PMode.contributions(ser, hs, nv, evs), rows = ct.rows;
-    const attr = rows.length ? sec("pf-attr", "Attribution", "weight × the holding's return = its contribution", `<div class="chart" style="max-width:820px">${barsChart(rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => ({ label: r.ticker, a: r.contribution * 100 })), { fmtY: (v) => v.toFixed(1) + "%", height: 200, labelW: 7 })}</div>
+    const attr = rows.length ? sec("pf-attr", "Attribution", "weight × the holding's return = its contribution", `<div class="chart" style="max-width:820px">${barsChart(rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => ({ label: r.ticker, a: r.contribution * 100 })), { fmtY: (v) => v.toFixed(1) + "%", height: 200, labelW: 7, width: innerWidth < 720 ? 480 : 640 })}</div>
       <div class="small"><span class="pill ${Math.abs(ct.total - (m?.totalReturn ?? ct.total)) < 1e-6 ? "pos" : "warn"}">Sum of contributions ${pp(ct.total, 2)} = portfolio return ${pp(m?.totalReturn, 2)}</span></div>
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th class="n">Return</th><th class="n">Contribution</th><th>Sector</th></tr></thead><tbody>${rows.map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b></td><td class="n">${p2(r.weight, 1)}%</td><td class="n ${cls(r.return)}">${pp(r.return)}</td><td class="n ${cls(r.contribution)}"><b>${pp(r.contribution, 2)}</b></td><td class="small">${esc(r.sector || "")}</td></tr>`).join("")}</tbody></table></div>`) : "";
     // 4. Allocation
@@ -6435,7 +6441,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const risk = m ? sec("pf-risk", "Risk & ratios", "against SPY over the same days", `<div class="two" style="grid-template-columns:repeat(auto-fit,minmax(min(460px,100%),1fr))">
       ${card("Risk / volatility", rowM("Annualized volatility", m.volatility, ms?.volatility, f1p, PMode.stance("volatility", m.volatility), "target under 16%") + rowM("1-day VaR (95%)", m.var95, ms?.var95, (v) => (isNum(num(v)) ? v.toFixed(2) + "%" : "—"), PMode.stance("var95", m.var95), "target under 1.8%") + rowM("Max drawdown", m.maxDrawdown, ms?.maxDrawdown, (v) => (isNum(num(v)) ? "−" + v.toFixed(1) + "%" : "—"), null, "peak to trough"))}
       ${card("Risk-adjusted returns", rowM("Sharpe", m.sharpeRatio, ms?.sharpeRatio, f2, PMode.stance("sharpeRatio", m.sharpeRatio), "target above 1.0") + rowM("Sortino", m.sortinoRatio, ms?.sortinoRatio, f2, PMode.stance("sortinoRatio", m.sortinoRatio), "target above 1.5") + rowM("Calmar", m.calmarRatio, ms?.calmarRatio, f2, PMode.stance("calmarRatio", m.calmarRatio), "annual return / max drawdown") + rowM("Annualized return", m.annReturn, ms?.annReturn, (v) => pp(v), null, "geometric"))}
-      ${card("Benchmark (vs SPY, monthly)", rowM("Beta", m.beta, 1, f2, PMode.stance("beta", m.beta), "target 0.8-1.0") + rowM("Correlation", m.correlationToSPY, 1, f2, PMode.stance("correlationToSPY", m.correlationToSPY), "lower diversifies more") + rowM("Upside capture", m.upsideCapture, 100, f0p, PMode.stance("capture", 0, { up: m.upsideCapture, down: m.downsideCapture }), "above downside capture") + rowM("Downside capture", m.downsideCapture, 100, f0p, null, "") + rowM("Alpha (a year)", m.alpha, 0, (v) => pp(v), isNum(m.alpha) ? (m.alpha > 0 ? "good" : "bad") : null, "CAPM, Rf 4%"))}
+      ${card(`Benchmark (vs SPY, ${m.betaBasis === "daily" ? "daily: under six months" : "monthly"})`, rowM("Beta", m.beta, 1, f2, PMode.stance("beta", m.beta), "target 0.8-1.0") + rowM("Correlation", m.correlationToSPY, 1, f2, PMode.stance("correlationToSPY", m.correlationToSPY), "lower diversifies more") + rowM("Upside capture", m.upsideCapture, 100, f0p, PMode.stance("capture", 0, { up: m.upsideCapture, down: m.downsideCapture }), "above downside capture") + rowM("Downside capture", m.downsideCapture, 100, f0p, null, "") + rowM("Alpha (a year)", m.alpha, 0, (v) => pp(v), isNum(m.alpha) ? (m.alpha > 0 ? "good" : "bad") : null, "CAPM, Rf 4%"))}
       ${card("Concentration", rowM("Effective holdings", effN, null, (v) => (isNum(num(v)) ? v.toFixed(1) : "—"), PMode.stance("effectiveHoldings", effN, { count: hs.length }), `target above 60% of ${hs.length}`) + rowM("Sector HHI", sh.hhi, null, (v) => (isNum(num(v)) ? Math.round(v).toLocaleString() : "—"), PMode.stance("hhi", sh.hhi), "under 1,500 diversified"))}</div>
       <div class="small muted">From daily dividend-adjusted closes (FMP). Volatility: daily standard deviation × √252. Sharpe and Sortino use the geometric annualized return less a 4% risk-free rate; Sortino divides by the downside semi-deviation. Beta, correlation and capture use calendar-month returns against SPY. VaR is the 5th-percentile daily return.</div>`) : "";
     // 6. Holdings
@@ -6444,7 +6450,9 @@ a.btnlink:hover { border-color: var(--accent); }
         <td class="n">${isNum(cost) ? "$" + Math.round(cost).toLocaleString() : num(h.avg_cost) > 0 ? fix(h.avg_cost, 2) : "—"}</td><td class="n">$${Math.round(h.marketValue).toLocaleString()}</td><td class="n ${cls(gain)}">${isNum(gain) ? `${gain >= 0 ? "+" : "−"}$${Math.abs(Math.round(gain)).toLocaleString()} <span class="small">(${pp(gain / cost)})</span>` : "—"}</td></tr>`; }).join("")}</tbody></table></div>`);
     // 7. Look-through
     const lt = PMode.lookThrough(hs, D.funds || {});
-    const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Direct</th><th class="n">Through funds</th><th class="n">Total</th><th>Via</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b><div class="small muted">${esc(trimC(r.name || "", 34))}</div></td><td class="n">${r.direct ? pct(r.direct, false, 2) : "—"}</td><td class="n">${r.viaFunds ? pct(r.viaFunds, false, 2) : "—"}</td><td class="n"><b>${pct(r.total, false, 2)}</b></td><td class="small muted">${r.via.slice(0, 4).map((v) => `${esc(v.fund)} ${pct(v.weight, false, 2)}`).join(" · ")}</td></tr>`).join("")}</tbody></table></div>
+    const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Total</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td class="wr"><b class="tick">${esc(r.ticker)}</b> <span class="small muted">${esc(trimC(r.name || "", 30))}</span>
+        <div class="small muted">${[r.direct ? `<span style="color:var(--text)">direct ${pct(r.direct, false, 2)}</span>` : "", ...r.via.slice(0, 4).map((v) => `${esc(v.fund)} ${pct(v.weight, false, 2)}`)].filter(Boolean).join(" · ")}</div></td>
+        <td class="n" style="width:120px"><b>${pct(r.total, false, 2)}</b><div class="meter" style="margin-top:4px"><i style="width:${Math.min(100, (r.total / (lt.rows[0]?.total || 1)) * 100)}%;background:var(--accent)"></i></div></td></tr>`).join("")}</tbody></table></div>
       ${lt.overlap.length ? `<div class="small"><b>Held both directly and through funds:</b> ${lt.overlap.slice(0, 8).map((r) => `<span class="chip-s">${esc(r.ticker)} ${pct(r.total, false, 1)}</span>`).join(" ")}</div>` : ""}<div class="small muted">Effective exposure = direct weight + Σ fund weight × its weight in the fund (each fund's full holdings list from FMP).</div>`) : "";
     const evList = evs.length ? sec("pf-events", "Rebalances", `${evs.length}`, `<ul class="dlist small">${evs.slice().reverse().map((e) => `<li><b class="mono">${esc(e.date)}</b> ${esc(e.label || "Rebalance")}: ${(e.trades || []).filter((t) => Math.abs(t.amountUsd) >= 1).map((t) => `<span class="pill ${t.amountUsd > 0 ? "pos" : "neg"}">${t.amountUsd > 0 ? "BUY" : "SELL"} ${esc(t.ticker)} $${Math.abs(Math.round(t.amountUsd)).toLocaleString()}</span>`).join(" ")}</li>`).join("")}</ul>`) : "";
     return hero + perf + attr + alloc + risk + htab + look + evList;
