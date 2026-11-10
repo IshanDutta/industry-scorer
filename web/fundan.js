@@ -204,8 +204,9 @@
     if (fd.timesL?.episodes?.length) { tl.push(M.timesLookText(fd.timesL, fd.sym)); fd.timesL.episodes.forEach((x) => { idx[x.id] = `${x.month}: a past month like today (${x.industries.length} of its industries)`; }); }
     if (fd.levels) put(tl, "T5", "Price levels", `Levels: 52-week high ${f1(fd.levels.high52, 2)}, low ${f1(fd.levels.low52, 2)}, 3-month swing high ${f1(fd.levels.swing_high, 2)}, swing low ${f1(fd.levels.swing_low, 2)}, 50-day ${f1(fd.levels.sma50, 2)}, 200-day ${f1(fd.levels.sma200, 2)}.`);
     const st = fd.street; if (st?.n) put(tl, "N1", "Wall Street on its holdings", `Wall Street on the ${st.n} biggest holdings (${pc(st.on, 0)} of the fund): ${pc(st.buy_share, 0)} of ratings are buy, weighted; consensus targets ${spf(st.upside)} above the holdings' prices. Biggest: ${st.rows.slice(0, 6).map((r) => `${r.ticker} ${r.consensus || "n/a"} (${pc(r.buy_share, 0)} buy, target ${spf(r.upside)})`).join("; ")}.`);
-    const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}. ${se.rows.slice(0, 6).map((r) => `${r.ticker} ${f1(r.s30, 2)} (${r.n30} articles)`).join(", ")}.`);
-    (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`));
+    if (fd.newsL) { tl.push(M.newsText(fd.newsL, fd.sym)); idx.NS1 = "News sentiment, weighted"; idx.NS2 = "Sentiment by holding"; for (const x of fd.newsL.heads.slice(0, 30)) idx[x.id] = trim(x.title, 80); }
+    else { const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}.`);
+      (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`)); }
     const dv = fd.dist; if (dv?.paying) put(tl, "D1", "Distributions", `Distributions: ${pc(dv.yield, 2)} trailing yield (${f1(dv.annual, 2)} a share a year, ${String(dv.freq || "").toLowerCase()}); 5-year growth ${spf(dv.cagr5)} a year${dv.cut5 ? "; cut in the last five years" : ""}${dv.next ? `; next ex-date ${dv.next.ex}` : ""}.`);
     B.tech = tl.join("\n");
     // D: the industries' own drivers and risks (for the context analyst)
@@ -244,7 +245,7 @@
   const PANELS = {
     core: { industries: "the industry mix and how the industries are rated", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
     calls: { calendar: "the dated events ahead that matter most at the fund's weights", plan: "the price levels and when to buy", times: "Times like this (cite HE)" },
-    markets: { stress: "how the fund held up in past crises and booms", tech: "trend, momentum and the pattern match", news: "news and sentiment on the biggest holdings", dist: "the distributions" },
+    markets: { stress: "how the fund held up in past crises and booms", tech: "trend, momentum and the pattern match", dist: "the distributions" },
     context: { look: "the look-through calls and scores" },
     world: {},
     exposures: {},
@@ -278,6 +279,7 @@ Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, one holdings_notes entry for e
 Probabilities add to 100. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
     markets: `{"returns": {"summary": "2-3 sentences: how the fund has done against its benchmark and SPY, and which industries and holdings drove the gap, cited"},
  "risk_profile": {"level": "low | moderate | high", "summary": "2-3 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
+ "news": {"tone": "positive | mixed | negative", "summary": "2-3 sentences: what the news flow and the sentiment numbers (NS1, NS2) say for the fund, against its industries' news-flow reads", "themes": [{"theme": "a story running through the headlines", "effect": "helps | hurts | mixed", "holdings": ["NVDA"], "why": "one sentence, cited NW"}], "watch": "the headline risk or sentiment turn to watch"},
  "season": {"summary": "2-3 sentences: what this earnings season has shown so far for the fund and what the next reports must show"},
  ${READ(PANELS.markets)}}`,
     context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
@@ -436,7 +438,9 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     } else if (part === "markets") {
       const sm = (x, k = 900) => (x?.summary ? { summary: t(x.summary, k) } : null);
       w = { returns: sm(o.returns), risk_profile: o.risk_profile ? { level: en(o.risk_profile.level, ["low", "moderate", "high"]), summary: t(o.risk_profile.summary, 900), worst_case: t(o.risk_profile.worst_case, 300) } : null,
-        street: sm(o.street, 700), season: sm(o.season, 700), reads: reads(o.reads) };
+        street: sm(o.street, 700), season: sm(o.season, 700), reads: reads(o.reads),
+        news: o.news ? { tone: en(o.news.tone, ["positive", "mixed", "negative"]), summary: t(o.news.summary, 700), watch: t(o.news.watch, 240),
+          themes: rows(o.news.themes, (x) => ({ theme: t(x?.theme, 120), effect: en(x?.effect, ENUM.eff), holdings: (Array.isArray(x?.holdings) ? x.holdings : []).map((y) => String(y).toUpperCase().slice(0, 8)).slice(0, 6), why: t(x?.why, 300) }), "theme").slice(0, 5) } : null };
     } else if (part === "context") {
       w = { drivers: rows(o.drivers, (x) => ({ driver: t(x?.driver, 200), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 500), ids: ids(x?.ids) }), "driver").slice(0, 8),
         industries: rows(o.industries, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 400) }), "id"),

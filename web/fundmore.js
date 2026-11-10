@@ -394,7 +394,59 @@
     return { macro, world, trade, reg };
   }
 
-  const FundMore = { factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  // ============================================================= news and sentiment
+  /**
+   * News and sentiment for the fund (code): each big holding's measured news sentiment (EODHD's daily scores, else its
+   * industry run's by-company figures) over 7, 30 and 90 days and its article volume, weighted into the fund's; its
+   * industries' own sentiment and the lead strategists' news-flow and perception scores (the industry runs); breadth
+   * (how much of the fund reads positive, and improving), the biggest movers, article spikes, a daily series for the fund
+   * against its industries, and one headline list from the fund's own news and its industry runs, tagged by holding.
+   * sent: {TICKER: [{date, count, normalized}]}; news: [{date, symbol, title, source, url}].
+   */
+  function newsLook({ cov, digests, hold = [], sent = {}, news = [], today, k = 20 }) {
+    const day = (d) => new Date(Date.parse(today) - d * 864e5).toISOString().slice(0, 10);
+    const avg = (rows, from) => { const xs = (rows || []).filter((r) => r.date >= from && r.count > 0); const c = xs.reduce((a, r) => a + r.count, 0); return c ? { v: xs.reduce((a, r) => a + r.count * n(r.normalized), 0) / c, n: c } : null; };
+    const L = inds(cov, digests), byCo = new Map(); for (const { g, d } of L) for (const x of d.news?.by || []) if (!byCo.has(x.symbol)) byCo.set(x.symbol, { ...x, industry: g.industry });
+    const top = (hold || []).filter((h) => h.ticker).slice(0, k);
+    const rows = top.map((h) => { const r = sent[h.ticker]; const a7 = avg(r, day(7)), a30 = avg(r, day(30)), a90 = avg(r, day(90)), b = byCo.get(h.ticker);
+      const s30 = a30 ? a30.v : n(b?.s30), s90 = a90 ? a90.v : n(b?.s90), n30 = a30 ? a30.n : n(b?.n30), n90 = a90 ? a90.n : n(b?.n90);
+      return { ticker: h.ticker, name: h.name, weight: h.weight, industry: h.industry, s7: a7 ? a7.v : NaN, s30, s90, change: isNum(s30) && isNum(s90) ? s30 - s90 : NaN, n30, n90, spike: isNum(n30) && n90 > 0 ? n30 / (n90 / 3) : NaN, src: a30 ? "EODHD" : b ? "industry run" : "" }; })
+      .filter((r) => isNum(r.s30) || isNum(r.s90));
+    const wv = (f) => { let w = 0, s0 = 0; for (const r of rows) { const v = f(r); if (isNum(v)) { w += r.weight; s0 += r.weight * v; } } return w ? s0 / w : NaN; }, on = rows.reduce((a, r) => a + r.weight, 0);
+    const iw = (f) => { let w = 0, s0 = 0; for (const { g, d } of L) { const v = n(f(d.news || {})); if (isNum(v)) { w += g.weight; s0 += g.weight * v; } } return w ? s0 / w : NaN; };
+    const fund = { s7: wv((r) => r.s7), s30: wv((r) => r.s30), s90: wv((r) => r.s90), n30: rows.reduce((a, r) => a + (isNum(r.n30) ? r.n30 : 0), 0), n90: rows.reduce((a, r) => a + (isNum(r.n90) ? r.n90 : 0), 0) };
+    const indS = { s7: iw((x) => x.s7), s30: iw((x) => x.s30), s90: iw((x) => x.s90) };
+    const vsInd = (r) => { const b = byCo.get(r.ticker), ii = L.find((x) => x.g.industry === r.industry)?.d.news; return isNum(r.s30) && isNum(n(ii?.s30)) ? r.s30 - n(ii.s30) : NaN; };
+    for (const r of rows) r.vs_ind = vsInd(r);
+    const breadth = on ? { above: rows.filter((r) => r.vs_ind > 0.02).reduce((a, r) => a + r.weight, 0) / on, below: rows.filter((r) => r.vs_ind < -0.02).reduce((a, r) => a + r.weight, 0) / on, improving: rows.filter((r) => r.change > 0.02).reduce((a, r) => a + r.weight, 0) / on, worsening: rows.filter((r) => r.change < -0.02).reduce((a, r) => a + r.weight, 0) / on } : null;
+    const movers = rows.filter((r) => isNum(r.change)).sort((a, b) => b.change - a.change), up = movers.filter((r) => r.change > 0.02).slice(0, 5), dn = movers.filter((r) => r.change < -0.02).reverse().slice(0, 5);
+    const spikes = rows.filter((r) => r.spike >= 1.5).sort((a, b) => b.spike - a.spike).slice(0, 6);
+    // Daily: the holdings' own scores (count-weighted per day, then by fund weight), next to the industries' (by fund weight).
+    const days = {}; for (const r of rows) for (const x of sent[r.ticker] || []) { if (x.date < day(90) || !(x.count > 0)) continue; const e = days[x.date] || (days[x.date] = { w: 0, s: 0 }); e.w += r.weight; e.s += r.weight * n(x.normalized); }
+    const idays = {}; for (const { g, d } of L) for (const [dt, sc, c] of d.news?.series || []) { if (dt < day(90) || !(c > 0) || !isNum(n(sc))) continue; const e = idays[dt] || (idays[dt] = { w: 0, s: 0 }); e.w += g.weight; e.s += g.weight * sc; }
+    const ser = (o) => { const ds = Object.keys(o).sort(); return { dates: ds, values: ds.map((x) => o[x].s / o[x].w) }; };
+    const flow = L.filter((x) => x.d.news?.news_dim || x.d.news?.perception || isNum(n(x.d.news?.s30))).slice(0, 10).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.news, series: undefined, by: undefined, items: undefined }));
+    // One headline list: the fund's own news on its holdings, then its industry runs' news on the same holdings; one per title.
+    const held = new Map((hold || []).map((h) => [h.ticker, h])), seen = new Set(), heads = [];
+    const add = (x, from) => { const key = lc(x.title).replace(/[^a-z0-9]+/g, " ").trim().slice(0, 70); if (!x.title || seen.has(key)) return; seen.add(key); const h = held.get(x.symbol); heads.push({ ...x, from, weight: h?.weight ?? null, industry: h?.industry || x.industry || "" }); };
+    for (const x of news || []) add(x, "fund");
+    for (const { g, d } of L) for (const x of d.news?.items || []) if (held.has(x.symbol)) add({ ...x, industry: g.industry }, "industry run");
+    heads.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.weight || 0) - (a.weight || 0)));
+    const cover = {}; for (const h of heads) if (h.symbol) cover[h.symbol] = (cover[h.symbol] || 0) + 1;
+    return { rows, on, fund, ind: indS, breadth, up, dn, spikes, series: { fund: ser(days), ind: ser(idays) }, flow, heads: heads.slice(0, 40).map((x, i) => ({ id: "NW" + (i + 1), ...x })), cover: Object.entries(cover).sort((a, b) => b[1] - a[1]).slice(0, 8) };
+  }
+  /** News and sentiment as dossier lines (NW headlines, NS the sentiment). */
+  function newsText(N, sym) {
+    if (!N) return "";
+    const f2 = (x) => (isNum(x) ? `${x > 0 ? "+" : ""}${x.toFixed(2)}` : "n/a");
+    return [`## NEWS AND SENTIMENT (code; scores -1 to +1)`,
+      `[NS1] ${sym}'s biggest holdings, weighted (${pc(N.on, 0)} of the fund): 7 days ${f2(N.fund.s7)}, 30 days ${f2(N.fund.s30)}, 90 days ${f2(N.fund.s90)}; ${N.fund.n30} articles in 30 days. Its industries, weighted: 7 days ${f2(N.ind.s7)}, 30 days ${f2(N.ind.s30)}, 90 days ${f2(N.ind.s90)}.${N.breadth ? ` Breadth: ${pc(N.breadth.improving, 0)} of that weight is improving (30 days above its 90), ${pc(N.breadth.worsening, 0)} worsening; ${pc(N.breadth.above, 0)} reads better than its own industry, ${pc(N.breadth.below, 0)} worse.` : ""}`,
+      `[NS2] By holding (30d / 90d, articles): ${N.rows.map((r) => `${r.ticker} ${pc(r.weight)} ${f2(r.s30)}/${f2(r.s90)} (${isNum(r.n30) ? r.n30 : "?"})${r.spike >= 1.5 ? " SPIKE" : ""}`).join("; ")}.`,
+      ...N.flow.map((x) => `${x.industry} (${pc(x.weight)}): sentiment 30d ${f2(n(x.s30))}${x.news_dim ? `; news flow ${x.news_dim.score > 0 ? "+" : ""}${x.news_dim.score} (−2 to +2): ${x.news_dim.summary}` : ""}${x.perception ? `; perception ${x.perception.score > 0 ? "+" : ""}${x.perception.score}: ${x.perception.summary}` : ""}`),
+      ...N.heads.slice(0, 30).map((x) => `[${x.id}] ${x.date} · ${x.symbol || ""}${x.weight ? ` (${pc(x.weight)})` : ""} · ${x.title}${x.source ? ` (${x.source})` : ""}${x.summary ? `: ${x.summary}` : ""}`)].join("\n");
+  }
+
+  const FundMore = { newsLook, newsText, factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -9727,7 +9727,7 @@ Reply with ONLY this JSON:
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 6, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 7, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -9783,6 +9783,17 @@ Reply with ONLY this JSON:
       // The industry report's macro, world-events, trade and regulation tables, as the company page reads them
       // (Company.lensInputs on the saved run): every indicator, situation, country, rule and policy/legal item.
       lens: (() => { try { return lensOf(rec); } catch (e) { return null; } })(),
+      // News and sentiment from the industry run: measured sentiment (daily, and by company), the lead strategist's
+      // news-flow and perception scores, and the run's latest company news and press releases.
+      news: (() => { const se = rec?.research?.sentiment, dm = a.dimensions || {}, it = rec?.research?.items || [];
+        if (!se && !dm.news && !it.length) return null;
+        const r2 = (x) => (isNum(n(x)) ? Math.round(n(x) * 1000) / 1000 : null);
+        return { s7: r2(se?.last_7d), s30: r2(se?.prior_30d), s90: r2(se?.last_90d), n30: n(se?.articles_30d) || null,
+          series: (se?.series || []).slice(-90).map((x) => [x.date, r2(x.score), x.count || 0]),
+          by: (se?.by_company || []).map((x) => ({ symbol: x.symbol, s30: r2(x.score_30d), s90: r2(x.score_90d), n30: x.articles_30d ?? null, n90: x.articles_90d ?? null })),
+          news_dim: dm.news ? { score: n(dm.news.score), summary: cutW(dm.news.summary, 360) } : null, perception: dm.perception ? { score: n(dm.perception.score), summary: cutW(dm.perception.summary, 300) } : null,
+          items: it.filter((x) => ["N", "P", "E"].includes(x.kind) && x.title).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 14)
+            .map((x) => ({ kind: x.kind, date: String(x.date || "").slice(0, 10), symbol: x.symbol || "", source: x.source || "", title: String(x.title).slice(0, 180), summary: cutW(x.summary, 170), url: x.url || "" })) }; })(),
       // The lead strategist's debates (the biggest questions about the industry, each side and which way it leans).
       debates: (a.debates || []).filter((x) => x?.question).slice(0, 3).map((x) => ({ q: cutW(x.question, 180), bull: cutW(x.bull, 240), bear: cutW(x.bear, 240), lean: lc(x.lean || ""), resolves: cutW(x.resolves_with, 160) })),
       positioning: d.positioning?.label || row?.positioning || null,
@@ -10410,7 +10421,59 @@ Reply with JSON only, in this shape:
     return { macro, world, trade, reg };
   }
 
-  const FundMore = { factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  // ============================================================= news and sentiment
+  /**
+   * News and sentiment for the fund (code): each big holding's measured news sentiment (EODHD's daily scores, else its
+   * industry run's by-company figures) over 7, 30 and 90 days and its article volume, weighted into the fund's; its
+   * industries' own sentiment and the lead strategists' news-flow and perception scores (the industry runs); breadth
+   * (how much of the fund reads positive, and improving), the biggest movers, article spikes, a daily series for the fund
+   * against its industries, and one headline list from the fund's own news and its industry runs, tagged by holding.
+   * sent: {TICKER: [{date, count, normalized}]}; news: [{date, symbol, title, source, url}].
+   */
+  function newsLook({ cov, digests, hold = [], sent = {}, news = [], today, k = 20 }) {
+    const day = (d) => new Date(Date.parse(today) - d * 864e5).toISOString().slice(0, 10);
+    const avg = (rows, from) => { const xs = (rows || []).filter((r) => r.date >= from && r.count > 0); const c = xs.reduce((a, r) => a + r.count, 0); return c ? { v: xs.reduce((a, r) => a + r.count * n(r.normalized), 0) / c, n: c } : null; };
+    const L = inds(cov, digests), byCo = new Map(); for (const { g, d } of L) for (const x of d.news?.by || []) if (!byCo.has(x.symbol)) byCo.set(x.symbol, { ...x, industry: g.industry });
+    const top = (hold || []).filter((h) => h.ticker).slice(0, k);
+    const rows = top.map((h) => { const r = sent[h.ticker]; const a7 = avg(r, day(7)), a30 = avg(r, day(30)), a90 = avg(r, day(90)), b = byCo.get(h.ticker);
+      const s30 = a30 ? a30.v : n(b?.s30), s90 = a90 ? a90.v : n(b?.s90), n30 = a30 ? a30.n : n(b?.n30), n90 = a90 ? a90.n : n(b?.n90);
+      return { ticker: h.ticker, name: h.name, weight: h.weight, industry: h.industry, s7: a7 ? a7.v : NaN, s30, s90, change: isNum(s30) && isNum(s90) ? s30 - s90 : NaN, n30, n90, spike: isNum(n30) && n90 > 0 ? n30 / (n90 / 3) : NaN, src: a30 ? "EODHD" : b ? "industry run" : "" }; })
+      .filter((r) => isNum(r.s30) || isNum(r.s90));
+    const wv = (f) => { let w = 0, s0 = 0; for (const r of rows) { const v = f(r); if (isNum(v)) { w += r.weight; s0 += r.weight * v; } } return w ? s0 / w : NaN; }, on = rows.reduce((a, r) => a + r.weight, 0);
+    const iw = (f) => { let w = 0, s0 = 0; for (const { g, d } of L) { const v = n(f(d.news || {})); if (isNum(v)) { w += g.weight; s0 += g.weight * v; } } return w ? s0 / w : NaN; };
+    const fund = { s7: wv((r) => r.s7), s30: wv((r) => r.s30), s90: wv((r) => r.s90), n30: rows.reduce((a, r) => a + (isNum(r.n30) ? r.n30 : 0), 0), n90: rows.reduce((a, r) => a + (isNum(r.n90) ? r.n90 : 0), 0) };
+    const indS = { s7: iw((x) => x.s7), s30: iw((x) => x.s30), s90: iw((x) => x.s90) };
+    const vsInd = (r) => { const b = byCo.get(r.ticker), ii = L.find((x) => x.g.industry === r.industry)?.d.news; return isNum(r.s30) && isNum(n(ii?.s30)) ? r.s30 - n(ii.s30) : NaN; };
+    for (const r of rows) r.vs_ind = vsInd(r);
+    const breadth = on ? { above: rows.filter((r) => r.vs_ind > 0.02).reduce((a, r) => a + r.weight, 0) / on, below: rows.filter((r) => r.vs_ind < -0.02).reduce((a, r) => a + r.weight, 0) / on, improving: rows.filter((r) => r.change > 0.02).reduce((a, r) => a + r.weight, 0) / on, worsening: rows.filter((r) => r.change < -0.02).reduce((a, r) => a + r.weight, 0) / on } : null;
+    const movers = rows.filter((r) => isNum(r.change)).sort((a, b) => b.change - a.change), up = movers.filter((r) => r.change > 0.02).slice(0, 5), dn = movers.filter((r) => r.change < -0.02).reverse().slice(0, 5);
+    const spikes = rows.filter((r) => r.spike >= 1.5).sort((a, b) => b.spike - a.spike).slice(0, 6);
+    // Daily: the holdings' own scores (count-weighted per day, then by fund weight), next to the industries' (by fund weight).
+    const days = {}; for (const r of rows) for (const x of sent[r.ticker] || []) { if (x.date < day(90) || !(x.count > 0)) continue; const e = days[x.date] || (days[x.date] = { w: 0, s: 0 }); e.w += r.weight; e.s += r.weight * n(x.normalized); }
+    const idays = {}; for (const { g, d } of L) for (const [dt, sc, c] of d.news?.series || []) { if (dt < day(90) || !(c > 0) || !isNum(n(sc))) continue; const e = idays[dt] || (idays[dt] = { w: 0, s: 0 }); e.w += g.weight; e.s += g.weight * sc; }
+    const ser = (o) => { const ds = Object.keys(o).sort(); return { dates: ds, values: ds.map((x) => o[x].s / o[x].w) }; };
+    const flow = L.filter((x) => x.d.news?.news_dim || x.d.news?.perception || isNum(n(x.d.news?.s30))).slice(0, 10).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, ...d.news, series: undefined, by: undefined, items: undefined }));
+    // One headline list: the fund's own news on its holdings, then its industry runs' news on the same holdings; one per title.
+    const held = new Map((hold || []).map((h) => [h.ticker, h])), seen = new Set(), heads = [];
+    const add = (x, from) => { const key = lc(x.title).replace(/[^a-z0-9]+/g, " ").trim().slice(0, 70); if (!x.title || seen.has(key)) return; seen.add(key); const h = held.get(x.symbol); heads.push({ ...x, from, weight: h?.weight ?? null, industry: h?.industry || x.industry || "" }); };
+    for (const x of news || []) add(x, "fund");
+    for (const { g, d } of L) for (const x of d.news?.items || []) if (held.has(x.symbol)) add({ ...x, industry: g.industry }, "industry run");
+    heads.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.weight || 0) - (a.weight || 0)));
+    const cover = {}; for (const h of heads) if (h.symbol) cover[h.symbol] = (cover[h.symbol] || 0) + 1;
+    return { rows, on, fund, ind: indS, breadth, up, dn, spikes, series: { fund: ser(days), ind: ser(idays) }, flow, heads: heads.slice(0, 40).map((x, i) => ({ id: "NW" + (i + 1), ...x })), cover: Object.entries(cover).sort((a, b) => b[1] - a[1]).slice(0, 8) };
+  }
+  /** News and sentiment as dossier lines (NW headlines, NS the sentiment). */
+  function newsText(N, sym) {
+    if (!N) return "";
+    const f2 = (x) => (isNum(x) ? `${x > 0 ? "+" : ""}${x.toFixed(2)}` : "n/a");
+    return [`## NEWS AND SENTIMENT (code; scores -1 to +1)`,
+      `[NS1] ${sym}'s biggest holdings, weighted (${pc(N.on, 0)} of the fund): 7 days ${f2(N.fund.s7)}, 30 days ${f2(N.fund.s30)}, 90 days ${f2(N.fund.s90)}; ${N.fund.n30} articles in 30 days. Its industries, weighted: 7 days ${f2(N.ind.s7)}, 30 days ${f2(N.ind.s30)}, 90 days ${f2(N.ind.s90)}.${N.breadth ? ` Breadth: ${pc(N.breadth.improving, 0)} of that weight is improving (30 days above its 90), ${pc(N.breadth.worsening, 0)} worsening; ${pc(N.breadth.above, 0)} reads better than its own industry, ${pc(N.breadth.below, 0)} worse.` : ""}`,
+      `[NS2] By holding (30d / 90d, articles): ${N.rows.map((r) => `${r.ticker} ${pc(r.weight)} ${f2(r.s30)}/${f2(r.s90)} (${isNum(r.n30) ? r.n30 : "?"})${r.spike >= 1.5 ? " SPIKE" : ""}`).join("; ")}.`,
+      ...N.flow.map((x) => `${x.industry} (${pc(x.weight)}): sentiment 30d ${f2(n(x.s30))}${x.news_dim ? `; news flow ${x.news_dim.score > 0 ? "+" : ""}${x.news_dim.score} (−2 to +2): ${x.news_dim.summary}` : ""}${x.perception ? `; perception ${x.perception.score > 0 ? "+" : ""}${x.perception.score}: ${x.perception.summary}` : ""}`),
+      ...N.heads.slice(0, 30).map((x) => `[${x.id}] ${x.date} · ${x.symbol || ""}${x.weight ? ` (${pc(x.weight)})` : ""} · ${x.title}${x.source ? ` (${x.source})` : ""}${x.summary ? `: ${x.summary}` : ""}`)].join("\n");
+  }
+
+  const FundMore = { newsLook, newsText, factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -10621,8 +10684,9 @@ Reply with JSON only, in this shape:
     if (fd.timesL?.episodes?.length) { tl.push(M.timesLookText(fd.timesL, fd.sym)); fd.timesL.episodes.forEach((x) => { idx[x.id] = `${x.month}: a past month like today (${x.industries.length} of its industries)`; }); }
     if (fd.levels) put(tl, "T5", "Price levels", `Levels: 52-week high ${f1(fd.levels.high52, 2)}, low ${f1(fd.levels.low52, 2)}, 3-month swing high ${f1(fd.levels.swing_high, 2)}, swing low ${f1(fd.levels.swing_low, 2)}, 50-day ${f1(fd.levels.sma50, 2)}, 200-day ${f1(fd.levels.sma200, 2)}.`);
     const st = fd.street; if (st?.n) put(tl, "N1", "Wall Street on its holdings", `Wall Street on the ${st.n} biggest holdings (${pc(st.on, 0)} of the fund): ${pc(st.buy_share, 0)} of ratings are buy, weighted; consensus targets ${spf(st.upside)} above the holdings' prices. Biggest: ${st.rows.slice(0, 6).map((r) => `${r.ticker} ${r.consensus || "n/a"} (${pc(r.buy_share, 0)} buy, target ${spf(r.upside)})`).join("; ")}.`);
-    const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}. ${se.rows.slice(0, 6).map((r) => `${r.ticker} ${f1(r.s30, 2)} (${r.n30} articles)`).join(", ")}.`);
-    (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`));
+    if (fd.newsL) { tl.push(M.newsText(fd.newsL, fd.sym)); idx.NS1 = "News sentiment, weighted"; idx.NS2 = "Sentiment by holding"; for (const x of fd.newsL.heads.slice(0, 30)) idx[x.id] = trim(x.title, 80); }
+    else { const se = fd.sent; if (se?.rows?.length) put(tl, "N2", "News sentiment", `News sentiment of the biggest holdings (EODHD, -1 to +1, weighted): 30 days ${f1(se.s30, 2)}, 90 days ${f1(se.s90, 2)}.`);
+      (fd.news || []).slice(0, 8).forEach((x, i) => put(tl, "NW" + (i + 1), trim(x.title, 80), `${x.date} · ${x.symbol || ""} · ${trim(x.title, 160)}${x.source ? ` (${x.source})` : ""}.`)); }
     const dv = fd.dist; if (dv?.paying) put(tl, "D1", "Distributions", `Distributions: ${pc(dv.yield, 2)} trailing yield (${f1(dv.annual, 2)} a share a year, ${String(dv.freq || "").toLowerCase()}); 5-year growth ${spf(dv.cagr5)} a year${dv.cut5 ? "; cut in the last five years" : ""}${dv.next ? `; next ex-date ${dv.next.ex}` : ""}.`);
     B.tech = tl.join("\n");
     // D: the industries' own drivers and risks (for the context analyst)
@@ -10661,7 +10725,7 @@ Reply with JSON only, in this shape:
   const PANELS = {
     core: { industries: "the industry mix and how the industries are rated", income: "income: yield, fees and dividend coverage", coverage: "how much of the fund the analysis covers and what that means" },
     calls: { calendar: "the dated events ahead that matter most at the fund's weights", plan: "the price levels and when to buy", times: "Times like this (cite HE)" },
-    markets: { stress: "how the fund held up in past crises and booms", tech: "trend, momentum and the pattern match", news: "news and sentiment on the biggest holdings", dist: "the distributions" },
+    markets: { stress: "how the fund held up in past crises and booms", tech: "trend, momentum and the pattern match", dist: "the distributions" },
     context: { look: "the look-through calls and scores" },
     world: {},
     exposures: {},
@@ -10695,6 +10759,7 @@ Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, one holdings_notes entry for e
 Probabilities add to 100. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
     markets: `{"returns": {"summary": "2-3 sentences: how the fund has done against its benchmark and SPY, and which industries and holdings drove the gap, cited"},
  "risk_profile": {"level": "low | moderate | high", "summary": "2-3 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
+ "news": {"tone": "positive | mixed | negative", "summary": "2-3 sentences: what the news flow and the sentiment numbers (NS1, NS2) say for the fund, against its industries' news-flow reads", "themes": [{"theme": "a story running through the headlines", "effect": "helps | hurts | mixed", "holdings": ["NVDA"], "why": "one sentence, cited NW"}], "watch": "the headline risk or sentiment turn to watch"},
  "season": {"summary": "2-3 sentences: what this earnings season has shown so far for the fund and what the next reports must show"},
  ${READ(PANELS.markets)}}`,
     context: `{"drivers": [{"driver": "what drives the fund over 12 months", "effect": "helps | hurts | mixed", "why": "2 sentences, cited", "ids": ["I1"]}],
@@ -10853,7 +10918,9 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     } else if (part === "markets") {
       const sm = (x, k = 900) => (x?.summary ? { summary: t(x.summary, k) } : null);
       w = { returns: sm(o.returns), risk_profile: o.risk_profile ? { level: en(o.risk_profile.level, ["low", "moderate", "high"]), summary: t(o.risk_profile.summary, 900), worst_case: t(o.risk_profile.worst_case, 300) } : null,
-        street: sm(o.street, 700), season: sm(o.season, 700), reads: reads(o.reads) };
+        street: sm(o.street, 700), season: sm(o.season, 700), reads: reads(o.reads),
+        news: o.news ? { tone: en(o.news.tone, ["positive", "mixed", "negative"]), summary: t(o.news.summary, 700), watch: t(o.news.watch, 240),
+          themes: rows(o.news.themes, (x) => ({ theme: t(x?.theme, 120), effect: en(x?.effect, ENUM.eff), holdings: (Array.isArray(x?.holdings) ? x.holdings : []).map((y) => String(y).toUpperCase().slice(0, 8)).slice(0, 6), why: t(x?.why, 300) }), "theme").slice(0, 5) } : null };
     } else if (part === "context") {
       w = { drivers: rows(o.drivers, (x) => ({ driver: t(x?.driver, 200), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 500), ids: ids(x?.ids) }), "driver").slice(0, 8),
         industries: rows(o.industries, (x) => ({ id: rowId(x), effect: en(x?.effect, ENUM.eff), why: t(x?.why, 400) }), "id"),
@@ -15748,7 +15815,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
       const sl = bySlugName.get(lc(name));
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
-        if (c && c.saved_at === r.saved_at && c.dg?.v === 6) { out[lc(name)] = c.dg; continue; }
+        if (c && c.saved_at === r.saved_at && c.dg?.v === 7) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
         const rec = await idbGet("run:" + sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
@@ -15870,8 +15937,8 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   async function fundNet(fd) {
     if (!S.mcp || !fd.hold?.length) return;
     let c = await idbGet("fundNet:" + fd.sym).catch(() => null);
-    if (!c || !c.earn || Date.now() - Date.parse(c.at || 0) > FUND_TTL_MS) {
-      const top = fd.hold.filter((h) => h.ticker && !Portfolio.isForeign(h.ticker)).slice(0, 15), t10 = top.slice(0, 10), t6 = top.slice(0, 6);
+    if (!c || !c.earn || c.v !== 2 || Date.now() - Date.parse(c.at || 0) > FUND_TTL_MS) {
+      const top = fd.hold.filter((h) => h.ticker && !Portfolio.isForeign(h.ticker)).slice(0, 15), all20 = fd.hold.filter((h) => h.ticker && !Portfolio.isForeign(h.ticker)).slice(0, 20), t10 = top.slice(0, 10);
       const eodT = (t) => t.replace(/\./g, "-") + ".US";
       const streetOf = async (t) => { const k = "street:" + t, x = await idbGet(k).catch(() => null); if (x && Date.now() - Date.parse(x.at || 0) < 864e5) return x.s;
         const [g, p] = await Promise.all([optional(() => fmp("analyst", { endpoint: "grades-summary", symbol: t }), []), optional(() => fmp("analyst", { endpoint: "price-target-consensus", symbol: t }), [])]);
@@ -15884,13 +15951,13 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
         await idbPut(k, jsonSafe({ day: today(), e })).catch(() => {}); return e; };
       const [divs, sentRaw, news, st, ea] = await Promise.all([
         optional(() => fmp("calendar", { endpoint: "dividends-company", symbol: fd.sym, limit: 80 }), []),
-        S.eod && t10.length ? optional(() => eodCall("get_sentiment_data", { symbols: t10.map((h) => eodT(h.ticker)).join(","), start_date: Horizon.addDays(today(), -90), end_date: today() }), null) : Promise.resolve(null),
-        t6.length ? optional(() => fmp("news", { endpoint: "search-stock-news", symbols: t6.map((h) => h.ticker), from_date: Horizon.addDays(today(), -30), to_date: today(), limit: 30 }), []) : Promise.resolve([]),
+        S.eod && all20.length ? optional(() => eodCall("get_sentiment_data", { symbols: all20.map((h) => eodT(h.ticker)).join(","), start_date: Horizon.addDays(today(), -90), end_date: today() }), null) : Promise.resolve(null),
+        t10.length ? optional(() => fmp("news", { endpoint: "search-stock-news", symbols: t10.map((h) => h.ticker), from_date: Horizon.addDays(today(), -45), to_date: today(), limit: 60 }), []) : Promise.resolve([]),
         Promise.all(top.map((h) => streetOf(h.ticker).catch(() => null))), Promise.all(top.map((h) => earnOf(h.ticker).catch(() => null)))]);
       const sent = {}; if (sentRaw && typeof sentRaw === "object" && !Array.isArray(sentRaw)) for (const [k, v] of Object.entries(sentRaw)) if (Array.isArray(v)) sent[k.replace(/\.US$/i, "")] = v;
       const street = {}, earn = {}; top.forEach((h, i) => { if (st[i]) street[Portfolio.tick(h.ticker)] = st[i]; if (ea[i]?.last || ea[i]?.next) earn[h.ticker] = ea[i]; });
       c = jsonSafe({ at: new Date().toISOString(), divs: divs || [], sent, street, earn,
-        news: (news || []).map((x) => ({ date: String(x.publishedDate || x.date || "").slice(0, 10), symbol: x.symbol || "", title: x.title || "", source: x.site || x.publisher || "", url: x.url || "" })).filter((x) => x.title).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 25) });
+        news: (news || []).map((x) => ({ date: String(x.publishedDate || x.date || "").slice(0, 10), symbol: x.symbol || "", title: x.title || "", summary: trimC(String(x.text || ""), 220), source: x.site || x.publisher || "", url: x.url || "" })).filter((x) => x.title).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 50), v: 2 });
       await idbPut("fundNet:" + fd.sym, c).catch(() => {});
     }
     const px = fd.ser?.closes?.[fd.ser.closes.length - 1];
@@ -15898,6 +15965,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     fd.street = FundAn.streetLook(fd.hold, c.street || {});
     fd.sent = FundAn.sentimentLook(fd.hold, Object.fromEntries(Object.entries(c.sent || {}).map(([k, v]) => [Portfolio.tick(k), v])), today());
     fd.news = c.news || [];
+    try { fd.newsL = FundMore.newsLook({ cov: fd.cov, digests: fd.digests, hold: fd.hold, sent: Object.fromEntries(Object.entries(c.sent || {}).map(([k, v]) => [Portfolio.tick(k), v])), news: fd.news, today: today() }); } catch (e) { console.warn("fund news", e); fd.newsL = null; }
     fd.season = FundMore.season(fd.hold, c.earn || {}, today()); fd.netAt = c.at;
     fundCard(fd);
   }
@@ -16542,10 +16610,35 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th>Consensus</th><th class="n">Buy / hold / sell</th><th class="n">Target</th><th class="n">Upside</th></tr></thead><tbody>${ST2.rows.map((r) => `<tr><td><span class="tick">${esc(r.ticker)}</span></td><td class="n">${pct(r.weight, false, 2)}</td><td>${esc(r.consensus || "—")}</td><td class="n">${r.buy} / ${r.hold} / ${r.sell}</td><td class="n">${fix(r.target, 2)}</td><td class="n ${cls(num(r.upside))}">${pct(r.upside)}</td></tr>`).join("")}</tbody></table></div>`)
       : fd.netDone ? "" : sec("fund-street", "Wall Street on its holdings", "", `<div class="small muted">${S.mcp ? "Reading the analysts' ratings and targets for the biggest holdings…" : "Open this page in Claude to read the analysts' views."}</div>`);
     // ---- news and sentiment
-    const SE = fd.sent, news = SE?.rows?.length || fd.news?.length ? sec("fund-news", "News & sentiment", "the biggest holdings", `${R("news", "context")}
-      ${SE?.rows?.length ? `<div class="kpis">${[kpi("Sentiment, 30 days", isNum(SE.s30) ? `${SE.s30 > 0 ? "+" : ""}${SE.s30.toFixed(2)}` : "—", "weighted, −1 to +1 (EODHD)", isNum(SE.s30) ? (SE.s30 >= 0 ? "up" : "down") : ""), kpi("Sentiment, 90 days", isNum(SE.s90) ? `${SE.s90 > 0 ? "+" : ""}${SE.s90.toFixed(2)}` : "—")].join("")}</div>
-        <div class="small">${SE.rows.map((r) => `<span class="chip-s"><b>${esc(r.ticker)}</b> ${isNum(r.s30) ? (r.s30 > 0 ? "+" : "") + r.s30.toFixed(2) : "—"} <span class="muted">${r.n30} articles</span></span>`).join(" ")}</div>` : ""}
-      ${fd.news?.length ? `<ul class="newslist">${fd.news.slice(0, 15).map((x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}<span class="src"><span class="mono">${esc(x.date)}</span>${x.symbol ? `<span class="tk">${esc(x.symbol)}</span>` : ""}${esc(x.source)}</span></li>`).join("")}</ul>` : ""}`) : "";
+    // ---- news and sentiment: its holdings' measured sentiment, its industries' news flow (the industry runs), the headlines
+    const NL = fd.newsL, NWR = MK.news;
+    const news = NL && (NL.rows.length || NL.heads.length || NL.flow.length) ? (() => {
+      const f2 = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : ""}${Number(x).toFixed(2)}` : "—"), tone = (x) => (isNum(num(x)) ? (x >= 0.6 ? "up" : x < 0.3 ? "down" : "") : "");
+      const chg = (x) => (isNum(num(x)) ? `<span class="${x > 0.02 ? "up" : x < -0.02 ? "down" : "muted"}">${x > 0 ? "▲" : x < 0 ? "▼" : "•"} ${Math.abs(x).toFixed(2)}</span>` : "—");
+      const tiles = `<div class="kpis">${[kpi("Holdings' sentiment, 30 days", f2(NL.fund.s30), `7 days ${f2(NL.fund.s7)} · 90 days ${f2(NL.fund.s90)}`, isNum(NL.fund.s30) && isNum(NL.fund.s90) ? (NL.fund.s30 >= NL.fund.s90 ? "up" : "down") : ""),
+        kpi("Its industries, 30 days", f2(NL.ind.s30), `90 days ${f2(NL.ind.s90)} · from the industry runs`), kpi("Improving", NL.breadth ? pct(NL.breadth.improving, false, 0) : "—", NL.breadth ? `worsening ${pct(NL.breadth.worsening, false, 0)} of the weight` : ""),
+        kpi("Better than its industry", NL.breadth ? pct(NL.breadth.above, false, 0) : "—", NL.breadth ? `worse ${pct(NL.breadth.below, false, 0)}` : ""), kpi("Articles, 30 days", NL.fund.n30 ? NL.fund.n30.toLocaleString() : "—", NL.fund.n90 ? `${(NL.fund.n30 / (NL.fund.n90 / 3)).toFixed(1)}× the 90-day pace` : "")].join("")}</div>`;
+      const sl = [NL.series.fund.dates.length > 5 ? { name: `${fd.sym}'s holdings`, color: "var(--accent)", ...NL.series.fund } : null, NL.series.ind.dates.length > 5 ? { name: "Its industries", color: "var(--bench)", dash: true, ...NL.series.ind } : null].filter(Boolean);
+      const chart = sl.length ? `<div class="chart"><h3>Daily news sentiment, 90 days</h3>${lineChart(sl, { fmtY: (v) => v.toFixed(2), height: 170, width: 1100 })}<div class="tip" hidden></div><div class="legend">${sl.map((x) => `<span><i style="background:${x.color}"></i>${esc(x.name)}</span>`).join("")}</div></div>` : "";
+      const TC = { helps: "pos", hurts: "neg", mixed: "warn" };
+      const ours = NWR?.summary ? `<div class="callout"><div class="callout-head"><span class="eyebrow">The news, for ${esc(fd.sym)}</span>${NWR.tone ? `<span class="pill ${NWR.tone === "positive" ? "pos" : NWR.tone === "negative" ? "neg" : "neu"}">${esc(NWR.tone)}</span>` : ""}</div><div class="small">${fundCites(NWR.summary, idx)}</div>
+        ${NWR.themes?.length ? `<div class="fcards" style="margin-top:6px">${NWR.themes.map((x) => `<div class="fcard ${TC[x.effect] || "neu"}"><b>${esc(x.theme)}</b><div class="row">${fEff(x.effect)}${x.holdings.map((h) => `<span class="chip-s">${esc(h)}</span>`).join("")}</div><div class="small">${fundCites(x.why, idx)}</div></div>`).join("")}</div>` : ""}
+        ${NWR.watch ? `<div class="small muted"><b>Watch:</b> ${fundCites(NWR.watch, idx)}</div>` : ""}</div>` : `<div class="small muted">${fd.writing ? "The news read is being written…" : "Our read of the news comes with the analysis."}</div>`;
+      const hmax = Math.max(...NL.rows.map((r) => r.weight), 0.0001);
+      const bar = (v) => (isNum(num(v)) ? `<div style="position:relative;height:8px;background:var(--sunk);border-radius:4px;min-width:90px"><i style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)"></i><i style="position:absolute;top:0;bottom:0;border-radius:4px;${v >= 0 ? `left:50%;width:${Math.min(50, v * 50).toFixed(1)}%;background:var(--pos)` : `right:50%;width:${Math.min(50, -v * 50).toFixed(1)}%;background:var(--neg)`}"></i></div>` : "");
+      const htab = NL.rows.length ? `<h3>Each holding's sentiment</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>30 days</th><th class="n">7d</th><th class="n">90d</th><th class="n">Change</th><th class="n">vs its industry</th><th class="n">Articles 30d</th></tr></thead><tbody>${NL.rows.map((r) => `<tr><td><button class="linkbtn tick" data-co="${esc(r.ticker)}">${esc(r.ticker)}</button><div class="small muted">${esc(trimC(r.industry || "", 30))}</div></td><td class="n">${pct(r.weight, false, 1)}<div class="meter" style="margin-top:3px"><i style="width:${(100 * r.weight / hmax).toFixed(0)}%;background:var(--accent)"></i></div></td>
+          <td style="min-width:120px"><b class="mono ${tone(r.s30)}">${f2(r.s30)}</b>${bar(r.s30)}</td><td class="n">${f2(r.s7)}</td><td class="n muted">${f2(r.s90)}</td><td class="n">${chg(r.change)}</td><td class="n">${chg(r.vs_ind)}</td><td class="n">${isNum(num(r.n30)) ? r.n30.toLocaleString() : "—"}${r.spike >= 1.5 ? ` <span class="pill warn">${r.spike.toFixed(1)}× pace</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
+        <div class="small muted">Scores from −1 to +1. Each holding's own daily news sentiment from EODHD where it was fetched, else its industry run's figure. "vs its industry" is its 30-day score against its industry's.</div>` : "";
+      const mv = (title, xs, c) => (xs.length ? `<div class="box ${c}"><b>${title}</b><ul class="dlist small">${xs.map((r) => `<li><b class="tick">${esc(r.ticker)}</b> <span class="muted">${pct(r.weight, false, 1)}</span> ${f2(r.s90)} → <b>${f2(r.s30)}</b> ${chg(r.change)}</li>`).join("")}</ul></div>` : "");
+      const movers = NL.up.length || NL.dn.length || NL.spikes.length ? `<div class="two">${mv("Improving most (30 days against 90)", NL.up, "hot")}${mv("Worsening most", NL.dn, "cool")}</div>${NL.spikes.length ? `<div class="small"><b>Unusual article volume:</b> ${NL.spikes.map((r) => `<span class="chip-s">${esc(r.ticker)} ${r.spike.toFixed(1)}×</span>`).join(" ")}</div>` : ""}` : "";
+      const sc = (x) => (isNum(num(x)) ? `<span class="pill ${x > 0 ? "pos" : x < 0 ? "neg" : "neu"}">${x > 0 ? "+" : ""}${x}</span>` : "");
+      const flow = NL.flow.length ? `<h3>Its industries' news flow</h3><div class="fcards">${NL.flow.map((x) => `<div class="fcard ${num(x.news_dim?.score) > 0 ? "pos" : num(x.news_dim?.score) < 0 ? "neg" : "neu"}"><div class="top"><b>${esc(x.industry)}</b><span class="mono small">${pct(x.weight, false, 1)}</span></div>
+          <div class="row small">${x.news_dim ? `<span class="muted">news flow</span> ${sc(x.news_dim.score)}` : ""}${x.perception ? `<span class="muted">perception</span> ${sc(x.perception.score)}` : ""}${isNum(num(x.s30)) ? `<span class="muted">sentiment</span> <b class="mono">${f2(x.s30)}</b>` : ""}</div>
+          ${x.news_dim?.summary ? `<div class="small">${esc(stripCites(x.news_dim.summary))}</div>` : ""}${x.perception?.summary ? `<div class="small muted">${esc(stripCites(x.perception.summary))}</div>` : ""}</div>`).join("")}</div><div class="small muted">From each industry run: its lead strategist's news-flow and perception scores (−2 to +2) and its measured news sentiment.</div>` : "";
+      const heads = NL.heads.length ? `<h3>Headlines on its holdings</h3>${NL.cover.length ? `<div class="small muted">Most covered: ${NL.cover.map(([t, k]) => `<span class="chip-s">${esc(t)} ${k}</span>`).join(" ")}</div>` : ""}${(() => { const li = (x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}${x.summary ? `<div class="small muted">${esc(trimC(stripCites(x.summary), 200))}</div>` : ""}<span class="src"><span class="idtag">${esc(x.id)}</span><span class="mono">${esc(x.date)}</span>${x.symbol ? `<span class="tk">${esc(x.symbol)}${x.weight ? ` ${pct(x.weight, false, 1)}` : ""}</span>` : ""}${esc(x.source || "")}${x.from === "industry run" ? ` · via the ${esc(x.industry)} run` : ""}</span></li>`;
+        return `<ul class="newslist">${NL.heads.slice(0, 12).map(li).join("")}</ul>${NL.heads.length > 12 ? `<details><summary class="small">${NL.heads.length - 12} more headlines</summary><ul class="newslist">${NL.heads.slice(12).map(li).join("")}</ul></details>` : ""}`; })()}` : "";
+      return sec("fund-news", "News & sentiment", `its ${NL.rows.length} biggest holdings and ${NL.flow.length} industries`, `${tiles}${ours}${IND("news")}${chart}${movers}${htab}${flow}${heads}`); })()
+      : fd.netDone ? "" : sec("fund-news", "News & sentiment", "", `<div class="small muted">${S.mcp ? "Reading the news and sentiment on its biggest holdings…" : "Open this page in Claude to read the news."}</div>`);
     // ---- distributions
     const DV = fd.dist, dist = DV ? sec("fund-dist", "Distributions", "what the fund has paid out", `${R("dist", "context")}${DV.paying ? `<div class="kpis">${[kpi("Trailing yield", pct(DV.yield, false, 2), `${fix(DV.annual, 2)} a share a year`), kpi("Frequency", esc(DV.freq || "—")), kpi("5-year growth", pct(DV.cagr5), "a year", cls(num(DV.cagr5))), kpi("Next ex-date", esc(DV.next?.ex || "—"), DV.next ? fix(DV.next.amt, 4) : "")].join("")}</div>
       ${DV.by_year?.length ? `<div class="chart"><h3>Paid per share, by year</h3>${barsChart(DV.by_year.map((y) => ({ label: String(y.year), a: y.total })), { fmtY: (v) => fix(v, 2), colorA: "var(--pos)", height: 170 })}</div>` : ""}

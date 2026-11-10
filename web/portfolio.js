@@ -299,7 +299,7 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 6, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 7, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -355,6 +355,17 @@
       // The industry report's macro, world-events, trade and regulation tables, as the company page reads them
       // (Company.lensInputs on the saved run): every indicator, situation, country, rule and policy/legal item.
       lens: (() => { try { return lensOf(rec); } catch (e) { return null; } })(),
+      // News and sentiment from the industry run: measured sentiment (daily, and by company), the lead strategist's
+      // news-flow and perception scores, and the run's latest company news and press releases.
+      news: (() => { const se = rec?.research?.sentiment, dm = a.dimensions || {}, it = rec?.research?.items || [];
+        if (!se && !dm.news && !it.length) return null;
+        const r2 = (x) => (isNum(n(x)) ? Math.round(n(x) * 1000) / 1000 : null);
+        return { s7: r2(se?.last_7d), s30: r2(se?.prior_30d), s90: r2(se?.last_90d), n30: n(se?.articles_30d) || null,
+          series: (se?.series || []).slice(-90).map((x) => [x.date, r2(x.score), x.count || 0]),
+          by: (se?.by_company || []).map((x) => ({ symbol: x.symbol, s30: r2(x.score_30d), s90: r2(x.score_90d), n30: x.articles_30d ?? null, n90: x.articles_90d ?? null })),
+          news_dim: dm.news ? { score: n(dm.news.score), summary: cutW(dm.news.summary, 360) } : null, perception: dm.perception ? { score: n(dm.perception.score), summary: cutW(dm.perception.summary, 300) } : null,
+          items: it.filter((x) => ["N", "P", "E"].includes(x.kind) && x.title).sort((x, y) => (x.date < y.date ? 1 : -1)).slice(0, 14)
+            .map((x) => ({ kind: x.kind, date: String(x.date || "").slice(0, 10), symbol: x.symbol || "", source: x.source || "", title: String(x.title).slice(0, 180), summary: cutW(x.summary, 170), url: x.url || "" })) }; })(),
       // The lead strategist's debates (the biggest questions about the industry, each side and which way it leans).
       debates: (a.debates || []).filter((x) => x?.question).slice(0, 3).map((x) => ({ q: cutW(x.question, 180), bull: cutW(x.bull, 240), bear: cutW(x.bear, 240), lean: lc(x.lean || ""), resolves: cutW(x.resolves_with, 160) })),
       positioning: d.positioning?.label || row?.positioning || null,

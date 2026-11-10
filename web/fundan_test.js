@@ -92,8 +92,8 @@ console.log("fundan ok (phases 3-4)");
 {
   assert.deepStrictEqual(A.PARTS, ["core", "calls", "markets", "context", "world", "exposures"]);
   const keys = Object.values(A.PANELS).flatMap((x) => Object.keys(x));
-  for (const k of ["industries", "income", "coverage", "calendar", "plan", "times", "stress", "tech", "news", "dist", "look"]) assert(keys.includes(k), "a read for " + k);
-  for (const k of ["valuation", "risk", "perf", "street", "world", "trade", "regulation", "macro_ind", "score"]) assert(!keys.includes(k), "no second read where a field already covers " + k);
+  for (const k of ["industries", "income", "coverage", "calendar", "plan", "times", "stress", "tech", "dist", "look"]) assert(keys.includes(k), "a read for " + k);
+  for (const k of ["valuation", "risk", "perf", "street", "news", "world", "trade", "regulation", "macro_ind", "score"]) assert(!keys.includes(k), "no second read where a field already covers " + k);
   assert.strictEqual(new Set(keys).size, keys.length, "each panel read by one analyst");
   const mk = A.cleanPart("markets", { returns: { summary: "Lagged SPY [P1]." }, risk_profile: { level: "High", summary: "Beta 1.1 [P2].", worst_case: "-31% in 2020 [S1]." },
     reads: { risk: { text: "Riskier than SPY [P2] [ZZ1].", points: ["Beta 1.1 [P2]", { text: "Max drawdown -18% [P2]" }], means: "Size it smaller.", watch: "Beta above 1.2" }, perf: "Old-style string [P1]." } }, dz.idx);

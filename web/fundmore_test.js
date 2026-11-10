@@ -4,7 +4,7 @@ const FX = require("./fixtures/funds.json");
 const m = P.mapHoldings(P.fromFmp(FX.fcntx_holdings), [], FX.cos), cov = P.coverage(m, FX.runs, { now: "2026-11-09" }), D = FX.digests;
 
 // ---- phase 3: the scorecard
-assert(Object.values(D).every((d) => d.v === 6 && d.pillars), "the fixture's digests are v6, with pillars");
+assert(Object.values(D).every((d) => d.v === 7 && d.pillars), "the fixture's digests are v7, with pillars");
 const own = M.ownFrom({ retRows: [{ label: "1M", value: 2, spy: 1 }, { label: "1Y", value: 11, spy: 15 }], g1: { beta: 1.1, vol: 0.2, downside_vol: 0.14, max_dd: -0.18, sharpe: 0.6 }, bench: { symbol: "SPY" },
   hold: [0.08, 0.07, 0.06, 0.05, 0.04, 0.03].map((weight) => ({ weight })), facts: { yield: 0.003, expense: 0.0063 } });
 assert(Math.abs(own.ex1m - 0.01) < 1e-9 && Math.abs(own.ex1y + 0.04) < 1e-9 && Math.abs(own.top5 - 0.3) < 1e-9 && own.yield === 0.003);
@@ -110,4 +110,16 @@ console.log("fundmore tests passed", JSON.stringify({ best: sc0.best, growth: Ma
   assert(M.stressText(X, "FCNTX").includes("[ST1]"));
   assert.strictEqual(M.factorOf({ label: "US 10Y Treasury yield" }), "rates"); assert.strictEqual(M.factorOf({ label: "WTI crude" }), "oil"); assert.strictEqual(M.factorOf({ label: "Copper" }), null);
   console.log("fundmore ok (stress test)");
+}
+// ---- news and sentiment
+{
+  const sent = { NVDA: [{ date: "2026-11-05", count: 40, normalized: 0.4 }, { date: "2026-09-01", count: 30, normalized: 0.8 }] };
+  const N = M.newsLook({ cov, digests: D, hold, sent, news: [{ date: "2026-11-07", symbol: "NVDA", title: "Nvidia guides above", source: "Reuters" }, { date: "2026-11-06", symbol: "NVDA", title: "Nvidia guides above!", source: "CNBC" }], today: "2026-11-09" });
+  const nv = N.rows.find((r) => r.ticker === "NVDA"); assert(nv.src === "EODHD" && Math.abs(nv.s30 - 0.4) < 1e-9 && Math.abs(nv.s90 - (40 * 0.4 + 30 * 0.8) / 70) < 1e-9 && nv.spike > 1.5, "a holding's own scores, count-weighted, with its article pace");
+  assert(N.rows.some((r) => r.src === "industry run"), "else its industry run's figures");
+  assert(N.heads[0].id === "NW1" && N.heads[0].weight > 0 && N.heads.filter((x) => /nvidia guides above/i.test(x.title)).length === 1, "one headline per story, tagged with its weight");
+  assert(N.heads.some((x) => x.from === "industry run"), "the industry runs' news on its holdings");
+  assert(N.flow.length && N.flow[0].news_dim && isFinite(N.ind.s30) && N.breadth.improving + N.breadth.worsening <= 1.0001);
+  assert(M.newsText(N, "FCNTX").includes("[NS1]") && M.newsText(N, "FCNTX").includes("[NW1]"));
+  console.log("fundmore ok (news)");
 }
