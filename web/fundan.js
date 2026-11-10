@@ -216,6 +216,7 @@
     // SC: the scorecard (code); PR: the peers; ES: the earnings season
     const sc = [`## THE SCORECARD, THE PEERS AND THE EARNINGS SEASON (code)`];
     if (fd.card) put(sc, "SC1", "Scorecard", M.scoreText(fd.card));
+    if (fd.benchCard) put(sc, "SC2", `Scorecard: ${fd.bench?.symbol}`, `Its benchmark ${fd.bench?.symbol} on the same scorecard: ${M.scoreText(fd.benchCard)}`);
     const pt = M.peerText(fd.sym, fd.peers?.rows); if (pt) put(sc, "PR1", "Peer funds", pt);
     const es = M.seasonText(fd.season); if (es) put(sc, "ES1", "Earnings season", es);
     B.score = sc.length > 1 ? sc.join("\n") : "";
@@ -266,17 +267,17 @@
  "watch": ["what to watch, with IDs"],
  "holdings_notes": [{"id": "H1", "bet": "what this position is a bet on, in a few words", "view": "one sentence at its weight, cited", "stance": "tailwind | neutral | headwind"}],
  "peers": {"stance": "best in group | competitive | lagging", "summary": "2 sentences: how it compares with its peer funds (PR1) and whether it's the one to own"},
- "fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "why": "2 sentences for this investor: what they get and what they give up", "watch": "the number to track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "fit": {"income": {"fit": "strong | good | weak | poor", "conviction": "high | medium | low", "vs_benchmark": "better | same | worse: is this fund a better way for this investor to own these industries than its benchmark (SC2)?", "case_for": "one sentence with a number", "case_against": "one sentence with a number", "instead": "if it's a weak or poor fit, what this investor should look for instead (a kind of fund, or a peer in PR1); else empty", "why": "2 sentences for this investor: what they get and what they give up", "watch": "the number to track", "what_changes": "what would raise or lower the fit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  ${READ(PANELS.core)},
  "confidence": "high | medium | low"}
 Sizes: 4-7 risks, 3-6 catalysts, 3-5 watch items, one holdings_notes entry for each of the 10 biggest holdings (H1-H10). Your fit judgment moves code's score for that investor (SC1): strong +5, good +2, weak -2, poor -5; judge each from the pillars and everything else, not from the score alone.`,
     calls: `{"scenarios": {"bull": {"probability": 25, "narrative": "2-3 sentences: what happens to the fund's main industries and holdings", "triggers": ["what would set it off"]}, "base": {...}, "bear": {...}},
  "horizons": {${HZ.map((h) => `"${h}": {"vs_benchmark": "outperform | in line | underperform", "drivers": "2-3 sentences, cited: what moves the fund in this window and which dated events land in it", "decisions": [{"date": "YYYY-MM-DD", "event": "..."}]}`).join(", ")}},
- "plans": {"income": {"size_pct": 0, "entry": "when or at what level to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "plans": {"income": {"size_pct": "a number from 0 to 15: the share of a whole portfolio to hold in this fund for this investor (never more than 15)", "entry": "when or at what level to buy", "hedge": "how to hedge, if at all", "review": "when to revisit"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  "change_mind": ["what would change the view, with a level or a date"],
  "debates": [{"id": "DB1", "side": "bull | bear | split", "why": "one or two sentences: which side the fund is on at its weights and holdings, cited"}],
  ${READ(PANELS.calls)}}
-Probabilities add to 100. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
+Probabilities add to 100. No plan ever sizes the fund above 15% of a portfolio; 0 means don't own it. One debates entry for EVERY debate DB listed. No price targets or % ranges: the colleague making the 1M-12M calls gives the direction; you give what drives each window and what lands in it.`,
     markets: `{"returns": {"summary": "2-3 sentences: how the fund has done against its benchmark and SPY, and which industries and holdings drove the gap, cited"},
  "risk_profile": {"level": "low | moderate | high", "summary": "2-3 sentences: what kind of ride this fund is (beta, volatility, drawdowns, capture, crises), whether it's changing, and who that suits", "worst_case": "one sentence: a realistic bad stretch, from its own history, with a number"},
  "news": {"tone": "positive | mixed | negative", "summary": "2-3 sentences: what the news flow and the sentiment numbers (NS1, NS2) say for the fund, against its industries' news-flow reads", "themes": [{"theme": "a story running through the headlines", "effect": "helps | hurts | mixed", "holdings": ["NVDA"], "why": "one sentence, cited NW"}], "watch": "the headline risk or sentiment turn to watch"},
@@ -399,6 +400,8 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   // ============================================================= cleaning and checks
   const ENUM = { verdict: ["attractive", "neutral", "unattractive"], vs: ["outperform", "in line", "underperform"], lvl: ["high", "medium", "low"], fit: ["strong", "good", "weak", "poor"],
     eff: ["helps", "hurts", "mixed", "none"], macro: ["supportive", "mixed", "headwind"], fac: ["tailwind", "headwind", "neutral"], risk: ["low", "moderate", "high"], stance: ["tailwind", "headwind", "mixed"] };
+  /** The most a plan may put in one fund, as a share of a whole portfolio (%). */
+  const MAX_SIZE = 15;
   const CALLV = ["bullish", "slightly bullish", "neutral", "slightly bearish", "bearish"];
   function cleaner(idx) {
     let dropped = 0;
@@ -421,7 +424,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     let w = {};
     if (part === "core") {
       const fit = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.fit?.[k] || {};
-        fit[k] = { fit: en(x.fit, ENUM.fit), conviction: en(x.conviction, ENUM.lvl), why: t(x.why, 400), watch: t(x.watch, 200), what_changes: t(x.what_changes, 240) }; }
+        fit[k] = { fit: en(x.fit, ENUM.fit), conviction: en(x.conviction, ENUM.lvl), vs_benchmark: en(x.vs_benchmark, ["better", "same", "worse"]), case_for: t(x.case_for, 260), case_against: t(x.case_against, 260), instead: t(x.instead, 240), why: t(x.why, 400), watch: t(x.watch, 200), what_changes: t(x.what_changes, 240) }; }
       w = { headline: t(o.headline, 300), verdict: { call: en(o.verdict?.call, ENUM.verdict), summary: t(o.verdict?.summary, 600) }, thesis: t(o.thesis, 3000),
         vs_benchmark: { call: en(o.vs_benchmark?.call, ENUM.vs), why: t(o.vs_benchmark?.why, 600) }, strategy: t(o.strategy, 600), valuation: { read: t(o.valuation?.read, 600) }, quality: t(o.quality, 400), street: o.street ? { stance: en(o.street.stance, ["agree", "more bullish", "more bearish"]), summary: t(o.street.summary, 600) } : null,
         holdings_notes: rows(o.holdings_notes, (x) => ({ id: rowId(x), bet: t(x?.bet, 120), view: t(x?.view, 500), stance: en(x?.stance, ["tailwind", "neutral", "headwind"]) }), "id").slice(0, 12),
@@ -432,7 +435,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
     } else if (part === "calls") {
       const scen = {}; for (const k of ["bull", "base", "bear"]) { const x = o.scenarios?.[k]; if (x) scen[k] = { probability: n(x.probability), narrative: t(x.narrative, 600), triggers: (Array.isArray(x.triggers) ? x.triggers : []).map((y) => t(y, 200)).filter(Boolean).slice(0, 4) }; }
       const hz = {}; for (const h of HZ) { const x = o.horizons?.[h]; if (!x) continue; hz[h] = { vs_benchmark: en(x.vs_benchmark, ENUM.vs), drivers: t(x.drivers, 1400), decisions: rows(x.decisions, (d) => ({ date: String(d?.date || "").slice(0, 10), event: t(d?.event, 200) }), "event").slice(0, 6) }; }
-      const plans = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.plans?.[k]; if (x) plans[k] = { size_pct: n(x.size_pct), entry: t(x.entry, 240), hedge: t(x.hedge, 240), review: t(x.review, 200) }; }
+      const plans = {}; for (const k of ["income", "conservative", "growth", "aggressive"]) { const x = o.plans?.[k]; if (x) plans[k] = { size_pct: isNum(n(x.size_pct)) ? Math.max(0, Math.min(MAX_SIZE, Math.round(n(x.size_pct) * 10) / 10)) : NaN, entry: t(x.entry, 240), hedge: t(x.hedge, 240), review: t(x.review, 200) }; }
       const debates = rows(o.debates, (x) => ({ id: rowId(x), side: en(x?.side, ["bull", "bear", "split"]), why: t(x?.why, 500) }), "id");
       w = { scenarios: scen, horizons: hz, plans, debates, change_mind: (Array.isArray(o.change_mind) ? o.change_mind : []).map((x) => t(x, 300)).filter(Boolean).slice(0, 6), reads: reads(o.reads) };
     } else if (part === "markets") {
@@ -478,7 +481,7 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   /** Why the saved analysis is out of date: the step-3 rules, on the step-3 fingerprint. */
   const changes = (a, b) => P.changes(a, b);
 
-  const FundAn = { PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "markets", "context", "world", "exposures"], CALLV };
+  const FundAn = { MAX_SIZE, PANEL_IND, IND_READ_LABEL, indReads, indReadsBlock, FUND_INPUTS, windows, prior, priorText, indCalls, outlookPrompt, cleanOutlook, provisional, streetLook, sentimentLook, holdings, concentration, extras, calendar, dossier, partPrompt, cleanPart, checks, changes, PANELS, PARTS: ["core", "calls", "markets", "context", "world", "exposures"], CALLV };
   if (typeof module !== "undefined" && module.exports) module.exports = FundAn;
   else root.FundAn = FundAn;
 })(typeof window !== "undefined" ? window : globalThis);

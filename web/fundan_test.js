@@ -119,3 +119,12 @@ console.log("fundan ok (phases 3-4)");
   assert(e.w.trade[0].freeze === "f" && e.w.regulation[0].cost === "$1B" && e.w.items[0].next === "n" && e.w.reg_overall.timeline.length === 1);
   console.log("fundan ok (macro, world, trade, regulation tables)", pw.length, pe.length);
 }
+// plans never put more than 15% of a portfolio in one fund; the fit carries its comparison with the benchmark
+{
+  const k = A.cleanPart("calls", { plans: { growth: { size_pct: 25 }, income: { size_pct: -3 }, aggressive: { size_pct: 12.34 } } }, dz.idx);
+  assert.strictEqual(k.w.plans.growth.size_pct, 15); assert.strictEqual(k.w.plans.income.size_pct, 0); assert.strictEqual(k.w.plans.aggressive.size_pct, 12.3); assert.strictEqual(A.MAX_SIZE, 15);
+  assert(A.partPrompt(fd, dz, "calls", "2026-11-09").includes("never more than 15"));
+  const c = A.cleanPart("core", { fit: { growth: { fit: "good", vs_benchmark: "Better", case_for: "x [I1]", case_against: "y", instead: "" } } }, dz.idx);
+  assert.strictEqual(c.w.fit.growth.vs_benchmark, "better"); assert.strictEqual(c.w.fit.growth.case_for, "x [I1]");
+  console.log("fundan ok (plans capped, fit vs benchmark)");
+}

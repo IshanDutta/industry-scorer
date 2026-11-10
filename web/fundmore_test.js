@@ -123,3 +123,10 @@ console.log("fundmore tests passed", JSON.stringify({ best: sc0.best, growth: Ma
   assert(M.newsText(N, "FCNTX").includes("[NS1]") && M.newsText(N, "FCNTX").includes("[NW1]"));
   console.log("fundmore ok (news)");
 }
+// the benchmark on the same scorecard
+{
+  const bo = M.benchOwnFrom({ retRows: [{ label: "1Y", value: 11, bench: 13, spy: 13 }], gB: { beta: 1, vol: 0.16, downside_vol: 0.11, max_dd: -0.12, sharpe: 0.9 } });
+  assert(bo.ex1y === 0 && bo.beta === 1 && !Number.isFinite(bo.yield));
+  const bc = M.scorecard({ cov, digests: D, own: bo }); assert(bc.pillars.risk.from === "fund" && Number.isFinite(bc.profiles.growth.base));
+  console.log("fundmore ok (benchmark scorecard)");
+}

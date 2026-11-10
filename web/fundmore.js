@@ -41,6 +41,12 @@
     const y = isNum(n(fd.dist?.yield)) ? n(fd.dist.yield) : n(fd.facts?.yield);
     return { ex1m: R("1M"), ex3m: R("3M"), ex6m: R("6M"), ex1y: R("1Y"), beta: n(g?.beta), vol: n(g1.vol), dvol: n(g1.downside_vol), mdd: n(g1.max_dd), shp: n(g1.sharpe), top5, yield: y, expense: n(fd.facts?.expense) };
   }
+  /** The benchmark's own numbers for the same scorecard: its returns against SPY and its risk (fd.gB, from its prices). */
+  function benchOwnFrom(fd) {
+    const R = (lab) => { const r = (fd.retRows || []).find((x) => x.label === lab); return r && isNum(n(r.bench)) && isNum(n(r.spy)) ? (r.bench - r.spy) / 100 : NaN; };
+    const g = fd.gB || {};
+    return { ex1m: R("1M"), ex3m: R("3M"), ex6m: R("6M"), ex1y: R("1Y"), beta: n(g.beta), vol: n(g.vol), dvol: n(g.downside_vol), mdd: n(g.max_dd), shp: n(g.sharpe), top5: NaN, yield: NaN, expense: NaN };
+  }
   /** The pillars the fund's own numbers give: {p: {score, items: [{key, label, value, score, kind}]}}. */
   function ownPillars(o) {
     const out = {};
@@ -446,7 +452,7 @@
       ...N.heads.slice(0, 30).map((x) => `[${x.id}] ${x.date} · ${x.symbol || ""}${x.weight ? ` (${pc(x.weight)})` : ""} · ${x.title}${x.source ? ` (${x.source})` : ""}${x.summary ? `: ${x.summary}` : ""}`)].join("\n");
   }
 
-  const FundMore = { newsLook, newsText, factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
+  const FundMore = { benchOwnFrom, newsLook, newsText, factorOf, macroStress, stressText, affairs, affairsText, timesLook, timesLookText, OVL, TYPES, ownFrom, ownPillars, scorecard, scoreText, cycleLook, debates, scenLook, season, seasonText, peersFor, peerStats, peerTable, peerText, dailyCheck, logDay, freshness, SECTOR_PEERS, STYLE_PEERS };
   if (typeof module !== "undefined" && module.exports) module.exports = FundMore;
   else root.FundMore = FundMore;
 })(typeof window !== "undefined" ? window : globalThis);
