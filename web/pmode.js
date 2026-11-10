@@ -24,7 +24,11 @@
   /** Weights scaled to add to 100 (one decimal). */
   function normalizeWeights(holdings) {
     const total = holdings.reduce((s, h) => s + (n(h.weight) || 0), 0); if (total <= 0) return holdings;
-    return holdings.map((h) => ({ ...h, weight: Math.round(((n(h.weight) || 0) / total) * 1000) / 10 }));
+    const out = holdings.map((h) => ({ ...h, weight: Math.round(((n(h.weight) || 0) / total) * 1000) / 10 }));
+    // Rounding to one decimal can leave the sum a tenth or two off 100: the largest weight takes the difference.
+    const drift = Math.round((100 - out.reduce((s, h) => s + h.weight, 0)) * 10) / 10;
+    if (drift) { const big = out.reduce((a, h) => (h.weight > a.weight ? h : a), out[0]); big.weight = Math.round((big.weight + drift) * 10) / 10; }
+    return out;
   }
   /** Dollar amounts to weights (of the investment amount, else of their sum). */
   function weightsFromDollars(items, totalInvestment) {

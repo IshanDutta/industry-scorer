@@ -3,6 +3,7 @@ const M = require("./pmode.js");
 const near = (a, b, e = 1e-9) => Math.abs(a - b) < e;
 
 // weights
+assert(near(M.normalizeWeights(Array(6).fill(0).map((_, i) => ({ ticker: "T" + i, weight: 1 }))).reduce((a, h) => a + h.weight, 0), 100, 1e-9), "normalized weights add to exactly 100");
 assert.deepStrictEqual(M.normalizeWeights([{ ticker: "A", weight: 30 }, { ticker: "B", weight: 10 }]).map((h) => h.weight), [75, 25]);
 assert.deepStrictEqual(M.weightsFromDollars([{ ticker: "a", dollar: 2500 }, { ticker: "b", dollar: 7500 }], 10000).map((h) => [h.ticker, h.weight]), [["A", 25], ["B", 75]]);
 assert.strictEqual(M.marketValues({ totalInvestment: 1000, holdings: [{ ticker: "A", weight: 40 }] })[0].marketValue, 400);
