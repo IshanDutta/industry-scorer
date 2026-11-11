@@ -308,6 +308,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .mcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: grid; gap: 5px; align-content: start; }
 .mname { font: 600 12px var(--body); color: var(--muted); letter-spacing: .02em; }
 .mval { font: 600 19px var(--mono); line-height: 1.25; overflow-wrap: anywhere; }
+#rec-goal .kpi, #pf-editor .kpi { min-width: 0; } #rec-goal input:not([type=checkbox]), #rec-goal select, #pf-editor .kpis input { width: 100%; max-width: 100%; box-sizing: border-box; min-width: 0; }
 .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 12px; align-items: start; }
 .box { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
 .box.hot { border-top: 3px solid var(--gA); } .box.cool { border-top: 3px solid var(--gF); }
@@ -5318,10 +5319,10 @@ a.btnlink:hover { border-color: var(--accent); }
     return raw;
   }
   /** Every holding matched to an industry; FMP profiles only for US stocks nothing else places (each ticker once, ever). */
-  async function fundMap(raw, ci, onStep = () => {}) {
+  async function fundMap(raw, ci, onStep = () => {}, { maxProfiles = 25 } = {}) {
     const eodH = Portfolio.fromEodEtf(raw.eod), tickInd = await fundTickInd();
     let mapped = Portfolio.mapHoldings(raw.holdings, eodH, ci.cos, tickInd);
-    const need = Portfolio.needProfiles(mapped).filter((t) => !tickInd[t]);
+    const need = Portfolio.needProfiles(mapped, maxProfiles).filter((t) => !tickInd[t]);
     if (need.length && S.mcp) {
       onStep(`Looking up ${need.length} compan${need.length === 1 ? "y" : "ies"} no saved industry or EODHD places…`);
       for (const t of need) { const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: t }), []))?.[0]; tickInd[t] = p ? { industry: p.industry || "", sector: p.sector || "", at: today() } : { industry: "", at: today() }; }
@@ -6412,10 +6413,10 @@ a.btnlink:hover { border-color: var(--accent); }
     const head = `<section class="panel" id="pf-head"><div class="panel-head" style="flex-wrap:wrap"><div style="display:grid;gap:4px;min-width:0;max-width:100%"><span class="eyebrow">Portfolio mode · quantitative, no AI</span>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${sw}<button class="sm" data-pf="new">+ New</button><button class="sm" data-pf="dup">Duplicate</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete</button>` : ""}</div>
         <h1 style="font-size:24px;margin:2px 0">${esc(p.name)}</h1><div class="mono"><span style="font-size:22px;font-weight:600">${esc(usd(total))}</span>${isNum(gain) ? ` <span class="${cls(gain)}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${(gain / pos.cost * 100).toFixed(1)}%) <span class="small muted">unrealized</span></span>` : ""} <span class="small muted">${hs.length} holdings · bought ${esc(fmtDate(pos?.from || pfStart(p)))}${p.description ? " · " + esc(p.description) : ""}</span></div></div>
-        <div class="actions" style="align-items:center;flex-wrap:wrap;max-width:100%"><div class="seg" role="group" aria-label="Mode"><button class="sm" aria-pressed="${mode === "analysis"}" data-pf="mode-analysis">Analysis</button><button class="sm" aria-pressed="${mode === "editor"}" data-pf="mode-editor">Editor</button></div>
-        <button class="sm" data-pf="rebal">Rebalance</button><button class="sm" data-pf="add">Add holding</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch again</button></div></div>
+        <div class="actions" style="align-items:center;flex-wrap:wrap;max-width:100%"><div class="seg" role="group" aria-label="Mode"><button class="sm" aria-pressed="${mode === "analysis"}" data-pf="mode-analysis">Analysis</button><button class="sm" aria-pressed="${mode === "editor"}" data-pf="mode-editor">Editor</button><button class="sm" aria-pressed="${mode === "recommend"}" data-pf="mode-recommend">Recommend ETFs</button></div>
+        <button class="sm" data-pf="improve" title="Swap to ETFs that fit your goal, with as few trades as possible">Improve with ETFs</button><button class="sm" data-pf="rebal">Rebalance</button><button class="sm" data-pf="add">Add holding</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch again</button></div></div>
       ${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}</section>`;
-    el.innerHTML = head + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + (mode === "editor" ? pfEditorView(p, hs) : pfAnalysisView(p, hs, D, total, pos));
+    el.innerHTML = head + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + (mode === "editor" ? pfEditorView(p, hs) : mode === "recommend" ? recGoalView(S.recImprove ? st.list.find((x) => x.id === S.recImprove)?.name : null) + recView(S.rec) : pfAnalysisView(p, hs, D, total, pos));
     wireCharts(el); wireSpy(el); pfBind(el);
   }
   function pfAnalysisView(p, hs, D, total, pos) {
@@ -6520,6 +6521,7 @@ a.btnlink:hover { border-color: var(--accent); }
     el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => inp.addEventListener("input", () => { clearTimeout(S.pfSugT); const q = inp.value.trim(); if (q.length < 1 || !S.mcp) return;
       S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
         const dl = $("pf-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); }));
+    el.querySelectorAll("[data-rg]").forEach((inp) => inp.addEventListener("change", () => { const d = recGoalDraft(), k = inp.dataset.rg; d[k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? (inp.value === "" ? "" : num(inp.value)) : inp.value; if (k === "intl" || k === "bonds") renderPortfolio(); }));
     el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
     if (!el.dataset.bound) { el.dataset.bound = "1"; el.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-pf], button[data-pf-per]"); if (b) pfClick(b); }); }
   }
@@ -6529,6 +6531,17 @@ a.btnlink:hover { border-color: var(--accent); }
     const a = b.dataset.pf, now = new Date().toISOString();
     if (a === "mode-analysis") { S.pfMode = "analysis"; S.pfDraft = null; renderPortfolio(); return; }
     if (a === "mode-editor") { S.pfMode = "editor"; renderPortfolio(); return; }
+    if (a === "mode-recommend" || a === "improve") { S.pfMode = "recommend"; S.recImprove = a === "improve" ? p.id : null;
+      if (!S.rec) { const last = await idbGet("etfRec:last").catch(() => null); if (last?.rec) { S.rec = last; S.recKey = last.improve ? "improved" : "recommended"; } } renderPortfolio(); return; }
+    if (a.startsWith("rg-type-")) { recGoalDraft().type = a.slice(8); renderPortfolio(); return; }
+    if (a === "rec-build" || a === "rec-improve") { if (!S.recRun) recBuild({ improveId: a === "rec-improve" ? S.recImprove : null }); return; }
+    if (a === "rec-stop") { if (S.recRun) S.recRun.cancel = true; return; }
+    if (a.startsWith("rec-key-")) { S.recKey = a.slice(8); renderPortfolio(); if (S.rec && S.sample && !S.rec.write?.[S.recKey]) recWrite(S.rec, S.recKey); return; }
+    if (a === "rec-write") { recWrite(S.rec, S.recKey); return; }
+    if (a === "rec-save" || a === "rec-apply") { await recSave({ apply: a === "rec-apply" }); return; }
+    if (a === "rec-new") { S.rec = null; renderPortfolio(); $("rec-goal")?.scrollIntoView?.({ behavior: "smooth" }); return; }
+    if (a === "rec-csv") { const r = S.rec, Pt = S.recKey === "improved" ? r?.improve?.after : r?.rec?.portfolios?.[S.recKey]; if (!Pt) return; const tot = r.improve?.total || num(r.goal.amount) || 10000;
+      pfDownload(`etf-${S.recKey}-${today()}.csv`, ["ticker,name,kind,weight,amount_usd,expense_ratio,yield,expected_return", ...r.rec.assets.map((x, i) => [x, i]).filter(([, i]) => Pt.w[i] > 0).map(([x, i]) => [x.symbol, `"${String(x.info?.name || "").replace(/"/g, "'")}"`, x.e.kind, (Pt.w[i] * 100).toFixed(1), Math.round(Pt.w[i] * tot), (x.expense * 100).toFixed(2), (x.yield * 100).toFixed(2), (r.rec.mu[i] * 100).toFixed(2)].join(","))].join("\n"), "text/csv"); return; }
     if (a === "add") { S.pfMode = "editor"; renderPortfolio(); S.pfDraft.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
     if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; S.pfMode = "editor"; S.pfDraft = null; await pfSave(); renderPortfolio(); return; }
     if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
@@ -6560,6 +6573,212 @@ a.btnlink:hover { border-color: var(--accent); }
       p.rebalanceEvents = [...(p.rebalanceEvents || []), ev]; p.holdings = p.holdings.map((h) => ({ ...h, weight: num(S.pfRebal.targets[h.ticker]) || 0, shares: undefined })).filter((h) => h.weight > 0);
       for (const t of Object.keys(S.pfRebal.targets)) if (!p.holdings.some((h) => h.ticker === t) && num(S.pfRebal.targets[t]) > 0) p.holdings.push({ ticker: t, weight: num(S.pfRebal.targets[t]) });
       p.updatedAt = now; S.pfRebal = null; await pfSave(); renderPortfolio(); return; }
+  }
+
+  // ============================================================= Portfolios tab: the ETF recommender and improver
+  /**
+   * Recommend (and Improve): ETF-only portfolios for a goal. Code picks and weights the ETFs (EtfRec): the curated
+   * universe screened live, every stock ETF looked through to the industry runs, bond ETFs on the Treasury curve,
+   * Black-Litterman returns, shrunk covariance, the optimizer with every ETF at most 15%. The analyst writes the why.
+   * Fetched facts are kept a week (prices two days), so a second build is quick.
+   */
+  const REC_FROM = "2019-12-01";
+  async function recCached(key, maxDays, fetchFn) {
+    const x = await idbGet(key).catch(() => null);
+    if (x && Date.now() - Date.parse(x.at || 0) <= maxDays * 864e5) return x.v;
+    const v = await fetchFn(); await idbPut(key, jsonSafe({ at: new Date().toISOString(), v })).catch(() => {}); return v;
+  }
+  /** FMP's ETF information row plus the profile's trailing dividend (for its yield). */
+  const recInfo = (sym) => recCached("etfInfo:" + sym, 7, async () => {
+    const [inf, pr] = await Promise.all([optional(() => fmp("etfAndMutualFunds", { endpoint: "information", symbol: sym }), []), optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), [])]);
+    const i = inf?.[0] || null, p = pr?.[0] || {}; if (!i && !p.symbol) return null;
+    const secs = {}; for (const r of i?.sectorsList || []) { const w = num(r.exposure), nm = Portfolio.sectorName(r.industry) || r.industry; if (r.industry && w > 0) secs[nm] = (secs[nm] || 0) + w / 100; }
+    return { name: i?.name || p.companyName || sym, expenseRatio: num(i?.expenseRatio), assetsUnderManagement: num(i?.assetsUnderManagement) || num(p.marketCap), avgVolume: num(i?.avgVolume) || num(p.averageVolume), inceptionDate: i?.inceptionDate || p.ipoDate || null,
+      holdingsCount: num(i?.holdingsCount), issuer: i?.etfCompany || "", assetClass: i?.assetClass || "", sectors: secs, price: num(p.price), lastDiv: num(p.lastDividend) };
+  });
+  async function recSeries(sym) {
+    const k = "etfpx:" + sym, x = await idbGet(k).catch(() => null);
+    if (x?.day && Date.now() - Date.parse(x.day) <= 2 * 864e5 && x.from <= REC_FROM) return { dates: x.dates, closes: x.closes };
+    const s = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: REC_FROM, to_date: today() }), [])) || []);
+    if (s.dates.length) await idbPut(k, { day: today(), from: REC_FROM, dates: s.dates, closes: s.closes }).catch(() => {});
+    return s;
+  }
+  const recCurve = () => recCached("tsyCurve", 1, async () => { const r = (await optional(() => fmp("economics", { endpoint: "treasury-rates", from_date: Horizon.addDays(today(), -12), to_date: today() }), [])) || []; return r.slice().sort((a, b) => (a.date < b.date ? 1 : -1))[0] || null; });
+  /** A stock ETF's holdings matched to the industries (the fund page's matching, with a small profile budget), kept a week. */
+  const recMapped = (sym, ci) => recCached("etfMap:" + sym, 7, async () => {
+    const raw = await fundRaw(sym).catch(() => null); if (!raw) return null;
+    const { mapped } = await fundMap(raw, ci, () => {}, { maxProfiles: 6 });
+    return mapped.map((h) => ({ ticker: h.ticker, name: h.name, weight: h.weight, kind: h.kind, industry: h.industry, sector: h.sector, top50: h.top50, rank: h.rank, via: h.via }));
+  });
+
+  function recGoalDraft() { return (S.recGoal ||= { type: "growth", horizon: "12M", amount: 10000, maxVol: "", minN: 7, maxN: 10, maxCost: 0.75, intl: false, bonds: true, exclude: "" }); }
+  function recGoalOf(d) {
+    const ex = String(d.exclude || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
+    return EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
+  }
+  /** Build: screen, price, look through, view, score, optimize, stress; then the analyst's write-up. improveId: a portfolio to improve. */
+  async function recBuild({ improveId = null } = {}) {
+    if (!S.mcp) { S.recErr = "Open this page in Claude to read ETF data."; renderPortfolio(); return; }
+    const d = recGoalDraft(), goal = recGoalOf(d), run = { cancel: false }; S.recRun = run; S.recErr = null;
+    const P = (S.recProg = { step: "Starting…", done: 0, n: 0 }); const step = (t, done, n) => { if (S.recRun !== run) return; Object.assign(P, { step: t }, done !== undefined ? { done, n } : {}); renderPortfolio(); };
+    try {
+      const ci = await coIndex(), qi = await quantIndex();
+      step("Reading the industry runs…");
+      const names = [...new Set([...Object.values(ci.runs).map((r) => r.name), ...Object.values(qi).map((r) => r.name)])], digests = await fundDigests(names, ci, step);
+      const bySector = {}; for (const dg of Object.values(digests)) if (dg?.sector) (bySector[dg.sector] ||= []).push(dg);
+      const curve = await recCurve();
+      // 1. Screen the universe on FMP's facts.
+      const uni = EtfRec.UNIVERSE.filter((e) => (goal.intl || !e.intl) && (goal.bondsOk || !EtfRec.isBond(e)) && !goal.excludeSyms.includes(e.symbol)), info = {}, why = {};
+      let k = 0; await pool(uni, 4, async (e) => { info[e.symbol] = await recInfo(e.symbol).catch(() => null); step("Screening the ETF universe…", ++k, uni.length); }, run);
+      const pass = uni.filter((e) => { const r = EtfRec.screen(e, info[e.symbol], goal, { today: today() }); if (!r.ok) why[e.symbol] = r.why; return r.ok; });
+      // 2. Prices (seven years: the stress episodes, three-year risk) and quant facts.
+      const series = {}; k = 0; await pool([...pass.map((e) => e.symbol), "SPY", "AGG"], 4, async (s) => { series[s] = await recSeries(s).catch(() => null); step("Reading seven years of prices…", ++k, pass.length + 2); }, run);
+      if (!series.SPY?.dates?.length) throw new Error("no SPY prices came back");
+      const q = {}; for (const e of pass) q[e.symbol] = EtfRec.quantFacts(series[e.symbol], series.SPY);
+      // 3. A first pass on tags, then the full look-through for the broad funds and the best sector and industry funds.
+      const pre = (e) => { const t = EtfRec.tagView(e, digests, bySector, goal), i = info[e.symbol];
+        const v = t ? { kind: "stock", expected: t.expected, conf: 0.3, score: t.score } : { kind: "stock", expected: NaN, conf: 0 };
+        return EtfRec.pillars({ e, info: i, q: q[e.symbol] || {}, v, yld: i?.lastDiv > 0 && i?.price > 0 ? i.lastDiv / i.price : NaN }, goal).total; };
+      const stocks = pass.filter((e) => EtfRec.isStock(e)), broad = stocks.filter((e) => ["core", "size", "style", "div", "intl"].includes(e.kind)),
+        narrow = stocks.filter((e) => !broad.includes(e)).sort((a, b) => (pre(b) || 0) - (pre(a) || 0)).slice(0, 22), deep = [...broad, ...narrow];
+      const mapped = {}; k = 0; await pool(deep, 3, async (e) => { mapped[e.symbol] = await recMapped(e.symbol, ci).catch((er) => { if (FATAL.has(er?.code)) throw er; return null; }); step("Looking through each ETF to the industries it holds…", ++k, deep.length); }, run);
+      if (run.cancel) throw new Error("stopped");
+      // 4. Views and pillars.
+      step("Scoring every ETF against your goal…");
+      const cands = pass.map((e) => { const i = info[e.symbol] || {}, yld = i.lastDiv > 0 && i.price > 0 ? i.lastDiv / i.price : NaN; let v, sectors = {}, stocks = {}, effN = NaN;
+        if (EtfRec.isBond(e)) v = EtfRec.bondView(e, { curve, ttmYield: yld, expense: num(i.expenseRatio) / 100 });
+        else if (EtfRec.isStock(e)) {
+          const m = mapped[e.symbol];
+          if (m?.length) { const cov = Portfolio.coverage(m, ci.runs, { now: today(), quant: qi }), look = Portfolio.lookThrough(cov, digests); v = EtfRec.equityView(look, cov, goal); sectors = Object.keys(i.sectors || {}).length ? i.sectors : cov.sectors;
+            const tot = m.reduce((a, h) => a + h.weight, 0) || 1; for (const h of m.slice().sort((a, b) => b.weight - a.weight).slice(0, 40)) if (h.ticker) stocks[h.ticker] = h.weight / tot; const s2 = m.reduce((a, h) => a + (h.weight / tot) ** 2, 0); effN = s2 > 0 ? 1 / s2 : NaN; }
+          else { const t = EtfRec.tagView(e, digests, bySector, goal); v = t ? { kind: "stock", expected: t.expected, conf: 0.3, score: t.score, why: "from its tagged industries" } : { kind: "stock", expected: NaN, conf: 0 }; sectors = i.sectors || (e.sector ? { [e.sector]: 1 } : {}); }
+        } else v = { kind: "other", expected: NaN, conf: 0, why: e.kind === "gold" ? "gold: no industry view (prior only)" : "commodities: no industry view (prior only)" };
+        const c = { symbol: e.symbol, e, info: i, q: q[e.symbol] || {}, v, yld, sectors, stocks, effN }; c.pill = EtfRec.pillars(c, goal); return c; });
+      // 5. The improver's current holdings.
+      let imp = null, force = [];
+      if (improveId) { const p = S.pfStore?.list?.find((x) => x.id === improveId); if (p) { await pfLoad(); const D = S.pfData, hs = pfHoldings(p, D), pos = pfPositions(p, hs, D);
+        imp = { id: p.id, name: p.name, total: pos?.total > 0 ? pos.total : p.totalInvestment, holdings: hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); const fs = D?.fsec?.[h.ticker];
+          return { ticker: h.ticker, weight: isNum(num(r?.weightNow)) ? r.weightNow : num(h.weight) || 0, asset_type: h.asset_type, sector: h.sector, industry: D?.info?.[h.ticker]?.industry || ci.cos?.[h.ticker]?.industry || "", sectors: fs || null, price: h.price }; }) };
+        force = imp.holdings.map((h) => h.ticker).filter((t) => EtfRec.BY.has(t)); } }
+      // 6. Optimize, stress, exposure, history.
+      step("Building the portfolios (Black-Litterman returns, shrunk covariance, 15% cap)…");
+      await new Promise((r) => setTimeout(r, 30));
+      const rec = EtfRec.recommend(cands, series, goal, { force });
+      const res = { at: new Date().toISOString(), day: today(), goal: d, goalFull: goal, curve, screened: { total: uni.length, passed: pass.length, deep: deep.length, out: why }, rec, views: {} };
+      for (const [key, Pt] of Object.entries(rec.portfolios)) if (Pt) res.views[key] = { stress: EtfRec.stress(Pt.w, rec.assets, series), exposure: EtfRec.exposure(Pt.w, rec.assets) };
+      if (imp) { res.improve = { ...imp, ...EtfRec.improve(rec, imp.holdings, goal) }; if (res.improve.after) res.views.improved = { stress: EtfRec.stress(res.improve.after.w, rec.assets, series), exposure: EtfRec.exposure(res.improve.after.w, rec.assets), before: EtfRec.stress(res.improve.before.w, rec.assets, series) }; }
+      res.hist = {}; for (const s of [...rec.assets.map((a) => a.symbol), "SPY", "AGG"]) if (series[s]) res.hist[s] = series[s];
+      S.rec = res; S.recKey = imp ? "improved" : "recommended"; S.recProg = null; renderPortfolio();
+      await idbPut("etfRec:last", jsonSafe({ ...res, hist: null })).catch(() => {});
+      // 7. The analyst's write-up (the weights stay as built).
+      await recWrite(res, S.recKey);
+    } catch (e) { if (S.recRun === run) S.recErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    finally { if (S.recRun === run) { S.recRun = null; S.recProg = null; renderPortfolio(); } }
+  }
+  /** The analyst's explanation of one version, cached on the result. */
+  async function recWrite(res, key) {
+    if (!S.sample || !res || (res.write ||= {})[key] || res.writing) return;
+    const goal = res.goalFull, rec = res.rec, improving = key === "improved", Pt = improving ? res.improve?.after : rec.portfolios[key]; if (!Pt) return;
+    const recView = improving ? { ...rec, portfolios: { ...rec.portfolios, improved: Pt } } : rec, vw = res.views[key] || {};
+    const ds = EtfRec.dossier(goal, recView, key, { improveRes: improving ? res.improve : null, exposureRes: vw.exposure, stressRes: vw.stress, curve: res.curve });
+    const inds = (vw.exposure?.industries || []).slice(0, 6), ci = await coIndex(), dg = await fundDigests(inds.map((x) => x.name), ci);
+    const reads = inds.map((x) => { const g = dg[String(x.name).toLowerCase()]; return g ? `- ${g.name} (${(x.weight * 100).toFixed(1)}% of the portfolio): ${g.headline || ""} 12M call: ${g.lean?.["12M"] || g.calls?.["12M"]?.call || "n/a"}; expected ${isNum(num(g.expected12)) ? g.expected12.toFixed(1) + "%" : "n/a"}.${g.reads?.macro ? " Macro: " + g.reads.macro : ""}` : ""; }).filter(Boolean).join("\n");
+    res.writing = key; renderPortfolio();
+    try { const out = await sampleJson(EtfRec.writePrompt(goal, ds, { improving, industryReads: reads }), { modelTier: "complex" });
+      res.write[key] = { ...EtfRec.cleanWrite(out, EtfRec.idsOf(ds)), dossier: ds, at: new Date().toISOString() }; await idbPut("etfRec:last", jsonSafe({ ...res, hist: null, writing: null })).catch(() => {}); }
+    catch (e) { res.writeErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    finally { res.writing = null; renderPortfolio(); }
+  }
+  /** [E1]-style ids as small chips with the fact behind them on hover. */
+  function recRich(t, ds) {
+    const facts = {}; for (const line of String(ds || "").split("\n")) { const m = line.match(/^\[([A-Z]{1,2}\d{1,3})\]\s*(.*)$/); if (m) facts[m[1]] = m[2]; }
+    return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(trimC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
+  }
+  function recGoalView(improveName) {
+    const d = recGoalDraft(), G = EtfRec.GOALS, opt = (k, v, l) => `<option value="${v}" ${String(d[k]) === String(v) ? "selected" : ""}>${l}</option>`;
+    return `<section class="panel" id="rec-goal"><div class="panel-head"><h2>${improveName ? `Improve “${esc(improveName)}” with ETFs` : "Your goal"}</h2><span class="small muted">ETFs only · every ETF at most 15% · US-listed${d.intl ? " plus international" : ""}</span></div>
+      <div class="seg" role="group" aria-label="Goal" style="margin-bottom:10px">${Object.entries(G).map(([k, g]) => `<button class="sm" aria-pressed="${d.type === k}" data-pf="rg-type-${k}">${g.label}</button>`).join("")}</div>
+      <div class="small muted" style="margin-bottom:10px">${esc({ income: "Yield first: dividend and bond ETFs, 30-65% in bonds, volatility under 10%.", conservative: "Protect capital: 40-75% in bonds, volatility under 8%, the industries the runs rate safest.", growth: "Total return: up to 20% in bonds, volatility under 17%, tilted to the industries the runs call up.", aggressive: "Maximum return: up to 10% in bonds, volatility under 24%, the strongest industry calls." }[d.type])}</div>
+      <div class="kpis"><label class="kpi"><span class="eyebrow">Horizon</span><select data-rg="horizon">${opt("horizon", "1M", "1 month")}${opt("horizon", "3M", "3 months")}${opt("horizon", "6M", "6 months")}${opt("horizon", "12M", "12 months")}${opt("horizon", "long", "Longer")}</select></label>
+        ${improveName ? "" : `<label class="kpi"><span class="eyebrow">Amount ($)</span><input data-rg="amount" type="number" min="0" step="1000" value="${esc(d.amount)}"></label>`}
+        <label class="kpi"><span class="eyebrow">Max volatility (%)</span><input data-rg="maxVol" type="number" min="2" max="40" step="1" placeholder="${(G[d.type].vol * 100).toFixed(0)}" value="${esc(d.maxVol)}"></label>
+        <label class="kpi"><span class="eyebrow">ETFs (min–max)</span><span style="display:flex;gap:6px"><input data-rg="minN" type="number" min="7" max="15" value="${esc(d.minN)}" style="width:64px"><input data-rg="maxN" type="number" min="7" max="15" value="${esc(d.maxN)}" style="width:64px"></span></label>
+        <label class="kpi"><span class="eyebrow">Max cost (%)</span><input data-rg="maxCost" type="number" min="0.05" max="1" step="0.05" value="${esc(d.maxCost)}"></label>
+        <label class="kpi"><span class="eyebrow">Leave out</span><input data-rg="exclude" placeholder="e.g. energy, China, ARKK" value="${esc(d.exclude)}"></label></div>
+      <div class="actions" style="align-items:center;margin-top:8px"><label class="small"><input type="checkbox" data-rg="bonds" ${d.bonds ? "checked" : ""}> Bond ETFs</label><label class="small"><input type="checkbox" data-rg="intl" ${d.intl ? "checked" : ""}> International ETFs</label>
+        <span style="margin-left:auto"></span>${S.recRun ? `<button class="sm" data-pf="rec-stop">Stop</button>` : `<button class="sm primary" data-pf="${improveName ? "rec-improve" : "rec-build"}">${improveName ? "Improve it" : "Build my ETF portfolio"}</button>`}</div>
+      ${S.recProg ? `<div class="notice info"><span>${esc(S.recProg.step)}${S.recProg.n ? ` (${S.recProg.done}/${S.recProg.n})` : ""}</span></div>${S.recProg.n ? `<div class="meter"><i style="width:${Math.round((S.recProg.done / S.recProg.n) * 100)}%;background:var(--accent)"></i></div>` : ""}` : ""}
+      ${S.recErr ? `<div class="notice err"><span>${esc(S.recErr)}</span></div>` : ""}
+      <div class="small muted">The first build reads about 150 ETFs and their holdings, which takes a few minutes; after that the facts are kept for a week and a build takes seconds.</div></section>`;
+  }
+  const REC_ROLE = { core: "pos", "growth tilt": "pos", income: "neu", ballast: "neu", diversifier: "neu", hedge: "warn" };
+  function recView(res) {
+    if (!res?.rec) return "";
+    const rec = res.rec, A = rec.assets, same = (x, y) => x && y && x.w.every((v, i) => Math.abs(v - y.w[i]) < 0.005);
+    // The simpler and bolder versions only when they differ from the recommended one.
+    const keys = [...(res.improve?.after ? ["improved"] : []), "recommended", "simpler", "bolder"].filter((k) => k === "improved" || (rec.portfolios[k] && (k === "recommended" || !same(rec.portfolios[k], rec.portfolios.recommended)) && !(k === "bolder" && same(rec.portfolios.bolder, rec.portfolios.simpler))));
+    const key = keys.includes(S.recKey) ? S.recKey : keys[0], Pt = key === "improved" ? res.improve.after : rec.portfolios[key], vw = res.views[key] || {}, W = res.write?.[key], goal = res.goalFull;
+    const LBL = { improved: "Improved", recommended: "Recommended", simpler: "Simpler", bolder: "Bolder" }, worst = (v) => { const xs = [...(v?.stress?.episodes || []).map((s) => s.ret), ...(v?.stress?.hypo || []).map((s) => s.ret)]; return xs.length ? Math.min(...xs) : NaN; };
+    const tabs = `<div class="kpis">${keys.map((k) => { const p = k === "improved" ? res.improve.after : rec.portfolios[k]; return `<button class="kpi ${k === key ? "sel" : ""}" data-pf="rec-key-${k}" style="text-align:left;cursor:pointer;${k === key ? "outline:2px solid var(--accent)" : ""}"><span class="eyebrow">${LBL[k]}</span><span class="v">${pct(p.expected, false)}</span><span class="small muted">a year expected · vol ${pct(p.vol, false)} · yield ${pct(p.yield, false, 2)} · ${p.n} ETFs · worst ${pct(worst(res.views[k]))}</span></button>`; }).join("")}</div>`;
+    const held = A.map((a, i) => ({ a, i, w: Pt.w[i] })).filter((x) => x.w > 0).sort((x, y) => y.w - x.w), total = res.improve?.total || num(res.goal.amount) || 10000;
+    const byKind = {}; for (const x of held) { const k = EtfRec.isBond(x.a.e) ? EtfRec.BOND_LABEL[x.a.e.bond] || "Bonds" : EtfRec.KIND_LABEL[x.a.e.kind]; byKind[k] = (byKind[k] || 0) + x.w * 100; }
+    const ds = W?.dossier || "", wr = (t) => recRich(t, ds), we = Object.fromEntries((W?.etfs || []).map((e) => [e.symbol, e]));
+    const head = sec("rec-sum", `${LBL[key]} ETF portfolio · ${esc(goal.label)}`, `built ${esc(fmtDate(res.day))} · ${res.screened.passed} of ${res.screened.total} ETFs passed the screen · ${res.screened.deep} looked through to their industries`, `${tabs}
+      ${W ? `<div class="prose" style="margin-top:10px"><p style="font-size:17px"><b>${wr(W.headline)}</b></p><p>${wr(W.summary)}</p></div>` : res.writing === key ? `<div class="notice info"><span>The analyst is writing the explanation…</span></div>` : S.sample ? `<button class="sm" data-pf="rec-write">Have the analyst explain it</button>` : ""}${res.writeErr && !W ? `<div class="notice warn"><span>${esc(res.writeErr)}</span></div>` : ""}
+      <div class="fmix" style="margin-top:10px"><div class="box"><h3 style="margin:0 0 6px">What it holds</h3>${donut(Object.entries(byKind).map(([k, v]) => ({ name: k, value: v })), { center: `${Pt.n} ETFs` })}</div>
+        <div class="box"><div class="kpis">${[kpi("Expected a year", pct(Pt.expected, false), "Black-Litterman: market prior moved toward the industry and bond views"), kpi("Volatility", pct(Pt.vol, false), `ceiling ${pct(goal.vol, false, 0)}`), kpi("Yield", pct(Pt.yield, false, 2), `about ${usd(total * Pt.yield)} a year on ${usd(total)}`), kpi("Cost", pct(Pt.cost, false, 2), `${usd(total * Pt.cost)} a year`), kpi("Bonds", pct(Pt.bonds, false, 0), `band ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}`), kpi("Largest ETF", pct(Math.max(...Pt.w), false, 1), "cap 15%")].join("")}</div>
+        ${Pt.binding?.length ? `<div class="small muted" style="margin-top:6px">Limits that bind: ${esc(Pt.binding.join(" · "))}</div>` : ""}${Pt.violated?.length ? `<div class="notice warn small"><span>Couldn't meet every limit with the ETFs that passed (${esc(Pt.violated.join(" · "))}): loosen the exclusions or the volatility ceiling.</span></div>` : ""}</div></div>
+      <div class="actions" style="margin-top:8px"><button class="sm primary" data-pf="rec-save">Save as a portfolio</button>${res.improve && key === "improved" ? `<button class="sm" data-pf="rec-apply">Apply to “${esc(res.improve.name)}”</button>` : ""}<button class="sm" data-pf="rec-csv">Export CSV</button><button class="sm" data-pf="rec-new">Change the goal</button></div>`);
+    // The improver: before and after, how the current holdings were mapped, the order sheet.
+    let impS = "";
+    if (key === "improved" && res.improve) { const im = res.improve, B = im.before, Af = im.after, sb = res.views.improved?.before;
+      const row = (l, b, a, f, better) => `<tr><td>${l}</td><td class="n">${f(b)}</td><td class="n"><b>${f(a)}</b></td><td>${isNum(b) && isNum(a) && Math.abs(a - b) > 1e-6 ? `<span class="pill ${(better === "up" ? a > b : a < b) ? "pos" : "neg"}">${better === "up" ? (a > b ? "better" : "worse") : a < b ? "better" : "worse"}</span>` : ""}</td></tr>`;
+      const tr = PMode.rebalanceTrades(im.holdings.map((h) => ({ ticker: h.ticker, weight: h.weight, price: h.price })), Object.fromEntries(A.map((a, i) => [a.symbol, Math.round(Af.w[i] * 1000) / 10]).filter(([, w]) => w > 0)), im.total);
+      impS = sec("rec-imp", "What changes", `turnover ${pct(im.turnover, false, 0)} of the portfolio`, `${W?.diagnosis?.length ? `<h3 style="margin:0 0 6px">What's wrong today</h3><ul class="dlist">${W.diagnosis.map((x) => `<li>${wr(x)}</li>`).join("")}</ul>` : ""}
+        <div class="two"><div class="box"><h3 style="margin:0 0 6px">Before and after</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th><th class="n">Today</th><th class="n">Improved</th><th></th></tr></thead><tbody>
+          ${row("Expected a year", B.expected, Af.expected, (v) => pct(v, false), "up")}${row("Volatility", B.vol, Af.vol, (v) => pct(v, false), "down")}${row("Yield", B.yield, Af.yield, (v) => pct(v, false, 2), "up")}${row("Cost", B.cost, Af.cost, (v) => pct(v, false, 2), "down")}
+          ${row("Return per unit of risk", (B.expected - EtfRec.RF) / B.vol, (Af.expected - EtfRec.RF) / Af.vol, (v) => fix(v, 2), "up")}${row("Worst stress", sb ? Math.min(...[...sb.episodes, ...sb.hypo].map((s) => s.ret)) : NaN, worst(res.views.improved), (v) => pct(v), "up")}</tbody></table></div>
+          <div class="small muted">Today's holdings are measured as the ETFs they map to (below), on the same expected returns and risk.</div></div>
+        <div class="box"><h3 style="margin:0 0 6px">Today's holdings, as ETFs</h3><ul class="dlist small">${im.map.map((m) => `<li><b class="tick">${esc(m.ticker)}</b> ${pct(m.weight, false, 1)} → <b class="tick">${esc(m.to)}</b> <span class="muted">(${esc(m.how)})</span></li>`).join("")}</ul></div></div>
+        <h3 style="margin:10px 0 6px">The order sheet</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>ETF or holding</th><th class="n">Today</th><th class="n">Target</th><th>Action</th><th class="n">Amount</th></tr></thead><tbody>${tr.filter((t) => t.action !== "HOLD" || t.target > 0).map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td class="n">${t.target.toFixed(1)}%</td><td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : usd(Math.abs(t.deltaUsd))}</td></tr>`).join("")}</tbody></table></div>`); }
+    // The ETF cards.
+    const cards = sec("rec-etfs", "The ETFs", "why each one is there", `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));gap:10px">${held.map(({ a, i, w }) => { const v = a.v || {}, e = we[a.symbol], bond = EtfRec.isBond(a.e);
+      const line = bond ? `${esc(v.label)} · yield ${pct(v.yield, false, 2)} · duration ~${v.duration}y · +1pp rates ${pct(v.rates_up_1pp)}` : v.kind === "stock" && v.conf > 0 ? `Industry runs: ${esc(v.call || "—")} (${goal.horizon}) · expected ${pct(v.expected)} · covers ${pct(v.on ?? 0, false, 0)}` : esc(v.why || "No industry view: market prior only");
+      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div><button class="linkbtn tick" data-fund="${esc(a.symbol)}" style="font-size:18px">${esc(a.symbol)}</button> ${e?.role ? `<span class="pill ${REC_ROLE[e.role] || "neu"}">${esc(e.role)}</span>` : ""}<div class="small muted">${esc(trimC(a.info?.name || "", 48))}</div></div><div class="mono" style="font-size:22px;font-weight:600">${(w * 100).toFixed(1)}%</div></div>
+        <div class="small" style="margin:6px 0">${line}</div>
+        <div class="small muted">${[EtfRec.KIND_LABEL[a.e.kind], `cost ${pct(a.expense, false, 2)}`, `yield ${pct(a.yield, false, 2)}`, `vol ${pct(a.q?.vol, false, 0)}`, `1Y ${pct(a.q?.r1y)}`, `${usd(total * w)}`].join(" · ")}</div>
+        ${!bond && v.top?.length ? `<div style="margin-top:6px">${v.top.slice(0, 3).map((x) => `<span class="chip-s">${esc(x.industry)} ${pct(x.weight, false, 0)}${x.call ? ` · ${esc(x.call)}` : ""}</span>`).join(" ")}</div>` : ""}
+        ${e?.why ? `<p class="small" style="margin:8px 0 0">${wr(e.why)}</p>` : ""}${e?.watch ? `<div class="small muted" style="margin-top:4px"><b>Sell if:</b> ${wr(e.watch)}</div>` : ""}
+        <div class="small muted" style="margin-top:6px">Goal score ${isNum(a.pill?.total) ? a.pill.total.toFixed(0) : "—"} · expected ${pct(rec.mu[i], false)} (prior ${pct(rec.prior[i], false)})${a.twins?.length ? ` · same exposure as ${esc(a.twins.join(", "))}` : ""}</div></div>`; }).join("")}</div>`);
+    // Look-through, stress, history.
+    const ex = vw.exposure || {}, bars = (xs) => `<div style="display:grid;gap:6px">${(xs || []).slice(0, 10).map((x) => `<div class="fbar"><span>${esc(x.name)}</span><b class="mono" style="text-align:right">${(x.weight * 100).toFixed(1)}%</b><div class="meter"><i style="width:${Math.min(100, x.weight * 100 / ((xs[0]?.weight || 1) * 100) * 100)}%;background:var(--accent)"></i></div></div>`).join("")}</div>`;
+    const look = sec("rec-look", "What you'd own underneath", "every ETF looked through to its industries and stocks", `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Industries</h3>${bars(ex.industries)}</div><div class="box"><h3 style="margin:0 0 6px">Single stocks (across all the ETFs)</h3>${bars(ex.stocks)}<div class="small muted" style="margin-top:6px">No single stock above 8% through the ETFs.</div></div></div>`);
+    const st = vw.stress || {}, strS = sec("rec-stress", "Stress test", "the same weights through past shocks and three hypothetical ones", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Shock</th><th class="n">This portfolio</th><th class="n">SPY</th></tr></thead><tbody>${(st.episodes || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">${esc(fmtDate(s.from))} to ${esc(fmtDate(s.to))}</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n ${cls(s.spy)}">${pct(s.spy)}</td></tr>`).join("")}
+      ${(st.hypo || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">hypothetical: betas and durations</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n muted">${s.label.startsWith("Stocks") ? "−20.0%" : ""}</td></tr>`).join("")}</tbody></table></div>`);
+    let histS = "";
+    if (res.hist?.SPY) { const syms = held.map((x) => ({ ticker: x.a.symbol, weight: x.w * 100 })), from = Horizon.addDays(today(), -5 * 365), cal = res.hist.SPY.dates, nv = PMode.nav(res.hist, syms, { from, start: 10000, calendar: cal }), sp = PMode.nav(res.hist, [{ ticker: "SPY", weight: 100 }], { from, start: 10000, calendar: cal });
+      const m = nv.dates.length > 60 ? PMode.metrics(nv, res.hist.SPY) : null, ms = sp.dates.length > 60 ? PMode.metrics(sp, res.hist.SPY) : null, col = "var(--accent)";
+      histS = sec("rec-hist", "How this mix behaved", `$10,000 held since ${esc(fmtDate(nv.from))}, against SPY`, `<div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: sp.dates, values: sp.values }, { name: "This mix", color: col, dates: nv.dates, values: nv.values }], { height: 240, width: innerWidth < 720 ? 520 : 1100, area: col, fmtY: (v) => "$" + Math.round(v / 1000) + "k" })}
+        <div class="legend"><span><i style="background:${col}"></i>This mix ${pct(m?.totalReturn)} · vol ${isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—"} · max drawdown −${isNum(m?.maxDrawdown) ? m.maxDrawdown.toFixed(1) : "—"}%</span><span><i style="background:var(--bench)"></i>SPY ${pct(ms?.totalReturn)} · max drawdown −${isNum(ms?.maxDrawdown) ? ms.maxDrawdown.toFixed(1) : "—"}%</span></div></div>
+        <div class="small muted">Today's weights held through the past: it shows how the mix behaves, not whether the picks were right then (they are based on today's industry calls). Saved recommendations are tracked from the day you save them in Portfolio mode.</div>`); }
+    const anal = W ? sec("rec-risks", "Risks and what would change it", "the analyst, from the facts above", `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Risks</h3><ul class="dlist">${(W.risks || []).map((x) => `<li>${wr(x)}</li>`).join("")}</ul></div><div class="box"><h3 style="margin:0 0 6px">What would change the call</h3><ul class="dlist">${(W.changes_mind || []).map((x) => `<li>${wr(x)}</li>`).join("")}</ul>${W.left_out ? `<h3 style="margin:10px 0 6px">Left out</h3><p class="small">${wr(W.left_out)}</p>` : ""}</div></div>`) : "";
+    const method = sec("rec-method", "How it was built", "", `<ul class="dlist small"><li><b>Universe:</b> ${res.screened.total} liquid US-listed ETFs; kept those with $250M+ in assets, real volume, three years of history, cost under ${pct(goal.maxCost, false, 2)}, no leverage${goal.intl ? "" : ", no international"}. ${Object.keys(res.screened.out).length} were screened out${Object.keys(res.screened.out).length ? ` (e.g. ${esc(Object.entries(res.screened.out).slice(0, 4).map(([s, w]) => `${s}: ${w}`).join("; "))})` : ""}.</li>
+      <li><b>Industry views:</b> each stock ETF's holdings matched to your industry runs; its expected return, calls and investor-type score are the runs' own, weighted by what it holds. Confidence falls with coverage.</li>
+      <li><b>Bond views:</b> carry from the Treasury curve (10-year ${esc(String(res.curve?.year10 ?? "—"))}%) and trailing yields, less expected defaults; duration from each fund's approximate profile.</li>
+      <li><b>Returns and risk:</b> Black-Litterman (prior: 4% + beta × 5%), three years of daily returns with Ledoit-Wolf shrinkage (${pct(rec.shrink, false, 0)} toward constant correlation), near-identical funds collapsed into one.</li>
+      <li><b>Limits:</b> every ETF 3–15%, ${goal.minN}–${goal.maxN} ETFs, bonds ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}, any sector at most ${pct(goal.sectorCap, false, 0)}, any single stock through the ETFs at most 8%, volatility under ${pct(goal.vol, false, 0)}.</li></ul>`);
+    return head + impS + cards + look + strS + histS + anal + method;
+  }
+  async function recSave({ apply = false } = {}) {
+    const res = S.rec; if (!res) return; const key = S.recKey, Pt = key === "improved" ? res.improve.after : res.rec.portfolios[key]; if (!Pt) return;
+    const st = await pfStore(), now = new Date().toISOString(), hold = res.rec.assets.map((a, i) => ({ ticker: a.symbol, name: a.info?.name || "", weight: Math.round(Pt.w[i] * 1000) / 10, asset_type: "etf" })).filter((h) => h.weight > 0);
+    if (apply && res.improve) { const p = st.list.find((x) => x.id === res.improve.id); if (!p) return;
+      if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])); if (!p.startDate) p.startDate = pfStart(p);
+      const d = (S.pfData?.series?.SPY?.dates || []).slice(-1)[0] || today(); p.rebalanceEvents = [...(p.rebalanceEvents || []), { id: pfId(), date: d, label: `ETF improvement ${d}`, trades: hold.map((h) => ({ ticker: h.ticker, amountUsd: 0, newWeight: h.weight })) }];
+      p.holdings = hold; p.updatedAt = now; st.activeId = p.id; }
+    else { const x = { id: pfId(), name: `${res.goalFull.label} ETFs (${today()})`, description: `ETF ${key} portfolio for a ${res.goalFull.label.toLowerCase()} goal, ${res.goalFull.horizon} horizon`, totalInvestment: res.improve?.total || num(res.goal.amount) || 10000, startDate: today(), holdings: hold, rebalanceEvents: [], createdAt: now, updatedAt: now };
+      st.list.push(x); st.activeId = x.id; }
+    await pfSave(); S.pfMode = "analysis"; S.pfDraft = null; renderPortfolio(); pfLoad();
   }
 
   function renderTabs() {

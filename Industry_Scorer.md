@@ -142,6 +142,84 @@ The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs a
 - **Rebalance**: set target weights (or equal weight). The order sheet shows BUY, SELL or HOLD for each holding, in dollars (total value × Δweight) and shares. Recording it saves the new weights and adds a dated event.
 - **Look-through**: each fund's full holdings list from FMP. A stock's effective exposure = its direct weight + Σ (fund weight × its weight in the fund). Names held both directly and through funds are flagged.
 
+## 1e. Recommend ETFs: the ETF recommender and portfolio improver
+
+**Recommend ETFs** in the Portfolios tab builds ETF-only portfolios for a goal, and **Improve with ETFs** reworks an existing portfolio into one. Code (`web/etfrec.js`, tested in `etfrec_test.js`) picks and weights every ETF. The analyst only writes the explanation, and every claim cites the facts it was given.
+
+**Goal.** The goal sets these limits:
+
+| Goal | Bonds | Volatility ceiling | Max per sector | Max per industry |
+|---|---|---|---|---|
+| Income | 30–65% | 10% | 30% | 20% |
+| Conservative | 40–75% | 8% | 25% | 20% |
+| Growth | 0–20% | 17% | 40% | 25% |
+| Aggressive | 0–10% | 24% | 45% | 30% |
+
+You also choose:
+- a horizon (1M, 3M, 6M, 12M or longer)
+- the amount
+- an optional volatility ceiling
+- the number of ETFs (7–15)
+- the highest cost you'll accept
+- anything to leave out (sectors, industries, countries or tickers)
+- whether to include bond ETFs and international ETFs
+
+**Limits on every portfolio:**
+- No ETF above **15%**.
+- No ETF below 3%.
+- No single stock above 8% across the ETFs.
+- Gold and commodities together at most 10%.
+
+**Universe.**
+- About 155 liquid US-listed ETFs: total market, size, style and factor, dividend, all 11 sectors, about 40 industries, themes, Treasuries (T-bills to long bonds), TIPS, aggregate, investment-grade, high yield, loans, munis, MBS, gold and commodities.
+- 16 international ETFs are added only when you ask.
+- Each build screens them on FMP's information. An ETF must have at least $250M in assets, real volume, three years of history, cost under your limit, and no leverage or inverse exposure.
+
+**Stock ETF views.**
+- A first pass scores each ETF on its tagged sector or industries.
+- Then every broad ETF, plus the best 22 sector and industry ETFs, is looked through to its holdings. The matching is the same as the fund page's.
+- `Portfolio.lookThrough` then gives the industry runs' views weighted by what the ETF holds: expected 12M return, the call for the horizon, the score for your investor type, valuation and risk.
+- Confidence rises with coverage and with how much comes from full runs.
+
+**Bond ETF views.**
+- Carry is FMP's Treasury curve at the fund's maturity plus a credit spread, blended with its trailing yield, less expected defaults.
+- Durations are approximate profiles.
+- The stress tests are +1pp on rates and a credit-spread widening.
+- Gold and commodities have no view and use the market prior only.
+
+**Scoring and shortlist.** Each ETF gets 0–100 pillars, weighted by goal: outlook, fit, value, risk, cost, income, momentum and diversification. The shortlist takes the best of each group (broad, sector and industry, bonds, gold) and drops duplicates. A duplicate is an ETF whose daily returns correlate above 0.985 with another's, or that has the same tagged sector or industries, or that shares more than 60% of its stocks with another.
+
+**Returns and risk.**
+- Black-Litterman: the CAPM prior (4% + beta × 5%) moves toward the industry and bond views in proportion to their confidence.
+- Covariance comes from three years of daily returns, shrunk toward constant correlation (Ledoit-Wolf).
+
+**Optimizer.**
+- Mean-variance, solved by projected gradient with an augmented Lagrangian for the limits on bonds, sectors, industries, single stocks, commodities and international.
+- Income goals add yield to the objective. Costs are subtracted from it.
+- The optimizer uses the least risk aversion that keeps volatility under the ceiling. Positions under 3% are dropped, and it re-solves until the ETF count fits.
+- It produces three versions: **Recommended**, **Simpler** (the fewest ETFs) and **Bolder** (looser bands and ceiling). A version only appears when it differs from the others.
+
+**Results page.**
+- The analyst's headline and summary.
+- A card per ETF: weight, the industry or bond view, cost, yield, risk, its role, why it's there and when to sell.
+- Look-through to industries and single stocks.
+- Stress tests: the COVID crash, the 2022 rate shock, the 2023 bank scare, the August 2024 unwind and the April 2025 tariff shock, plus three hypotheticals.
+- How the mix behaved over five years against SPY. These are today's weights held through the past, so it isn't a test of the picks.
+- Risks, what would change the call, and the ETFs left out.
+- How it was built.
+- Buttons: **Save as a portfolio** (Portfolio mode then tracks it from that day) and **Export CSV**.
+
+**Improver.**
+- Today's holdings are mapped to ETFs:
+  - ETFs in the universe stay as they are.
+  - A stock maps to the ETF holding the most of its industry.
+  - A fund maps to the ETF with the closest sector mix.
+- The same optimizer then runs with a turnover penalty, so it makes the fewest trades that close most of the gap.
+- It shows before and after (expected return, volatility, yield, cost, return per unit of risk, worst stress), how each holding mapped, and the BUY/SELL order sheet.
+- **Apply** records the change as a dated event on the portfolio.
+
+**Data and timing.** Facts are kept a week, prices two days and the curve a day. With FMP's call spacing, the first build takes about 2–3 minutes. Builds after that take seconds.
+
 ## 2. Report sections
 
 1. **Overview:** the lead strategist's verdict. See §6.
