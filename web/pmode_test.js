@@ -50,6 +50,17 @@ const nv2 = M.nav(series, hold, { start: 10000, events: ev }), c2 = M.contributi
 assert(Math.abs(nv2.values[k] - nv.values[k]) > 1, "the rebalance changes the path");
 assert(near(c2.total, nv2.values[k] / 10000 - 1, 1e-9), "attribution still adds up across a rebalance");
 
+// positions: bought on day 0, today's value, cost and gain; with a rebalance the cost basis follows average cost
+const ps = M.positions(series, hold, { from: dates[0], start: 10000 }), pa = ps.rows.find((r) => r.ticker === "A");
+assert(near(pa.value, 6000 * A.closes[k] / A.closes[0], 1e-6) && near(pa.cost, 6000) && near(pa.gain, pa.value - 6000) && near(ps.total, nv.values[k], 1e-6));
+assert(near(pa.shares, pa.value / A.closes[k]) && near(ps.rows.reduce((a, r) => a + r.weightNow, 0), 100, 1e-9));
+const ps2 = M.positions(series, hold, { from: dates[0], start: 10000, events: ev }); assert(near(ps2.total, nv2.values[k], 1e-6));
+const ev2 = [...ev, { id: "e2", date: dates[400], label: "Edit", trades: [{ ticker: "A", newWeight: 50 }, { ticker: "B", newWeight: 50 }] }];
+const pe2 = M.positions(series, hold, { from: dates[0], start: 10000, events: ev2 }), wa = pe2.rows[0].value / pe2.total, xa = 0.5 * A.closes[k] / A.closes[400], xb = 0.5 * B.closes[k] / B.closes[400];
+assert(near(wa, xa / (xa + xb), 1e-9), "two events on one day: the later one wins");
+const C = mk((i) => 20 + i * 0.01), ev3 = [{ id: "e3", date: dates[500], trades: [{ ticker: "A", newWeight: 50 }, { ticker: "C", newWeight: 50 }] }], pc = M.positions({ ...series, C }, [{ ticker: "A", weight: 50 }, { ticker: "C", weight: 50 }], { from: dates[0], start: 10000, events: ev3, base: hold });
+assert(near(pc.rows.find((r) => r.ticker === "C").value / pc.total, 0.5 * (C.closes[k] / C.closes[500]) / (0.5 * C.closes[k] / C.closes[500] + 0.5 * A.closes[k] / A.closes[500]), 1e-9), "a ticker a rebalance brings in is bought then");
+const own = M.positions(series, [{ ticker: "A", weight: 100, shares: 10, avg_cost: 90 }], { from: dates[0], start: 10000, prices: { A: 120 } }).rows[0]; assert(own.value === 1200 && own.cost === 900 && own.gain === 300 && !own.implied);
 // rebalance sheet, look-through, health
 const tr = M.rebalanceTrades([{ ticker: "A", weight: 60, price: 100 }, { ticker: "B", weight: 40 }], { A: 50, B: 40, C: 10 }, 100000);
 assert.deepStrictEqual(tr.map((t) => [t.ticker, t.action, Math.round(t.deltaUsd)]), [["A", "SELL", -10000], ["C", "BUY", 10000], ["B", "HOLD", 0]]); assert.strictEqual(tr[0].shares, -100);

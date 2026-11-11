@@ -132,6 +132,13 @@ The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs a
   - Sector HHI: Σ (sector %)². Below 1,500 is diversified; above 2,500 is highly concentrated.
   - Funds are split by FMP's sector weighting for the fund, with EODHD's or their holdings' sectors as fallbacks.
   - A 0–100 health score built from risk-adjusted return, drawdown, holdings, sectors and capture.
+- **Holdings: shares, cost and gain**:
+  - A portfolio entered as weights is treated as bought on its **Bought on** date, which you can set in the Editor. The starter portfolio uses a year ago; a new portfolio uses the day it was made.
+  - Each position is valued from the dividend-adjusted prices since that date, with every recorded rebalance applied at average cost. That gives its value, cost basis, unrealized gain and today's weight (which drifts from the target).
+  - Its shares are today's value divided by today's price; the table marks these and the average cost with ≈.
+  - Holdings with your own shares and average cost use those instead.
+  - The rebalance sheet starts from today's weights.
+  - Changing weights in the Editor after a rebalance is recorded as one more dated event, so earlier periods keep the lineup they actually had.
 - **Rebalance**: set target weights (or equal weight). The order sheet shows BUY, SELL or HOLD for each holding, in dollars (total value × Δweight) and shares. Recording it saves the new weights and adds a dated event.
 - **Look-through**: each fund's full holdings list from FMP. A stock's effective exposure = its direct weight + Σ (fund weight × its weight in the fund). Names held both directly and through funds are flagged.
 

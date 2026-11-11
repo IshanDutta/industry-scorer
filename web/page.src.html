@@ -687,7 +687,7 @@ a.btnlink:hover { border-color: var(--accent); }
       } catch (e) { if (FATAL.has(e?.code)) throw e; }
       cur = E.addDays(end, 1);
     }
-    rf.sort((a, b) => (a.date < b.date ? -1 : 1));
+    rf.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     const returns = Object.fromEntries(WINDOWS.map((w) => [w, E.singleReturn(spy, asOf, CFG.windows[w])]));
     const last = rf[rf.length - 1];
     // Factor series for the measured sensitivities: oil, the dollar and high-yield credit (ETFs), plus the 10-year yield.
@@ -4954,7 +4954,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const sentRows = sentRaw && typeof sentRaw === "object" ? (Array.isArray(sentRaw) ? sentRaw : Object.values(sentRaw)[0] || []) : [];
     const g = grades?.[0] || {}, t = target?.[0] || {};
     const cut = Horizon.addDays(today(), -60);
-    const estimates = (est || []).filter((e) => e?.date && String(e.date) >= cut && isNum(Number(e.epsAvg))).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 3)
+    const estimates = (est || []).filter((e) => e?.date && String(e.date) >= cut && isNum(Number(e.epsAvg))).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).slice(0, 3)
       .map((e) => ({ year: Number(String(e.date).slice(0, 4)), rev: Number(e.revenueAvg), eps: Number(e.epsAvg), analysts: Number(e.numAnalystsEps) || null }));
     const data = jsonSafe({
       profile: profile?.[0] || null, scores: scores?.[0] || null, metrics: metrics?.[0] || null, ratios: ratios?.[0] || null, c, ttm: c ? Fund.companyTTM(c) : null,
@@ -4973,7 +4973,7 @@ a.btnlink:hover { border-color: var(--accent); }
         esgBench: (esgRB?.bench || []).map((b) => ({ period: b.period, year: b.fiscalYear, e: num(b.environmentalScore), s: num(b.socialScore), g: num(b.governanceScore), total: num(b.ESGScore) })),
         eod: eodOwn, country: profile?.[0]?.country || null, isAdr: !!profile?.[0]?.isAdr },
       execs: (execs || []).filter((x) => x?.name).slice(0, 12).map((x) => ({ name: x.name, title: x.title, pay: x.pay, born: x.yearBorn })),
-      sentiment: (Array.isArray(sentRows) ? sentRows : []).map((r) => ({ date: String(r.date).slice(0, 10), score: Number(r.normalized), count: Number(r.count) || 0 })).filter((r) => isNum(r.score)).sort((a, b) => (a.date < b.date ? -1 : 1)),
+      sentiment: (Array.isArray(sentRows) ? sentRows : []).map((r) => ({ date: String(r.date).slice(0, 10), score: Number(r.normalized), count: Number(r.count) || 0 })).filter((r) => isNum(r.score)).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
       rhist: (rhist || []).map((x) => ({ date: String(x.date).slice(0, 10), sb: x.analystRatingsStrongBuy, b: x.analystRatingsBuy, h: x.analystRatingsHold, s: x.analystRatingsSell, ss: x.analystRatingsStrongSell })),
       segments: { product: Research.segTable(prod, 4), geo: Research.segTable(geo, 1) }, insider: Positioning.insiderSummary(ins), peers: (peers || []).slice(0, 12),
       news: [...(news || []).map((x) => ({ kind: "N", date: String(x.publishedDate || x.date || "").slice(0, 10), source: x.site || x.publisher || "", title: x.title, summary: x.text, url: x.url })),
@@ -5104,7 +5104,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const rows = await Promise.all(ps.map(async (x) => {
       const r = await optional(() => fmp("calendar", { endpoint: "earnings-company", symbol: x.symbol, limit: 8 }), []);
       const list = (Array.isArray(r) ? r : []).map((e) => ({ date: String(e.date || "").slice(0, 10), act: num(e.epsActual ?? e.eps), est: num(e.epsEstimated) })).filter((e) => e.date);
-      const next = list.filter((e) => e.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0] || null, last = list.filter((e) => e.date < today() && isNum(e.act)).sort((a, b) => (a.date > b.date ? -1 : 1))[0] || null;
+      const next = list.filter((e) => e.date >= today()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))[0] || null, last = list.filter((e) => e.date < today() && isNum(e.act)).sort((a, b) => (a.date > b.date ? -1 : 1))[0] || null;
       return { id: x.id, symbol: x.symbol, name: x.name, role: x.role, relies: (x.depends || []).includes(co.sym), next, last };
     }));
     if (S.co !== co) return;
@@ -5478,7 +5478,7 @@ a.btnlink:hover { border-color: var(--accent); }
       const earnOf = async (t) => { const k = "earn:" + t, x = await idbGet(k).catch(() => null); if (x?.day === today()) return x.e;
         const r = await optional(() => fmp("calendar", { endpoint: "earnings-company", symbol: t, limit: 8 }), []);
         const list = (Array.isArray(r) ? r : []).map((e) => ({ date: String(e.date || "").slice(0, 10), act: num(e.epsActual ?? e.eps), est: num(e.epsEstimated) })).filter((e) => e.date);
-        const e = { next: list.filter((y) => y.date >= today()).sort((a, b) => (a.date < b.date ? -1 : 1))[0] || null, last: list.filter((y) => y.date < today() && isNum(y.act)).sort((a, b) => (a.date > b.date ? -1 : 1))[0] || null };
+        const e = { next: list.filter((y) => y.date >= today()).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))[0] || null, last: list.filter((y) => y.date < today() && isNum(y.act)).sort((a, b) => (a.date > b.date ? -1 : 1))[0] || null };
         await idbPut(k, jsonSafe({ day: today(), e })).catch(() => {}); return e; };
       const [divs, sentRaw, news, st, ea] = await Promise.all([
         optional(() => fmp("calendar", { endpoint: "dividends-company", symbol: fd.sym, limit: 80 }), []),
@@ -6317,6 +6317,23 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   async function pfSave() { const st = S.pfStore; if (st) await idbPut("portfolios", jsonSafe(st)).catch(() => {}); }
   const pfActive = () => { const st = S.pfStore; return st ? st.list.find((p) => p.id === st.activeId) || st.list[0] : null; };
+  /** Every ticker the portfolio has held: today's, the starting lineup's and every rebalance's. */
+  const pfSyms = (p) => [...new Set([...p.holdings.map((h) => h.ticker), ...Object.keys(p.startWeights || {}), ...(p.rebalanceEvents || []).flatMap((e) => (e.trades || []).map((t) => t.ticker))].filter(Boolean))];
+  /** The day it was bought: its own date, else a year back for the starter portfolio, else the day it was made. */
+  const pfStart = (p) => p.startDate || (p.id === "portfolio_seed_1" ? Horizon.addDays(today(), -365) : String(p.createdAt || "").slice(0, 10) || today());
+  /** The lineup in force on `date`: the one bought on the start date, then each rebalance up to that day. */
+  function pfLineup(p, hs, date) {
+    let w = p.startWeights ? { ...p.startWeights } : Object.fromEntries(hs.map((h) => [h.ticker, num(h.weight) || 0]));
+    for (const e of (p.rebalanceEvents || []).slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))) if (e.date <= date) { const nw = {}; for (const t of e.trades || []) if (num(t.newWeight) > 0) nw[t.ticker] = num(t.newWeight); if (Object.keys(nw).length) w = nw; }
+    const meta = Object.fromEntries(hs.map((h) => [h.ticker, h]));
+    return Object.entries(w).filter(([, x]) => x > 0).map(([ticker, weight]) => ({ ...(meta[ticker] || {}), ticker, weight }));
+  }
+  /** Today's positions: value, cost basis, gain, today's weight and shares (implied unless the holding has its own). */
+  function pfPositions(p, hs, D) {
+    if (!D?.series) return null; const st = pfStart(p);
+    return PMode.positions(D.series, hs, { from: st, start: p.totalInvestment > 0 ? p.totalInvestment : 10000, events: p.rebalanceEvents || [], calendar: D.series.SPY?.dates || null, base: pfLineup(p, hs, st),
+      prices: Object.fromEntries(hs.map((h) => [h.ticker, h.price])) });
+  }
   /** One ticker's facts (FMP profile and quote), kept a week: name, type, sector, dividend; price and day change are fresh. */
   async function pfInfo(sym) {
     const k = "tkInfo:" + sym; let x = await idbGet(k).catch(() => null);
@@ -6332,11 +6349,12 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Everything the analysis needs for the active portfolio: prices since 5+ years back, quotes, facts, funds' holdings. */
   async function pfLoad({ force = false } = {}) {
     const p = pfActive(); if (!p || !S.mcp) { renderPortfolio(); return; }
-    const syms = [...new Set(p.holdings.map((h) => h.ticker).filter(Boolean))], key = syms.join(",");
-    if (!force && S.pfData?.key === key && S.pfData.day === today()) return;
+    const syms = pfSyms(p), key = syms.join(",");
+    const need = Horizon.addDays(pfStart(p), -10);
+    if (!force && S.pfData?.key === key && S.pfData.day === today() && (S.pfData.from || "") <= need) return;
     S.pfLoading = "Reading prices, quotes and facts…"; S.pfErr = null; renderPortfolio();
     try {
-      const from = Horizon.addDays(today(), -(5 * 366 + 20)), series = {};
+      const back = Horizon.addDays(today(), -(5 * 366 + 20)), st = Horizon.addDays(pfStart(p), -10), from = st < back ? st : back, series = {};
       await pool([...syms, "SPY"], 4, async (sym) => { series[sym] = await trackSeries(sym, from).catch(() => null); }, null);
       const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
       const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
@@ -6354,7 +6372,7 @@ a.btnlink:hover { border-color: var(--accent); }
         // The fund's P/E through its holdings: harmonic, over the holdings whose P/E the industry runs know (half its weight or more).
         let wk = 0, inv = 0; for (const h of funds[sym]) { const pe = num(ci0?.cos?.[h.ticker]?.pe), w = num(h.weight); if (pe > 0 && w > 0) { wk += w; inv += w / pe; } }
         const wt = funds[sym].reduce((a, h) => a + (num(h.weight) || 0), 0); if (inv > 0 && wt > 0 && wk / wt >= 0.5) fpe[sym] = wk / inv; }, null);
-      S.pfData = { key, day: today(), series, quotes, info, funds, fsec, fpe, cos: ci0?.cos || {} };
+      S.pfData = { key, from, day: today(), series, quotes, info, funds, fsec, fpe, cos: ci0?.cos || {} };
     } catch (e) { S.pfErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { S.pfLoading = null; renderPortfolio(); }
   }
@@ -6388,23 +6406,24 @@ a.btnlink:hover { border-color: var(--accent); }
     if (!S.pfStore) { el.innerHTML = `<div class="small muted">Opening your portfolios…</div>`; pfStore().then(() => { renderPortfolio(); pfLoad(); }); return; }
     const st = S.pfStore, p = pfActive(), mode = S.pfMode || "analysis";
     const sw = `<select id="pf-sel" aria-label="Portfolio" style="max-width:100%">${st.list.map((x) => `<option value="${esc(x.id)}" ${x.id === p.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>`;
-    const D = S.pfData && S.pfData.key === [...new Set(p.holdings.map((h) => h.ticker).filter(Boolean))].join(",") ? S.pfData : null;
-    const hs = pfHoldings(p, D), mv = PMode.marketValues({ ...p, holdings: hs }), total = mv.reduce((a, h) => a + (h.marketValue || 0), 0);
+    const D = S.pfData && S.pfData.key === pfSyms(p).join(",") ? S.pfData : null;
+    const hs = pfHoldings(p, D), pos = pfPositions(p, hs, D), mv = PMode.marketValues({ ...p, holdings: hs }), total = pos?.total > 0 ? pos.total : mv.reduce((a, h) => a + (h.marketValue || 0), 0);
+    const gain = pos?.total > 0 && pos.cost > 0 ? pos.total - pos.cost : NaN;
     const head = `<section class="panel" id="pf-head"><div class="panel-head" style="flex-wrap:wrap"><div style="display:grid;gap:4px;min-width:0;max-width:100%"><span class="eyebrow">Portfolio mode · quantitative, no AI</span>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${sw}<button class="sm" data-pf="new">+ New</button><button class="sm" data-pf="dup">Duplicate</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete</button>` : ""}</div>
-        <h1 style="font-size:24px;margin:2px 0">${esc(p.name)}</h1><div class="mono"><span style="font-size:22px;font-weight:600">${esc(usd(total))}</span> <span class="small muted">${hs.length} holdings${p.description ? " · " + esc(p.description) : ""}</span></div></div>
+        <h1 style="font-size:24px;margin:2px 0">${esc(p.name)}</h1><div class="mono"><span style="font-size:22px;font-weight:600">${esc(usd(total))}</span>${isNum(gain) ? ` <span class="${cls(gain)}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${(gain / pos.cost * 100).toFixed(1)}%) <span class="small muted">unrealized</span></span>` : ""} <span class="small muted">${hs.length} holdings · bought ${esc(fmtDate(pos?.from || pfStart(p)))}${p.description ? " · " + esc(p.description) : ""}</span></div></div>
         <div class="actions" style="align-items:center;flex-wrap:wrap;max-width:100%"><div class="seg" role="group" aria-label="Mode"><button class="sm" aria-pressed="${mode === "analysis"}" data-pf="mode-analysis">Analysis</button><button class="sm" aria-pressed="${mode === "editor"}" data-pf="mode-editor">Editor</button></div>
         <button class="sm" data-pf="rebal">Rebalance</button><button class="sm" data-pf="add">Add holding</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch again</button></div></div>
       ${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}</section>`;
-    el.innerHTML = head + (S.pfRebal ? pfRebalView(p, hs, total) : "") + (mode === "editor" ? pfEditorView(p, hs) : pfAnalysisView(p, hs, D, total));
+    el.innerHTML = head + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + (mode === "editor" ? pfEditorView(p, hs) : pfAnalysisView(p, hs, D, total, pos));
     wireCharts(el); wireSpy(el); pfBind(el);
   }
-  function pfAnalysisView(p, hs, D, total) {
+  function pfAnalysisView(p, hs, D, total, pos) {
     if (!hs.length) return `<section class="panel"><div class="small muted">No holdings yet. Switch to the Editor to add some.</div></section>`;
     if (!D) return `<section class="panel"><div class="small muted">${S.pfLoading ? "Loading…" : S.mcp ? "Press Fetch again to load prices." : ""}</div></section>`;
     const per = S.pfPeriod || "1Y", ser = D.series, last = (ser.SPY?.dates || []).slice(-1)[0] || today(), from = PMode.periodStart(last, per);
     const start = p.totalInvestment > 0 ? p.totalInvestment : 10000, evs = p.rebalanceEvents || [];
-    const nv = PMode.nav(ser, hs, { from, start, events: evs, calendar: ser.SPY?.dates || null }), m = nv.dates.length > 5 ? PMode.metrics(nv, ser.SPY) : null;
+    const lineup = pfLineup(p, hs, from), nv = PMode.nav(ser, lineup, { from, start, events: evs, calendar: ser.SPY?.dates || null }), m = nv.dates.length > 5 ? PMode.metrics(nv, ser.SPY) : null;
     const spyNav = PMode.nav({ SPY: ser.SPY }, [{ ticker: "SPY", weight: 100 }], { from, start, calendar: ser.SPY?.dates || null }), ms = spyNav.dates.length > 5 ? PMode.metrics(spyNav, ser.SPY) : null;
     const ws = hs.map((h) => num(h.weight) || 0), effN = PMode.effectiveHoldings(ws), secs = pfSectors(hs, D), sh = PMode.sectorHHI(secs), hsc = PMode.healthScore(m, effN, hs.length, sh.hhi);
     const pe = PMode.weighted(hs, "pe", { harmonic: true }), yl = PMode.weighted(hs, "yield");
@@ -6423,7 +6442,7 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: spyNav.dates, values: spyNav.values }, { name: p.name, color: col, dates: nv.dates, values: nv.values }], { height: innerWidth < 720 ? 300 : 260, width: innerWidth < 720 ? 520 : 1100, area: col, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : Math.round(v / 1000) + "k"), markers: evIdx })}
       <div class="legend"><span><i style="background:${col}"></i>${esc(p.name)} ${pp(m?.totalReturn)}</span><span><i style="background:var(--bench)"></i>SPY ${pp(ms?.totalReturn)}</span>${evIdx.length ? `<span class="muted">┊ rebalances</span>` : ""}</div></div>`);
     // 3. Attribution
-    const ct = PMode.contributions(ser, hs, nv, evs), rows = ct.rows;
+    const ct = PMode.contributions(ser, lineup, nv, evs), rows = ct.rows;
     const attr = rows.length ? sec("pf-attr", "Attribution", "weight × the holding's return = its contribution", `<div class="chart" style="max-width:820px">${barsChart(rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => ({ label: r.ticker, a: r.contribution * 100 })), { fmtY: (v) => v.toFixed(1) + "%", height: 200, labelW: 7, width: innerWidth < 720 ? 480 : 640 })}</div>
       <div class="small"><span class="pill ${Math.abs(ct.total - (m?.totalReturn ?? ct.total)) < 1e-6 ? "pos" : "warn"}">Sum of contributions ${pp(ct.total, 2)} = portfolio return ${pp(m?.totalReturn, 2)}</span></div>
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th class="n">Return</th><th class="n">Contribution</th><th>Sector</th></tr></thead><tbody>${rows.map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b></td><td class="n">${p2(r.weight, 1)}%</td><td class="n ${cls(r.return)}">${pp(r.return)}</td><td class="n ${cls(r.contribution)}"><b>${pp(r.contribution, 2)}</b></td><td class="small">${esc(r.sector || "")}</td></tr>`).join("")}</tbody></table></div>`) : "";
@@ -6445,9 +6464,15 @@ a.btnlink:hover { border-color: var(--accent); }
       ${card("Concentration", rowM("Effective holdings", effN, null, (v) => (isNum(num(v)) ? v.toFixed(1) : "—"), PMode.stance("effectiveHoldings", effN, { count: hs.length }), `target above 60% of ${hs.length}`) + rowM("Sector HHI", sh.hhi, null, (v) => (isNum(num(v)) ? Math.round(v).toLocaleString() : "—"), PMode.stance("hhi", sh.hhi), "under 1,500 diversified"))}</div>
       <div class="small muted">From daily dividend-adjusted closes (FMP). Volatility: daily standard deviation × √252. Sharpe and Sortino use the geometric annualized return less a 4% risk-free rate; Sortino divides by the downside semi-deviation. Beta, correlation and capture use calendar-month returns against SPY. VaR is the 5th-percentile daily return.</div>`) : "";
     // 6. Holdings
-    const htab = sec("pf-hold", "Holdings", `${hs.length} · ${usd(total)}`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>Type</th><th>Sector</th><th class="n">Weight</th><th class="n">Shares</th><th class="n">Price</th><th class="n">1D</th><th class="n">Cost basis</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>${PMode.marketValues({ ...p, holdings: hs }).map((h) => { const cost = num(h.avg_cost) > 0 && num(h.shares) > 0 ? h.avg_cost * h.shares : NaN, gain = isNum(cost) ? h.marketValue - cost : NaN;
-      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}${h.sectorTop ? ` <span class="muted">(largest)</span>` : ""}</td><td class="n"><b>${p2(h.weight, 1)}%</b></td><td class="n">${num(h.shares) > 0 ? fix(h.shares, 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
-        <td class="n">${isNum(cost) ? "$" + Math.round(cost).toLocaleString() : num(h.avg_cost) > 0 ? fix(h.avg_cost, 2) : "—"}</td><td class="n">$${Math.round(h.marketValue).toLocaleString()}</td><td class="n ${cls(gain)}">${isNum(gain) ? `${gain >= 0 ? "+" : "−"}$${Math.abs(Math.round(gain)).toLocaleString()} <span class="small">(${pp(gain / cost)})</span>` : "—"}</td></tr>`; }).join("")}</tbody></table></div>`);
+    const PR = Object.fromEntries((pos?.rows || []).map((r) => [r.ticker, r])), anyImp = (pos?.rows || []).some((r) => r.implied && isNum(num(r.shares)));
+    const mvS = Object.fromEntries(PMode.marketValues({ ...p, holdings: hs }).map((h) => [h.ticker, h.marketValue]));
+    const htab = sec("pf-hold", "Holdings", `${hs.length} · ${usd(total)}`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>Type</th><th>Sector</th><th class="n">Weight<div class="small muted">target · now</div></th><th class="n">Shares</th><th class="n">Price</th><th class="n">1D</th><th class="n">Avg cost</th><th class="n">Cost basis</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>${hs.map((h) => {
+      const r = PR[h.ticker] || {}, value = isNum(num(r.value)) ? r.value : mvS[h.ticker], cost = num(r.cost), g = num(r.gain), imp = r.implied ? "≈" : "", drift = num(r.weightNow) - (num(h.weight) || 0);
+      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}${h.sectorTop ? ` <span class="muted">(largest)</span>` : ""}</td>
+        <td class="n"><b>${p2(h.weight, 1)}%</b>${isNum(num(r.weightNow)) ? `<div class="small ${Math.abs(drift) >= 2 ? (drift > 0 ? "up" : "down") : "muted"}">${r.weightNow.toFixed(1)}%</div>` : ""}</td><td class="n">${isNum(num(r.shares)) ? imp + fix(r.shares, r.shares >= 100 ? 1 : 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
+        <td class="n">${isNum(num(r.avgCost)) ? imp + fix(r.avgCost, 2) : "—"}</td><td class="n">${isNum(cost) ? usd(cost) : "—"}</td><td class="n"><b>${usd(value)}</b></td><td class="n ${cls(g)}">${isNum(g) ? `${g >= 0 ? "+" : "−"}${usd(Math.abs(g))}<div class="small">${isNum(cost) && cost > 0 ? pp(g / cost) : ""}</div>` : "—"}</td></tr>`; }).join("")}</tbody>
+      ${pos?.cost > 0 ? `<tfoot><tr><td colspan="8"><b>Total</b></td><td class="n">${usd(pos.cost)}</td><td class="n"><b>${usd(pos.total)}</b></td><td class="n ${cls(pos.total - pos.cost)}"><b>${pos.total >= pos.cost ? "+" : "−"}${usd(Math.abs(pos.total - pos.cost))}</b><div class="small">${pp(pos.total / pos.cost - 1)}</div></td></tr></tfoot>` : ""}</table></div>
+      ${anyImp ? `<div class="small muted">≈ Implied: ${esc(usd(p.totalInvestment > 0 ? p.totalInvestment : 10000))} put in on ${esc(fmtDate(pos.from))} at the starting weights${(p.rebalanceEvents || []).length ? ", with every recorded rebalance (average cost)" : ""}, dividends reinvested, so the shares are today's value at today's price. Enter your own shares and average cost in the Editor to use them instead; change the purchase date there too.</div>` : ""}`);
     // 7. Look-through
     const lt = PMode.lookThrough(hs, D.funds || {});
     const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Total</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td class="wr"><b class="tick">${esc(r.ticker)}</b> <span class="small muted">${esc(trimC(r.name || "", 30))}</span>
@@ -6458,33 +6483,35 @@ a.btnlink:hover { border-color: var(--accent); }
     return hero + perf + attr + alloc + risk + htab + look + evList;
   }
   function pfEditorView(p, hs) {
-    const dr = S.pfDraft || (S.pfDraft = { name: p.name, description: p.description || "", totalInvestment: p.totalInvestment || 10000, rows: p.holdings.map((h) => ({ ...h })) }), entry = S.pfEntry || "pct";
+    const dr = S.pfDraft || (S.pfDraft = { name: p.name, description: p.description || "", totalInvestment: p.totalInvestment || 10000, startDate: pfStart(p), rows: p.holdings.map((h) => ({ ...h })) }), entry = S.pfEntry || "pct";
     const sum = dr.rows.reduce((a, r) => a + (num(r.weight) || 0), 0);
     const rows = dr.rows.map((r, i) => `<tr><td><input data-pfr="${i}" data-k="ticker" value="${esc(r.ticker || "")}" list="pf-sug" placeholder="Ticker" style="width:90px;text-transform:uppercase"></td><td class="small muted">${esc(trimC(r.name || "", 30))}</td>
       <td>${entry === "pct" ? `<input data-pfr="${i}" data-k="weight" type="number" step="0.1" min="0" value="${isNum(num(r.weight)) ? r.weight : ""}" style="width:80px"> %` : `$ <input data-pfr="${i}" data-k="dollar" type="number" step="1" min="0" value="${Math.round((num(r.weight) || 0) * dr.totalInvestment / 100)}" style="width:110px"> <span class="small muted">${p2v(r.weight)}%</span>`}</td>
       <td><input data-pfr="${i}" data-k="shares" type="number" step="any" min="0" value="${num(r.shares) > 0 ? r.shares : ""}" style="width:90px" placeholder="optional"></td><td><input data-pfr="${i}" data-k="avg_cost" type="number" step="any" min="0" value="${num(r.avg_cost) > 0 ? r.avg_cost : ""}" style="width:90px" placeholder="optional"></td>
       <td><button class="sm" data-pf="rm-${i}" aria-label="Remove">✕</button></td></tr>`).join("");
     return `<section class="panel" id="pf-editor"><div class="panel-head"><h2>Editor</h2><div class="seg" role="group" aria-label="Entry"><button class="sm" aria-pressed="${entry === "pct"}" data-pf="entry-pct">% weight</button><button class="sm" aria-pressed="${entry === "usd"}" data-pf="entry-usd">$ amount</button></div></div>
-      <div class="kpis" style="margin-bottom:10px"><label class="kpi"><span class="eyebrow">Name</span><input id="pf-name" value="${esc(dr.name)}"></label><label class="kpi"><span class="eyebrow">Description</span><input id="pf-desc" value="${esc(dr.description)}"></label><label class="kpi"><span class="eyebrow">Total investment ($)</span><input id="pf-total" type="number" min="0" step="100" value="${dr.totalInvestment}"></label></div>
+      <div class="kpis" style="margin-bottom:10px"><label class="kpi"><span class="eyebrow">Name</span><input id="pf-name" value="${esc(dr.name)}"></label><label class="kpi"><span class="eyebrow">Description</span><input id="pf-desc" value="${esc(dr.description)}"></label><label class="kpi"><span class="eyebrow">Total investment ($)</span><input id="pf-total" type="number" min="0" step="100" value="${dr.totalInvestment}"></label><label class="kpi"><span class="eyebrow">Bought on</span><input id="pf-start" type="date" max="${today()}" value="${esc(dr.startDate)}"></label></div>
       <datalist id="pf-sug">${(S.pfSug || []).map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join("")}</datalist>
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Ticker</th><th>Name</th><th>${entry === "pct" ? "Weight" : "Amount"}</th><th>Shares</th><th>Avg cost</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
       <div class="actions" style="align-items:center"><button class="sm" data-pf="row-add">+ Add row</button><button class="sm" data-pf="norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Weights add to ${sum.toFixed(1)}%</span>
         <span style="margin-left:auto"></span><button class="sm" data-pf="cancel">Discard changes</button><button class="sm primary" data-pf="save">Save</button></div>
-      <div class="small muted">Enter weights in % or dollar amounts (of the total investment); shares and average cost are optional and give the holdings table its cost basis and gains. Normalize scales the weights to 100%.</div></section>`;
+      <div class="small muted">Enter weights in % or dollar amounts (of the total investment); "Bought on" is when the money went in: the holdings table works out each position's shares, cost and gain from it. Your own shares and average cost, where you enter them, are used instead. Normalize scales the weights to 100%.</div></section>`;
   }
   const p2v = (x) => (isNum(num(x)) ? Number(x).toFixed(1) : "—");
-  function pfRebalView(p, hs, total) {
-    const tg = S.pfRebal.targets, tr = PMode.rebalanceTrades(hs.map((h) => ({ ...h, weight: num(h.weight) || 0 })), tg, total), sum = Object.values(tg).reduce((a, x) => a + (num(x) || 0), 0);
+  /** The holdings at today's weights (they drift with prices from the targets) for the rebalance sheet. */
+  const pfNow = (hs, pos) => hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); return { ...h, weight: isNum(num(r?.weightNow)) ? r.weightNow : num(h.weight) || 0 }; });
+  function pfRebalView(p, hs, total, pos) {
+    const tg = S.pfRebal.targets, tr = PMode.rebalanceTrades(pfNow(hs, pos), tg, total), sum = Object.values(tg).reduce((a, x) => a + (num(x) || 0), 0);
     return `<section class="panel" id="pf-rebal"><div class="panel-head"><h2>Rebalance</h2><span class="small muted">set target weights; the order sheet follows</span></div>
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Current</th><th>Target</th><th>Action</th><th class="n">Amount</th><th class="n">Shares</th></tr></thead><tbody>${tr.map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td><input data-pft="${esc(t.ticker)}" type="number" step="0.1" min="0" value="${num(tg[t.ticker]) || 0}" style="width:80px"> %</td>
         <td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : `$${Math.abs(Math.round(t.deltaUsd)).toLocaleString()}`}</td><td class="n">${isNum(num(t.shares)) && t.action !== "HOLD" ? fix(Math.abs(t.shares), 2) : "—"}</td></tr>`).join("")}</tbody></table></div>
       <div class="actions" style="align-items:center"><button class="sm" data-pf="rb-equal">Equal weight</button><button class="sm" data-pf="rb-norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Targets add to ${sum.toFixed(1)}%</span><span style="margin-left:auto"></span><button class="sm" data-pf="rb-cancel">Close</button><button class="sm primary" data-pf="rb-apply" ${Math.abs(sum - 100) < 0.5 ? "" : "disabled"}>Record the rebalance</button></div>
-      <div class="small muted">Δ value = total value × (target − current) / 100: positive is a BUY, negative a SELL. Recording it sets the new weights and pins today's date on the performance chart.</div></section>`;
+      <div class="small muted">Current is today's weight (the targets drift as prices move). Δ value = total value × (target − current) / 100: positive is a BUY, negative a SELL. Recording it sets the new weights and pins today's date on the performance chart.</div></section>`;
   }
   /** Inputs on the Portfolios tab (the page's click handler only sees buttons). */
   function pfBind(el) {
     $("pf-sel")?.addEventListener("change", (ev) => { S.pfStore.activeId = ev.target.value; S.pfDraft = null; S.pfRebal = null; pfSave(); renderPortfolio(); pfLoad(); });
-    for (const [id, k] of [["pf-name", "name"], ["pf-desc", "description"], ["pf-total", "totalInvestment"]]) $(id)?.addEventListener("input", (ev) => { if (S.pfDraft) S.pfDraft[k] = k === "totalInvestment" ? num(ev.target.value) || 0 : ev.target.value; });
+    for (const [id, k] of [["pf-name", "name"], ["pf-desc", "description"], ["pf-total", "totalInvestment"], ["pf-start", "startDate"]]) $(id)?.addEventListener("input", (ev) => { if (S.pfDraft) S.pfDraft[k] = k === "totalInvestment" ? num(ev.target.value) || 0 : ev.target.value; });
     el.querySelectorAll("input[data-pfr]").forEach((inp) => inp.addEventListener("change", () => { const r = S.pfDraft?.rows?.[+inp.dataset.pfr]; if (!r) return; const k = inp.dataset.k, v = inp.value;
       if (k === "ticker") { r.ticker = v.trim().toUpperCase(); r.name = ""; r.asset_type = ""; r.sector = ""; }
       else if (k === "dollar") r.weight = S.pfDraft.totalInvestment > 0 ? Math.round(((num(v) || 0) / S.pfDraft.totalInvestment) * 1000) / 10 : 0;
@@ -6507,7 +6534,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
     if (a === "del") { if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return; st.list = st.list.filter((x) => x.id !== p.id); st.activeId = st.list[0]?.id || null; await pfSave(); S.pfDraft = null; renderPortfolio(); pfLoad(); return; }
     if (a === "refresh") { pfLoad({ force: true }); return; }
-    if (a === "csv") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.csv`, PMode.toCsv({ ...p, holdings: pfHoldings(p, S.pfData) }), "text/csv"); return; }
+    if (a === "csv") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.csv`, PMode.toCsv({ ...p, holdings: ((hs, pos) => hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); return r && isNum(num(r.shares)) ? { ...h, shares: Math.round(r.shares * 1e4) / 1e4, avg_cost: Math.round(r.avgCost * 100) / 100 } : h; }))(pfHoldings(p, S.pfData), pfPositions(p, pfHoldings(p, S.pfData), S.pfData)) }), "text/csv"); return; }
     if (a === "json") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.json`, JSON.stringify(p, null, 2), "application/json"); return; }
     if (a === "entry-pct" || a === "entry-usd") { S.pfEntry = a === "entry-pct" ? "pct" : "usd"; renderPortfolio(); return; }
     if (a === "row-add") { S.pfDraft?.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
@@ -6515,13 +6542,20 @@ a.btnlink:hover { border-color: var(--accent); }
     if (a === "norm") { if (S.pfDraft) S.pfDraft.rows = PMode.normalizeWeights(S.pfDraft.rows); renderPortfolio(); return; }
     if (a === "cancel") { S.pfDraft = null; S.pfMode = "analysis"; renderPortfolio(); return; }
     if (a === "save") { const dr = S.pfDraft; if (!dr) return; const rows = dr.rows.filter((r) => r.ticker);
+      const before = p.holdings.map((h) => `${h.ticker}:${num(h.weight) || 0}`).sort().join(), after = rows.map((r) => `${r.ticker}:${num(r.weight) || 0}`).sort().join();
+      // With rebalances on record, new weights are a change made today (kept as one more event), not a rewrite of the past.
+      if ((p.rebalanceEvents || []).length && before !== after) { if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0]));
+        const d = (S.pfData?.series?.SPY?.dates || []).slice(-1)[0] || today(); p.rebalanceEvents.push({ id: pfId(), date: d, label: `Weights edited ${d}`, trades: rows.filter((r) => num(r.weight) > 0).map((r) => ({ ticker: r.ticker, amountUsd: 0, newWeight: num(r.weight) })) }); }
+      else if (before !== after) p.startWeights = undefined;
+      p.startDate = /^\d{4}-\d{2}-\d{2}$/.test(dr.startDate || "") ? dr.startDate : pfStart(p);
       Object.assign(p, { name: dr.name || "Untitled", description: dr.description, totalInvestment: dr.totalInvestment > 0 ? dr.totalInvestment : 10000, holdings: rows.map((r) => ({ ticker: r.ticker, name: r.name || "", weight: num(r.weight) || 0, shares: num(r.shares) > 0 ? num(r.shares) : undefined, avg_cost: num(r.avg_cost) > 0 ? num(r.avg_cost) : undefined, asset_type: r.asset_type || undefined, sector: r.sector || undefined })), updatedAt: now });
       S.pfDraft = null; S.pfMode = "analysis"; await pfSave(); renderPortfolio(); pfLoad(); return; }
     if (a === "rebal") { S.pfRebal = { targets: Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])) }; renderPortfolio(); $("pf-rebal")?.scrollIntoView?.({ behavior: "smooth" }); return; }
     if (a === "rb-cancel") { S.pfRebal = null; renderPortfolio(); return; }
     if (a === "rb-equal") { const k = p.holdings.length; for (const h of p.holdings) S.pfRebal.targets[h.ticker] = Math.round((1000 / k)) / 10; renderPortfolio(); return; }
     if (a === "rb-norm") { const ws = PMode.normalizeWeights(Object.entries(S.pfRebal.targets).map(([ticker, weight]) => ({ ticker, weight }))); S.pfRebal.targets = Object.fromEntries(ws.map((x) => [x.ticker, x.weight])); renderPortfolio(); return; }
-    if (a === "rb-apply") { const hs = pfHoldings(p, S.pfData), total = PMode.marketValues({ ...p, holdings: hs }).reduce((s, h) => s + (h.marketValue || 0), 0), tr = PMode.rebalanceTrades(hs, S.pfRebal.targets, total);
+    if (a === "rb-apply") { const hs = pfHoldings(p, S.pfData), pos = pfPositions(p, hs, S.pfData), total = pos?.total > 0 ? pos.total : PMode.marketValues({ ...p, holdings: hs }).reduce((s, h) => s + (h.marketValue || 0), 0), tr = PMode.rebalanceTrades(pfNow(hs, pos), S.pfRebal.targets, total);
+      if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])); if (!p.startDate) p.startDate = pfStart(p);
       const evDate = (S.pfData?.series?.SPY?.dates || []).slice(-1)[0] || today(), ev = { id: pfId(), date: evDate, label: `Rebalance ${evDate}`, trades: tr.map((t) => ({ ticker: t.ticker, amountUsd: Math.round(t.deltaUsd * 100) / 100, newWeight: t.target })) };
       p.rebalanceEvents = [...(p.rebalanceEvents || []), ev]; p.holdings = p.holdings.map((h) => ({ ...h, weight: num(S.pfRebal.targets[h.ticker]) || 0, shares: undefined })).filter((h) => h.weight > 0);
       for (const t of Object.keys(S.pfRebal.targets)) if (!p.holdings.some((h) => h.ticker === t) && num(S.pfRebal.targets[t]) > 0) p.holdings.push({ ticker: t, weight: num(S.pfRebal.targets[t]) });
@@ -7469,7 +7503,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function coStatements(co) {
     const per = S.coPer || "annual", st = co.data?.stmts?.[per]; if (!st || !(st.inc?.length || st.bs?.length || st.cf?.length)) return "";
     const lab = (r) => (per === "annual" ? `FY${String(r.fiscalYear || r.date).slice(0, 4)}` : `${r.period || ""} ${String(r.fiscalYear || r.date).slice(0, 4)}`.trim());
-    const tbl = (rows, defs) => { const rs = [...(rows || [])].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(per === "annual" ? -5 : -8); if (!rs.length) return `<div class="small muted">Not reported.</div>`;
+    const tbl = (rows, defs) => { const rs = [...(rows || [])].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).slice(per === "annual" ? -5 : -8); if (!rs.length) return `<div class="small muted">Not reported.</div>`;
       return `<div class="tbl-wrap"><table><thead><tr><th></th>${rs.map((r) => `<th class="n">${esc(lab(r))}</th>`).join("")}</tr></thead><tbody>${defs.map(([k, l, kind]) => `<tr><td>${esc(l)}</td>${rs.map((r) => { const v = num(r[k]); return `<td class="n ${isNum(v) && v < 0 ? "down" : ""}">${kind === "eps" ? fix(v, 2) : isNum(v) ? (Math.abs(v) >= 1e9 ? (v / 1e9).toFixed(2) + "B" : (v / 1e6).toFixed(0) + "M") : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`; };
     const seg = `<div class="seg" role="group" aria-label="Period">${[["annual", "Annual"], ["quarter", "Quarterly"]].map(([k, l]) => `<button aria-pressed="${k === per}" data-co-per="${k}">${l}</button>`).join("")}</div>`;
     const dp = co.dupont || [];

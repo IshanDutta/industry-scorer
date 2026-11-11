@@ -17,7 +17,7 @@
 
   // ------------------------------------------------------------------ portfolios and weights
   const SEED = () => ({ id: "portfolio_seed_1", name: "Growth & Value Core", description: "A starter portfolio: edit it or make your own.", totalInvestment: 100000,
-    holdings: [{ ticker: "QQQ", name: "Invesco QQQ Trust", weight: 30, asset_type: "etf" }, { ticker: "SPY", name: "SPDR S&P 500 ETF", weight: 30, asset_type: "etf" },
+    startDate: new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10), holdings: [{ ticker: "QQQ", name: "Invesco QQQ Trust", weight: 30, asset_type: "etf" }, { ticker: "SPY", name: "SPDR S&P 500 ETF", weight: 30, asset_type: "etf" },
       { ticker: "AAPL", name: "Apple Inc.", weight: 15, asset_type: "stock", sector: "Technology" }, { ticker: "MSFT", name: "Microsoft Corp.", weight: 15, asset_type: "stock", sector: "Technology" },
       { ticker: "SCHD", name: "Schwab US Dividend Equity", weight: 10, asset_type: "etf" }],
     rebalanceEvents: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
@@ -53,6 +53,8 @@
   function nav(series, holdings, { from = null, start = 10000, events = [], calendar = null } = {}) {
     const hs = holdings.filter((h) => n(h.weight) > 0), maps = {}, missing = [];
     for (const h of hs) { const m = mapOf(series[h.ticker]); if (m.size) maps[h.ticker] = m; else missing.push(h.ticker); }
+    // Tickers a rebalance brings in later need their prices too (they don't hold back the start date).
+    for (const e of events || []) for (const tr of e?.trades || []) if (!maps[tr.ticker] && n(tr.newWeight) > 0) { const m = mapOf(series[tr.ticker]); if (m.size) maps[tr.ticker] = m; else if (!missing.includes(tr.ticker)) missing.push(tr.ticker); }
     const live = hs.filter((h) => maps[h.ticker]); if (!live.length) return { dates: [], values: [], from: null, missing, late: [] };
     const firsts = live.map((h) => ({ ticker: h.ticker, first: [...maps[h.ticker].keys()].sort()[0] }));
     const common = firsts.reduce((a, x) => (x.first > a ? x.first : a), "0000");
@@ -60,23 +62,47 @@
     if (!days.length) return { dates: [], values: [], from: null, missing, late: [] };
     const last = {}; const px = (t, d) => { const v = maps[t].get(d); if (v > 0) last[t] = v; return last[t]; };
     // Prime each holding's last known price at or before the first day.
-    for (const h of live) { const ks = [...maps[h.ticker].keys()].filter((d) => d <= days[0]).sort(); if (ks.length) last[h.ticker] = maps[h.ticker].get(ks[ks.length - 1]); }
-    const evs = (events || []).filter((e) => e?.date && e.date > days[0]).sort((a, b) => (a.date < b.date ? -1 : 1));
+    for (const t of Object.keys(maps)) { const ks = [...maps[t].keys()].filter((d) => d <= days[0]).sort(); if (ks.length) last[t] = maps[t].get(ks[ks.length - 1]); }
+    const evs = (events || []).filter((e) => e?.date && e.date > days[0]).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     let w = Object.fromEntries(live.map((h) => [h.ticker, n(h.weight) / 100])), tw = Object.values(w).reduce((a, x) => a + x, 0);
     for (const k of Object.keys(w)) w[k] /= tw;
     // Units held of each holding per dollar of NAV.
-    let value = start, units = {}; for (const t of Object.keys(w)) units[t] = (value * w[t]) / px(t, days[0]);
+    let value = start, units = {}, cost = {}; for (const t of Object.keys(w)) { units[t] = (value * w[t]) / px(t, days[0]); cost[t] = value * w[t]; }
     const dates = [], values = []; let ei = 0;
     for (const d of days) {
       let v = 0; for (const t of Object.keys(units)) v += units[t] * (px(t, d) || 0);
-      if (ei < evs.length && d >= evs[ei].date) {
+      while (ei < evs.length && d >= evs[ei].date) {
         const tgt = {}; for (const tr of evs[ei].trades || []) if (maps[tr.ticker] && n(tr.newWeight) > 0) tgt[tr.ticker] = n(tr.newWeight) / 100;
-        const s0 = Object.values(tgt).reduce((a, x) => a + x, 0); if (s0 > 0) { units = {}; for (const t of Object.keys(tgt)) { const p = px(t, d); if (p > 0) units[t] = (v * tgt[t] / s0) / p; } }
+        const s0 = Object.values(tgt).reduce((a, x) => a + x, 0);
+        if (s0 > 0) { const old = units, nu = {}, nc = {};
+          for (const t of Object.keys(tgt)) { const p = px(t, d); if (!(p > 0)) continue; nu[t] = (v * tgt[t] / s0) / p;
+            // Average cost: a buy adds its dollars, a sell takes out its share of the cost.
+            const was = (old[t] || 0) * p, now = nu[t] * p, c0 = cost[t] || 0; nc[t] = now >= was ? c0 + (now - was) : was > 0 ? c0 * (now / was) : 0; }
+          units = nu; cost = nc; }
         ei++;
       }
       dates.push(d); values.push(v);
     }
-    return { dates, values, from: days[0], missing, late: firsts.filter((x) => x.first > (from || "0000")).map((x) => x) };
+    const lastPx = Object.fromEntries(Object.keys(units).map((t) => [t, last[t]]));
+    return { dates, values, from: days[0], missing, late: firsts.filter((x) => x.first > (from || "0000")).map((x) => x), units, cost, lastPx };
+  }
+  /**
+   * Where each holding stands today when the portfolio was bought on `from` for `start` dollars at its weights (rebalances
+   * applied, average cost): value, cost basis, gain, today's weight, and the shares implied at today's quote.
+   * Holdings with their own shares and average cost keep them. prices: {ticker: today's quote}. base: the lineup bought
+   * on `from` when it differs from today's holdings (they changed at rebalances).
+   */
+  function positions(series, holdings, { from, start, events = [], calendar = null, prices = {}, base = null } = {}) {
+    const nv = nav(series, base || holdings, { from, start, events, calendar });
+    const rows = holdings.map((h) => { const t = h.ticker, own = n(h.shares) > 0, px = n(prices[t]) > 0 ? n(prices[t]) : nv.lastPx?.[t];
+      if (own) { const value = n(px) > 0 ? h.shares * px : NaN, costB = n(h.avg_cost) > 0 ? h.shares * h.avg_cost : NaN;
+        return { ticker: t, shares: h.shares, value, cost: costB, gain: value - costB, avgCost: n(h.avg_cost) || NaN, implied: false }; }
+      const u = nv.units?.[t]; if (!(u > 0)) return { ticker: t, shares: NaN, value: NaN, cost: NaN, gain: NaN, avgCost: NaN, implied: true };
+      const value = u * nv.lastPx[t], costB = nv.cost[t], shares = n(px) > 0 ? value / px : NaN;
+      return { ticker: t, shares, value, cost: costB, gain: value - costB, avgCost: shares > 0 ? costB / shares : NaN, implied: true }; });
+    const total = rows.reduce((a, r) => a + (n(r.value) > 0 ? r.value : 0), 0);
+    for (const r of rows) r.weightNow = total > 0 && n(r.value) > 0 ? (r.value / total) * 100 : NaN;
+    return { rows, total, from: nv.from, cost: rows.reduce((a, r) => a + (n(r.cost) > 0 ? r.cost : 0), 0) };
   }
   /** The start date of a period ending at `end`: 1M, 3M, 6M, YTD, 1Y, 3Y, 5Y. */
   function periodStart(end, p) {
@@ -202,7 +228,7 @@
   /** Holdings as CSV (for export). */
   function toCsv(p) { const head = "ticker,name,asset_type,sector,weight,shares,avg_cost,price,market_value"; return [head, ...marketValues(p).map((h) => [h.ticker, `"${String(h.name || "").replace(/"/g, "'")}"`, h.asset_type || "", `"${h.sector || ""}"`, h.weight ?? "", h.shares ?? "", h.avg_cost ?? "", h.price ?? "", r1(h.marketValue, 2) ?? ""].join(","))].join("\n"); }
 
-  const PMode = { RF, SEED, normalizeWeights, weightsFromDollars, marketValues, nav, periodStart, rets, maxDrawdown, var95, monthly, metrics, effectiveHoldings, sectorHHI, hhiLabel, contributions, healthScore, stance, rebalanceTrades, lookThrough, weighted, toCsv };
+  const PMode = { RF, SEED, normalizeWeights, weightsFromDollars, marketValues, nav, positions, periodStart, rets, maxDrawdown, var95, monthly, metrics, effectiveHoldings, sectorHHI, hhiLabel, contributions, healthScore, stance, rebalanceTrades, lookThrough, weighted, toCsv };
   if (typeof module !== "undefined" && module.exports) module.exports = PMode;
   else root.PMode = PMode;
 })(typeof window !== "undefined" ? window : globalThis);
