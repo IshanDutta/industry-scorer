@@ -6532,7 +6532,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (a === "mode-analysis") { S.pfMode = "analysis"; S.pfDraft = null; renderPortfolio(); return; }
     if (a === "mode-editor") { S.pfMode = "editor"; renderPortfolio(); return; }
     if (a === "mode-recommend" || a === "improve") { S.pfMode = "recommend"; S.recImprove = a === "improve" ? p.id : null;
-      if (!S.rec) { const last = await idbGet("etfRec:last").catch(() => null); if (last?.rec) { S.rec = last; S.recKey = last.improve ? "improved" : "recommended"; } } renderPortfolio(); return; }
+      if (!S.rec) { const last = await idbGet("etfRec:last").catch(() => null); if (last?.sels) { S.rec = last; S.recKey = last.improve ? "improved" : "recommended"; } } renderPortfolio(); return; }
     if (a.startsWith("rg-type-")) { recGoalDraft().type = a.slice(8); renderPortfolio(); return; }
     if (a === "rec-build" || a === "rec-improve") { if (!S.recRun) recBuild({ improveId: a === "rec-improve" ? S.recImprove : null }); return; }
     if (a === "rec-stop") { if (S.recRun) S.recRun.cancel = true; return; }
@@ -6540,8 +6540,8 @@ a.btnlink:hover { border-color: var(--accent); }
     if (a === "rec-write") { recWrite(S.rec, S.recKey); return; }
     if (a === "rec-save" || a === "rec-apply") { await recSave({ apply: a === "rec-apply" }); return; }
     if (a === "rec-new") { S.rec = null; renderPortfolio(); $("rec-goal")?.scrollIntoView?.({ behavior: "smooth" }); return; }
-    if (a === "rec-csv") { const r = S.rec, Pt = S.recKey === "improved" ? r?.improve?.after : r?.rec?.portfolios?.[S.recKey]; if (!Pt) return; const tot = r.improve?.total || num(r.goal.amount) || 10000;
-      pfDownload(`etf-${S.recKey}-${today()}.csv`, ["ticker,name,kind,weight,amount_usd,expense_ratio,yield,expected_return", ...r.rec.assets.map((x, i) => [x, i]).filter(([, i]) => Pt.w[i] > 0).map(([x, i]) => [x.symbol, `"${String(x.info?.name || "").replace(/"/g, "'")}"`, x.e.kind, (Pt.w[i] * 100).toFixed(1), Math.round(Pt.w[i] * tot), (x.expense * 100).toFixed(2), (x.yield * 100).toFixed(2), (r.rec.mu[i] * 100).toFixed(2)].join(","))].join("\n"), "text/csv"); return; }
+    if (a === "rec-csv") { const r = S.rec, sel = r?.sels?.[S.recKey]; if (!sel) return; const tot = r.improve?.total || num(r.goal.amount) || 10000;
+      pfDownload(`etf-${S.recKey}-${today()}.csv`, ["ticker,name,weight,amount_usd,expense_ratio,yield,expected_return,found_via", ...r.cands.map((c, i) => [c, i]).filter(([, i]) => sel.w[i] > 0).map(([c, i]) => [c.symbol, `"${String(c.info?.name || "").replace(/"/g, "'")}"`, (sel.w[i] * 100).toFixed(1), Math.round(sel.w[i] * tot), (c.expense * 100).toFixed(2), ((num(c.yield) || 0) * 100).toFixed(2), ((num(c.mu) || 0) * 100).toFixed(2), `"${String(c.via).replace(/"/g, "'")}"`].join(","))].join("\n"), "text/csv"); return; }
     if (a === "add") { S.pfMode = "editor"; renderPortfolio(); S.pfDraft.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
     if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; S.pfMode = "editor"; S.pfDraft = null; await pfSave(); renderPortfolio(); return; }
     if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
@@ -6611,83 +6611,135 @@ a.btnlink:hover { border-color: var(--accent); }
     return mapped.map((h) => ({ ticker: h.ticker, name: h.name, weight: h.weight, kind: h.kind, industry: h.industry, sector: h.sector, top50: h.top50, rank: h.rank, via: h.via }));
   });
 
-  function recGoalDraft() { return (S.recGoal ||= { type: "growth", horizon: "12M", amount: 10000, maxVol: "", minN: 7, maxN: 10, maxCost: 0.75, intl: false, bonds: true, exclude: "" }); }
+  function recGoalDraft() { return (S.recGoal ||= { type: "growth", horizon: "12M", amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }); }
   function recGoalOf(d) {
     const ex = String(d.exclude || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
     return EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
   }
-  /** Build: screen, price, look through, view, score, optimize, stress; then the analyst's write-up. improveId: a portfolio to improve. */
+  /** Every ETF that holds a company, from FMP's reverse lookup (kept a week, trimmed to US-listed funds). */
+  const recExposure = (sym) => recCached("etfExp:" + sym, 7, async () => {
+    const r = (await optional(() => fmp("etfAndMutualFunds", { endpoint: "etf-asset-exposure", symbol: sym }), [])) || [];
+    return r.filter((x) => /^[A-Z]{2,5}$/.test(String(x.symbol || "")) && num(x.weightPercentage) > 0 && num(x.weightPercentage) <= 25).map((x) => ({ symbol: x.symbol, weightPercentage: num(x.weightPercentage), marketValue: num(x.marketValue) }));
+  });
+  /** A run's companies: its ranking (scored for every investor type), constituents, the lead strategist's best expressions and avoids, thin names. */
+  async function recCompanies(dg) {
+    const rec = dg.kind === "full" && dg.slug ? await idbGet("run:" + dg.slug).catch(() => null) : null, d = rec?.industry;
+    if (d?.constituents?.length) { const rank = d.ranking?.rows?.length ? d.ranking.rows : Plan.rankCompanies(d.constituents).rows, o = rec.agent?.result?.opportunity || {};
+      return { rank, cons: Object.fromEntries(d.constituents.map((c) => [c.symbol, c])), best: o.best_expressions || [], avoid: o.avoid || [], thin: d.plan?.liquidity?.thin || [] }; }
+    const cs = (dg.cos || []).map((c) => ({ symbol: c.symbol, name: c.name, weight: c.w, market_cap: c.w, pe: c.pe, op_margin: c.opm, rev_growth: c.g, excess_1Y: c.r1y, div_yield: c.div, ret_1Y: c.r1y, beta: c.beta }));
+    return { rank: cs.length ? Plan.rankCompanies(cs).rows : [], cons: Object.fromEntries(cs.map((c) => [c.symbol, c])), best: [], avoid: [], thin: [] };
+  }
+  /**
+   * Build, top down: industry distribution -> bond sleeve -> best companies per industry -> every ETF that holds them
+   * (reverse lookup) plus the curated sector, industry, broad and bond funds -> holdings, prices, views -> the ETF mix
+   * that tracks the target with the least overlap -> stress, world/trade/regulation lens, opportunities -> the three
+   * analysts. improveId: a portfolio to improve.
+   */
   async function recBuild({ improveId = null } = {}) {
     if (!S.mcp) { S.recErr = "Open this page in Claude to read ETF data."; renderPortfolio(); return; }
     const d = recGoalDraft(), goal = recGoalOf(d), run = { cancel: false }; S.recRun = run; S.recErr = null;
-    const P = (S.recProg = { step: "Starting…", done: 0, n: 0 }); const step = (t, done, n) => { if (S.recRun !== run) return; Object.assign(P, { step: t }, done !== undefined ? { done, n } : {}); renderPortfolio(); };
+    // Progress redraws at most four times a second; the previous result is put away while building.
+    const P = (S.recProg = { step: "Starting…", done: 0, n: 0 }); let lastDraw = 0; const step = (t, done, n) => { if (S.recRun !== run) return; Object.assign(P, { step: t }, done !== undefined ? { done, n } : { done: 0, n: 0 }); const now = Date.now(); if (now - lastDraw > 250 || done === n) { lastDraw = now; renderPortfolio(); } };
+    S.rec = null;
     try {
       const ci = await coIndex(), qi = await quantIndex();
-      step("Reading the industry runs…");
+      step("Reading every industry run…");
       const names = [...new Set([...Object.values(ci.runs).map((r) => r.name), ...Object.values(qi).map((r) => r.name)])], digests = await fundDigests(names, ci, step);
-      const bySector = {}; for (const dg of Object.values(digests)) if (dg?.sector) (bySector[dg.sector] ||= []).push(dg);
+      if (Object.keys(digests).length < 8) throw new Error(`Only ${Object.keys(digests).length} industries are analyzed: run more industries (or a sector) first, so there is a distribution to choose from.`);
       const curve = await recCurve();
-      // 1. Screen the universe on FMP's facts.
-      const uni = EtfRec.UNIVERSE.filter((e) => (goal.intl || !e.intl) && (goal.bondsOk || !EtfRec.isBond(e)) && !goal.excludeSyms.includes(e.symbol)), info = {}, why = {};
-      let k = 0; await pool(uni, 4, async (e) => { info[e.symbol] = await recInfo(e.symbol).catch(() => null); step("Screening the ETF universe…", ++k, uni.length); }, run);
-      const pass = uni.filter((e) => { const r = EtfRec.screen(e, info[e.symbol], goal, { today: today() }); if (!r.ok) why[e.symbol] = r.why; return r.ok; });
-      // 2. Prices (seven years: the stress episodes, three-year risk) and quant facts.
-      const series = {}; k = 0; await pool([...pass.map((e) => e.symbol), "SPY", "AGG"], 4, async (s) => { series[s] = await recSeries(s).catch(() => null); step("Reading seven years of prices…", ++k, pass.length + 2); }, run);
-      if (!series.SPY?.dates?.length) throw new Error("no SPY prices came back");
-      const q = {}; for (const e of pass) q[e.symbol] = EtfRec.quantFacts(series[e.symbol], series.SPY);
-      // 3. A first pass on tags, then the full look-through for the broad funds and the best sector and industry funds.
-      const pre = (e) => { const t = EtfRec.tagView(e, digests, bySector, goal), i = info[e.symbol];
-        const v = t ? { kind: "stock", expected: t.expected, conf: 0.3, score: t.score } : { kind: "stock", expected: NaN, conf: 0 };
-        return EtfRec.pillars({ e, info: i, q: q[e.symbol] || {}, v, yld: i?.lastDiv > 0 && i?.price > 0 ? i.lastDiv / i.price : NaN }, goal).total; };
-      const stocks = pass.filter((e) => EtfRec.isStock(e)), broad = stocks.filter((e) => ["core", "size", "style", "div", "intl"].includes(e.kind)),
-        narrow = stocks.filter((e) => !broad.includes(e)).sort((a, b) => (pre(b) || 0) - (pre(a) || 0)).slice(0, 22), deep = [...broad, ...narrow];
-      const mapped = {}; k = 0; await pool(deep, 3, async (e) => { mapped[e.symbol] = await recMapped(e.symbol, ci).catch((er) => { if (FATAL.has(er?.code)) throw er; return null; }); step("Looking through each ETF to the industries it holds…", ++k, deep.length); }, run);
-      if (run.cancel) throw new Error("stopped");
-      // 4. Views and pillars.
-      step("Scoring every ETF against your goal…");
-      const cands = pass.map((e) => { const i = info[e.symbol] || {}, yld = i.lastDiv > 0 && i.price > 0 ? i.lastDiv / i.price : NaN; let v, sectors = {}, stocks = {}, effN = NaN;
-        if (EtfRec.isBond(e)) v = EtfRec.bondView(e, { curve, ttmYield: yld, expense: num(i.expenseRatio) / 100 });
-        else if (EtfRec.isStock(e)) {
-          const m = mapped[e.symbol];
-          if (m?.length) { const cov = Portfolio.coverage(m, ci.runs, { now: today(), quant: qi }), look = Portfolio.lookThrough(cov, digests); v = EtfRec.equityView(look, cov, goal); sectors = Object.keys(i.sectors || {}).length ? i.sectors : cov.sectors;
-            const tot = m.reduce((a, h) => a + h.weight, 0) || 1; for (const h of m.slice().sort((a, b) => b.weight - a.weight).slice(0, 40)) if (h.ticker) stocks[h.ticker] = h.weight / tot; const s2 = m.reduce((a, h) => a + (h.weight / tot) ** 2, 0); effN = s2 > 0 ? 1 / s2 : NaN; }
-          else { const t = EtfRec.tagView(e, digests, bySector, goal); v = t ? { kind: "stock", expected: t.expected, conf: 0.3, score: t.score, why: "from its tagged industries" } : { kind: "stock", expected: NaN, conf: 0 }; sectors = i.sectors || (e.sector ? { [e.sector]: 1 } : {}); }
-        } else v = { kind: "other", expected: NaN, conf: 0, why: e.kind === "gold" ? "gold: no industry view (prior only)" : "commodities: no industry view (prior only)" };
-        const c = { symbol: e.symbol, e, info: i, q: q[e.symbol] || {}, v, yld, sectors, stocks, effN }; c.pill = EtfRec.pillars(c, goal); return c; });
-      // 5. The improver's current holdings.
-      let imp = null, force = [];
+      // 1. Industry distribution.
+      step("Setting the industry distribution from the runs' convictions…");
+      const rows = EtfStrat.conviction(EtfStrat.industryRows(digests, goal), goal, { now: today() });
+      const capW = rows.reduce((s, r) => s + r.mkt * r.z, 0), bondShare = goal.bondsOk ? clamp2(goal.bonds[0] + (goal.bonds[1] - goal.bonds[0]) * (0.5 - capW * 0.6) + (num(curve?.month3) >= 4 && goal.type !== "aggressive" ? 0.03 : 0), goal.bonds[0], goal.bonds[1]) : 0;
+      const tgt = EtfStrat.targetIndustries(rows, goal, 1 - bondShare), sleeve = EtfStrat.bondSleeve(goal, curve, bondShare);
+      // 2. The best companies in each held industry.
+      const picksBy = {}; let k = 0;
+      for (const h of tgt.held) { const dg = digests[h.name.toLowerCase()]; if (!dg) continue; const cx = await recCompanies(dg); picksBy[h.name] = { ...EtfStrat.pickCompanies(cx.rank, goal, { k: EtfStrat.STYLE[goal.type].perInd, best: cx.best, avoid: cx.avoid, thin: cx.thin, cons: cx.cons }) }; step("Picking the best companies in each industry…", ++k, tgt.held.length); }
+      const T = EtfStrat.companyTargets(tgt.held, picksBy);
+      // 3. Every ETF that holds them (reverse lookup), plus the curated funds for the held sectors, industries, income and bonds.
+      const look = Object.entries(T).sort((a, b) => b[1] - a[1]).slice(0, 45).map(([s]) => s), exps = {}; k = 0;
+      await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies…", ++k, look.length); }, run);
+      const disc = EtfStrat.discover(exps, T, { exclude: goal.excludeSyms }), heldSec = new Set(tgt.held.map((h) => h.sector)), heldInd = new Set(tgt.held.map((h) => h.name));
+      const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => (e.kind === "core") || (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
+        || (e.kind === "div" && (goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
+        || (EtfRec.isBond(e) && bondShare > 0 && sleeve.buckets[EtfStrat.bucketOf(e)]) || (e.kind === "gold" && goal.type !== "aggressive" && e.symbol === "GLDM"));
+      let improveCtx = null, held0 = [];
       if (improveId) { const p = S.pfStore?.list?.find((x) => x.id === improveId); if (p) { await pfLoad(); const D = S.pfData, hs = pfHoldings(p, D), pos = pfPositions(p, hs, D);
-        imp = { id: p.id, name: p.name, total: pos?.total > 0 ? pos.total : p.totalInvestment, holdings: hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); const fs = D?.fsec?.[h.ticker];
-          return { ticker: h.ticker, weight: isNum(num(r?.weightNow)) ? r.weightNow : num(h.weight) || 0, asset_type: h.asset_type, sector: h.sector, industry: D?.info?.[h.ticker]?.industry || ci.cos?.[h.ticker]?.industry || "", sectors: fs || null, price: h.price }; }) };
-        force = imp.holdings.map((h) => h.ticker).filter((t) => EtfRec.BY.has(t)); } }
-      // 6. Optimize, stress, exposure, history.
-      step("Building the portfolios (Black-Litterman returns, shrunk covariance, 15% cap)…");
-      await new Promise((r) => setTimeout(r, 30));
-      const rec = EtfRec.recommend(cands, series, goal, { force });
-      const res = { at: new Date().toISOString(), day: today(), goal: d, goalFull: goal, curve, screened: { total: uni.length, passed: pass.length, deep: deep.length, out: why }, rec, views: {} };
-      for (const [key, Pt] of Object.entries(rec.portfolios)) if (Pt) res.views[key] = { stress: EtfRec.stress(Pt.w, rec.assets, series), exposure: EtfRec.exposure(Pt.w, rec.assets) };
-      if (imp) { res.improve = { ...imp, ...EtfRec.improve(rec, imp.holdings, goal) }; if (res.improve.after) res.views.improved = { stress: EtfRec.stress(res.improve.after.w, rec.assets, series), exposure: EtfRec.exposure(res.improve.after.w, rec.assets), before: EtfRec.stress(res.improve.before.w, rec.assets, series) }; }
-      res.hist = {}; for (const s of [...rec.assets.map((a) => a.symbol), "SPY", "AGG"]) if (series[s]) res.hist[s] = series[s];
-      S.rec = res; S.recKey = imp ? "improved" : "recommended"; S.recProg = null; renderPortfolio();
+        held0 = hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); return { ticker: h.ticker, name: h.name, weight: isNum(num(r?.weightNow)) ? r.weightNow : num(h.weight) || 0, asset_type: h.asset_type, industry: D?.info?.[h.ticker]?.industry || ci.cos?.[h.ticker]?.industry || "", sector: h.sector, price: h.price }; });
+        improveCtx = { id: p.id, name: p.name, total: pos?.total > 0 ? pos.total : p.totalInvestment }; } }
+      const pool0 = new Map(); for (const x of disc.slice(0, 50)) pool0.set(x.symbol, { symbol: x.symbol, via: `holds ${Object.keys(x.hits).slice(0, 4).join(", ")}${Object.keys(x.hits).length > 4 ? ` +${Object.keys(x.hits).length - 4}` : ""}`, disc: x });
+      for (const e of curated) if (!pool0.has(e.symbol)) pool0.set(e.symbol, { symbol: e.symbol, via: "the curated list", e });
+      for (const h of held0) if (h.asset_type !== "stock" && !pool0.has(h.ticker)) pool0.set(h.ticker, { symbol: h.ticker, via: "your portfolio" });
+      const all = [...pool0.values()], info = {}, out = {}; k = 0;
+      await pool(all, 4, async (c) => { info[c.symbol] = await recInfo(c.symbol).catch(() => null); step("Screening the candidate ETFs…", ++k, all.length); }, run);
+      const ok = all.filter((c) => { c.e ||= EtfRec.BY.get(c.symbol) || { symbol: c.symbol, kind: "disc", industries: [], intl: false };
+        const r = EtfRec.screen(c.e, info[c.symbol], goal, { today: today() }); if (!r.ok && c.via !== "your portfolio") { out[c.symbol] = r.why; return false; }
+        if (c.e.kind === "disc" && info[c.symbol]?.assetClass && !/equity/i.test(info[c.symbol].assetClass)) { out[c.symbol] = info[c.symbol].assetClass; return false; } return true; });
+      // 4. Holdings, prices, views.
+      const mapped = {}, series = {}; k = 0; const stockC = ok.filter((c) => !EtfRec.isBond(c.e));
+      await pool(stockC, 3, async (c) => { mapped[c.symbol] = await recMapped(c.symbol, ci).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }); step("Reading each ETF's full holdings and matching them to industries…", ++k, stockC.length); }, run);
+      const syms = [...new Set([...ok.map((c) => c.symbol), "SPY", "AGG", ...held0.map((h) => h.ticker)])]; k = 0;
+      await pool(syms, 4, async (s) => { series[s] = await recSeries(s).catch(() => null); step("Reading seven years of prices…", ++k, syms.length); }, run);
+      if (run.cancel) throw new Error("stopped");
+      if (!series.SPY?.dates?.length) throw new Error("no SPY prices came back");
+      step("Valuing every candidate on the industry and bond views…");
+      const byRow = new Map(rows.map((r) => [r.name, r]));
+      let cands = ok.map((c) => { const i = info[c.symbol] || {}, isBond = EtfRec.isBond(c.e), q = EtfRec.quantFacts(series[c.symbol], series.SPY) || {}, yld = i.lastDiv > 0 && i.price > 0 ? i.lastDiv / i.price : NaN;
+        if (isBond) { const v = EtfRec.bondView(c.e, { curve, ttmYield: yld, expense: num(i.expenseRatio) / 100 }); return { ...c, info: i, q, isBond, bucket: EtfStrat.bucketOf(c.e), v, mu: v.expected, yield: isNum(v.yield) ? v.yield : yld, expense: num(i.expenseRatio) / 100 || 0 }; }
+        const m = mapped[c.symbol]; if (!m?.length) return null;
+        const vec = EtfStrat.vectors(m), cov0 = Portfolio.coverage(m, ci.runs, { now: today(), quant: qi });
+        if (!goal.intl && (cov0.buckets.foreign || 0) > 0.3) { out[c.symbol] = "mostly outside the US"; return null; }
+        let vs = 0, vw = 0; for (const [ind, w] of Object.entries(vec.ind)) { const r = byRow.get(ind); if (r && isNum(r.exp12)) { vs += w * r.exp12 / 100; vw += w; } }
+        const prior = EtfRec.RF + (isNum(q.beta) ? q.beta : 1) * EtfRec.ERP, view = vw > 0 ? vs / vw : NaN, conf = Math.min(0.8, vw * 0.8);
+        return { ...c, info: i, q, isBond: false, vec, cov: cov0, mu: isNum(view) ? prior + conf * (view - prior) : prior, view, conf, prior, yield: yld, expense: num(i.expenseRatio) / 100 || 0, hard: c.e.kind === "gold" || c.e.kind === "cmdty" };
+      }).filter((c) => c && series[c.symbol]?.dates?.length > 500);
+      // Same fund twice (another issuer's copy of one index): keep the cheaper.
+      cands.sort((a, b) => a.expense - b.expense || (num(b.info?.assetsUnderManagement) || 0) - (num(a.info?.assetsUnderManagement) || 0));
+      const keepC = []; for (const c of cands) { const twin = !c.isBond ? keepC.find((x) => !x.isBond && EtfStrat.overlap(x.vec.cos, c.vec.cos) > 0.9) : keepC.find((x) => x.isBond && x.bucket === c.bucket && Math.abs((x.e.duration || 0) - (c.e.duration || 0)) < 1 && x.e.bond === c.e.bond);
+        if (twin && c.via !== "your portfolio") (twin.twins ||= []).push(c.symbol); else keepC.push(c); }
+      cands = keepC;
+      // 5. The mix.
+      step("Choosing the ETF mix: tracking the target, least overlap, risk under the ceiling…"); await new Promise((r) => setTimeout(r, 30));
+      const R0 = EtfRec.aligned(series, cands.map((c) => c.symbol), series.SPY.dates, 756), C = EtfRec.covariance(R0); if (!C) throw new Error("not enough common price history");
+      const target = { industries: Object.fromEntries(tgt.held.map((h) => [h.name, h.target])), buckets: sleeve.buckets, companies: T };
+      const sels = { recommended: EtfStrat.mix(cands, target, C.cov, goal), simpler: EtfStrat.mix(cands, target, C.cov, goal, { maxN: goal.minN }), conviction: EtfStrat.mix(cands, target, C.cov, goal, { beta: 8, gamma: 0.3, delta: 0.4 }) };
+      let improve = null;
+      if (improveCtx) { const w0 = cands.map((c) => (held0.find((h) => h.ticker === c.symbol)?.weight || 0) / 100);
+        sels.improved = EtfStrat.mix(cands, target, C.cov, goal, { w0, kappa: 0.03, keep: w0.map((x, i) => (x > 0.03 ? i : -1)).filter((i) => i >= 0) });
+        // Today's portfolio on the same yardsticks: its look-through industries and companies, its own risk.
+        const vec0 = { ind: {}, cos: {} }; for (const h of held0) { const w = h.weight / 100, m = mapped[h.ticker] || (h.asset_type !== "stock" ? await recMapped(h.ticker, ci).catch(() => null) : null);
+          if (m?.length) { const v = EtfStrat.vectors(m); for (const [a, x] of Object.entries(v.ind)) vec0.ind[a] = (vec0.ind[a] || 0) + w * x; for (const [a, x] of Object.entries(v.cos)) vec0.cos[a] = (vec0.cos[a] || 0) + w * x; }
+          else { const ind = h.industry || "(unmapped stocks)"; vec0.ind[ind] = (vec0.ind[ind] || 0) + w; vec0.cos[h.ticker] = (vec0.cos[h.ticker] || 0) + w; } }
+        const before = EtfStrat.achieved([1], [{ symbol: "TODAY", vec: vec0 }], target, rows), R1 = EtfRec.aligned(series, held0.map((h) => h.ticker), series.SPY.dates, 756), C1 = EtfRec.covariance(R1), w1 = held0.map((h) => h.weight / 100);
+        before.vol = C1 ? Math.sqrt(w1.reduce((s, x, i) => s + x * w1.reduce((t, y, j) => t + y * C1.cov[i][j], 0), 0)) : NaN;
+        improve = { ...improveCtx, holdings: held0, before, lines: `${held0.map((h) => `${h.ticker} ${h.weight.toFixed(1)}%`).join(", ")}; tracks the target within ${(before.tracking * 100).toFixed(1)}%, captures ${(before.capture * 100).toFixed(0)}% of the company targets, volatility ${isNum(before.vol) ? (before.vol * 100).toFixed(1) + "%" : "n/a"}.` }; }
+      const assetsOf = (c) => ({ symbol: c.symbol, q: c.q, isBond: c.isBond, v: c.v, e: c.e });
+      const res = { v: 2, at: new Date().toISOString(), day: today(), goal: d, goalFull: goal, curve, bondShare, rows, tgt: { rows: tgt.rows, held: tgt.held, avoided: tgt.avoided }, sleeve, picksBy, T, discovered: disc.length, screened: { pool: all.length, passed: ok.length, out }, cands, cov: C.cov, shrink: C.shrink, sels, improve, views: {} };
+      const lensOf = (ach) => { const tot = ach.stockShare || 1; return Portfolio.lookThrough({ industries: ach.industries.filter((x) => x.got > 0).map((x) => ({ industry: x.name, weight: x.got / tot })) }, digests); };
+      for (const [key, sel] of Object.entries(sels)) if (sel) { const ach = EtfStrat.achieved(sel.w, cands, target, rows); res.views[key] = { ach, stress: EtfRec.stress(sel.w, cands.map(assetsOf), series), lens: lensOf(ach),
+        yield: sel.w.reduce((s, x, i) => s + x * (num(cands[i].yield) || 0), 0), cost: sel.w.reduce((s, x, i) => s + x * (cands[i].expense || 0), 0), mu: sel.w.reduce((s, x, i) => s + x * (num(cands[i].mu) || 0), 0), bonds: sel.w.reduce((s, x, i) => s + (cands[i].isBond ? x : 0), 0) }; }
+      res.opps = EtfStrat.opportunities(rows, tgt, picksBy, goal, { today: today(), etfFor: (ind) => cands.filter((c) => !c.isBond && (c.vec.ind[ind] || 0) > 0.15).sort((a, b) => b.vec.ind[ind] - a.vec.ind[ind]).slice(0, 3).map((c) => ({ symbol: c.symbol, purity: c.vec.ind[ind] })) });
+      res.hist = {}; for (const s of [...cands.map((c) => c.symbol), "SPY", "AGG"]) if (series[s]) res.hist[s] = series[s];
+      S.rec = res; S.recKey = improve ? "improved" : "recommended"; S.recProg = null; renderPortfolio();
       await idbPut("etfRec:last", jsonSafe({ ...res, hist: null })).catch(() => {});
-      // 7. The analyst's write-up (the weights stay as built).
       await recWrite(res, S.recKey);
     } catch (e) { if (S.recRun === run) S.recErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { if (S.recRun === run) { S.recRun = null; S.recProg = null; renderPortfolio(); } }
   }
-  /** The analyst's explanation of one version, cached on the result. */
+  const clamp2 = (x, a, b) => Math.max(a, Math.min(b, x));
+  /** The three analysts (allocation, selection, risks and opportunities) on one version, in parallel, cached on the result. */
   async function recWrite(res, key) {
-    if (!S.sample || !res || (res.write ||= {})[key] || res.writing) return;
-    const goal = res.goalFull, rec = res.rec, improving = key === "improved", Pt = improving ? res.improve?.after : rec.portfolios[key]; if (!Pt) return;
-    const recView = improving ? { ...rec, portfolios: { ...rec.portfolios, improved: Pt } } : rec, vw = res.views[key] || {};
-    const ds = EtfRec.dossier(goal, recView, key, { improveRes: improving ? res.improve : null, exposureRes: vw.exposure, stressRes: vw.stress, curve: res.curve });
-    const inds = (vw.exposure?.industries || []).slice(0, 6), ci = await coIndex(), dg = await fundDigests(inds.map((x) => x.name), ci);
-    const reads = inds.map((x) => { const g = dg[String(x.name).toLowerCase()]; return g ? `- ${g.name} (${(x.weight * 100).toFixed(1)}% of the portfolio): ${g.headline || ""} 12M call: ${g.lean?.["12M"] || g.calls?.["12M"]?.call || "n/a"}; expected ${isNum(num(g.expected12)) ? g.expected12.toFixed(1) + "%" : "n/a"}.${g.reads?.macro ? " Macro: " + g.reads.macro : ""}` : ""; }).filter(Boolean).join("\n");
-    res.writing = key; renderPortfolio();
-    try { const out = await sampleJson(EtfRec.writePrompt(goal, ds, { improving, industryReads: reads }), { modelTier: "complex" });
-      res.write[key] = { ...EtfRec.cleanWrite(out, EtfRec.idsOf(ds)), dossier: ds, at: new Date().toISOString() }; await idbPut("etfRec:last", jsonSafe({ ...res, hist: null, writing: null })).catch(() => {}); }
-    catch (e) { res.writeErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
-    finally { res.writing = null; renderPortfolio(); }
+    if (!S.sample || !res?.sels?.[key] || (res.write ||= {})[key] || (res.writing ||= {})[key]) return;
+    const goal = res.goalFull, sel = res.sels[key], vw = res.views[key];
+    const ctx = { goal, curve: res.curve, rows: res.rows, tgt: { ...res.tgt, by: new Map(res.rows.map((r) => [r.name, r])) }, sleeve: res.sleeve, picksBy: res.picksBy, sel, ach: vw.ach, cands: res.cands, target: { industries: Object.fromEntries(res.tgt.held.map((h) => [h.name, h.target])), buckets: res.sleeve.buckets, companies: res.T }, opps: res.opps, stressRes: vw.stress, lens: vw.lens, improve: key === "improved" ? res.improve : null };
+    const ds = EtfStrat.dossier(ctx), ids = EtfStrat.idsOf(ds.text);
+    res.writing[key] = true; renderPortfolio();
+    try {
+      const parts = await Promise.all(Object.keys(EtfStrat.PARTS).map((p) => sampleJson(EtfStrat.prompt(p, goal, ds.text, { improving: key === "improved" }), { modelTier: "complex" }).then((x) => EtfStrat.clean(p, x, ids)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; })));
+      res.write[key] = { allocation: parts[0], selection: parts[1], risks: parts[2], dossier: ds.text, ids: ds.ids, at: new Date().toISOString() };
+      await idbPut("etfRec:last", jsonSafe({ ...res, hist: null, writing: null })).catch(() => {});
+    } catch (e) { res.writeErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    finally { res.writing[key] = false; renderPortfolio(); }
   }
   /** [E1]-style ids as small chips with the fact behind them on hover. */
   function recRich(t, ds) {
@@ -6711,72 +6763,115 @@ a.btnlink:hover { border-color: var(--accent); }
       ${S.recErr ? `<div class="notice err"><span>${esc(S.recErr)}</span></div>` : ""}
       <div class="small muted">The first build reads about 150 ETFs and their holdings, which takes a few minutes; after that the facts are kept for a week and a build takes seconds.</div></section>`;
   }
-  const REC_ROLE = { core: "pos", "growth tilt": "pos", income: "neu", ballast: "neu", diversifier: "neu", hedge: "warn" };
+  const REC_ROLE = { core: "pos", "industry tilt": "pos", "company capture": "pos", income: "neu", ballast: "neu", diversifier: "neu" };
+  const REC_STANCE = { overweight: "pos", neutral: "neu", underweight: "warn", avoid: "neg" };
+  const LVL = { low: "neu", medium: "warn", high: "neg" };
   function recView(res) {
-    if (!res?.rec) return "";
-    const rec = res.rec, A = rec.assets, same = (x, y) => x && y && x.w.every((v, i) => Math.abs(v - y.w[i]) < 0.005);
-    // The simpler and bolder versions only when they differ from the recommended one.
-    const keys = [...(res.improve?.after ? ["improved"] : []), "recommended", "simpler", "bolder"].filter((k) => k === "improved" || (rec.portfolios[k] && (k === "recommended" || !same(rec.portfolios[k], rec.portfolios.recommended)) && !(k === "bolder" && same(rec.portfolios.bolder, rec.portfolios.simpler))));
-    const key = keys.includes(S.recKey) ? S.recKey : keys[0], Pt = key === "improved" ? res.improve.after : rec.portfolios[key], vw = res.views[key] || {}, W = res.write?.[key], goal = res.goalFull;
-    const LBL = { improved: "Improved", recommended: "Recommended", simpler: "Simpler", bolder: "Bolder" }, worst = (v) => { const xs = [...(v?.stress?.episodes || []).map((s) => s.ret), ...(v?.stress?.hypo || []).map((s) => s.ret)]; return xs.length ? Math.min(...xs) : NaN; };
-    const tabs = `<div class="kpis">${keys.map((k) => { const p = k === "improved" ? res.improve.after : rec.portfolios[k]; return `<button class="kpi ${k === key ? "sel" : ""}" data-pf="rec-key-${k}" style="text-align:left;cursor:pointer;${k === key ? "outline:2px solid var(--accent)" : ""}"><span class="eyebrow">${LBL[k]}</span><span class="v">${pct(p.expected, false)}</span><span class="small muted">a year expected · vol ${pct(p.vol, false)} · yield ${pct(p.yield, false, 2)} · ${p.n} ETFs · worst ${pct(worst(res.views[k]))}</span></button>`; }).join("")}</div>`;
-    const held = A.map((a, i) => ({ a, i, w: Pt.w[i] })).filter((x) => x.w > 0).sort((x, y) => y.w - x.w), total = res.improve?.total || num(res.goal.amount) || 10000;
-    const byKind = {}; for (const x of held) { const k = EtfRec.isBond(x.a.e) ? EtfRec.BOND_LABEL[x.a.e.bond] || "Bonds" : EtfRec.KIND_LABEL[x.a.e.kind]; byKind[k] = (byKind[k] || 0) + x.w * 100; }
-    const ds = W?.dossier || "", wr = (t) => recRich(t, ds), we = Object.fromEntries((W?.etfs || []).map((e) => [e.symbol, e]));
-    const head = sec("rec-sum", `${LBL[key]} ETF portfolio · ${esc(goal.label)}`, `built ${esc(fmtDate(res.day))} · ${res.screened.passed} of ${res.screened.total} ETFs passed the screen · ${res.screened.deep} looked through to their industries`, `${tabs}
-      ${W ? `<div class="prose" style="margin-top:10px"><p style="font-size:17px"><b>${wr(W.headline)}</b></p><p>${wr(W.summary)}</p></div>` : res.writing === key ? `<div class="notice info"><span>The analyst is writing the explanation…</span></div>` : S.sample ? `<button class="sm" data-pf="rec-write">Have the analyst explain it</button>` : ""}${res.writeErr && !W ? `<div class="notice warn"><span>${esc(res.writeErr)}</span></div>` : ""}
-      <div class="fmix" style="margin-top:10px"><div class="box"><h3 style="margin:0 0 6px">What it holds</h3>${donut(Object.entries(byKind).map(([k, v]) => ({ name: k, value: v })), { center: `${Pt.n} ETFs` })}</div>
-        <div class="box"><div class="kpis">${[kpi("Expected a year", pct(Pt.expected, false), "Black-Litterman: market prior moved toward the industry and bond views"), kpi("Volatility", pct(Pt.vol, false), `ceiling ${pct(goal.vol, false, 0)}`), kpi("Yield", pct(Pt.yield, false, 2), `about ${usd(total * Pt.yield)} a year on ${usd(total)}`), kpi("Cost", pct(Pt.cost, false, 2), `${usd(total * Pt.cost)} a year`), kpi("Bonds", pct(Pt.bonds, false, 0), `band ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}`), kpi("Largest ETF", pct(Math.max(...Pt.w), false, 1), "cap 15%")].join("")}</div>
-        ${Pt.binding?.length ? `<div class="small muted" style="margin-top:6px">Limits that bind: ${esc(Pt.binding.join(" · "))}</div>` : ""}${Pt.violated?.length ? `<div class="notice warn small"><span>Couldn't meet every limit with the ETFs that passed (${esc(Pt.violated.join(" · "))}): loosen the exclusions or the volatility ceiling.</span></div>` : ""}</div></div>
+    if (!res?.sels) return res?.rec ? `<section class="panel"><div class="small muted">This result is from the earlier version of the recommender: build again for the new analysis.</div></section>` : "";
+    const same = (x, y) => x && y && x.w.every((v, i) => Math.abs(v - y.w[i]) < 0.005), S2 = res.sels;
+    const keys = ["improved", "recommended", "conviction", "simpler"].filter((k) => S2[k] && (k === "improved" || k === "recommended" || !same(S2[k], S2.recommended)) && !(k === "simpler" && same(S2.simpler, S2.conviction)));
+    const key = keys.includes(S.recKey) ? S.recKey : keys[0], sel = S2[key], vw = res.views[key], ach = vw.ach, W = res.write?.[key] || {}, A = W.allocation, Sl = W.selection, Rk = W.risks, goal = res.goalFull, cands = res.cands;
+    const LBL = { improved: "Improved", recommended: "Recommended", conviction: "High conviction", simpler: "Simpler" }, worst = (v) => { const xs = [...(v?.stress?.episodes || []).map((s) => s.ret), ...(v?.stress?.hypo || []).map((s) => s.ret)]; return xs.length ? Math.min(...xs) : NaN; };
+    const wr = (t) => recRich(t, W.dossier || ""), total = res.improve?.total || num(res.goal.amount) || 10000, held = cands.map((c, i) => ({ c, i, w: sel.w[i] })).filter((x) => x.w > 0).sort((a, b) => b.w - a.w);
+    const ex12 = (vw.ach.industryExp * vw.ach.stockShare) + held.filter((x) => x.c.isBond).reduce((s, x) => s + x.w * (num(x.c.mu) || 0), 0);
+    const tabs = `<div class="kpis">${keys.map((k) => { const v = res.views[k]; return `<button class="kpi" data-pf="rec-key-${k}" style="text-align:left;cursor:pointer;${k === key ? "outline:2px solid var(--accent)" : ""}"><span class="eyebrow">${LBL[k]}</span><span class="v">${pct(v.mu, false)}</span><span class="small muted">expected a year · vol ${pct(S2[k].vol, false)} · ${S2[k].w.filter((x) => x > 0).length} ETFs · tracks within ${pct(v.ach.tracking, false, 0)} · captures ${pct(v.ach.capture, false, 0)} · worst ${pct(worst(v))}</span></button>`; }).join("")}</div>`;
+    const writing = res.writing?.[key];
+    // Summary
+    const head = sec("rec-sum", `${LBL[key]} ETF portfolio · ${esc(goal.label)}`, `built ${esc(fmtDate(res.day))} from ${res.rows.length} industry runs · ${res.discovered} ETFs found holding the target companies · ${res.screened.passed} screened in · ${cands.length} compared`, `${tabs}
+      ${A?.headline ? `<p style="font-size:19px;margin:12px 0 6px"><b>${wr(A.headline)}</b></p>` : writing ? `<div class="notice info"><span>The strategists are writing the analysis (allocation, selection, risks and opportunities)…</span></div>` : S.sample ? `<button class="sm" data-pf="rec-write">Have the strategists write it up</button>` : ""}${res.writeErr && !A ? `<div class="notice warn"><span>${esc(res.writeErr)}</span></div>` : ""}
+      ${A?.thesis ? `<div class="prose">${String(A.thesis).split(/\n+/).map((p) => `<p>${wr(p)}</p>`).join("")}</div>` : ""}
+      <div class="kpis" style="margin-top:10px">${[kpi("Expected a year", pct(vw.mu, false), `blend of market prior and the runs' views · industries alone imply ${pct(ex12, false)}`), kpi("Volatility", pct(sel.vol, false), `ceiling ${pct(goal.vol, false, 0)}`), kpi("Yield", pct(vw.yield, false, 2), `about ${usd(total * vw.yield)} a year`), kpi("Cost", pct(vw.cost, false, 2), `${usd(total * vw.cost)} a year`),
+        kpi("Industries", String(res.tgt.held.length), `${res.tgt.avoided.length} avoided`), kpi("Target companies", String(Object.keys(res.T).length), `captures ${pct(ach.capture, false, 0)}`), kpi("Off target", pct(ach.tracking, false, 1), "of the portfolio sits in other industries than planned"), kpi("Bonds", pct(vw.bonds, false, 0), `band ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}`)].join("")}</div>
       <div class="actions" style="margin-top:8px"><button class="sm primary" data-pf="rec-save">Save as a portfolio</button>${res.improve && key === "improved" ? `<button class="sm" data-pf="rec-apply">Apply to “${esc(res.improve.name)}”</button>` : ""}<button class="sm" data-pf="rec-csv">Export CSV</button><button class="sm" data-pf="rec-new">Change the goal</button></div>`);
-    // The improver: before and after, how the current holdings were mapped, the order sheet.
+    // Improvement
     let impS = "";
-    if (key === "improved" && res.improve) { const im = res.improve, B = im.before, Af = im.after, sb = res.views.improved?.before;
-      const row = (l, b, a, f, better) => `<tr><td>${l}</td><td class="n">${f(b)}</td><td class="n"><b>${f(a)}</b></td><td>${isNum(b) && isNum(a) && Math.abs(a - b) > 1e-6 ? `<span class="pill ${(better === "up" ? a > b : a < b) ? "pos" : "neg"}">${better === "up" ? (a > b ? "better" : "worse") : a < b ? "better" : "worse"}</span>` : ""}</td></tr>`;
-      const tr = PMode.rebalanceTrades(im.holdings.map((h) => ({ ticker: h.ticker, weight: h.weight, price: h.price })), Object.fromEntries(A.map((a, i) => [a.symbol, Math.round(Af.w[i] * 1000) / 10]).filter(([, w]) => w > 0)), im.total);
-      impS = sec("rec-imp", "What changes", `turnover ${pct(im.turnover, false, 0)} of the portfolio`, `${W?.diagnosis?.length ? `<h3 style="margin:0 0 6px">What's wrong today</h3><ul class="dlist">${W.diagnosis.map((x) => `<li>${wr(x)}</li>`).join("")}</ul>` : ""}
-        <div class="two"><div class="box"><h3 style="margin:0 0 6px">Before and after</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th><th class="n">Today</th><th class="n">Improved</th><th></th></tr></thead><tbody>
-          ${row("Expected a year", B.expected, Af.expected, (v) => pct(v, false), "up")}${row("Volatility", B.vol, Af.vol, (v) => pct(v, false), "down")}${row("Yield", B.yield, Af.yield, (v) => pct(v, false, 2), "up")}${row("Cost", B.cost, Af.cost, (v) => pct(v, false, 2), "down")}
-          ${row("Return per unit of risk", (B.expected - EtfRec.RF) / B.vol, (Af.expected - EtfRec.RF) / Af.vol, (v) => fix(v, 2), "up")}${row("Worst stress", sb ? Math.min(...[...sb.episodes, ...sb.hypo].map((s) => s.ret)) : NaN, worst(res.views.improved), (v) => pct(v), "up")}</tbody></table></div>
-          <div class="small muted">Today's holdings are measured as the ETFs they map to (below), on the same expected returns and risk.</div></div>
-        <div class="box"><h3 style="margin:0 0 6px">Today's holdings, as ETFs</h3><ul class="dlist small">${im.map.map((m) => `<li><b class="tick">${esc(m.ticker)}</b> ${pct(m.weight, false, 1)} → <b class="tick">${esc(m.to)}</b> <span class="muted">(${esc(m.how)})</span></li>`).join("")}</ul></div></div>
-        <h3 style="margin:10px 0 6px">The order sheet</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>ETF or holding</th><th class="n">Today</th><th class="n">Target</th><th>Action</th><th class="n">Amount</th></tr></thead><tbody>${tr.filter((t) => t.action !== "HOLD" || t.target > 0).map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td class="n">${t.target.toFixed(1)}%</td><td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : usd(Math.abs(t.deltaUsd))}</td></tr>`).join("")}</tbody></table></div>`); }
-    // The ETF cards.
-    const cards = sec("rec-etfs", "The ETFs", "why each one is there", `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));gap:10px">${held.map(({ a, i, w }) => { const v = a.v || {}, e = we[a.symbol], bond = EtfRec.isBond(a.e);
-      const line = bond ? `${esc(v.label)} · yield ${pct(v.yield, false, 2)} · duration ~${v.duration}y · +1pp rates ${pct(v.rates_up_1pp)}` : v.kind === "stock" && v.conf > 0 ? `Industry runs: ${esc(v.call || "—")} (${goal.horizon}) · expected ${pct(v.expected)} · covers ${pct(v.on ?? 0, false, 0)}` : esc(v.why || "No industry view: market prior only");
-      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline"><div><button class="linkbtn tick" data-fund="${esc(a.symbol)}" style="font-size:18px">${esc(a.symbol)}</button> ${e?.role ? `<span class="pill ${REC_ROLE[e.role] || "neu"}">${esc(e.role)}</span>` : ""}<div class="small muted">${esc(trimC(a.info?.name || "", 48))}</div></div><div class="mono" style="font-size:22px;font-weight:600">${(w * 100).toFixed(1)}%</div></div>
-        <div class="small" style="margin:6px 0">${line}</div>
-        <div class="small muted">${[EtfRec.KIND_LABEL[a.e.kind], `cost ${pct(a.expense, false, 2)}`, `yield ${pct(a.yield, false, 2)}`, `vol ${pct(a.q?.vol, false, 0)}`, `1Y ${pct(a.q?.r1y)}`, `${usd(total * w)}`].join(" · ")}</div>
-        ${!bond && v.top?.length ? `<div style="margin-top:6px">${v.top.slice(0, 3).map((x) => `<span class="chip-s">${esc(x.industry)} ${pct(x.weight, false, 0)}${x.call ? ` · ${esc(x.call)}` : ""}</span>`).join(" ")}</div>` : ""}
+    if (key === "improved" && res.improve) { const B = res.improve.before, tr = PMode.rebalanceTrades(res.improve.holdings.map((h) => ({ ticker: h.ticker, weight: h.weight, price: h.price })), Object.fromEntries(cands.map((c, i) => [c.symbol, Math.round(sel.w[i] * 1000) / 10]).filter(([, w]) => w > 0)), res.improve.total);
+      const row = (l, b, a, f, up) => `<tr><td>${l}</td><td class="n">${f(b)}</td><td class="n"><b>${f(a)}</b></td><td>${isNum(b) && isNum(a) && Math.abs(a - b) > 1e-6 ? `<span class="pill ${(up ? a > b : a < b) ? "pos" : "neg"}">${(up ? a > b : a < b) ? "better" : "worse"}</span>` : ""}</td></tr>`;
+      impS = sec("rec-imp", "What changes in your portfolio", `turnover ${pct(sel.w.reduce((s, x, i) => s + Math.abs(x - (res.improve.holdings.find((h) => h.ticker === cands[i].symbol)?.weight || 0) / 100), 0) / 2, false, 0)}`, `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Today vs improved</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th><th class="n">Today</th><th class="n">Improved</th><th></th></tr></thead><tbody>
+        ${row("Off the target industry mix", B.tracking, ach.tracking, (v) => pct(v, false), false)}${row("Company targets captured", B.capture, ach.capture, (v) => pct(v, false, 0), true)}${row("Industry-implied 12M return (stocks)", B.industryExp, ach.industryExp, (v) => pct(v, false), true)}${row("Volatility", B.vol, sel.vol, (v) => pct(v, false), false)}${row("Largest single stock underneath", B.stocks[0]?.weight, ach.stocks[0]?.weight, (v) => pct(v, false), false)}</tbody></table></div></div>
+        <div class="box"><h3 style="margin:0 0 6px">The order sheet</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Today</th><th class="n">Target</th><th>Action</th><th class="n">Amount</th></tr></thead><tbody>${tr.filter((t) => t.action !== "HOLD" || t.target > 0).map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td class="n">${t.target.toFixed(1)}%</td><td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : usd(Math.abs(t.deltaUsd))}</td></tr>`).join("")}</tbody></table></div></div></div>`); }
+    // 1. Industry distribution
+    const ind = new Map((A?.industries || []).map((x) => [x.id, x])), ids = W.ids?.I || {}, byRow = new Map(res.rows.map((r) => [r.name, r])), gotBy = new Map(ach.industries.map((x) => [x.name, x.got]));
+    const maxT = Math.max(...res.tgt.held.map((h) => Math.max(h.target, h.market)), 0.01);
+    const indRow = (h) => { const r = byRow.get(h.name) || {}, a = ind.get(ids[h.name]), got = gotBy.get(h.name) || 0;
+      return `<tr><td class="wr" style="min-width:200px"><b>${esc(h.name)}</b>${a?.stance ? ` <span class="pill ${REC_STANCE[a.stance] || "neu"}">${esc(a.stance)}</span>` : ""}<div class="small muted">${esc(h.sector)} · ${r.kind === "full" ? "full run" : "code-only"}</div>
+          <div style="display:grid;gap:2px;margin-top:4px"><div class="meter" title="target"><i style="width:${(h.target / maxT) * 100}%;background:var(--accent)"></i></div><div class="meter" title="market"><i style="width:${(h.market / maxT) * 100}%;background:var(--bench)"></i></div></div></td>
+        <td class="n"><b>${pct(h.target, false)}</b><div class="small muted">mkt ${pct(h.market, false)}</div></td><td class="n ${cls(h.active)}">${pct(h.active)}</td><td class="n">${pct(got, false)}</td>
+        <td class="n"><b class="${h.z > 0.2 ? "up" : h.z < -0.2 ? "down" : ""}">${h.z > 0 ? "+" : ""}${h.z.toFixed(2)}</b></td><td class="small">${esc(r.call || "—")}<div class="muted">12M exp ${isNum(r.exp12) ? r.exp12.toFixed(1) + "%" : "—"}</div></td>
+        <td class="small">${isNum(r.pe) ? r.pe.toFixed(1) + "×" : "—"}<div class="muted">${isNum(r.pe_pct) ? Math.round(r.pe_pct * 100) + "th pct" : ""}</div></td>
+        <td class="wr small" style="min-width:260px">${a?.why ? wr(a.why) : (h.reasons || []).map((x) => `<span class="chip-s ${x.x > 0 ? "up" : "down"}">${esc(x.label)} ${x.x > 0 ? "+" : ""}${x.x.toFixed(1)}</span>`).join(" ")}${a?.risk ? `<div class="muted" style="margin-top:3px"><b>Wrong if:</b> ${wr(a.risk)}</div>` : ""}</td></tr>`; };
+    const secT = {}; for (const h of res.tgt.held) secT[h.sector] = (secT[h.sector] || 0) + h.target;
+    const indS = sec("rec-ind", "1 · The industry distribution", "the market's weights tilted by each industry run's conviction for this goal", `<div class="fmix"><div class="box"><h3 style="margin:0 0 6px">By sector</h3>${donut(Object.entries(secT).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, value: v * 100 })), { center: `${res.tgt.held.length} ind.` })}</div>
+        <div class="box small"><h3 style="margin:0 0 6px">How the targets were set</h3><p>Each industry's <b>conviction</b> weighs ${esc(Object.entries(EtfStrat.STYLE[goal.type].w).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map(([k]) => ({ fit: "the run's score for this investor type", call: "the call for the horizon", expected: "the 12-month expectation", skew: "bull vs bear scenarios", value: "valuation vs history", quality: "quality", revisions: "estimate revisions", risk: "risk", income: "dividend yield", lens: "macro, world, trade and regulation", verdict: "the lead strategist's verdict" })[k]).join(", "))}. Targets are the market weight × e<sup>${EtfStrat.STYLE[goal.type].tilt} × conviction</sup>, then capped at ${pct(goal.industryCap, false, 0)} per industry and ${pct(goal.sectorCap, false, 0)} per sector, nothing under 1%.</p>
+        <p>Bars: <span style="color:var(--accent)">target</span> vs <span class="muted">market</span>. "Got" is what the ETFs actually deliver.</p></div></div>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Target</th><th class="n">Active</th><th class="n">Got</th><th class="n">Conviction</th><th>Call</th><th>P/E</th><th>Why</th></tr></thead><tbody>${res.tgt.held.map(indRow).join("")}</tbody></table></div>
+      ${res.tgt.avoided.length ? `<h3 style="margin:12px 0 6px">Avoided</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Market</th><th class="n">Conviction</th><th>Why</th></tr></thead><tbody>${res.tgt.avoided.slice(0, 10).map((h) => { const a = ind.get(ids[h.name]); return `<tr><td><b>${esc(h.name)}</b><div class="small muted">${esc(h.sector)}</div></td><td class="n">${pct(h.market, false)}</td><td class="n down">${h.z.toFixed(2)}</td><td class="wr small">${a?.why ? wr(a.why) : (h.reasons || []).map((x) => `<span class="chip-s ${x.x > 0 ? "up" : "down"}">${esc(x.label)} ${x.x.toFixed(1)}</span>`).join(" ")}</td></tr>`; }).join("")}</tbody></table></div>` : ""}`);
+    // 2. Bonds
+    const bk = ach.bonds.filter((b) => b.target > 0 || b.got > 0);
+    const bondS = bk.length ? sec("rec-bonds", "2 · The bond sleeve", `${pct(res.bondShare, false, 0)} of the portfolio · 10-year ${esc(String(res.curve?.year10 ?? "—"))}%`, `${A?.bonds ? `<p>${wr(A.bonds)}</p>` : ""}${res.sleeve.notes.length ? `<ul class="dlist small">${res.sleeve.notes.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Bucket</th><th class="n">Target</th><th class="n">Got</th><th>ETFs</th></tr></thead><tbody>${bk.map((b) => `<tr><td>${esc(b.label)}</td><td class="n">${pct(b.target, false)}</td><td class="n"><b>${pct(b.got, false)}</b></td><td class="small">${held.filter((x) => x.c.isBond && x.c.bucket === b.name).map((x) => `<b class="tick">${esc(x.c.symbol)}</b> ${pct(x.w, false)} · yield ${pct(x.c.yield, false, 2)} · ~${x.c.e.duration}y`).join("<br>")}</td></tr>`).join("")}</tbody></table></div>`) : "";
+    // 3. Companies
+    const cw = new Map((Sl?.companies || []).map((x) => [x.id, x.why])), cid = W.ids?.C || {}, gotCo = new Map(ach.stocks.map((s) => [s.symbol, s.weight]));
+    const coS = sec("rec-cos", "3 · The companies it's built to own", `${Object.keys(res.T).length} companies, the best in each industry for a ${esc(goal.label.toLowerCase())} investor by the run's own ranking`, `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:10px">${res.tgt.held.filter((h) => res.picksBy[h.name]?.picks?.length).map((h) => `<div class="box"><div style="display:flex;justify-content:space-between"><b>${esc(h.name)}</b><span class="mono">${pct(h.target, false)}</span></div>
+      <div class="tbl-wrap"><table class="wrap-table" style="margin-top:6px"><tbody>${res.picksBy[h.name].picks.map((p) => { const x = p.c || {}, got = cands.reduce((s, c, i) => s + sel.w[i] * (num(c.vec?.cos?.[p.symbol]) || 0), 0), why = cw.get(cid[p.symbol]);
+        return `<tr><td style="width:70px"><button class="linkbtn tick" data-co="${esc(p.symbol)}">${esc(p.symbol)}</button><div class="small muted">${esc(trimC(p.name || x.name || "", 22))}</div></td><td class="small">score <b>${isNum(p.profile) ? p.profile : "—"}</b>${p.strategist ? ' <span class="pill pos" title="' + esc(p.strategist) + '">strategist pick</span>' : ""}<div class="muted">${["growth", "quality", "value", "momentum", "revisions"].filter((k) => isNum(p.factors?.[k])).map((k) => `${k.slice(0, 4)} ${p.factors[k]}`).join(" · ")}</div>
+          <div class="muted">P/E ${fix(x.pe, 1)} · growth ${pct(num(x.ntm_growth ?? x.rev_growth), false, 0)} · div ${pct(num(x.div_yield), false, 1)}</div>${why ? `<div style="margin-top:3px">${wr(why)}</div>` : ""}</td><td class="n small">target ${pct(h.target * p.within, false, 2)}<div class="${got >= h.target * p.within * 0.6 ? "up" : "muted"}">got ${pct(got, false, 2)}</div></td></tr>`; }).join("")}</tbody></table></div>
+      ${res.picksBy[h.name].avoided?.length ? `<div class="small muted">Strategist avoids: ${res.picksBy[h.name].avoided.map((a) => `<b class="tick">${esc(a.symbol)}</b>`).join(" ")}</div>` : ""}</div>`).join("")}</div>`);
+    // 4. ETFs
+    const ew = new Map((Sl?.etfs || []).map((x) => [x.symbol, x]));
+    const etfS = sec("rec-etfs", "4 · The ETFs", `${held.length} chosen from ${cands.length}: each placed to deliver part of the target with as little overlap as possible`, `${Sl?.overlap ? `<p>${wr(Sl.overlap)}</p>` : ""}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(400px,100%),1fr));gap:10px">${held.map(({ c, w }) => { const e = ew.get(c.symbol), v = c.vec || {};
+      const caps = c.isBond ? [] : Object.entries(v.cos || {}).filter(([t]) => res.T[t]).sort((a, b) => b[1] - a[1]).slice(0, 6), inT = c.isBond ? 0 : Object.entries(v.ind || {}).reduce((a, [k, x]) => a + (res.tgt.held.some((h) => h.name === k) ? x : 0), 0);
+      const ov = ach.pairs.filter((p) => p.a === c.symbol || p.b === c.symbol).sort((a, b) => b.overlap - a.overlap)[0];
+      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px"><div><button class="linkbtn tick" data-fund="${esc(c.symbol)}" style="font-size:18px">${esc(c.symbol)}</button> ${e?.role ? `<span class="pill ${REC_ROLE[e.role] || "neu"}">${esc(e.role)}</span>` : ""}<div class="small muted">${esc(trimC(c.info?.name || "", 52))}</div></div><div style="text-align:right"><div class="mono" style="font-size:22px;font-weight:600">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(total * w)}</div></div></div>
+        <div class="small" style="margin:6px 0">${c.isBond ? `${esc(EtfStrat.BUCKETS[c.bucket] || "")} · yield ${pct(c.yield, false, 2)} · duration ~${c.e.duration}y · +1pp rates ${pct(c.v?.rates_up_1pp)}` : `<b>${pct(inT, false, 0)}</b> in target industries · <b>${pct(caps.reduce((a, x) => a + x[1], 0), false, 0)}</b> in target companies · ${v.n} holdings (effective ${fix(v.effN, 0)})`}</div>
+        ${caps.length ? `<div>${caps.map(([t, x]) => `<span class="chip-s">${esc(t)} ${pct(x, false, 1)}</span>`).join(" ")}</div>` : ""}
+        ${!c.isBond ? `<div class="small muted" style="margin-top:4px">${Object.entries(v.ind || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, x]) => `${esc(k)} ${pct(x, false, 0)}`).join(" · ")}</div>` : ""}
         ${e?.why ? `<p class="small" style="margin:8px 0 0">${wr(e.why)}</p>` : ""}${e?.watch ? `<div class="small muted" style="margin-top:4px"><b>Sell if:</b> ${wr(e.watch)}</div>` : ""}
-        <div class="small muted" style="margin-top:6px">Goal score ${isNum(a.pill?.total) ? a.pill.total.toFixed(0) : "—"} · expected ${pct(rec.mu[i], false)} (prior ${pct(rec.prior[i], false)})${a.twins?.length ? ` · same exposure as ${esc(a.twins.join(", "))}` : ""}</div></div>`; }).join("")}</div>`);
-    // Look-through, stress, history.
-    const ex = vw.exposure || {}, bars = (xs) => `<div style="display:grid;gap:6px">${(xs || []).slice(0, 10).map((x) => `<div class="fbar"><span>${esc(x.name)}</span><b class="mono" style="text-align:right">${(x.weight * 100).toFixed(1)}%</b><div class="meter"><i style="width:${Math.min(100, x.weight * 100 / ((xs[0]?.weight || 1) * 100) * 100)}%;background:var(--accent)"></i></div></div>`).join("")}</div>`;
-    const look = sec("rec-look", "What you'd own underneath", "every ETF looked through to its industries and stocks", `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Industries</h3>${bars(ex.industries)}</div><div class="box"><h3 style="margin:0 0 6px">Single stocks (across all the ETFs)</h3>${bars(ex.stocks)}<div class="small muted" style="margin-top:6px">No single stock above 8% through the ETFs.</div></div></div>`);
-    const st = vw.stress || {}, strS = sec("rec-stress", "Stress test", "the same weights through past shocks and three hypothetical ones", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Shock</th><th class="n">This portfolio</th><th class="n">SPY</th></tr></thead><tbody>${(st.episodes || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">${esc(fmtDate(s.from))} to ${esc(fmtDate(s.to))}</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n ${cls(s.spy)}">${pct(s.spy)}</td></tr>`).join("")}
-      ${(st.hypo || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">hypothetical: betas and durations</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n muted">${s.label.startsWith("Stocks") ? "−20.0%" : ""}</td></tr>`).join("")}</tbody></table></div>`);
+        <div class="small muted" style="margin-top:6px">${[`cost ${pct(c.expense, false, 2)}`, `$${fix(num(c.info?.assetsUnderManagement) / 1e9, 1)}B`, `yield ${pct(c.yield, false, 1)}`, `vol ${pct(c.q?.vol, false, 0)}`, `beta ${fix(c.q?.beta, 2)}`, `1Y ${pct(c.q?.r1y)}`, `3Y ${pct(c.q?.r3y)}/yr`].join(" · ")}</div>
+        <div class="small muted">Found via ${esc(c.via)}${ov ? ` · most overlap: ${esc(ov.a === c.symbol ? ov.b : ov.a)} ${pct(ov.overlap, false, 0)}` : ""}${c.twins?.length ? ` · same as ${esc(c.twins.slice(0, 3).join(", "))}` : ""}</div></div>`; }).join("")}</div>`);
+    // Overlap matrix
+    const st = held.filter((x) => !x.c.isBond).map((x) => x.c), ovS = st.length > 1 ? sec("rec-ovl", "Overlap between the ETFs", "the share of each pair that is the same stocks", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th>${st.map((c) => `<th class="n">${esc(c.symbol)}</th>`).join("")}</tr></thead><tbody>${st.map((a) => `<tr><td><b class="tick">${esc(a.symbol)}</b></td>${st.map((b) => { if (a === b) return `<td class="n muted">—</td>`; const o = EtfStrat.overlap(a.vec.cos, b.vec.cos); return `<td class="n" style="background:rgba(239,68,68,${Math.min(0.6, o * 1.2).toFixed(2)})">${(o * 100).toFixed(0)}%</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`) : "";
+    // Look-through
+    const bars = (xs, f) => `<div style="display:grid;gap:6px">${(xs || []).slice(0, 12).map((x) => `<div class="fbar"><span>${esc(x.name || x.symbol)}${f ? f(x) : ""}</span><b class="mono" style="text-align:right">${pct(x.weight ?? x.got, false)}</b><div class="meter"><i style="width:${Math.min(100, ((x.weight ?? x.got) / ((xs[0]?.weight ?? xs[0]?.got) || 1)) * 100)}%;background:var(--accent)"></i></div></div>`).join("")}</div>`;
+    const lookS = sec("rec-look", "What you'd own underneath", "every ETF looked through to its stocks", `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Largest stocks across the ETFs</h3>${bars(ach.stocks, (s) => (s.target ? ` <span class="pill pos">target ${pct(s.target, false, 1)}</span>` : ""))}<div class="small muted" style="margin-top:6px">No single stock above ${pct(goal.stockCap, false, 0)} through the ETFs.</div></div>
+      <div class="box"><h3 style="margin:0 0 6px">Industries outside the target</h3>${bars(ach.industries.filter((x) => !x.target && x.got > 0.003).sort((a, b) => b.got - a.got).map((x) => ({ name: x.name, weight: x.got })))}<div class="small muted" style="margin-top:6px">What the ETFs bring along beyond the plan.</div></div></div>`);
+    // Horizons and scenarios
+    const lc2 = vw.lens || {}, hzS = sec("rec-hz", "Horizons and scenarios", "the strategist's calls for this mix, next to the industry runs' own", `<div class="kpis">${["1M", "3M", "6M", "12M"].map((h) => { const a = A?.horizons?.[h], c = lc2.calls?.[h]; return kpi(h, esc(a?.call || c?.call || "—"), `${c ? `runs: ${esc(c.call || "—")}${isNum(c.expected) ? `, ${c.expected.toFixed(1)}%` : ""} · ${pct(c.dist?.up || 0, false, 0)} up / ${pct(c.dist?.down || 0, false, 0)} down` : ""}${a?.why ? "<br>" + wr(a.why) : ""}`); }).join("")}</div>
+      ${A?.scenarios ? `<div class="two" style="margin-top:10px">${["bull", "base", "bear"].map((k) => { const s = A.scenarios[k]; return s ? `<div class="box"><span class="pill ${k === "bull" ? "pos" : k === "bear" ? "neg" : "neu"}">${k}</span> <b>${isNum(s.probability) ? s.probability + "%" : ""}</b> ${esc(s.ret || "")}<p class="small" style="margin:6px 0 0">${wr(s.narrative)}</p></div>` : ""; }).join("")}</div>` : ""}`);
+    // Opportunities
+    const ow = Rk?.opportunities || [], oppS = sec("rec-opp", "Opportunities", "where the runs see the best cases, and how to play them", `${ow.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));gap:10px">${ow.map((o) => `<div class="box"><b>${esc(o.title)}</b> ${o.horizon ? `<span class="pill neu">${esc(o.horizon)}</span>` : ""}<p class="small" style="margin:6px 0">${wr(o.why)}</p>${o.how ? `<div class="small"><b>How:</b> ${wr(o.how)}</div>` : ""}</div>`).join("")}</div>` : ""}
+      <div class="tbl-wrap" style="margin-top:10px"><table class="wrap-table"><thead><tr><th>Opportunity</th><th>Why</th><th>Best companies</th><th>Purest ETFs</th></tr></thead><tbody>${(res.opps || []).filter((o) => o.kind !== "catalyst").map((o) => `<tr><td><b>${esc(o.industry)}</b><div class="small muted">${o.kind === "value" ? "cheap, improving" : "high conviction"} · ${esc(o.call || "")}</div></td><td class="wr small">${esc(o.why)}</td><td class="small">${(o.companies || []).map((s) => `<b class="tick">${esc(s)}</b>`).join(" ")}</td><td class="small">${(o.etfs || []).map((x) => `<b class="tick">${esc(x.symbol)}</b> ${pct(x.purity, false, 0)}`).join("<br>")}</td></tr>`).join("")}</tbody></table></div>
+      ${(res.opps || []).some((o) => o.kind === "catalyst") ? `<h3 style="margin:10px 0 6px">Dated catalysts inside the horizon</h3><ul class="dlist small">${res.opps.filter((o) => o.kind === "catalyst").map((o) => `<li><b class="mono">${esc(o.date)}</b> ${esc(o.title)} <span class="muted">(${esc(o.industry)})</span></li>`).join("")}</ul>` : ""}`);
+    // Risks and the lens
+    const riskS = sec("rec-risks", "Risks, macro, world, trade and regulation", "across the whole mix, through its industries", `${Rk?.risks?.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Why</th><th>Offset</th></tr></thead><tbody>${Rk.risks.map((r) => `<tr><td><b>${esc(r.risk)}</b></td><td><span class="pill ${LVL[r.likelihood] || "neu"}">${esc(r.likelihood)}</span></td><td><span class="pill ${LVL[r.impact] || "neu"}">${esc(r.impact)}</span></td><td class="wr small">${wr(r.why)}</td><td class="wr small">${wr(r.hedge)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${Rk?.macro ? `<h3 style="margin:10px 0 6px">Macro</h3><p>${wr(Rk.macro)}</p>` : ""}${Rk?.world ? `<h3 style="margin:10px 0 6px">World, trade and regulation</h3><p>${wr(Rk.world)}</p>` : ""}
+      <div class="two" style="margin-top:8px">${(lc2.world || []).length ? `<div class="box"><h3 style="margin:0 0 6px">World events reaching the mix</h3><table class="wrap-table"><tbody>${lc2.world.slice(0, 6).map((x) => `<tr><td class="wr small">${esc(x.title)}</td><td class="n small">${pct(x.w, false, 0)}</td><td class="small ${x.net > 0 ? "up" : x.net < 0 ? "down" : ""}">${x.net > 0 ? "helps" : x.net < 0 ? "hurts" : "mixed"}</td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${(lc2.trade || []).length ? `<div class="box"><h3 style="margin:0 0 6px">Trade exposure</h3><table class="wrap-table"><tbody>${lc2.trade.slice(0, 6).map((x) => `<tr><td class="small"><b>${esc(x.country)}</b></td><td class="small">${esc(x.threat)}</td><td class="n small">${pct(x.rev, false, 1)} of revenue</td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${(lc2.rules || []).length ? `<div class="box"><h3 style="margin:0 0 6px">Binding rules</h3><table class="wrap-table"><tbody>${lc2.rules.slice(0, 6).map((x) => `<tr><td class="wr small"><b>${esc(x.name)}</b><div class="muted">${esc(x.bottom_line || "")}</div></td><td class="small">${esc(x.severity)}</td><td class="n small">${pct(x.w, false, 0)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`);
+    const stt = vw.stress || {}, strS = sec("rec-stress", "Stress test", "the mix through past shocks and three hypothetical ones", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Shock</th><th class="n">This mix</th><th class="n">SPY</th></tr></thead><tbody>${(stt.episodes || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">${esc(fmtDate(s.from))} to ${esc(fmtDate(s.to))}</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n ${cls(s.spy)}">${pct(s.spy)}</td></tr>`).join("")}${(stt.hypo || []).map((s) => `<tr><td>${esc(s.label)}<div class="small muted">hypothetical</div></td><td class="n ${cls(s.ret)}"><b>${pct(s.ret)}</b></td><td class="n muted">${s.label.startsWith("Stocks") ? "−20.0%" : ""}</td></tr>`).join("")}</tbody></table></div>`);
     let histS = "";
-    if (res.hist?.SPY) { const syms = held.map((x) => ({ ticker: x.a.symbol, weight: x.w * 100 })), from = Horizon.addDays(today(), -5 * 365), cal = res.hist.SPY.dates, nv = PMode.nav(res.hist, syms, { from, start: 10000, calendar: cal }), sp = PMode.nav(res.hist, [{ ticker: "SPY", weight: 100 }], { from, start: 10000, calendar: cal });
+    if (res.hist?.SPY) { const hs2 = held.map((x) => ({ ticker: x.c.symbol, weight: x.w * 100 })), from = Horizon.addDays(today(), -5 * 365), cal = res.hist.SPY.dates, nv = PMode.nav(res.hist, hs2, { from, start: 10000, calendar: cal }), sp = PMode.nav(res.hist, [{ ticker: "SPY", weight: 100 }], { from, start: 10000, calendar: cal });
       const m = nv.dates.length > 60 ? PMode.metrics(nv, res.hist.SPY) : null, ms = sp.dates.length > 60 ? PMode.metrics(sp, res.hist.SPY) : null, col = "var(--accent)";
-      histS = sec("rec-hist", "How this mix behaved", `$10,000 held since ${esc(fmtDate(nv.from))}, against SPY`, `<div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: sp.dates, values: sp.values }, { name: "This mix", color: col, dates: nv.dates, values: nv.values }], { height: 240, width: innerWidth < 720 ? 520 : 1100, area: col, fmtY: (v) => "$" + Math.round(v / 1000) + "k" })}
-        <div class="legend"><span><i style="background:${col}"></i>This mix ${pct(m?.totalReturn)} · vol ${isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—"} · max drawdown −${isNum(m?.maxDrawdown) ? m.maxDrawdown.toFixed(1) : "—"}%</span><span><i style="background:var(--bench)"></i>SPY ${pct(ms?.totalReturn)} · max drawdown −${isNum(ms?.maxDrawdown) ? ms.maxDrawdown.toFixed(1) : "—"}%</span></div></div>
-        <div class="small muted">Today's weights held through the past: it shows how the mix behaves, not whether the picks were right then (they are based on today's industry calls). Saved recommendations are tracked from the day you save them in Portfolio mode.</div>`); }
-    const anal = W ? sec("rec-risks", "Risks and what would change it", "the analyst, from the facts above", `<div class="two"><div class="box"><h3 style="margin:0 0 6px">Risks</h3><ul class="dlist">${(W.risks || []).map((x) => `<li>${wr(x)}</li>`).join("")}</ul></div><div class="box"><h3 style="margin:0 0 6px">What would change the call</h3><ul class="dlist">${(W.changes_mind || []).map((x) => `<li>${wr(x)}</li>`).join("")}</ul>${W.left_out ? `<h3 style="margin:10px 0 6px">Left out</h3><p class="small">${wr(W.left_out)}</p>` : ""}</div></div>`) : "";
-    const method = sec("rec-method", "How it was built", "", `<ul class="dlist small"><li><b>Universe:</b> ${res.screened.total} liquid US-listed ETFs; kept those with $250M+ in assets, real volume, three years of history, cost under ${pct(goal.maxCost, false, 2)}, no leverage${goal.intl ? "" : ", no international"}. ${Object.keys(res.screened.out).length} were screened out${Object.keys(res.screened.out).length ? ` (e.g. ${esc(Object.entries(res.screened.out).slice(0, 4).map(([s, w]) => `${s}: ${w}`).join("; "))})` : ""}.</li>
-      <li><b>Industry views:</b> each stock ETF's holdings matched to your industry runs; its expected return, calls and investor-type score are the runs' own, weighted by what it holds. Confidence falls with coverage.</li>
-      <li><b>Bond views:</b> carry from the Treasury curve (10-year ${esc(String(res.curve?.year10 ?? "—"))}%) and trailing yields, less expected defaults; duration from each fund's approximate profile.</li>
-      <li><b>Returns and risk:</b> Black-Litterman (prior: 4% + beta × 5%), three years of daily returns with Ledoit-Wolf shrinkage (${pct(rec.shrink, false, 0)} toward constant correlation), near-identical funds collapsed into one.</li>
-      <li><b>Limits:</b> every ETF 3–15%, ${goal.minN}–${goal.maxN} ETFs, bonds ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}, any sector at most ${pct(goal.sectorCap, false, 0)}, any single stock through the ETFs at most 8%, volatility under ${pct(goal.vol, false, 0)}.</li></ul>`);
-    return head + impS + cards + look + strS + histS + anal + method;
+      histS = sec("rec-hist", "How this mix behaved", `$10,000 since ${esc(fmtDate(nv.from))}, against SPY`, `<div class="chart">${lineChart([{ name: "SPY", color: "var(--bench)", dash: true, dates: sp.dates, values: sp.values }, { name: "This mix", color: col, dates: nv.dates, values: nv.values }], { height: 240, width: innerWidth < 720 ? 520 : 1100, area: col, fmtY: (v) => "$" + Math.round(v / 1000) + "k" })}
+        <div class="legend"><span><i style="background:${col}"></i>This mix ${pct(m?.totalReturn)} · vol ${isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—"} · max DD −${isNum(m?.maxDrawdown) ? m.maxDrawdown.toFixed(1) : "—"}%</span><span><i style="background:var(--bench)"></i>SPY ${pct(ms?.totalReturn)} · max DD −${isNum(ms?.maxDrawdown) ? ms.maxDrawdown.toFixed(1) : "—"}%</span></div></div><div class="small muted">Today's weights held through the past: how the mix behaves, not proof the picks were right then.</div>`); }
+    const planS = Sl?.implementation?.length || Rk?.watch?.length || Rk?.change_mind?.length ? sec("rec-plan", "Putting it on and watching it", "", `<div class="two">${Sl?.implementation?.length ? `<div class="box"><h3 style="margin:0 0 6px">Implementation</h3><ol class="small">${Sl.implementation.map((x) => `<li>${wr(x)}</li>`).join("")}</ol>${Sl.left_out ? `<h3 style="margin:10px 0 6px">Left out</h3><p class="small">${wr(Sl.left_out)}</p>` : ""}</div>` : ""}
+      <div class="box">${Rk?.watch?.length ? `<h3 style="margin:0 0 6px">Watch list</h3><ul class="dlist small">${Rk.watch.map((w) => `<li><b class="mono">${esc(w.date)}</b> ${wr(w.what)} <span class="muted">${wr(w.why)}</span></li>`).join("")}</ul>` : ""}${Rk?.change_mind?.length ? `<h3 style="margin:10px 0 6px">What would change the allocation</h3><ul class="dlist small">${Rk.change_mind.map((x) => `<li>${wr(x)}</li>`).join("")}</ul>` : ""}</div></div>`) : "";
+    const method = sec("rec-method", "How it was built", "", `<ol class="small"><li><b>Industries:</b> ${res.rows.length} industry runs, each given a conviction for a ${esc(goal.label.toLowerCase())} investor over ${esc(goal.horizon)}; the target distribution tilts the market's own weights by conviction, drops what to avoid, and caps industries and sectors.</li>
+      <li><b>Bonds:</b> ${pct(res.bondShare, false, 0)} (the goal's band, more when the industries' convictions are weak), split by the goal and the curve.</li>
+      <li><b>Companies:</b> the best ${EtfStrat.STYLE[goal.type].perInd} per industry by the run's ranking for this investor type, plus the lead strategist's best expressions; avoids and thinly traded names dropped.</li>
+      <li><b>ETFs:</b> every US-listed fund holding the top ${Math.min(45, Object.keys(res.T).length)} target companies (FMP's reverse lookup: ${res.discovered} with $200M+), the strongest 50 of them plus curated sector, industry, broad and bond funds (${res.screened.pool} in all); ${res.screened.passed} passed the screen (size, volume, age, cost, no leverage, US); full holdings matched to the industries; copies of the same index collapsed.</li>
+      <li><b>The mix:</b> a quadratic program matching the industry targets and company targets, penalizing overlap between the ETFs and off-target exposure, with risk (three years of daily returns, ${pct(res.shrink, false, 0)} Ledoit-Wolf shrinkage) under the ${pct(goal.vol, false, 0)} ceiling, every ETF 3–15%, no single stock above ${pct(goal.stockCap, false, 0)} underneath.</li>
+      <li><b>Expected returns:</b> each ETF's CAPM prior (4% + beta × 5%) moved toward its industries' 12-month expectations by how much of it the runs cover; bonds on carry less defaults.</li></ol>`);
+    return head + impS + indS + bondS + coS + etfS + ovS + lookS + hzS + oppS + riskS + strS + histS + planS + method;
   }
   async function recSave({ apply = false } = {}) {
-    const res = S.rec; if (!res) return; const key = S.recKey, Pt = key === "improved" ? res.improve.after : res.rec.portfolios[key]; if (!Pt) return;
-    const st = await pfStore(), now = new Date().toISOString(), hold = res.rec.assets.map((a, i) => ({ ticker: a.symbol, name: a.info?.name || "", weight: Math.round(Pt.w[i] * 1000) / 10, asset_type: "etf" })).filter((h) => h.weight > 0);
+    const res = S.rec; if (!res?.sels) return; const key = S.recKey, sel = res.sels[key]; if (!sel) return;
+    const st = await pfStore(), now = new Date().toISOString(), hold = res.cands.map((c, i) => ({ ticker: c.symbol, name: c.info?.name || "", weight: Math.round(sel.w[i] * 1000) / 10, asset_type: "etf" })).filter((h) => h.weight > 0);
     if (apply && res.improve) { const p = st.list.find((x) => x.id === res.improve.id); if (!p) return;
       if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])); if (!p.startDate) p.startDate = pfStart(p);
       const d = (S.pfData?.series?.SPY?.dates || []).slice(-1)[0] || today(); p.rebalanceEvents = [...(p.rebalanceEvents || []), { id: pfId(), date: d, label: `ETF improvement ${d}`, trades: hold.map((h) => ({ ticker: h.ticker, amountUsd: 0, newWeight: h.weight })) }];
       p.holdings = hold; p.updatedAt = now; st.activeId = p.id; }
-    else { const x = { id: pfId(), name: `${res.goalFull.label} ETFs (${today()})`, description: `ETF ${key} portfolio for a ${res.goalFull.label.toLowerCase()} goal, ${res.goalFull.horizon} horizon`, totalInvestment: res.improve?.total || num(res.goal.amount) || 10000, startDate: today(), holdings: hold, rebalanceEvents: [], createdAt: now, updatedAt: now };
+    else { const x = { id: pfId(), name: `${res.goalFull.label} ETFs (${today()})`, description: `ETF portfolio (${key}) for a ${res.goalFull.label.toLowerCase()} goal, ${res.goalFull.horizon} horizon`, totalInvestment: res.improve?.total || num(res.goal.amount) || 10000, startDate: today(), holdings: hold, rebalanceEvents: [], createdAt: now, updatedAt: now };
       st.list.push(x); st.activeId = x.id; }
     await pfSave(); S.pfMode = "analysis"; S.pfDraft = null; renderPortfolio(); pfLoad();
   }

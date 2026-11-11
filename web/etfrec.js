@@ -73,7 +73,7 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
   function goalOf(g = {}) {
     const base = GOALS[g.type] || GOALS.growth, vol = isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : base.vol;
     return { ...base, type: GOALS[g.type] ? g.type : "growth", horizon: HZ_MONTHS[g.horizon] ? g.horizon : "12M", vol, amount: n(g.amount) > 0 ? n(g.amount) : 10000,
-      minN: Math.max(Math.ceil(100 / CAP), n(g.minN) || 7), maxN: Math.max(Math.ceil(100 / CAP), Math.min(15, n(g.maxN) || 10)), cap: CAP, minW: 3, stockCap: 0.08,
+      minN: Math.max(Math.ceil(100 / CAP), n(g.minN) || 8), maxN: Math.max(Math.ceil(100 / CAP), Math.min(15, n(g.maxN) || 12)), cap: CAP, minW: 3, stockCap: 0.08,
       maxCost: isNum(n(g.maxCost)) && n(g.maxCost) > 0 ? n(g.maxCost) / 100 : 0.0075, intl: !!g.intl, bondsOk: g.bonds !== false,
       exclude: (g.exclude || []).map(lc), excludeSyms: (g.excludeSyms || []).map((s) => String(s).toUpperCase()), yieldTarget: n(g.yieldTarget) > 0 ? n(g.yieldTarget) / 100 : NaN };
   }
