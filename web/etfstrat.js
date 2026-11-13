@@ -300,8 +300,8 @@
     const byRow = new Map((rows || []).map((r) => [r.name, r]));
     let expS = 0, expW = 0; for (const [k, v] of Object.entries(ind)) { const r = byRow.get(k); if (r && isNum(r.exp12)) { expS += v * r.exp12 / 100; expW += v; } }
     const stockW = Object.values(ind).reduce((a, x) => a + x, 0), covered = stockW ? expW / stockW : 0;
-    const stocks = Object.entries(cos).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([t, v]) => ({ symbol: t, weight: v, target: target.companies[t] || 0 }));
-    return { industries: table, bonds, tracking, capture, pairs: pairs.sort((x, y) => y.overlap - x.overlap), stocks, stockShare: stockW, industryExp: expW ? expS / expW : NaN, covered, dup };
+    const allStocks = Object.entries(cos).sort((a, b) => b[1] - a[1]).map(([t, v]) => ({ symbol: t, weight: v })), stocks = allStocks.slice(0, 25).map((x) => ({ ...x, target: target.companies[x.symbol] || 0 }));
+    return { industries: table, bonds, tracking, capture, pairs: pairs.sort((x, y) => y.overlap - x.overlap), stocks, allStocks: allStocks.slice(0, 400), stockShare: stockW, industryExp: expW ? expS / expW : NaN, covered, dup };
   }
 
   // ------------------------------------------------------------------ 6. opportunities
@@ -319,6 +319,43 @@
     const cat = []; for (const r of rows.filter((x) => tgt.held.some((h) => h.name === x.name) || x.z > 0.3)) for (const e of r.events || []) if (e.date >= today && e.date <= until && /high|critical/.test(lc(e.importance))) cat.push({ kind: "catalyst", industry: r.name, date: e.date, title: e.title, detail: e.detail, z: r.z });
     out.push(...cat.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 8));
     return out;
+  }
+
+  // ------------------------------------------------------------------ the report card
+  const GRADE_W = {
+    growth: { alignment: 0.18, conviction: 0.2, quality: 0.15, diversification: 0.14, risk: 0.1, cost: 0.08, expected: 0.1, fit: 0.05 },
+    aggressive: { conviction: 0.24, expected: 0.18, alignment: 0.14, quality: 0.14, diversification: 0.1, risk: 0.05, cost: 0.08, fit: 0.07 },
+    income: { income: 0.24, risk: 0.14, quality: 0.14, alignment: 0.12, diversification: 0.1, cost: 0.1, conviction: 0.08, fit: 0.08 },
+    conservative: { risk: 0.24, diversification: 0.15, quality: 0.14, alignment: 0.12, cost: 0.1, income: 0.08, conviction: 0.08, fit: 0.09 },
+  };
+  const LETTERS = [[90, "A"], [85, "A-"], [80, "B+"], [75, "B"], [70, "B-"], [65, "C+"], [60, "C"], [55, "C-"], [45, "D"], [0, "F"]];
+  const letterOf = (s) => (isNum(s) ? LETTERS.find(([t]) => s >= t)[1] : "—");
+  const lin = (x, a, b) => (isNum(x) ? clamp(((x - a) / (b - a)) * 100, 0, 100) : NaN);
+  /**
+   * Grade a portfolio for the goal, 0-100 with a letter, from eight parts: alignment with the target industry mix,
+   * the industry runs' conviction behind what it holds, the quality of its companies by the runs' rankings,
+   * diversification (effective stocks, the largest single stock, overlap), risk against the ceiling, cost, income, the
+   * industry-implied return against the market's, and fit with the goal's bond band.
+   * x: {ach (EtfStrat.achieved), conv (weighted conviction of its stock industries), quality (0-100), vol, cost, yield, bonds, mktExp, maxOverlap}
+   */
+  function grade(x, goal) {
+    const W = GRADE_W[goal.type] || GRADE_W.growth, P = {}, a = x.ach || {};
+    const effN = (() => { const s = (a.allStocks || a.stocks || []).reduce((t, v) => t + (v.weight / (a.stockShare || 1)) ** 2, 0); return s > 0 ? 1 / s : NaN; })(), maxS = n(a.stocks?.[0]?.weight);
+    P.alignment = { score: isNum(a.tracking) ? 100 * (1 - clamp(a.tracking / 0.7, 0, 1)) : NaN, value: a.tracking, label: "Industry mix vs the target", note: isNum(a.tracking) ? `${Math.round(a.tracking * 100)}% of it sits in other industries than the runs' target` : "" };
+    P.conviction = { score: isNum(x.conv) ? 50 + 48 * Math.tanh(x.conv / 0.45) : NaN, value: x.conv, label: "Conviction behind its industries", note: isNum(x.conv) ? `weighted conviction ${x.conv > 0 ? "+" : ""}${x.conv.toFixed(2)} (0 = the market)` : "" };
+    P.quality = { score: isNum(x.quality) ? clamp((x.quality - 30) * 1.6, 0, 100) : NaN, value: x.quality, label: "Quality of its companies", note: isNum(x.quality) ? `average rank score ${Math.round(x.quality)} for this investor type` : "" };
+    const dv = [lin(Math.log(effN), Math.log(8), Math.log(120)), isNum(maxS) ? clamp(100 - Math.max(0, maxS - 0.05) * 800, 0, 100) : NaN, isNum(x.maxOverlap) ? clamp(100 - Math.max(0, x.maxOverlap - 0.25) * 200, 0, 100) : NaN].filter(isNum);
+    P.diversification = { score: dv.length ? dv.reduce((s2, v) => s2 + v, 0) / dv.length : NaN, value: effN, label: "Diversification", note: `${isNum(effN) ? `about ${Math.round(effN)} effective stocks` : ""}${isNum(maxS) ? `, largest single stock ${(maxS * 100).toFixed(1)}%` : ""}${isNum(x.maxOverlap) && x.maxOverlap > 0.25 ? `, funds overlap up to ${Math.round(x.maxOverlap * 100)}%` : ""}` };
+    P.risk = { score: isNum(x.vol) ? clamp(100 - Math.max(0, x.vol / goal.vol - 0.8) * 125, 0, 100) : NaN, value: x.vol, label: "Risk vs the goal", note: isNum(x.vol) ? `volatility ${(x.vol * 100).toFixed(1)}% against a ${(goal.vol * 100).toFixed(0)}% ceiling` : "" };
+    P.cost = { score: lin(-x.cost, -0.0075, -0.0005), value: x.cost, label: "Cost", note: isNum(x.cost) ? `${(x.cost * 100).toFixed(2)}% a year` : "" };
+    P.income = { score: lin(x.yield, 0.005, goal.type === "income" ? 0.05 : 0.035), value: x.yield, label: "Income", note: isNum(x.yield) ? `yield ${(x.yield * 100).toFixed(2)}%` : "" };
+    P.expected = { score: isNum(a.industryExp) ? clamp(50 + (a.industryExp - (isNum(x.mktExp) ? x.mktExp : 0.05)) * 600, 0, 100) : NaN, value: a.industryExp, label: "What the runs expect", note: isNum(a.industryExp) ? `industries imply ${(a.industryExp * 100).toFixed(1)}% over 12 months${isNum(x.mktExp) ? ` (market ${(x.mktExp * 100).toFixed(1)}%)` : ""}` : "" };
+    const lo = goal.bonds[0], hi = goal.bonds[1], b = n(x.bonds) || 0, off = b < lo ? lo - b : b > hi ? b - hi : 0;
+    P.fit = { score: clamp(100 - off * 300, 0, 100), value: b, label: "Fit with the goal", note: `bonds ${(b * 100).toFixed(0)}% (the goal's band ${(lo * 100).toFixed(0)}-${(hi * 100).toFixed(0)}%)` };
+    let s = 0, w = 0; for (const [k, wt] of Object.entries(W)) if (isNum(P[k]?.score)) { s += wt * P[k].score; w += wt; }
+    const score = w ? s / w : NaN;
+    for (const k of Object.keys(P)) { P[k].weight = W[k] || 0; P[k].letter = letterOf(P[k].score); }
+    return { score, letter: letterOf(score), parts: P };
   }
 
   // ------------------------------------------------------------------ the analysts' dossier and prompts
@@ -386,9 +423,25 @@ ${P.rule}
 Return JSON only:
 ${P.ask}`;
   }
+  /** The report card's written verdict on today's portfolio (M2 carries its grades). */
+  function gradePrompt(goal, text) {
+    return `You are the chief investment officer grading a client's current portfolio for a ${goal.label.toLowerCase()} goal. Its grades were computed by code (M2); the target allocation and the recommended ETFs follow from the industry research below. Judge it plainly: what it does well, what is wrong, and what to change. Do not invent numbers.
+
+Every claim cites fact ids in brackets, like [M2], [I3] or [E2]; use only ids that appear below.
+
+Facts:
+${text}
+
+Return JSON only:
+{"verdict": "3 sentences: the overall grade and the main reasons",
+ "strengths": ["2-3 things it does well, with ids"],
+ "weaknesses": ["3-5 problems: concentration, industries the runs are bearish on, missing industries they favor, overlap, cost, risk vs the goal; with ids"],
+ "fixes": ["3-5 concrete changes, naming the ETFs (E#) and industries (I#) to add, trim or replace"]}`;
+  }
   function clean(part, x, idList) {
     const ok = new Set(idList), fix = (s) => String(s || "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (ok.has(id) ? m : "")).replace(/\s+([.,;])/g, "$1").trim(), arr = (a, k) => (Array.isArray(a) ? a.slice(0, k) : []);
     if (!x || typeof x !== "object") return null;
+    if (part === "grade") return { verdict: fix(x.verdict), strengths: arr(x.strengths, 4).map(fix), weaknesses: arr(x.weaknesses, 6).map(fix), fixes: arr(x.fixes, 6).map(fix) };
     if (part === "allocation") return { headline: fix(x.headline), thesis: fix(x.thesis), bonds: fix(x.bonds),
       industries: arr(x.industries, 40).map((r) => ({ id: String(r?.id || ""), stance: lc(r?.stance), why: fix(r?.why), risk: fix(r?.risk) })).filter((r) => ok.has(r.id)),
       horizons: Object.fromEntries(["1M", "3M", "6M", "12M"].map((h) => [h, { call: lc(x.horizons?.[h]?.call), why: fix(x.horizons?.[h]?.why) }])),
@@ -402,7 +455,7 @@ ${P.ask}`;
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfStrat = { STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
+  const EtfStrat = { gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfStrat;
   else root.EtfStrat = EtfStrat;
 })(typeof globalThis !== "undefined" ? globalThis : this);

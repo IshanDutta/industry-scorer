@@ -107,9 +107,21 @@ The **Funds** tab opens any US stock ETF or mutual fund and reads it through the
 
 ---
 
-## 1d. Portfolios: the quantitative portfolio mode (no AI)
+## 1d. Portfolios
 
-The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs and mutual funds. Everything is code (`web/pmode.js`, tested in `pmode_test.js`); no model is called.
+The **Portfolios** tab builds, measures and grades your own portfolios of stocks, ETFs and mutual funds.
+
+**Layout.**
+
+- **Switcher.** Each portfolio is a chip at the top, carrying its grade once analyzed.
+- **Hero card.** It shows the value, today's change, the unrealized gain, the holding count, the purchase date and the grade ring. Its buttons are **Analyze**, **Edit**, **Rebalance** and **More** (duplicate, export, fetch prices, delete).
+- **Tabs.** There are four:
+  - **Overview:** stat cards with colored accents, the performance chart, allocation and attribution side by side, the risk cards, and the look-through.
+  - **Holdings:** a card per holding with value, gain, today's move, and today's weight against the target, plus the full table.
+  - **Analysis:** the report card and the recommendations (1e).
+  - **Edit.**
+
+The numbers in Overview and Holdings are code (`web/pmode.js`, tested in `pmode_test.js`) with no model.
 
 - **Portfolios** are kept in this browser (IndexedDB key `portfolios`), with a starter portfolio (QQQ, SPY, AAPL, MSFT, SCHD) when there are none. You can make, duplicate, delete and switch between them, and export each as CSV or JSON.
 - **Editor**: enter weights in % or as dollar amounts of the total investment. Shares and average cost are optional and give the cost basis and gain. Normalize scales the weights to 100%. Ticker suggestions come from FMP search.
@@ -142,11 +154,11 @@ The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs a
 - **Rebalance**: set target weights (or equal weight). The order sheet shows BUY, SELL or HOLD for each holding, in dollars (total value × Δweight) and shares. Recording it saves the new weights and adds a dated event.
 - **Look-through**: each fund's full holdings list from FMP. A stock's effective exposure = its direct weight + Σ (fund weight × its weight in the fund). Names held both directly and through funds are flagged.
 
-## 1e. Recommend ETFs: the top-down ETF strategist and portfolio improver
+## 1e. Analyze: the report card and ETF recommendations
 
-**Recommend ETFs** and **Improve with ETFs** in the Portfolios tab work top down, the way a portfolio manager would. The process is industry distribution → bond sleeve → best companies → every ETF that holds them → the mix with the least overlap → analysis. The math is code (`web/etfstrat.js` and `web/etfrec.js`, tested in `etfstrat_test.js` and `etfrec_test.js`). Three strategists write the analysis.
+**Analyze** on a portfolio (the hero button, or the Analysis tab) grades what you hold, then recommends ETFs. It replaces the separate Recommend and Improve views. The code is in `web/etfstrat.js` and `web/etfrec.js`, tested in `etfstrat_test.js` and `etfrec_test.js`. It runs the same code either here or on GitHub (`runner/portfolio.mjs`, test `runner/test/portfolio.mjs`).
 
-**Goal.**
+**Goal.** Choose income, conservative, growth or aggressive (the four investor types the runs score) and a horizon.
 
 | Goal | Bonds | Volatility ceiling | Max per industry | Max per sector |
 |---|---|---|---|---|
@@ -155,50 +167,86 @@ The **Portfolios** tab builds and measures your own portfolios of stocks, ETFs a
 | Growth | 0–20% | 17% | 25% | 40% |
 | Aggressive | 0–10% | 24% | 30% | 45% |
 
-You also set the horizon, amount, number of ETFs (8–12 by default), maximum cost, exclusions, and whether to include bond and international ETFs.
+Settings: volatility ceiling, ETF count (8–12 by default), maximum cost, exclusions, and whether to include bond and international ETFs. Every ETF in a recommendation is 3–15%, and no single stock may exceed 8% through the ETFs.
 
-**Limits on every portfolio:** each ETF between 3% and 15%, and no single stock above 8% across the ETFs.
+**What it works out, top down:**
 
-1. **Industry distribution.** Every industry run (full and code-only) gets a **conviction** for the goal, built from:
-   - the run's score for the investor type
-   - its call for the horizon and its 12M expected return
-   - bull vs bear scenarios
-   - valuation against its own history and what is priced in
-   - quality, estimate revisions, risk, and dividend yield
-   - the macro, world, trade and regulation reads
-   - the lead strategist's verdict
-
-   Each goal weighs these inputs differently. Code-only industries count 60%, and runs older than three weeks count 85%. Target weights are the market weight × e^(tilt × conviction). Industries the goal should avoid are dropped. The strongest are kept, up to the goal's breadth (14–20 industries). Each industry and sector is capped, and nothing is under 1%. The table shows each industry's target, market weight, active weight, what the ETFs deliver, conviction and its reasons, call, P/E percentile, and the strategist's stance. Avoided industries are listed with the reasons.
-2. **Bond sleeve.** Its size sits inside the goal's band: larger when the industry convictions are weak, slightly larger when T-bills pay 4%+. It is split by goal across T-bills, short, intermediate and long Treasuries, TIPS, investment grade, high yield, MBS and loans, then adjusted for the curve: an inverted curve leans short, a steep long end adds duration. Buckets too small for a 3% position fold into the largest.
-3. **Companies.** The best 4–5 per held industry come from the run's own ranking for the investor type (percentiles for value, quality, growth, momentum, revisions, risk and income). The lead strategist's best expressions add points; the strategist's avoids and thinly traded names are dropped. That sets a target weight for each company.
-4. **ETFs that hold them.** FMP's reverse lookup (`etf-asset-exposure`) lists every fund holding each of the top 45 target companies. Only US-listed ETFs with $200M+ in assets are kept, with no mutual funds and no leveraged or single-stock products. The strongest 50, ranked by purity and how much of the target they capture, join the curated sector, industry, broad, income and bond funds. They are screened on size, volume, age, cost and leverage; mostly non-US funds are dropped unless you ask for international. Their full holdings are matched to the industries, and copies of the same index collapse into the cheapest.
-5. **The mix.** A quadratic program does the following:
-   - matches the target industry distribution and the company targets
-   - penalizes overlap between ETFs (the same stocks bought twice) and off-target industries
-   - holds bonds to the chosen sleeve
+1. **The target industry distribution.**
+   - Every industry run gets a conviction for the goal, built from:
+     - the run's score for the investor type
+     - its call for the horizon and its 12M expected return
+     - bull vs bear scenarios
+     - valuation against its own history and what is priced in
+     - quality, revisions, risk and income
+     - the macro, world, trade and regulation reads
+     - the lead strategist's verdict
+   - Each goal weighs these inputs differently; code-only industries count 60%, and runs older than three weeks count 85%.
+   - The market's weights are tilted by e^(tilt × conviction). Industries to avoid are dropped. Each industry and sector is capped, and nothing is under 1%.
+2. **A bond sleeve** inside the goal's band, split by goal and the Treasury curve.
+3. **The best 4–5 companies per industry.** These come from the run's own ranking for the investor type, plus the lead strategist's best expressions; the strategist's avoids and thinly traded names are dropped.
+4. **Every ETF that holds them.**
+   - FMP's reverse lookup finds the funds holding the top 45 target companies.
+   - Only US-listed ETFs with $200M+ in assets are kept, with no mutual funds and no leveraged or single-stock products.
+   - Curated sector, industry, broad, income and bond funds are added.
+   - Candidates are screened, their full holdings are matched to industries, and copies of the same index collapse into the cheapest. ETFs you already hold are always kept as candidates.
+5. **The ETF mixes.** A quadratic program does the following:
+   - tracks the target industries and companies
+   - penalizes overlap and off-target industries
+   - holds the bond sleeve
    - keeps risk under the ceiling (three years of daily returns, Ledoit-Wolf shrinkage)
    - subtracts costs and leans slightly toward higher expected returns
 
-   Weak positions are pruned gradually, so weight consolidates into the best fund. It produces three versions: **Recommended**, **High conviction** (leans into the target companies) and **Simpler** (the fewest ETFs). A version appears only when it differs from the others.
-6. **Analysis.**
-   - Sections:
-     - the thesis
-     - the industry table and avoided list
-     - the bond sleeve
-     - the companies, by industry, with target vs delivered weight
-     - ETF cards: what each captures of the target companies and industries, its overlap, cost, size, risk and returns, and how it was found
-     - the overlap matrix
-     - what the ETFs hold underneath, including industries outside the plan
-     - horizon calls (1M to 12M) next to the runs' own, and bull/base/bear scenarios
-     - opportunities: high-conviction and cheap-but-improving industries, the best companies, the purest ETFs, and dated catalysts
-     - a risk table with likelihood, impact and offsets
-     - macro, world, trade and regulation across the mix
-     - stress tests and five years of history
-     - implementation steps, the watch list, and what would change the view
-   - Three strategists write it in parallel (allocation; selection; risks and opportunities). Every claim cites the facts.
-7. **Improver.** It measures your portfolio's own look-through against the same targets: off-target share, company capture, industry-implied return, volatility and the largest single stock. It then runs the same program with a turnover penalty and produces an order sheet. **Apply** records the change as a dated event.
+   It produces four mixes:
+   - **Fix what you have:** the same program with a turnover penalty from today's holdings, so it makes the fewest trades.
+   - **Best mix from scratch.**
+   - **High conviction:** leans into the target companies.
+   - **Simplest:** the fewest ETFs.
 
-**Data and timing.** ETF information, holdings and reverse lookups are kept a week, prices two days and the curve a day. The first build takes a few minutes because of FMP's call spacing; later builds take seconds.
+**The report card.**
+
+- It grades today's portfolio, and each recommended mix, 0–100 with a letter.
+- It looks through your funds to their stocks and industries.
+- Eight parts, weighted by goal:
+  - the industry mix against the target
+  - the conviction behind the industries you hold
+  - the quality of your companies (the runs' rank scores)
+  - diversification (effective stocks, the largest single stock, overlap between funds)
+  - risk against the ceiling
+  - cost
+  - income
+  - what the runs expect against the market
+- One more part checks fit with the goal's bond band.
+- A strategist writes the verdict: what it does well, what's wrong, and what to change.
+
+**Analysis tab sections.**
+
+1. The goal and the run buttons.
+2. The report card.
+3. Where you are against where the runs say to be: each industry, today vs the target.
+4. The version cards, each with its grade.
+5. For the chosen version:
+   - the strategists' thesis and stats
+   - what changes: today vs improved and the order sheet
+   - the industry table and avoided list
+   - the bond sleeve
+   - the companies
+   - the ETF cards
+   - the overlap matrix
+   - the look-through
+   - horizons and scenarios
+   - opportunities
+   - risks with the macro, world, trade and regulation lens
+   - stress tests and history
+   - implementation and the watch list
+   - how it was built
+6. Buttons: **Apply to this portfolio** (recorded as a dated rebalance), **Save as a new portfolio** and **Export CSV**.
+
+**Where it runs.**
+
+- **Here.** This uses your Claude plan and the industry runs in this browser. The first run takes a few minutes; facts are kept a week and prices two days.
+- **On GitHub.** This uses your API key against every sector's runs in the exports branch: the **Portfolio analysis** workflow (`.github/workflows/portfolio.yml`), about $1–3 a run, 10–20 minutes. It saves `portfolios/<id>.json.gz` to the exports branch. **Update everything from GitHub** copies it into the page with the sector runs (as `runs/pf-<id>.b64.txt`, listed under `portfolios` in `runs/index.json`), and the analysis appears by itself.
+  - The page's **Analyze on GitHub** button gives you the request to paste into the workflow.
+  - With the Claude task in `runner/portfolio-task.md` set up, the same button starts the workflow, waits for it, and copies the result back in one click (set `PF_TRIGGER` in the page to the task's id).
 
 ## 2. Report sections
 

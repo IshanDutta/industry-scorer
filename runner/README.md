@@ -168,6 +168,17 @@ Settings (repository variables): `DAILY_BUDGET_USD` (default 5 per sector), `DAI
 at once per sector, default 4), `CLAUDE_MODEL_QUICK` (default Haiku 4.5), `CLAUDE_MODEL_DAILY` (default Sonnet 5.5).
 The updated sector goes back to the `exports` branch.
 
+## Analyze a portfolio (the Portfolios tab's Analyze, on GitHub)
+
+Actions → **Portfolio analysis** → Run workflow, with the portfolio's **id** and the **request** the page's *Analyze on GitHub* button shows (base64 of the holdings, total and goal).
+
+The job loads every sector's saved runs from the exports branch into the headless page. It then runs the page's own analysis: the report card, the target industry distribution, the best companies, every ETF holding them, the mixes, stress tests and the strategists' write-up. It saves `portfolios/<id>.json.gz` to the exports branch.
+
+- **Cost:** Opus for the write-up, at standard price; about $1–3, 10–20 minutes. `budget` caps it (default $15).
+- **Getting it into the page:** **Update everything from GitHub** brings it in with the sector runs.
+- **One click from the page:** set up the Claude task in `portfolio-task.md`. The page then starts the workflow, waits and copies the result back by itself.
+- **Test it offline:** `node test/portfolio.mjs <exports dir>`.
+
 ## Get the results into Industry Scorer
 
 The latest run of every sector is kept in the `exports` branch (`runs/<sector>.json.gz`). In Industry Scorer, open

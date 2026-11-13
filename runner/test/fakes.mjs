@@ -91,7 +91,7 @@ export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs 
   return new Promise((r) => server.listen(port, "127.0.0.1", () => r({ server, stats })));
 }
 
-const FMP_TOOLS = ["analyst", "calendar", "chart", "commodity", "company", "directory", "earningsTranscript", "economics", "forex", "form13F", "indexes", "insiderTrades", "marketPerformance", "news", "quote", "search", "statements"];
+const FMP_TOOLS = ["analyst", "calendar", "chart", "commodity", "company", "directory", "earningsTranscript", "economics", "etfAndMutualFunds", "forex", "form13F", "indexes", "insiderTrades", "marketPerformance", "news", "quote", "search", "statements"];
 const EOD_TOOLS = ["get_company_news", "get_sentiment_data", "get_credit_corporate_hqm_yields", "get_credit_corporate_cmdi", "get_rates_reference_rates", "get_ust_real_yield_rates", "get_earnings_trends", "get_fundamentals_data"];
 
 /** Fake FMP (/fmp) and EODHD (/eodhd) MCP servers over streamable HTTP, answering from the mock data. */

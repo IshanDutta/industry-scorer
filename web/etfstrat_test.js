@@ -67,4 +67,8 @@ const ids = S.idsOf(ds.text); assert(ids.includes("G1") && ids.includes("I1") &&
 for (const p of Object.keys(S.PARTS)) assert(/Return JSON only/.test(S.prompt(p, g2, ds.text)));
 const al = S.clean("allocation", { headline: "x [I1] [Z9]", industries: [{ id: "I1", stance: "Overweight", why: "y [I1]" }, { id: "Q1" }], horizons: { "1M": { call: "Bullish" } }, scenarios: { bull: { probability: 30 } } }, ids);
 assert(al.headline === "x [I1]" && al.industries.length === 1 && al.industries[0].stance === "overweight" && al.horizons["1M"].call === "bullish");
+// 7. the report card
+const gg = R.goalOf({ type: "growth" }), good = S.grade({ ach: { tracking: 0.1, industryExp: 0.09, stocks: [{ weight: 0.04 }], allStocks: Array.from({ length: 80 }, () => ({ weight: 1 / 80 })), stockShare: 1 }, conv: 0.6, quality: 75, vol: 0.14, cost: 0.002, yield: 0.012, bonds: 0.1, mktExp: 0.06, maxOverlap: 0.2 }, gg);
+const bad = S.grade({ ach: { tracking: 0.6, industryExp: 0.02, stocks: [{ weight: 0.3 }], allStocks: [{ weight: 0.3 }, { weight: 0.3 }, { weight: 0.4 }], stockShare: 1 }, conv: -0.5, quality: 35, vol: 0.3, cost: 0.009, yield: 0.002, bonds: 0.5, mktExp: 0.06, maxOverlap: 0.7 }, gg);
+assert(good.score > 80 && /^A|B\+/.test(good.letter) && bad.score < 40 && bad.letter === "F" && Object.keys(good.parts).length === 9, JSON.stringify([good.score, bad.score]));
 console.log("etfstrat tests passed", JSON.stringify({ n: sel.w.filter((x) => x > 0).length, bonds: +bonds.toFixed(2), tracking: +ach.tracking.toFixed(3), capture: +ach.capture.toFixed(2), opps: opps.length }));

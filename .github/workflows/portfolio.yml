@@ -1,0 +1,94 @@
+# Industry Scorer: analyze one portfolio (the page's "Analyze" button, on your own API keys).
+#
+# The page puts the request in its database and fires a Claude task, which starts this workflow with the request,
+# waits for it, and copies the result into the page. This job:
+#   1. loads every sector's saved industry runs from the "exports" branch into the real page (headless),
+#   2. runs the page's portfolio analysis: the report card for today's holdings, the target industry distribution,
+#      the best companies, every ETF holding them, the ETF mixes, stress tests and the strategists' write-up,
+#   3. saves the result to the exports branch as portfolios/<id>.json.gz.
+# Claude: Opus for the write-up, standard price (a handful of calls, wanted quickly); about $1-3 a run.
+name: Portfolio analysis
+run-name: "Portfolio analysis ${{ inputs.id }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      id:
+        description: "The portfolio's id (letters, digits, - and _)"
+        required: true
+      request:
+        description: "The request: base64 of its JSON (holdings, total, goal)"
+        required: true
+      budget:
+        description: "Most to spend on Claude, in US dollars"
+        required: false
+        default: "15"
+
+permissions:
+  contents: write # to save the result in the exports branch
+
+concurrency:
+  group: portfolio-${{ inputs.id }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - name: Check the request
+        env:
+          ID: ${{ inputs.id }}
+          REQ: ${{ inputs.request }}
+        run: |
+          if ! printf '%s' "$ID" | grep -Eq '^[A-Za-z0-9_-]{1,64}$'; then echo "The id isn't valid."; exit 1; fi
+          printf '%s' "$REQ" | base64 -d > "$RUNNER_TEMP/request.json"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); if(r.id!==process.argv[2]) throw new Error("the request is for another portfolio"); console.log(`${(r.holdings||[]).length} holdings, goal ${r.goal?.type||"growth"}`)' "$RUNNER_TEMP/request.json" "$ID"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund
+      - name: Install Chromium
+        working-directory: runner
+        run: npx playwright install --with-deps chromium
+      - name: Get every sector's saved runs
+        run: |
+          mkdir -p exports
+          git fetch -q origin exports
+          git archive FETCH_HEAD runs | tar -x -C exports
+          ls exports/runs | head -40
+      - name: Analyze the portfolio
+        working-directory: runner
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          EODHD_MCP_URL: ${{ secrets.EODHD_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          EODHD_MCP_HEADERS: ${{ secrets.EODHD_MCP_HEADERS }}
+          CLAUDE_BUDGET_USD: ${{ inputs.budget || '15' }}
+          JOB_FMP_GAP_MS: ${{ vars.FMP_GAP_MS || '230' }}
+        run: node portfolio.mjs --request "$RUNNER_TEMP/request.json" --exports ../exports --out ../out --deadline-min 65
+      - name: Save the result in the exports branch
+        env:
+          ID: ${{ inputs.id }}
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            rm -rf ex && git fetch -q origin exports && git worktree add -q ex FETCH_HEAD
+            mkdir -p ex/portfolios && cp out/portfolio.json.gz "ex/portfolios/$ID.json.gz"
+            (cd ex && git add portfolios && { git diff --cached --quiet || git commit -qm "Portfolio analysis $ID"; } && git push -q origin HEAD:exports) && { echo "Saved portfolios/$ID.json.gz"; break; }
+            git worktree remove --force ex; sleep $((attempt * 7))
+          done
+      - name: Keep the result with the run too
+        if: always() && hashFiles('out/portfolio.json.gz') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: portfolio-${{ inputs.id }}
+          path: out/portfolio.json.gz
+          retention-days: 14
+          compression-level: 0

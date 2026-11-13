@@ -60,13 +60,26 @@ for (const f of names) {
   changed.push(j.sector);
   console.log(`${j.sector}: ${n} file${n > 1 ? "s" : ""}, exported ${j.exported_at}`);
 }
+// Portfolio analyses (the "Portfolio analysis" workflow, exports branch portfolios/<id>.json.gz): each becomes
+// pf-<id>.b64.txt, written only when GitHub has a newer one than the page carries.
+const pfDir = join(EXP, "portfolios"), portfolios = [], curPf = Object.fromEntries((cur.portfolios || []).map((x) => [x.id, x]));
+if (existsSync(pfDir)) for (const f of readdirSync(pfDir).filter((x) => /^[A-Za-z0-9_-]{1,64}\.json\.gz$/.test(x)).sort()) {
+  const id = f.replace(/\.json\.gz$/, ""), buf = readFileSync(join(pfDir, f));
+  let at = null; try { const j = JSON.parse(gunzipSync(buf)); at = j.at || null; } catch (e) { console.error(`${f}: unreadable (${e.message}); skipped`); continue; }
+  if (curPf[id] && at && curPf[id].at >= at) { portfolios.push(curPf[id]); continue; }
+  const path = `pf-${id}.b64.txt`, b = buf.toString("base64");
+  if (b.length > HARD) { console.error(`${path} is over the page's file limit; skipped`); continue; }
+  writeFileSync(join(OUT, path), b); written.push({ path, bytes: b.length }); portfolios.push({ id, path, at }); changed.push(`portfolio ${id}`);
+  console.log(`Portfolio ${id}: analyzed ${at}`);
+}
+for (const x of cur.portfolios || []) if (!portfolios.some((y) => y.id === x.id)) portfolios.push(x);
 // Sectors the page has that GitHub no longer exports stay as they are.
 for (const x of cur.files || []) if (x.sector && !files.some((y) => y.sector === x.sector)) { files.push(x); if (!unchanged.includes(x.sector)) unchanged.push(x.sector); }
 
 const batches = []; let b = [], size = 0;
 for (const w of written) { if (b.length && size + w.bytes > BATCH) { batches.push(b); b = []; size = 0; } b.push(w.path); size += w.bytes; }
 if (b.length) batches.push(b);
-const listed = new Set(files.map((x) => x.path)), remove = (cur.files || []).map((x) => x.path).filter((p) => !listed.has(p));
-writeFileSync(join(OUT, "index.json"), JSON.stringify({ files, copied_at: new Date().toISOString(), commit }));
+const listed = new Set([...files.map((x) => x.path), ...portfolios.map((x) => x.path)]), remove = (cur.files || []).map((x) => x.path).filter((p) => !listed.has(p));
+writeFileSync(join(OUT, "index.json"), JSON.stringify({ files, portfolios, copied_at: new Date().toISOString(), commit }));
 writeFileSync(join(OUT, "plan.json"), JSON.stringify({ changed, unchanged, batches, remove, index: "index.json", commit }, null, 2));
 console.log(changed.length ? `Changed: ${changed.join(", ")} (${written.length} files in ${batches.length} publish${batches.length === 1 ? "" : "es"})` : "Nothing newer on GitHub.");
