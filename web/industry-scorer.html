@@ -18591,7 +18591,7 @@ Return JSON only:
    * here starts the "Portfolio analysis" workflow, waits for it, and copies the result into this page as a file
    * (pf/<id>.b64.txt) before marking the request done. The page watches the request and loads the file.
    */
-  const PF_TRIGGER = "", PF_SERVER = "Claude Code Remote", PF_ACTIONS = "https://github.com/IshanDutta/industry-scorer/actions/workflows/portfolio.yml";
+  const PF_TRIGGER = "trig_018Fgswa53erCrVMecyG5kdp", PF_SERVER = "Claude Code Remote", PF_ACTIONS = "https://github.com/IshanDutta/industry-scorer/actions/workflows/portfolio.yml";
   /** The request the "Portfolio analysis" workflow takes (base64 of its JSON). */
   async function pfRequest(p) {
     await pfLoad(); const D = S.pfData, hs = pfHoldings(p, D), pos = pfPositions(p, hs, D);

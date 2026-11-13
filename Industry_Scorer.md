@@ -246,7 +246,7 @@ Settings: volatility ceiling, ETF count (8–12 by default), maximum cost, exclu
 - **Here.** This uses your Claude plan and the industry runs in this browser. The first run takes a few minutes; facts are kept a week and prices two days.
 - **On GitHub.** This uses your API key against every sector's runs in the exports branch: the **Portfolio analysis** workflow (`.github/workflows/portfolio.yml`), about $1–3 a run, 10–20 minutes. It saves `portfolios/<id>.json.gz` to the exports branch. **Update everything from GitHub** copies it into the page with the sector runs (as `runs/pf-<id>.b64.txt`, listed under `portfolios` in `runs/index.json`), and the analysis appears by itself.
   - The page's **Analyze on GitHub** button gives you the request to paste into the workflow.
-  - With the Claude task in `runner/portfolio-task.md` set up, the same button starts the workflow, waits for it, and copies the result back in one click (set `PF_TRIGGER` in the page to the task's id).
+  - With the Claude task in `runner/portfolio-task.md` set up, the same button starts the workflow, waits for it, and copies the result back in one click (the page's `PF_TRIGGER` is set to it).
 
 ## 2. Report sections
 
