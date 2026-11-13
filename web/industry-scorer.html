@@ -18588,8 +18588,9 @@ Return JSON only:
   }
   /**
    * Run it on GitHub: the request goes in the page's database (pfjobs/<portfolio id>), and a Claude task fired from
-   * here starts the "Portfolio analysis" workflow, waits for it, and copies the result into this page as a file
-   * (pf/<id>.b64.txt) before marking the request done. The page watches the request and loads the file.
+   * here starts the "Portfolio analysis" workflow, waits for it, and copies the result into this page's database
+   * (pfparts/<id>.0, .1, ...: slices of the gzipped result as base64) before marking the request done with
+   * path "db:pfparts/<id>" and the number of parts. The page watches the request and loads the result.
    */
   const PF_TRIGGER = "trig_018Fgswa53erCrVMecyG5kdp", PF_SERVER = "Claude Code Remote", PF_ACTIONS = "https://github.com/IshanDutta/industry-scorer/actions/workflows/portfolio.yml";
   /** The request the "Portfolio analysis" workflow takes (base64 of its JSON). */
@@ -18620,8 +18621,19 @@ Return JSON only:
       if (S.tab === "portfolios") renderPortfolio(); }, () => {}); } catch {}
   }
   async function pfAnaFromFile(pid, x) {
-    try { const r = await fetch(x.path + "?v=" + encodeURIComponent(x.done_at || ""), { cache: "no-store" }); if (!r.ok) throw new Error(`the result file couldn't be read (${r.status})`);
-      const s = atob((await r.text()).replace(/\s+/g, "")), bytes = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    try { let b64;
+      if (String(x.path).startsWith("db:")) {
+        const db = await outlookDb(); if (!db) throw new Error("the page's database isn't available");
+        const n = Number(x.parts) || 0; if (!(n > 0)) throw new Error("the result has no parts");
+        const key = String(x.path).slice(3).replace(/^pfparts\//, "") || pid;
+        const ps = await Promise.all(Array.from({ length: n }, (_, i) => db.doc(`pfparts/${key}.${i}`).get()));
+        if (ps.some((d) => !d.exists)) throw new Error("part of the result is missing from the database");
+        b64 = ps.map((d) => String(d.data()?.data || "")).join("");
+      } else {
+        const r = await fetch(x.path + "?v=" + encodeURIComponent(x.done_at || ""), { cache: "no-store" }); if (!r.ok) throw new Error(`the result file couldn't be read (${r.status})`);
+        b64 = await r.text();
+      }
+      const s = atob(b64.replace(/\s+/g, "")), bytes = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
       const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(bytes);
       const res = JSON.parse(text); res.from_path = x.path + "@" + x.done_at; res.write ||= {}; res.writing = {};
       (S.pfAna ||= {})[pid] = res; S.recKey = res.current ? "improved" : "recommended"; await idbPut("pfAna:" + pid, jsonSafe(res)).catch(() => {});
