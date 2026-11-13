@@ -11,6 +11,12 @@
  *   <out>/index.json         the page's full new index (what the page reads to know what it carries)
  *   <out>/plan.json          { changed, unchanged, batches: [[file, ...], ...] (each under 55 MB, to publish in
  *                              turn), remove: [old files no longer listed], index: "index.json", commit }
+ * plan.delete_assets lists the uploaded assets (ids) of the entries this replaces, to delete once the new ones are in.
+ *
+ *   node runner/pack-page.mjs --set-urls <urls.json> --out <dir>
+ *
+ * After uploading each written file as an asset of the page: urls.json is { "<file>": { "url": ..., "id": ... } }.
+ * Adds url and asset to those entries of <out>/index.json (the index the task writes to the "sync/runs" doc).
  * No dependencies beyond Node.
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from "node:fs";
@@ -19,7 +25,17 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { execFileSync } from "node:child_process";
 
 const arg = (k) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : null; };
-const EXP = arg("exports"), OUT = arg("out"), CUR = arg("current");
+const EXP = arg("exports"), OUT = arg("out"), CUR = arg("current"), URLS = arg("set-urls");
+if (URLS && OUT) {
+  const urls = JSON.parse(readFileSync(URLS, "utf8")), ip = join(OUT, "index.json"), idx = JSON.parse(readFileSync(ip, "utf8"));
+  let n = 0, missing = [];
+  for (const x of [...(idx.files || []), ...(idx.portfolios || [])]) {
+    const u = urls[x.path]; if (u?.url) { x.url = u.url; x.asset = u.id || null; n++; }
+    else if (!x.url && JSON.parse(readFileSync(join(OUT, "plan.json"), "utf8")).batches.flat().includes(x.path)) missing.push(x.path);
+  }
+  if (missing.length) { console.error(`No uploaded url for: ${missing.join(", ")}`); process.exit(1); }
+  writeFileSync(ip, JSON.stringify(idx)); console.log(`${n} entries now point at uploaded assets.`); process.exit(0);
+}
 if (!EXP || !OUT) { console.error("usage: --exports <dir> --out <dir> [--current <index.json>]"); process.exit(2); }
 mkdirSync(OUT, { recursive: true });
 const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -80,6 +96,9 @@ const batches = []; let b = [], size = 0;
 for (const w of written) { if (b.length && size + w.bytes > BATCH) { batches.push(b); b = []; size = 0; } b.push(w.path); size += w.bytes; }
 if (b.length) batches.push(b);
 const listed = new Set([...files.map((x) => x.path), ...portfolios.map((x) => x.path)]), remove = (cur.files || []).map((x) => x.path).filter((p) => !listed.has(p));
+// Uploaded assets of the entries replaced or dropped (only entries that came from uploads carry an asset id).
+const kept = new Set([...files, ...portfolios].map((x) => x.asset).filter(Boolean));
+const delete_assets = [...new Set([...(cur.files || []), ...(cur.portfolios || [])].map((x) => x.asset).filter((a) => a && !kept.has(a)))];
 writeFileSync(join(OUT, "index.json"), JSON.stringify({ files, portfolios, copied_at: new Date().toISOString(), commit }));
-writeFileSync(join(OUT, "plan.json"), JSON.stringify({ changed, unchanged, batches, remove, index: "index.json", commit }, null, 2));
+writeFileSync(join(OUT, "plan.json"), JSON.stringify({ changed, unchanged, batches, remove, delete_assets, index: "index.json", commit }, null, 2));
 console.log(changed.length ? `Changed: ${changed.join(", ")} (${written.length} files in ${batches.length} publish${batches.length === 1 ? "" : "es"})` : "Nothing newer on GitHub.");

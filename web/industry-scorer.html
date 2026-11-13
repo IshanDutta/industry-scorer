@@ -14742,6 +14742,19 @@ Return JSON only:
    * carries a newer copy of, and saves them in this browser. Nothing changes again until the button is pressed again.
    * Its progress is the "sync/github" doc in the page's database: {pending, state, requested_at, done_at, result, changed}.
    */
+  /**
+   * The list of runs copied from GitHub: the "sync/runs" doc in the page's database (the task uploads each file
+   * as an asset and lists its url there), or the runs/index.json published with the page. The newer one wins.
+   */
+  async function runsIndex() {
+    let a = null, b = null;
+    try { const db = await outlookDb(); if (db) { const d = await db.doc("sync/runs").get(); if (d.exists) a = d.data(); } } catch {}
+    try { const r = await fetch("runs/index.json", { cache: "no-store" }); if (r.ok) b = await r.json(); } catch {}
+    if (a && b) return String(a.copied_at || "") >= String(b.copied_at || "") ? a : b;
+    return a || b;
+  }
+  /** Where one listed file is read from: its uploaded asset, or the file published with the page. */
+  function runUrl(x) { return x.url || "runs/" + x.path; }
   const SYNC_TRIGGER = "trig_011ad4f3PZEd3HM6KU5ZaHdX", SYNC_SERVER = "Claude Code Remote";
   async function watchSync() {
     const db = await outlookDb(); if (!db || S.syncWatched) return; S.syncWatched = true;
@@ -14770,8 +14783,8 @@ Return JSON only:
   async function autoPull() {
     if (S.outsideClaude || busy() || S.pulling) return;
     try {
-      const r = await fetch("runs/index.json", { cache: "no-store" }); if (!r.ok) return;
-      const idx = await r.json(), all = idx?.files || [];
+      const idx = await runsIndex(); if (!idx) return;
+      const all = idx?.files || [];
       S.carried = { copied_at: idx?.copied_at || null, commit: idx?.commit || null, newest: all.reduce((a, x) => (x.exported_at > a ? x.exported_at : a), "") }; renderMeta();
       const newer = [...new Set(all.filter((x) => x.sector && x.exported_at && (!S.copyAt?.[x.sector] || x.exported_at > S.copyAt[x.sector])).map((x) => x.sector))];
       pfPullFromIndex(idx).catch(() => {});
@@ -14782,9 +14795,9 @@ Return JSON only:
     if (busy() || S.pulling) return;
     S.pulling = sector || true; renderAll();
     try {
-      const r = await fetch("runs/index.json", { cache: "no-store" });
-      if (!r.ok) throw new Error("no runs have been copied from GitHub into this page yet");
-      const idx0 = await r.json(), all = idx0?.files || [];
+      const idx0 = await runsIndex();
+      if (!idx0) throw new Error("no runs have been copied from GitHub into this page yet");
+      const all = idx0?.files || [];
       pfPullFromIndex(idx0).catch(() => {});
       // One sector's button pulls just that sector; the picker's pulls every sector and opens the one you're on;
       // on opening, only the sectors that are newer here than in this browser.
@@ -14792,7 +14805,7 @@ Return JSON only:
       if (!list.length) throw new Error(sector ? `no ${sector} run has been copied from GitHub into this page yet` : "no runs have been copied from GitHub into this page yet");
       const files = [];
       for (const x of list) {
-        const b = await fetch("runs/" + x.path, { cache: "no-store" });
+        const b = await fetch(runUrl(x), { cache: "no-store" });
         if (!b.ok) throw new Error(`${x.sector || x.path} couldn't be read (${b.status})`);
         // Saved as base64 text (pages can't carry .gz files); the bytes are the run's .json.gz.
         let bytes;
@@ -18643,7 +18656,7 @@ Return JSON only:
   async function pfAnaRestore() {
     const st = S.pfStore; if (!st) return;
     for (const x of st.list) { if (!S.pfAna?.[x.id]) { const r = await idbGet("pfAna:" + x.id).catch(() => null); if (r?.sels) (S.pfAna ||= {})[x.id] = r; } pfWatch(x.id); }
-    try { const r = await fetch("runs/index.json", { cache: "no-store" }); if (r.ok) await pfPullFromIndex(await r.json()); } catch {}
+    try { const idx = await runsIndex(); if (idx) await pfPullFromIndex(idx); } catch {}
     renderPortfolio();
   }
   /** Portfolio analyses copied from GitHub with the sector runs: load each one newer than this browser's. */
@@ -18651,7 +18664,7 @@ Return JSON only:
     const st = S.pfStore || (await pfStore().catch(() => null)); if (!st) return 0; let n = 0;
     for (const x of idx?.portfolios || []) { if (!x?.id || !x.path || !st.list.some((p) => p.id === x.id)) continue;
       const have = S.pfAna?.[x.id] || (await idbGet("pfAna:" + x.id).catch(() => null)); if (have?.at && x.at && have.at >= x.at) { if (have.sels) (S.pfAna ||= {})[x.id] = have; continue; }
-      await pfAnaFromFile(x.id, { path: "runs/" + x.path, done_at: x.at }); n++; }
+      await pfAnaFromFile(x.id, { path: runUrl(x), done_at: x.at }); n++; }
     if (n && S.tab === "portfolios") renderPortfolio();
     return n;
   }
