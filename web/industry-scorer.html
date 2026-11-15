@@ -12356,7 +12356,7 @@ Return JSON only:
     }
     if (p.isBond) add(`Bonds: ${p.bond.bucket || "n/a"}, duration about ${p.bond.duration ?? "n/a"} years; a 1-point rise in rates ${pc(p.bond.rates_up_1pp)}${isNum(p.bond.credit_stress) ? `, a credit stress ${pc(p.bond.credit_stress)}` : ""}.`);
     if (p.top.length) add(`Largest holdings: ${p.top.map((t) => `${t.symbol} ${pp(t.weight, 1)}`).join(", ")}.`);
-    for (const g of p.industries) add(`Industry ${g.name}: ${pp(g.weight, 0)} of the fund. The industry run: ${goal.horizon} call ${g.call || "n/a"}, 12M call ${g.call12 || "n/a"}, expected 12-month return ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}, conviction for this goal ${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "n/a"}, P/E ${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th percentile of its history" : "n/a"}, strategist verdict ${g.verdict || "n/a"}.${g.headline ? ` Headline: ${g.headline}` : ""}`);
+    for (const g of p.industries) add(`Industry ${g.name}: ${pp(g.weight, 0)} of the fund. The industry run: ${goal.horizon} call ${g.call || "n/a"}${goal.horizon !== "12M" ? `, 12M call ${g.call12 || "n/a"}` : ""}, expected 12-month return ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}, conviction for this goal ${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "n/a"}, P/E ${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th percentile of its history" : "n/a"}, strategist verdict ${g.verdict || "n/a"}.${g.headline ? ` Headline: ${g.headline}` : ""}`);
     add(`Expected return the recommender uses: ${pp(p.mu)} a year (market prior ${pp(p.prior)}${isNum(p.view) ? `, the industry runs' view ${pp(p.view)}, weighted ${pp(p.conf, 0)} toward the view` : ""}).`);
     return L.join("\n");
   }
@@ -14939,11 +14939,15 @@ Return JSON only:
   const SYNC_TRIGGER = "trig_011ad4f3PZEd3HM6KU5ZaHdX", SYNC_SERVER = "Claude Code Remote";
   async function watchSync() {
     const db = await outlookDb(); if (!db || S.syncWatched) return; S.syncWatched = true;
-    try { db.doc("sync/github").onSnapshot((d) => { S.sync = d.exists ? d.data() : null; renderMeta(); renderPicker(); }, () => {}); } catch {}
+    // When a sync finishes, bring in what it copied right away: the task no longer republishes the page, so nothing
+    // reloads by itself (autoPull pulls only the sectors newer than this browser's copies).
+    try { db.doc("sync/github").onSnapshot((d) => { const prev = S.sync; S.sync = d.exists ? d.data() : null; renderMeta(); renderPicker();
+      if (S.sync?.state === "done" && S.sync.done_at && prev && prev.done_at !== S.sync.done_at) autoPull(); }, () => {}); } catch {}
   }
   const syncPending = () => { const x = S.sync; return !!(x?.pending && x.requested_at && Date.now() - Date.parse(x.requested_at) < 45 * 60000 && !(x.done_at && x.done_at > x.requested_at)); };
   async function updateFromGithub() {
     if (busy() || S.pulling || syncPending()) return;
+    await autoPull(); // whatever is already copied but not yet in this browser comes in now
     const db = await outlookDb();
     if (!S.mcp || !db) { pullFromGithub(); return; } // outside Claude: bring in what the page carries
     const at = new Date().toISOString();
