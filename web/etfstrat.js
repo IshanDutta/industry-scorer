@@ -415,6 +415,7 @@
     return `You are ${P.role} for an ETF-only ${goal.label.toLowerCase()} portfolio${improving ? " (an improvement of the client's current holdings, M2)" : ""}. The weights were set by a quantitative process from the facts below: explain and judge them, do not change them, and do not invent numbers.
 
 Write for a sharp investor, plainly. Every claim cites fact ids in brackets, like [I3] or [E2][S1]; use only ids that appear below. The industry facts summarize full research reports: lean on their calls, scenarios and reads.
+Never recommend or suggest broad-market or size index funds (S&P 500, total market, Russell 1000/2000, mid-cap or small-cap index funds such as SPY, VOO, IVV, VTI or IWM); none are in the mix and the S&P 500 is only the benchmark. Name only ETFs that appear in the facts.
 
 Facts:
 ${text}
@@ -427,7 +428,7 @@ ${P.ask}`;
   function gradePrompt(goal, text) {
     return `You are the chief investment officer grading a client's current portfolio for a ${goal.label.toLowerCase()} goal. Its grades were computed by code (M2); the target allocation and the recommended ETFs follow from the industry research below. Judge it plainly: what it does well, what is wrong, and what to change. Do not invent numbers.
 
-Every claim cites fact ids in brackets, like [M2], [I3] or [E2]; use only ids that appear below.
+Every claim cites fact ids in brackets, like [M2], [I3] or [E2]; use only ids that appear below. When the client holds broad-market or size index funds (SPY, VOO, IVV, VTI, IWM and the like), the fix is to replace them with the recommended ETFs: never suggest keeping or adding one.
 
 Facts:
 ${text}

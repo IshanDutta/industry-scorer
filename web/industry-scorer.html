@@ -11357,6 +11357,19 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
   const BY = new Map(UNIVERSE.map((e) => [e.symbol, e]));
   const isBond = (e) => e?.kind === "bond" || e?.kind === "intlbond";
   const isStock = (e) => ["core", "size", "style", "div", "sector", "ind", "theme", "intl"].includes(e?.kind);
+  // Broad-market and size index funds are never recommended (the S&P 500 is only the benchmark): the curated ones,
+  // the other well-known ones, and any fund whose name says it tracks the whole market or a size slice of it.
+  const BROAD = new Set(("VOO IVV SPY VTI SCHB ITOT SPLG IJH VO MDY IJR VB IWM SCHA IWB IWV IWR IWL SCHX SCHK SCHM VV VXF DIA OEF MGC SPTM SPMD SPSM " +
+    "VTHR VONE VTWO IVOO VIOO IYY EUSA SPYX PBUS DFUS STRV BBUS IMCB ISCB").split(" "));
+  const BROAD_NAME = /\b(s&p ?500|s&p ?100|s&p (?:mid ?cap|small ?cap|composite|total market)|s&p 1500|total (?:us |u\.s\. )?(?:stock )?market|russell (?:1000|2000|3000|top 200|mid ?cap|micro ?cap)|extended market|dow jones industrial|broad (?:us )?market|crsp us (?:total|large|mid|small)|(?:us|u\.s\.) (?:large|mid|small|mega|micro)[- ]cap(?: index| etf| equity)?|(?:mid|small|large|mega|micro|all)[- ]cap (?:index|etf|equity|stock)|msci usa(?: imi)?(?: index| etf)?$)/i;
+  const NOT_BROAD = /(growth|value|dividend|momentum|quality|low vol|min(?:imum)? vol|equal|high beta|buyback|sector|technolog|financial|health|energy|utilit|industrial|material|consumer|real estate|communication|covered call|buywrite|premium|income|leverag|inverse|\b[23]x\b|buffer|hedged|esg|factor|fundamental|enhanced|top 50|innovation|revenue|semiconductor|biotech|software|bank|insurance|defense|infrastructure|ai\b)/i;
+  /** True for a broad-market or size index fund (never recommended). info: FMP fund info (name) when known. */
+  function isBroadIndex(symbol, info = null) {
+    const s = String(symbol || "").toUpperCase(), e = BY.get(s);
+    if (BROAD.has(s) || (e && (e.kind === "core" || (e.kind === "size" && s !== "AVUV")))) return true;
+    const name = String(info?.name || info?.companyName || "");
+    return !!name && BROAD_NAME.test(name) && !NOT_BROAD.test(name);
+  }
   const KIND_LABEL = { core: "US total market", size: "Mid and small caps", style: "Style and factor", div: "Dividend and income", sector: "Sector", ind: "Industry", theme: "Theme", bond: "Bonds", gold: "Gold", cmdty: "Commodities", intl: "International stocks", intlbond: "International bonds" };
   const BOND_LABEL = { cash: "T-bills and cash", float: "Floating-rate notes", treasury: "Treasuries", agg: "Core bonds (aggregate)", tips: "Inflation-protected Treasuries", ig: "Investment-grade corporates", hy: "High yield", loans: "Bank loans", muni: "Municipal bonds", mbs: "Mortgage-backed" };
   // Spread over Treasuries (when no trailing yield is known), expected default losses a year, and the spread move in a credit stress.
@@ -11625,7 +11638,8 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
    * Shortlist, expected returns, risk and the three portfolios. cands: [{symbol, e, info, q, v, yld, pill, sectors, stocks, expense}].
    * series: {sym: {dates, closes}} with SPY. Returns {assets, mu, prior, cov, portfolios: {recommended, simpler, bolder}}.
    */
-  function recommend(cands, series, goal, { size = 30, force = [] } = {}) {
+  function recommend(cands0, series, goal, { size = 30, force = [] } = {}) {
+    const cands = (cands0 || []).filter((c) => !isBroadIndex(c.symbol, c.info));
     const spy = series.SPY; if (!spy?.dates?.length) throw new Error("no SPY prices");
     const ok = cands.filter((c) => c.ok !== false && series[c.symbol]?.dates?.length > 300);
     // Shortlist: the best by the goal's pillars within each group, so the optimizer sees stocks, bonds and diversifiers.
@@ -11667,7 +11681,7 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
       const w = (n(h.weight) || 0) / tot; let to = idx.get(h.ticker), how = "kept";
       if (to === undefined && h.asset_type === "stock" && h.industry) { let b = -1; assets.forEach((a, i) => { const s = (a.v?.industries || []).find((g) => lc(g.industry) === lc(h.industry))?.weight || (a.e.industries || []).map(lc).includes(lc(h.industry)) * 0.5; if (s > b && !a.isBond) { b = s; to = i; } }); if (b <= 0) to = undefined; else how = `its industry (${h.industry})`; }
       if (to === undefined && h.sector) { const sx = h.sectors || { [h.sector]: 1 }; let b = 0; assets.forEach((a, i) => { const s = cos(sx, a.sectors); if (s > b && !a.isBond) { b = s; to = i; } }); if (to !== undefined) how = "the closest sector mix"; }
-      if (to === undefined) { to = assets.findIndex((a) => a.e.kind === "core"); how = "the total market"; }
+      if (to === undefined) { to = assets.findIndex((a) => a.e.kind === "style" || a.e.kind === "div"); how = "the closest broad holding"; }
       if (to >= 0) { w0[to] += w; map.push({ ticker: h.ticker, weight: w, to: assets[to].symbol, how }); }
     }
     return { w0, map };
@@ -11751,7 +11765,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfRec = { RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
+  const EtfRec = { isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfRec;
   else root.EtfRec = EtfRec;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -12173,6 +12187,7 @@ Return JSON only:
     return `You are ${P.role} for an ETF-only ${goal.label.toLowerCase()} portfolio${improving ? " (an improvement of the client's current holdings, M2)" : ""}. The weights were set by a quantitative process from the facts below: explain and judge them, do not change them, and do not invent numbers.
 
 Write for a sharp investor, plainly. Every claim cites fact ids in brackets, like [I3] or [E2][S1]; use only ids that appear below. The industry facts summarize full research reports: lean on their calls, scenarios and reads.
+Never recommend or suggest broad-market or size index funds (S&P 500, total market, Russell 1000/2000, mid-cap or small-cap index funds such as SPY, VOO, IVV, VTI or IWM); none are in the mix and the S&P 500 is only the benchmark. Name only ETFs that appear in the facts.
 
 Facts:
 ${text}
@@ -12185,7 +12200,7 @@ ${P.ask}`;
   function gradePrompt(goal, text) {
     return `You are the chief investment officer grading a client's current portfolio for a ${goal.label.toLowerCase()} goal. Its grades were computed by code (M2); the target allocation and the recommended ETFs follow from the industry research below. Judge it plainly: what it does well, what is wrong, and what to change. Do not invent numbers.
 
-Every claim cites fact ids in brackets, like [M2], [I3] or [E2]; use only ids that appear below.
+Every claim cites fact ids in brackets, like [M2], [I3] or [E2]; use only ids that appear below. When the client holds broad-market or size index funds (SPY, VOO, IVV, VTI, IWM and the like), the fix is to replace them with the recommended ETFs: never suggest keeping or adding one.
 
 Facts:
 ${text}
@@ -12216,6 +12231,172 @@ Return JSON only:
   const EtfStrat = { gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfStrat;
   else root.EtfStrat = EtfStrat;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
+/**
+ * EtfDeep: the full case for every ETF a recommendation holds (code computes every number; a strategist writes the case).
+ *
+ * For each fund, from its own dividend-adjusted daily prices against SPY:
+ *   - returns over 1M, 3M, 6M, YTD, 1Y, 3Y, 5Y and the longest window available (annualized past a year), each
+ *     next to the S&P 500's; every calendar year; what $10,000 became over five years;
+ *   - risk over three years: volatility, downside volatility, Sharpe and Sortino (4% cash), beta and correlation to
+ *     the S&P 500, up and down capture and the share of months it beat the S&P 500 (monthly), best and worst month;
+ *   - the worst drawdown over five years (peak, trough, recovery) and how far it sits below its high today;
+ *   - every rolling 12-month window over the history: worst, median and best, how often it was up and how often it
+ *     beat the S&P 500.
+ * Plus what it is (cost, size, age, holdings), what it owns (largest holdings, industries and what the industry runs
+ * say about each), the expected return the recommender uses, and its role in the mix (weight, target companies it
+ * is the main source of, overlap with the others).
+ * Pure functions; the page fetches and asks.
+ */
+(function (root) {
+  "use strict";
+  const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const mean = (a) => { const b = a.filter(isNum); return b.length ? b.reduce((s, x) => s + x, 0) / b.length : NaN; };
+  const sd = (a) => { const b = a.filter(isNum); if (b.length < 2) return NaN; const m = mean(b); return Math.sqrt(b.reduce((s, x) => s + (x - m) ** 2, 0) / (b.length - 1)); };
+  const quant = (a, q) => { const s = a.filter(isNum).sort((x, y) => x - y); if (!s.length) return NaN; const p = (s.length - 1) * q, lo = Math.floor(p), hi = Math.ceil(p); return s[lo] + (s[hi] - s[lo]) * (p - lo); };
+  const RF = 0.04, TD = 252;
+  const addMonths = (d, k) => { const t = new Date(d + "T00:00:00Z"); t.setUTCMonth(t.getUTCMonth() + k); return t.toISOString().slice(0, 10); };
+  /** Index of the last date <= d, or -1. */
+  function at(dates, d) { let lo = 0, hi = dates.length - 1, a = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (dates[m] <= d) { a = m; lo = m + 1; } else hi = m - 1; } return a; }
+
+  /** Total return between two dates (the closes on or before each); NaN when the fund wasn't trading at the start. */
+  function between(s, a, b) { const i = at(s.dates, a), j = at(s.dates, b); if (i < 0 || j < 0 || j <= i) return NaN; if ((Date.parse(a) - Date.parse(s.dates[i])) / 864e5 > 7 && i === 0) return NaN; return s.closes[j] / s.closes[i] - 1; }
+  const annual = (r, years) => (isNum(r) && r > -1 ? (1 + r) ** (1 / years) - 1 : NaN);
+  /** Month-end closes {month, close} from daily. */
+  function monthly(s) { const out = []; for (let i = 0; i < s.dates.length; i++) if (i === s.dates.length - 1 || s.dates[i + 1].slice(0, 7) !== s.dates[i].slice(0, 7)) out.push({ month: s.dates[i].slice(0, 7), close: s.closes[i] }); return out; }
+
+  /**
+   * Every number for one fund. ser, spy: {dates, closes} (dividend-adjusted). Returns null without a year of prices.
+   */
+  function stats(ser, spy, { rf = RF } = {}) {
+    if (!ser?.dates?.length || ser.dates.length < 250 || !spy?.dates?.length) return null;
+    const end = ser.dates[ser.dates.length - 1], first = ser.dates[0], yrsAvail = (Date.parse(end) - Date.parse(first)) / (365.25 * 864e5);
+    const P = [["1M", 1], ["3M", 3], ["6M", 6], ["1Y", 12], ["3Y", 36], ["5Y", 60]];
+    const periods = P.map(([k, m]) => { const a = addMonths(end, -m), r = between(ser, a, end), s = between(spy, a, end), ann = m > 12;
+      return { k, ret: ann ? annual(r, m / 12) : r, spy: ann ? annual(s, m / 12) : s, annualized: ann }; });
+    const ytdA = `${Number(end.slice(0, 4)) - 1}-12-31`, ytd = { k: "YTD", ret: between(ser, ytdA, end), spy: between(spy, ytdA, end), annualized: false };
+    periods.splice(3, 0, ytd);
+    const maxR = ser.closes[ser.closes.length - 1] / ser.closes[0] - 1, maxS = between(spy, first, end);
+    periods.push({ k: "Since " + first.slice(0, 4), ret: annual(maxR, yrsAvail), spy: annual(maxS, yrsAvail), annualized: true, years: Math.round(yrsAvail * 10) / 10 });
+    for (const p of periods) p.excess = isNum(p.ret) && isNum(p.spy) ? p.ret - p.spy : NaN;
+    // Calendar years (the last five full ones, then this year so far).
+    const y1 = Number(end.slice(0, 4));
+    const years = []; for (let y = y1 - 5; y <= y1; y++) { const a = `${y - 1}-12-31`, b = y === y1 ? end : `${y}-12-31`, r = between(ser, a, b), s = between(spy, a, b); if (isNum(r)) years.push({ year: y, ret: r, spy: s, excess: isNum(s) ? r - s : NaN, partial: y === y1 }); }
+    // Daily risk over three years, on dates both traded.
+    const sm = new Map(spy.dates.map((d, i) => [d, spy.closes[i]])), from3 = addMonths(end, -36), dr = [], ds = [];
+    for (let i = Math.max(1, at(ser.dates, from3)); i < ser.dates.length; i++) { const a = sm.get(ser.dates[i - 1]), b = sm.get(ser.dates[i]); if (!(a > 0 && b > 0)) continue; dr.push(ser.closes[i] / ser.closes[i - 1] - 1); ds.push(b / a - 1); }
+    const rfd = (1 + rf) ** (1 / TD) - 1, ex = dr.map((x) => x - rfd), vol = sd(dr) * Math.sqrt(TD), down = Math.sqrt(mean(dr.map((x) => Math.min(0, x - rfd) ** 2))) * Math.sqrt(TD);
+    const ann3 = periods.find((p) => p.k === "3Y")?.ret;
+    let cov = 0, vs = 0, vx = 0; const mx = mean(dr), my = mean(ds); for (let i = 0; i < dr.length; i++) { cov += (dr[i] - mx) * (ds[i] - my); vs += (ds[i] - my) ** 2; vx += (dr[i] - mx) ** 2; }
+    const beta = vs > 0 ? cov / vs : NaN, corr = vs > 0 && vx > 0 ? cov / Math.sqrt(vs * vx) : NaN;
+    // Monthly: capture, months beaten, best and worst.
+    const me = monthly(ser), ms = new Map(monthly(spy).map((x) => [x.month, x.close])), mr = [];
+    for (let i = 1; i < me.length; i++) { const a = ms.get(me[i - 1].month), b = ms.get(me[i].month); if (a > 0 && b > 0) mr.push({ month: me[i].month, r: me[i].close / me[i - 1].close - 1, s: b / a - 1 }); }
+    const m36 = mr.slice(-36), up = m36.filter((x) => x.s > 0), dn = m36.filter((x) => x.s < 0);
+    const geo = (xs) => (xs.length ? xs.reduce((p, x) => p * (1 + x), 1) ** (1 / xs.length) - 1 : NaN);
+    const upCap = up.length ? geo(up.map((x) => x.r)) / geo(up.map((x) => x.s)) : NaN, dnCap = dn.length ? geo(dn.map((x) => x.r)) / geo(dn.map((x) => x.s)) : NaN;
+    const best = m36.reduce((a, x) => (!a || x.r > a.r ? x : a), null), worst = m36.reduce((a, x) => (!a || x.r < a.r ? x : a), null);
+    // Drawdown over five years.
+    const i5 = Math.max(0, at(ser.dates, addMonths(end, -60))); let pk = i5, dd = { depth: 0 }, curPk = i5;
+    for (let i = i5; i < ser.closes.length; i++) { if (ser.closes[i] > ser.closes[curPk]) curPk = i; const d = ser.closes[i] / ser.closes[curPk] - 1; if (d < dd.depth) { dd = { depth: d, peak: ser.dates[curPk], trough: ser.dates[i], ti: i, pi: curPk }; pk = curPk; } }
+    if (dd.ti) { const lvl = ser.closes[dd.pi]; const k = ser.closes.findIndex((x, i) => i > dd.ti && x >= lvl); dd.recovered = k > 0 ? ser.dates[k] : null; dd.days_down = dd.ti - dd.pi; dd.days_back = k > 0 ? k - dd.ti : null; delete dd.ti; delete dd.pi; }
+    const hi = Math.max(...ser.closes.slice(-TD)), fromHigh = ser.closes[ser.closes.length - 1] / hi - 1;
+    // Rolling 12 months.
+    const roll = [], rollEx = []; for (let i = TD; i < ser.dates.length; i += 5) { const r = ser.closes[i] / ser.closes[i - TD] - 1, s = between(spy, ser.dates[i - TD], ser.dates[i]); roll.push(r); if (isNum(s)) rollEx.push(r - s); }
+    // $10,000 over five years (or since it started).
+    const g0 = at(ser.dates, addMonths(end, -60)), gFrom = g0 >= 0 ? ser.dates[g0] : first;
+    const growth = { from: gFrom, value: 10000 * (1 + between(ser, gFrom, end)), spy: 10000 * (1 + between(spy, gFrom, end)) };
+    return { as_of: end, first, periods, years, growth,
+      risk: { vol, downside: down, sharpe: isNum(ann3) && vol > 0 ? (ann3 - rf) / vol : (mean(ex) / sd(ex)) * Math.sqrt(TD), sortino: isNum(ann3) && down > 0 ? (ann3 - rf) / down : NaN, beta, corr,
+        up_capture: upCap, down_capture: dnCap, months: m36.length, months_beat: m36.length ? m36.filter((x) => x.r > x.s).length / m36.length : NaN, best_month: best, worst_month: worst },
+      drawdown: { ...dd, from_high: fromHigh },
+      rolling: roll.length ? { n: roll.length, worst: quant(roll, 0), median: quant(roll, 0.5), best: quant(roll, 1), up: roll.filter((x) => x > 0).length / roll.length, beat: rollEx.length ? rollEx.filter((x) => x > 0).length / rollEx.length : NaN, median_excess: quant(rollEx, 0.5) } : null };
+  }
+
+  /**
+   * Everything about one candidate for the write-up and the card. c: a recommendation candidate (info, q, vec, mu,
+   * prior, view, conf, yield, expense, isBond, e, via, twins); st: stats(); rows: the industry rows (by name).
+   */
+  function profile(c, st, byRow) {
+    const i = c.info || {}, v = c.vec || {};
+    const top = Object.entries(v.cos || {}).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([symbol, w]) => ({ symbol, weight: w }));
+    const inds = Object.entries(v.ind || {}).filter(([k]) => !k.startsWith("(")).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, w]) => { const r = byRow?.get?.(name) || {};
+      return { name, weight: w, call: r.call || null, call12: r.call12 || null, exp12: isNum(r.exp12) ? r.exp12 : null, z: isNum(r.z) ? r.z : null, pe_pct: isNum(r.pe_pct) ? r.pe_pct : null, verdict: r.verdict || null, headline: String(r.headline || "").slice(0, 220) }; });
+    return { symbol: c.symbol, name: i.name || "", issuer: i.issuer || "", inception: i.inceptionDate || null, aum: n(i.assetsUnderManagement), expense: c.expense, yield: n(c.yield), holdings: n(i.holdingsCount) || v.n || null,
+      effN: v.effN || null, isBond: !!c.isBond, bond: c.isBond ? { bucket: c.bucket, duration: c.e?.duration, rates_up_1pp: c.v?.rates_up_1pp, credit_stress: c.v?.credit_stress } : null,
+      top, industries: inds, mu: n(c.mu), prior: n(c.prior), view: n(c.view), conf: n(c.conf), via: c.via, twins: c.twins || [], stats: st };
+  }
+
+  /** Its role in one mix: weight, the target companies it is the main source of, its largest overlap. */
+  function role(sym, sel, cands, T) {
+    const k = cands.findIndex((c) => c.symbol === sym); if (k < 0 || !(sel?.w?.[k] > 0)) return null;
+    const w = sel.w[k], c = cands[k], unique = [];
+    if (!c.isBond) for (const t of Object.keys(T || {})) { const mine = w * (n(c.vec?.cos?.[t]) || 0); if (!mine) continue; const tot = cands.reduce((s, x, i) => s + sel.w[i] * (n(x.vec?.cos?.[t]) || 0), 0); if (tot > 0 && mine / tot >= 0.5) unique.push({ symbol: t, share: mine / tot, weight: mine }); }
+    unique.sort((a, b) => b.weight - a.weight);
+    let ov = null; if (!c.isBond) cands.forEach((x, i) => { if (i === k || !(sel.w[i] > 0) || x.isBond) return; let s = 0; for (const [t, a] of Object.entries(c.vec?.cos || {})) s += Math.min(a, n(x.vec?.cos?.[t]) || 0); if (!ov || s > ov.overlap) ov = { symbol: x.symbol, overlap: s }; });
+    return { weight: w, unique: unique.slice(0, 8), overlap: ov };
+  }
+
+  const pc = (x, d = 1) => (isNum(x) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");
+  const pp = (x, d = 1) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a");
+  const f2 = (x, d = 2) => (isNum(x) ? x.toFixed(d) : "n/a");
+  /** The fact sheet a strategist writes from: [D#] lines. goal: the goal; rl: role(); mixes: {key: role()}. */
+  function text(p, goal, rl, { mixLabel = "this mix", others = [] } = {}) {
+    const L = [], s = p.stats, add = (t) => L.push(`[D${L.length + 1}] ${t}`);
+    add(`${p.symbol} ${p.name}${p.issuer ? ` (${p.issuer})` : ""}: cost ${pp(p.expense, 2)} a year, $${isNum(p.aum) ? (p.aum / 1e9).toFixed(1) : "n/a"}B in assets, started ${p.inception || "n/a"}, ${p.holdings || "n/a"} holdings${p.effN ? ` (effectively ${Math.round(p.effN)} equal positions)` : ""}, yield ${pp(p.yield, 2)}. Found via ${p.via}.${p.twins.length ? ` Near-identical funds collapsed into it: ${p.twins.slice(0, 4).join(", ")}.` : ""}`);
+    if (rl) add(`Role in ${mixLabel} (a ${goal.label.toLowerCase()} portfolio, ${goal.horizon}): ${pp(rl.weight, 1)} of the portfolio.${rl.unique.length ? ` Main source of the target companies ${rl.unique.map((u) => `${u.symbol} (${pp(u.share, 0)} of the mix's ${u.symbol})`).join(", ")}.` : ""}${rl.overlap ? ` Largest overlap: ${rl.overlap.symbol}, ${pp(rl.overlap.overlap, 0)} the same stocks.` : ""}${others.length ? ` The other ETFs in the mix: ${others.join(", ")}.` : ""}`);
+    if (s) {
+      add(`Returns with dividends reinvested, to ${s.as_of} (S&P 500 in brackets; 3Y, 5Y and the longest window are a year): ${s.periods.map((x) => `${x.k} ${pc(x.ret)} [${pc(x.spy)}]`).join(", ")}.`);
+      add(`By calendar year (S&P 500 in brackets): ${s.years.map((y) => `${y.year}${y.partial ? " so far" : ""} ${pc(y.ret)} [${pc(y.spy)}]`).join(", ")}. $10,000 from ${s.growth.from} is $${Math.round(s.growth.value).toLocaleString("en-US")} (S&P 500 $${Math.round(s.growth.spy).toLocaleString("en-US")}).`);
+      const r = s.risk; add(`Risk over 3 years: volatility ${pp(r.vol)}, downside volatility ${pp(r.downside)}, Sharpe ${f2(r.sharpe)}, Sortino ${f2(r.sortino)}, beta ${f2(r.beta)}, correlation to the S&P 500 ${f2(r.corr)}. Monthly: up capture ${pp(r.up_capture, 0)}, down capture ${pp(r.down_capture, 0)}, beat the S&P 500 in ${pp(r.months_beat, 0)} of ${r.months} months; best month ${r.best_month ? `${r.best_month.month} ${pc(r.best_month.r)}` : "n/a"}, worst ${r.worst_month ? `${r.worst_month.month} ${pc(r.worst_month.r)}` : "n/a"}.`);
+      const d = s.drawdown; add(`Worst drawdown in 5 years: ${pc(d.depth)} from ${d.peak || "n/a"} to ${d.trough || "n/a"} (${d.days_down ?? "n/a"} trading days down; ${d.recovered ? `back to the high on ${d.recovered}, ${d.days_back} trading days later` : "not yet back to that high"}). Today ${pc(d.from_high)} from its 12-month high.`);
+      if (s.rolling) add(`Every rolling 12-month window since ${s.first} (${s.rolling.n} windows): worst ${pc(s.rolling.worst)}, median ${pc(s.rolling.median)}, best ${pc(s.rolling.best)}; up in ${pp(s.rolling.up, 0)} of them and ahead of the S&P 500 in ${pp(s.rolling.beat, 0)} (median lead ${pc(s.rolling.median_excess)}).`);
+    }
+    if (p.isBond) add(`Bonds: ${p.bond.bucket || "n/a"}, duration about ${p.bond.duration ?? "n/a"} years; a 1-point rise in rates ${pc(p.bond.rates_up_1pp)}${isNum(p.bond.credit_stress) ? `, a credit stress ${pc(p.bond.credit_stress)}` : ""}.`);
+    if (p.top.length) add(`Largest holdings: ${p.top.map((t) => `${t.symbol} ${pp(t.weight, 1)}`).join(", ")}.`);
+    for (const g of p.industries) add(`Industry ${g.name}: ${pp(g.weight, 0)} of the fund. The industry run: ${goal.horizon} call ${g.call || "n/a"}, 12M call ${g.call12 || "n/a"}, expected 12-month return ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}, conviction for this goal ${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "n/a"}, P/E ${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th percentile of its history" : "n/a"}, strategist verdict ${g.verdict || "n/a"}.${g.headline ? ` Headline: ${g.headline}` : ""}`);
+    add(`Expected return the recommender uses: ${pp(p.mu)} a year (market prior ${pp(p.prior)}${isNum(p.view) ? `, the industry runs' view ${pp(p.view)}, weighted ${pp(p.conf, 0)} toward the view` : ""}).`);
+    return L.join("\n");
+  }
+
+  function prompt(sym, goal, facts, { improving = false } = {}) {
+    return `You are the ETF analyst writing the full case for ${sym}, one fund in an ETF-only ${goal.label.toLowerCase()} portfolio${improving ? " that improves the client's current holdings" : ""} (horizon ${goal.horizon}). A quantitative process chose it and its weight from the industry research; your job is to tell the client, with the evidence, why they should own it, what it adds, what can go wrong and when to sell. Do not change the weight and do not invent numbers: every figure comes from the facts.
+
+Write for a sharp investor, plainly and specifically. Every claim cites fact ids in brackets like [D3]; use only ids that appear below. Past returns don't guarantee future ones: lean on the industry runs' forward view as much as on the record, and say plainly where the record is weak.
+Never recommend, suggest or compare against buying broad-market or size index funds (S&P 500, total market, Russell 1000/2000, mid-cap or small-cap index funds such as SPY, VOO, IVV, VTI or IWM): the S&P 500 is only the benchmark.
+
+Facts:
+${facts}
+
+Return JSON only:
+{"verdict": "one sentence: why the client needs this fund",
+ "conviction": 1-10,
+ "case": "3-4 short paragraphs separated by \\n: what it owns and why that wins for this goal now, with numbers",
+ "returns": "3-4 sentences on its record against the S&P 500: which periods it led or lagged and why, how consistent (rolling windows, months beaten), and what a bad stretch looked like",
+ "edge": "2 sentences: what it adds that the other ETFs in the mix don't (companies, industries, overlap)",
+ "outlook": "2-3 sentences: what the industry runs expect for its industries over the horizon, and the valuation",
+ "risks": [{"risk": "short", "why": "1-2 sentences with numbers", "size": "low | medium | high"}],
+ "entry": "1-2 sentences: buy all at once or in stages, given where it sits against its high and its volatility",
+ "sell_if": ["2-3 specific, checkable triggers"],
+ "alternatives": "1-2 sentences: why this fund over the near-identical ones and other ways to own the same thing named in the facts (or say none were close)"}
+2-4 risks.`;
+  }
+  function clean(x, ids) {
+    if (!x || typeof x !== "object") return null;
+    const ok = new Set(ids), fix = (s) => String(s || "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (ok.has(id) ? m : "")).replace(/\s+([.,;])/g, "$1").trim();
+    const lvl = (s) => (["low", "medium", "high"].includes(String(s || "").toLowerCase()) ? String(s).toLowerCase() : "medium");
+    const cv = Math.round(n(x.conviction));
+    return { verdict: fix(x.verdict), conviction: isNum(cv) ? Math.max(1, Math.min(10, cv)) : null, case: fix(x.case), returns: fix(x.returns), edge: fix(x.edge), outlook: fix(x.outlook),
+      risks: (Array.isArray(x.risks) ? x.risks.slice(0, 4) : []).map((r) => ({ risk: String(r?.risk || "").slice(0, 120), why: fix(r?.why), size: lvl(r?.size) })).filter((r) => r.risk),
+      entry: fix(x.entry), sell_if: (Array.isArray(x.sell_if) ? x.sell_if.slice(0, 4) : []).map(fix).filter(Boolean), alternatives: fix(x.alternatives) };
+  }
+  const idsOf = (t) => [...new Set([...String(t).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
+
+  const EtfDeep = { stats, profile, role, text, prompt, clean, idsOf, between, monthly };
+  if (typeof module !== "undefined" && module.exports) module.exports = EtfDeep;
+  else root.EtfDeep = EtfDeep;
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 </script>
@@ -18440,16 +18621,18 @@ Return JSON only:
     const look = Object.entries(T).sort((a, b) => b[1] - a[1]).slice(0, 45).map(([s]) => s), exps = {}; k = 0;
     await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies…", ++k, look.length); }, run);
     const disc = EtfStrat.discover(exps, T, { exclude: goal.excludeSyms }), heldSec = new Set(tgt.held.map((h) => h.sector)), heldInd = new Set(tgt.held.map((h) => h.name));
-    const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => (e.kind === "core") || (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
+    const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => !EtfRec.isBroadIndex(e.symbol)).filter((e) => (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
       || (e.kind === "div" && (goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
       || (EtfRec.isBond(e) && bondShare > 0 && sleeve.buckets[EtfStrat.bucketOf(e)]) || (e.kind === "gold" && goal.type !== "aggressive" && e.symbol === "GLDM"));
-    const pool0 = new Map(); for (const x of disc.slice(0, 50)) pool0.set(x.symbol, { symbol: x.symbol, via: `holds ${Object.keys(x.hits).slice(0, 4).join(", ")}${Object.keys(x.hits).length > 4 ? ` +${Object.keys(x.hits).length - 4}` : ""}`, disc: x });
+    const pool0 = new Map(); for (const x of disc.slice(0, 70)) pool0.set(x.symbol, { symbol: x.symbol, via: `holds ${Object.keys(x.hits).slice(0, 4).join(", ")}${Object.keys(x.hits).length > 4 ? ` +${Object.keys(x.hits).length - 4}` : ""}`, disc: x });
     for (const e of curated) if (!pool0.has(e.symbol)) pool0.set(e.symbol, { symbol: e.symbol, via: "the curated list", e });
     // What you hold stays a candidate (never collapsed into a cheaper copy), so fixing it can keep it.
     for (const h of held0) if (h.asset_type !== "stock") pool0.set(h.ticker, { ...(pool0.get(h.ticker) || { symbol: h.ticker }), via: "your portfolio" });
     const all = [...pool0.values()], info = {}, out = {}; k = 0;
     await pool(all, 4, async (c) => { info[c.symbol] = await recInfo(c.symbol).catch(() => null); step("Screening the candidate ETFs…", ++k, all.length); }, run);
     const ok = all.filter((c) => { c.e ||= EtfRec.BY.get(c.symbol) || { symbol: c.symbol, kind: "disc", industries: [], intl: false };
+      // Broad-market and size index funds are never recommended, not even to keep (what you hold is still graded).
+      if (EtfRec.isBroadIndex(c.symbol, info[c.symbol])) { out[c.symbol] = "a broad-market or size index fund (never recommended)"; return false; }
       const r = EtfRec.screen(c.e, info[c.symbol], goal, { today: today() }); if (!r.ok && c.via !== "your portfolio") { out[c.symbol] = r.why; return false; }
       if (c.e.kind === "disc" && info[c.symbol]?.assetClass && !/equity/i.test(info[c.symbol].assetClass)) { out[c.symbol] = info[c.symbol].assetClass; return false; } return true; });
     // 5. Holdings, prices, views.
@@ -18507,6 +18690,9 @@ Return JSON only:
     if (current) { current.stress = EtfRec.stress(held0.map((h) => h.weight / 100), held0.map((h) => ({ symbol: h.ticker, q: EtfRec.quantFacts(series[h.ticker], series.SPY) || {}, isBond: false })), series); current.lens = lensOf(current.ach);
       res.grades.current = EtfStrat.grade({ ach: current.ach, conv: convOf(current.vec.ind), quality: qualOf(current.ach.allStocks), vol: current.vol, cost: current.cost, yield: current.yield, bonds: current.bonds, mktExp, maxOverlap: current.maxOverlap }, goal); }
     res.opps = EtfStrat.opportunities(rows, tgt, picksBy, goal, { today: today(), etfFor: (ind) => cands.filter((c) => !c.isBond && (c.vec.ind[ind] || 0) > 0.15).sort((a, b) => b.vec.ind[ind] - a.vec.ind[ind]).slice(0, 3).map((c) => ({ symbol: c.symbol, purity: c.vec.ind[ind] })) });
+    // The full case for every ETF any version holds: returns, risk, drawdowns, rolling windows, holdings, industries.
+    step("Measuring every chosen ETF against the S&P 500…");
+    res.deep = {}; for (const [i, c] of cands.entries()) if (Object.values(sels).some((s) => s?.w?.[i] > 0)) res.deep[c.symbol] = EtfDeep.profile(c, EtfDeep.stats(series[c.symbol], series.SPY), byRow);
     res.hist = {}; for (const s of [...cands.map((c) => c.symbol), "SPY", "AGG"]) if (series[s]) res.hist[s] = { dates: series[s].dates.slice(-1300), closes: series[s].closes.slice(-1300) };
     return res;
   }
@@ -18519,8 +18705,12 @@ Return JSON only:
     const ds = EtfStrat.dossier(ctx), ids = EtfStrat.idsOf(ds.text), parts = Object.keys(EtfStrat.PARTS);
     const asks = parts.map((p) => sampleJson(EtfStrat.prompt(p, goal, ds.text, { improving: !!res.current }), { modelTier: "complex" }).then((x) => EtfStrat.clean(p, x, ids)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }));
     if (res.current && key === "improved") asks.push(sampleJson(EtfStrat.gradePrompt(goal, ds.text), { modelTier: "complex" }).then((x) => EtfStrat.clean("grade", x, ids)).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }));
-    const got = await Promise.all(asks);
-    return { allocation: got[0], selection: got[1], risks: got[2], verdict: got[3] || null, dossier: ds.text, ids: ds.ids, at: new Date().toISOString() };
+    // The full case for each ETF in this version, one analyst per fund, in parallel.
+    const heldSyms = res.cands.map((c, i) => [c.symbol, sel.w[i]]).filter(([s, w]) => w > 0 && res.deep?.[s]).sort((a, b) => b[1] - a[1]).map(([s]) => s), etfs = {}, etfFacts = {};
+    const deepAsks = heldSyms.map((s) => { const facts = EtfDeep.text(res.deep[s], goal, EtfDeep.role(s, sel, res.cands, res.T), { mixLabel: "this mix", others: heldSyms.filter((x) => x !== s) }); etfFacts[s] = facts;
+      return sampleJson(EtfDeep.prompt(s, goal, facts, { improving: !!res.current }), { modelTier: "complex" }).then((x) => { etfs[s] = EtfDeep.clean(x, EtfDeep.idsOf(facts)); }).catch((e) => { if (FATAL.has(e?.code)) throw e; }); });
+    const [got] = await Promise.all([Promise.all(asks), Promise.all(deepAsks)]);
+    return { allocation: got[0], selection: got[1], risks: got[2], verdict: got[3] || null, etfs, etfFacts, dossier: ds.text, ids: ds.ids, at: new Date().toISOString() };
   }
   // ------------------------------------------------------------- the Analysis tab: grade, then recommendations
   function recGoalDefaults() { return { type: "growth", horizon: "12M", amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
@@ -18678,6 +18868,41 @@ Return JSON only:
     catch (e) { res.writeErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { res.writing[key] = false; renderPortfolio(); }
   }
+  /** The full case for one ETF: the strategist's write-up and every number behind it, against the S&P 500. */
+  function recDeep(sym, res, W) {
+    const D = res.deep?.[sym], X = W?.etfs?.[sym], s = D?.stats; if (!D) return "";
+    const wr = (t) => recRich(t, W?.etfFacts?.[sym] || ""), sz = { low: "pos", medium: "warn", high: "neg" };
+    const rows = (s?.periods || []).map((p) => `<tr><td>${esc(p.k)}${p.annualized ? ` <span class="muted small">a year</span>` : ""}</td><td class="n ${cls(p.ret)}"><b>${pct(p.ret)}</b></td><td class="n ${cls(p.spy)}">${pct(p.spy)}</td><td class="n ${cls(p.excess)}">${pct(p.excess)}</td></tr>`).join("");
+    const yrs = (s?.years || []).map((y) => `<tr><td>${y.year}${y.partial ? " <span class=\"muted small\">so far</span>" : ""}</td><td class="n ${cls(y.ret)}"><b>${pct(y.ret)}</b></td><td class="n ${cls(y.spy)}">${pct(y.spy)}</td><td class="n ${cls(y.excess)}">${pct(y.excess)}</td></tr>`).join("");
+    let chart = "";
+    const h = res.hist?.[sym], sp = res.hist?.SPY;
+    if (h?.dates?.length && sp?.dates?.length && s?.growth) { const from = s.growth.from, norm = (x) => { const i = x.dates.findIndex((d) => d >= from); if (i < 0) return null; const b = x.closes[i]; return { dates: x.dates.slice(i), values: x.closes.slice(i).map((v) => (10000 * v) / b) }; };
+      const a = norm(h), b = norm(sp); if (a && b) chart = `<div class="chart">${lineChart([{ name: "S&P 500", color: "var(--bench)", dash: true, ...b }, { name: sym, color: "var(--accent)", ...a }], { height: 200, width: innerWidth < 720 ? 520 : 900, area: "var(--accent)", fmtY: (v) => "$" + Math.round(v / 1000) + "k" })}
+        <div class="legend"><span><i style="background:var(--accent)"></i>${esc(sym)} ${usd(s.growth.value)}</span><span><i style="background:var(--bench)"></i>S&amp;P 500 ${usd(s.growth.spy)}</span><span class="muted">$10,000 from ${esc(fmtDate(from))}, dividends reinvested</span></div></div>`; }
+    const r = s?.risk || {}, dd = s?.drawdown || {}, ro = s?.rolling;
+    const riskK = s ? `<div class="kpis">${[kpi("Volatility (3Y)", pct(r.vol, false), `downside ${pct(r.downside, false)}`), kpi("Sharpe (3Y)", fix(r.sharpe), `Sortino ${fix(r.sortino)}`), kpi("Beta to S&amp;P 500", fix(r.beta), `correlation ${fix(r.corr)}`),
+      kpi("Up / down capture", `${pct(r.up_capture, false, 0)} / ${pct(r.down_capture, false, 0)}`, "monthly, 3 years"), kpi("Months beating S&amp;P 500", pct(r.months_beat, false, 0), `of ${r.months}`),
+      kpi("Best / worst month", `${pct(r.best_month?.r, true, 1)} / ${pct(r.worst_month?.r, true, 1)}`, `${esc(r.best_month?.month || "")} / ${esc(r.worst_month?.month || "")}`),
+      kpi("Worst drop (5Y)", pct(dd.depth), `${esc(fmtDate(dd.peak))} → ${esc(fmtDate(dd.trough))}${dd.recovered ? `, back by ${esc(fmtDate(dd.recovered))}` : ", not yet recovered"}`), kpi("From 12M high", pct(dd.from_high), ""),
+      ro ? kpi("Rolling 12 months", `${pct(ro.median)}`, `median · worst ${pct(ro.worst)} · best ${pct(ro.best)} · up ${pct(ro.up, false, 0)} · beat S&amp;P ${pct(ro.beat, false, 0)}`) : ""].join("")}</div>` : `<div class="small muted">Less than a year of prices: no record to measure.</div>`;
+    const inds = D.industries.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">In fund</th><th>Run's call</th><th class="n">12M expected</th><th class="n">Conviction</th><th>P/E vs history</th></tr></thead><tbody>${D.industries.map((g) => `<tr><td><b>${esc(g.name)}</b></td><td class="n">${pct(g.weight, false, 0)}</td><td class="small">${esc(g.call || "—")}${g.call12 ? `<div class="muted">12M ${esc(g.call12)}</div>` : ""}</td><td class="n ${cls(g.exp12)}">${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "—"}</td><td class="n ${g.z > 0.2 ? "up" : g.z < -0.2 ? "down" : ""}">${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "—"}</td><td class="small">${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th pct" : "—"}</td></tr>`).join("")}</tbody></table></div>` : "";
+    const facts = `<div class="small muted">${[`cost ${pct(D.expense, false, 2)}`, isNum(D.aum) ? `$${(D.aum / 1e9).toFixed(1)}B` : "", D.inception ? `since ${esc(String(D.inception).slice(0, 4))}` : "", D.holdings ? `${D.holdings} holdings` : "", `yield ${pct(D.yield, false, 2)}`, `expected ${pct(D.mu, false)} a year`].filter(Boolean).join(" · ")}</div>`;
+    return `<details class="dive" style="margin-top:8px"><summary>Full analysis${X?.conviction ? ` <span class="pill ${X.conviction >= 7 ? "pos" : X.conviction >= 4 ? "neu" : "warn"}">conviction ${X.conviction}/10</span>` : ""}</summary><div class="dive-body">
+      ${X?.verdict ? `<p style="font-size:16px;margin:0"><b>${wr(X.verdict)}</b></p>` : ""}${facts}
+      ${X?.case ? `<div class="prose">${String(X.case).split(/\n+/).map((x) => `<p>${wr(x)}</p>`).join("")}</div>` : ""}
+      <h3 style="margin:4px 0">Returns against the S&amp;P 500</h3>${X?.returns ? `<p class="small" style="margin:0">${wr(X.returns)}</p>` : ""}${chart}
+      <div class="two"><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Period</th><th class="n">${esc(sym)}</th><th class="n">S&amp;P 500</th><th class="n">Lead</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Year</th><th class="n">${esc(sym)}</th><th class="n">S&amp;P 500</th><th class="n">Lead</th></tr></thead><tbody>${yrs}</tbody></table></div></div>
+      <h3 style="margin:4px 0">Risk</h3>${riskK}
+      ${D.isBond ? `<div class="small">Duration about ${esc(String(D.bond?.duration ?? "—"))} years · a 1-point rise in rates ${pct(D.bond?.rates_up_1pp)}${isNum(D.bond?.credit_stress) ? ` · credit stress ${pct(D.bond.credit_stress)}` : ""}</div>` : ""}
+      ${D.top.length ? `<h3 style="margin:4px 0">What it owns</h3><div>${D.top.map((x) => `<span class="chip-s">${esc(x.symbol)} ${pct(x.weight, false, 1)}</span>`).join(" ")}</div>` : ""}${inds}
+      ${X?.edge ? `<p class="small" style="margin:0"><b>What it adds:</b> ${wr(X.edge)}</p>` : ""}${X?.outlook ? `<p class="small" style="margin:0"><b>Outlook:</b> ${wr(X.outlook)}</p>` : ""}
+      ${X?.risks?.length ? `<div><b class="small">Risks</b><ul class="dlist small">${X.risks.map((k) => `<li><span class="pill ${sz[k.size] || "neu"}">${esc(k.size)}</span> <b>${esc(k.risk)}</b>: ${wr(k.why)}</li>`).join("")}</ul></div>` : ""}
+      ${X?.entry ? `<p class="small" style="margin:0"><b>How to buy:</b> ${wr(X.entry)}</p>` : ""}${X?.sell_if?.length ? `<div class="small"><b>Sell if:</b><ul class="dlist">${X.sell_if.map((x) => `<li>${wr(x)}</li>`).join("")}</ul></div>` : ""}
+      ${X?.alternatives ? `<p class="small muted" style="margin:0"><b>Why this one:</b> ${wr(X.alternatives)}</p>` : ""}
+      ${!X && W?.etfs ? `<div class="small muted">The analyst's write-up for this fund didn't come back; the numbers above are complete.</div>` : !X ? `<div class="small muted">The written case comes with the strategists' write-up.</div>` : ""}
+      <div class="small muted">Past returns don't guarantee future ones. Every number is computed from dividend-adjusted prices; the case is the analyst's reading of them and of the industry runs.</div></div></details>`;
+  }
   function recView(res) {
     if (!res?.sels) return res?.rec ? `<section class="panel"><div class="small muted">This result is from the earlier version of the recommender: build again for the new analysis.</div></section>` : "";
     const same = (x, y) => x && y && x.w.every((v, i) => Math.abs(v - y.w[i]) < 0.005), S2 = res.sels;
@@ -18738,9 +18963,10 @@ Return JSON only:
         <div class="small" style="margin:6px 0">${c.isBond ? `${esc(EtfStrat.BUCKETS[c.bucket] || "")} · yield ${pct(c.yield, false, 2)} · duration ~${c.e.duration}y · +1pp rates ${pct(c.v?.rates_up_1pp)}` : `<b>${pct(inT, false, 0)}</b> in target industries · <b>${pct(caps.reduce((a, x) => a + x[1], 0), false, 0)}</b> in target companies · ${v.n} holdings (effective ${fix(v.effN, 0)})`}</div>
         ${caps.length ? `<div>${caps.map(([t, x]) => `<span class="chip-s">${esc(t)} ${pct(x, false, 1)}</span>`).join(" ")}</div>` : ""}
         ${!c.isBond ? `<div class="small muted" style="margin-top:4px">${Object.entries(v.ind || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, x]) => `${esc(k)} ${pct(x, false, 0)}`).join(" · ")}</div>` : ""}
-        ${e?.why ? `<p class="small" style="margin:8px 0 0">${wr(e.why)}</p>` : ""}${e?.watch ? `<div class="small muted" style="margin-top:4px"><b>Sell if:</b> ${wr(e.watch)}</div>` : ""}
+        ${W.etfs?.[c.symbol]?.verdict ? `<p style="margin:8px 0 0"><b>${recRich(W.etfs[c.symbol].verdict, W.etfFacts?.[c.symbol] || "")}</b></p>` : ""}${e?.why ? `<p class="small" style="margin:8px 0 0">${wr(e.why)}</p>` : ""}${e?.watch ? `<div class="small muted" style="margin-top:4px"><b>Sell if:</b> ${wr(e.watch)}</div>` : ""}
         <div class="small muted" style="margin-top:6px">${[`cost ${pct(c.expense, false, 2)}`, `$${fix(num(c.info?.assetsUnderManagement) / 1e9, 1)}B`, `yield ${pct(c.yield, false, 1)}`, `vol ${pct(c.q?.vol, false, 0)}`, `beta ${fix(c.q?.beta, 2)}`, `1Y ${pct(c.q?.r1y)}`, `3Y ${pct(c.q?.r3y)}/yr`].join(" · ")}</div>
-        <div class="small muted">Found via ${esc(c.via)}${ov ? ` · most overlap: ${esc(ov.a === c.symbol ? ov.b : ov.a)} ${pct(ov.overlap, false, 0)}` : ""}${c.twins?.length ? ` · same as ${esc(c.twins.slice(0, 3).join(", "))}` : ""}</div></div>`; }).join("")}</div>`);
+        <div class="small muted">Found via ${esc(c.via)}${ov ? ` · most overlap: ${esc(ov.a === c.symbol ? ov.b : ov.a)} ${pct(ov.overlap, false, 0)}` : ""}${c.twins?.length ? ` · same as ${esc(c.twins.slice(0, 3).join(", "))}` : ""}</div>
+        ${recDeep(c.symbol, res, W)}</div>`; }).join("")}</div>`);
     // Overlap matrix
     const st = held.filter((x) => !x.c.isBond).map((x) => x.c), ovS = st.length > 1 ? sec("rec-ovl", "Overlap between the ETFs", "the share of each pair that is the same stocks", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th></th>${st.map((c) => `<th class="n">${esc(c.symbol)}</th>`).join("")}</tr></thead><tbody>${st.map((a) => `<tr><td><b class="tick">${esc(a.symbol)}</b></td>${st.map((b) => { if (a === b) return `<td class="n muted">—</td>`; const o = EtfStrat.overlap(a.vec.cos, b.vec.cos); return `<td class="n" style="background:rgba(239,68,68,${Math.min(0.6, o * 1.2).toFixed(2)})">${(o * 100).toFixed(0)}%</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`) : "";
     // Look-through
@@ -18771,7 +18997,7 @@ Return JSON only:
     const method = sec("rec-method", "How it was built", "", `<ol class="small"><li><b>Industries:</b> ${res.rows.length} industry runs, each given a conviction for a ${esc(goal.label.toLowerCase())} investor over ${esc(goal.horizon)}; the target distribution tilts the market's own weights by conviction, drops what to avoid, and caps industries and sectors.</li>
       <li><b>Bonds:</b> ${pct(res.bondShare, false, 0)} (the goal's band, more when the industries' convictions are weak), split by the goal and the curve.</li>
       <li><b>Companies:</b> the best ${EtfStrat.STYLE[goal.type].perInd} per industry by the run's ranking for this investor type, plus the lead strategist's best expressions; avoids and thinly traded names dropped.</li>
-      <li><b>ETFs:</b> every US-listed fund holding the top ${Math.min(45, Object.keys(res.T).length)} target companies (FMP's reverse lookup: ${res.discovered} with $200M+), the strongest 50 of them plus curated sector, industry, broad and bond funds (${res.screened.pool} in all); ${res.screened.passed} passed the screen (size, volume, age, cost, no leverage, US); full holdings matched to the industries; copies of the same index collapsed.</li>
+      <li><b>ETFs:</b> every US-listed fund holding the top ${Math.min(45, Object.keys(res.T).length)} target companies (FMP's reverse lookup: ${res.discovered} with $200M+), the strongest 70 of them plus curated sector, industry, factor and bond funds; broad-market and size index funds (SPY, VOO, VTI, IWM and the like) are never recommended (${res.screened.pool} in all); ${res.screened.passed} passed the screen (size, volume, age, cost, no leverage, US); full holdings matched to the industries; copies of the same index collapsed.</li>
       <li><b>The mix:</b> a quadratic program matching the industry targets and company targets, penalizing overlap between the ETFs and off-target exposure, with risk (three years of daily returns, ${pct(res.shrink, false, 0)} Ledoit-Wolf shrinkage) under the ${pct(goal.vol, false, 0)} ceiling, every ETF 3–15%, no single stock above ${pct(goal.stockCap, false, 0)} underneath.</li>
       <li><b>Expected returns:</b> each ETF's CAPM prior (4% + beta × 5%) moved toward its industries' 12-month expectations by how much of it the runs cover; bonds on carry less defaults.</li></ol>`);
     return head + impS + indS + bondS + coS + etfS + ovS + lookS + hzS + oppS + riskS + strS + histS + planS + method;

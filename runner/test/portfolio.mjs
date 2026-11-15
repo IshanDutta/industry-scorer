@@ -50,6 +50,7 @@ const brainSrc = `window.FX = ${JSON.stringify({ cos: FX.cos, spy: FX.spy_holdin
     if (/grading a client/.test(p)) return { verdict: "A concentrated mega-cap portfolio [M2].", strengths: ["Low cost [M2]"], weaknesses: ["Too much in one stock [M2]"], fixes: ["Add the semiconductor ETF [E1]"] };
     if (/chief investment strategist/.test(p)) return { headline: "Chips and platforms, with a bond ballast [A1].", thesis: "One [I1].\\nTwo [I2].\\nThree [A1].", industries: ids(/^\\[(I\\d+)\\]/gm).map((id) => ({ id, stance: "overweight", why: "Its run is bullish [" + id + "].", risk: "A miss [" + id + "]" })), bonds: "Intermediate Treasuries [B1].", horizons: { "1M": { call: "neutral", why: "x [A1]" }, "12M": { call: "slightly bullish", why: "y [A1]" } }, scenarios: { bull: { probability: 30, return: "+18%", narrative: "b [A1]" }, base: { probability: 50, return: "+7%", narrative: "c" }, bear: { probability: 20, return: "-15%", narrative: "d [S1]" } } };
     if (/portfolio manager choosing/.test(p)) return { companies: ids(/^\\[(C\\d+)\\]/gm).slice(0, 10).map((id) => ({ id, why: "Best in its industry [" + id + "]." })), etfs: [...String(p).matchAll(/^\\[E\\d+\\] ([A-Z]+)/gm)].map((m, i) => ({ symbol: m[1], role: i ? "industry tilt" : "core", why: "Captures the targets [E" + (i + 1) + "].", watch: "If the call turns [E" + (i + 1) + "]" })), overlap: "Low overlap [A1].", implementation: ["Buy the core first [E1]"], left_out: "Gold [O1]." };
+    if (/ETF analyst writing the full case/.test(p)) return { verdict: "It owns the target companies [D2].", conviction: 7, case: "One [D3].\\nTwo [D4].", returns: "Led in 2024 [D4].", edge: "Unique names [D2].", outlook: "Runs are bullish [D9].", risks: [{ risk: "Drawdown", why: "Fell hard once [D6].", size: "medium" }], entry: "In two steps [D6].", sell_if: ["The call turns [D9]"], alternatives: "None close [D1]." };
     if (/head of risk/.test(p)) return { opportunities: [{ title: "Chips", ids: ["O1"], why: "The strongest case [O1].", how: "SMH", horizon: "12M" }], risks: [{ risk: "Rates", likelihood: "medium", impact: "high", why: "2022 [S2]", hedge: "Bonds [B1]" }], macro: "Mixed [M1].", world: "Tariffs [W1].", watch: [{ date: "2026-12-10", what: "FOMC", why: "rates" }], change_mind: ["A recession [S6]"] };
     return {};
   };
@@ -72,6 +73,11 @@ if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString()
   ok(!!r.sels?.improved && !!r.sels?.recommended, "the fix-what-you-have and from-scratch mixes are there");
   ok(r.sels.recommended.w.every((x) => x <= 0.15 + 1e-9), "every ETF at most 15%");
   ok(!!r.write?.improved?.verdict?.verdict && !!r.write?.improved?.allocation?.headline, "the strategists' write-up (verdict, allocation) is there");
+  const R2 = require("../../web/etfrec.js"), broad = Object.entries(r.sels).flatMap(([k, s]) => r.cands.filter((c, i) => s.w[i] > 0 && R2.isBroadIndex(c.symbol, c.info)).map((c) => `${k}:${c.symbol}`));
+  ok(!broad.length, `no broad-market or size index fund in any mix${broad.length ? ` (found ${broad.join(", ")})` : ""}`);
+  const held = r.cands.filter((c, i) => r.sels.recommended.w[i] > 0).map((c) => c.symbol);
+  ok(held.every((s) => r.deep?.[s]?.stats?.periods?.length), "every recommended ETF has its returns and risk measured");
+  ok(held.every((s) => r.write?.recommended?.etfs?.[s]?.verdict), `every recommended ETF has its written case (${Object.keys(r.write?.recommended?.etfs || {}).length}/${held.length})`);
   ok(r.job?.industries >= 8, `${r.job?.industries} industry runs loaded`);
   console.log(readFileSync(join(tmp, "summary.md"), "utf8")); }
 else ok(false, "no result file");

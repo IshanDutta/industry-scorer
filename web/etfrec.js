@@ -52,6 +52,19 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
   const BY = new Map(UNIVERSE.map((e) => [e.symbol, e]));
   const isBond = (e) => e?.kind === "bond" || e?.kind === "intlbond";
   const isStock = (e) => ["core", "size", "style", "div", "sector", "ind", "theme", "intl"].includes(e?.kind);
+  // Broad-market and size index funds are never recommended (the S&P 500 is only the benchmark): the curated ones,
+  // the other well-known ones, and any fund whose name says it tracks the whole market or a size slice of it.
+  const BROAD = new Set(("VOO IVV SPY VTI SCHB ITOT SPLG IJH VO MDY IJR VB IWM SCHA IWB IWV IWR IWL SCHX SCHK SCHM VV VXF DIA OEF MGC SPTM SPMD SPSM " +
+    "VTHR VONE VTWO IVOO VIOO IYY EUSA SPYX PBUS DFUS STRV BBUS IMCB ISCB").split(" "));
+  const BROAD_NAME = /\b(s&p ?500|s&p ?100|s&p (?:mid ?cap|small ?cap|composite|total market)|s&p 1500|total (?:us |u\.s\. )?(?:stock )?market|russell (?:1000|2000|3000|top 200|mid ?cap|micro ?cap)|extended market|dow jones industrial|broad (?:us )?market|crsp us (?:total|large|mid|small)|(?:us|u\.s\.) (?:large|mid|small|mega|micro)[- ]cap(?: index| etf| equity)?|(?:mid|small|large|mega|micro|all)[- ]cap (?:index|etf|equity|stock)|msci usa(?: imi)?(?: index| etf)?$)/i;
+  const NOT_BROAD = /(growth|value|dividend|momentum|quality|low vol|min(?:imum)? vol|equal|high beta|buyback|sector|technolog|financial|health|energy|utilit|industrial|material|consumer|real estate|communication|covered call|buywrite|premium|income|leverag|inverse|\b[23]x\b|buffer|hedged|esg|factor|fundamental|enhanced|top 50|innovation|revenue|semiconductor|biotech|software|bank|insurance|defense|infrastructure|ai\b)/i;
+  /** True for a broad-market or size index fund (never recommended). info: FMP fund info (name) when known. */
+  function isBroadIndex(symbol, info = null) {
+    const s = String(symbol || "").toUpperCase(), e = BY.get(s);
+    if (BROAD.has(s) || (e && (e.kind === "core" || (e.kind === "size" && s !== "AVUV")))) return true;
+    const name = String(info?.name || info?.companyName || "");
+    return !!name && BROAD_NAME.test(name) && !NOT_BROAD.test(name);
+  }
   const KIND_LABEL = { core: "US total market", size: "Mid and small caps", style: "Style and factor", div: "Dividend and income", sector: "Sector", ind: "Industry", theme: "Theme", bond: "Bonds", gold: "Gold", cmdty: "Commodities", intl: "International stocks", intlbond: "International bonds" };
   const BOND_LABEL = { cash: "T-bills and cash", float: "Floating-rate notes", treasury: "Treasuries", agg: "Core bonds (aggregate)", tips: "Inflation-protected Treasuries", ig: "Investment-grade corporates", hy: "High yield", loans: "Bank loans", muni: "Municipal bonds", mbs: "Mortgage-backed" };
   // Spread over Treasuries (when no trailing yield is known), expected default losses a year, and the spread move in a credit stress.
@@ -320,7 +333,8 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
    * Shortlist, expected returns, risk and the three portfolios. cands: [{symbol, e, info, q, v, yld, pill, sectors, stocks, expense}].
    * series: {sym: {dates, closes}} with SPY. Returns {assets, mu, prior, cov, portfolios: {recommended, simpler, bolder}}.
    */
-  function recommend(cands, series, goal, { size = 30, force = [] } = {}) {
+  function recommend(cands0, series, goal, { size = 30, force = [] } = {}) {
+    const cands = (cands0 || []).filter((c) => !isBroadIndex(c.symbol, c.info));
     const spy = series.SPY; if (!spy?.dates?.length) throw new Error("no SPY prices");
     const ok = cands.filter((c) => c.ok !== false && series[c.symbol]?.dates?.length > 300);
     // Shortlist: the best by the goal's pillars within each group, so the optimizer sees stocks, bonds and diversifiers.
@@ -362,7 +376,7 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
       const w = (n(h.weight) || 0) / tot; let to = idx.get(h.ticker), how = "kept";
       if (to === undefined && h.asset_type === "stock" && h.industry) { let b = -1; assets.forEach((a, i) => { const s = (a.v?.industries || []).find((g) => lc(g.industry) === lc(h.industry))?.weight || (a.e.industries || []).map(lc).includes(lc(h.industry)) * 0.5; if (s > b && !a.isBond) { b = s; to = i; } }); if (b <= 0) to = undefined; else how = `its industry (${h.industry})`; }
       if (to === undefined && h.sector) { const sx = h.sectors || { [h.sector]: 1 }; let b = 0; assets.forEach((a, i) => { const s = cos(sx, a.sectors); if (s > b && !a.isBond) { b = s; to = i; } }); if (to !== undefined) how = "the closest sector mix"; }
-      if (to === undefined) { to = assets.findIndex((a) => a.e.kind === "core"); how = "the total market"; }
+      if (to === undefined) { to = assets.findIndex((a) => a.e.kind === "style" || a.e.kind === "div"); how = "the closest broad holding"; }
       if (to >= 0) { w0[to] += w; map.push({ ticker: h.ticker, weight: w, to: assets[to].symbol, how }); }
     }
     return { w0, map };
@@ -446,7 +460,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfRec = { RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
+  const EtfRec = { isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfRec;
   else root.EtfRec = EtfRec;
 })(typeof globalThis !== "undefined" ? globalThis : this);
