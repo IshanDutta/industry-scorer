@@ -47,6 +47,7 @@ const brainSrc = `window.FX = ${JSON.stringify({ cos: FX.cos, spy: FX.spy_holdin
     return { payload: [] }; } };
   const json = async (p) => {
     const ids = (re) => [...String(p).matchAll(re)].map((m) => m[1]);
+    if (/full investment memo/.test(p)) return { title: "Own the leaders [P1].", summary: "The case [P2]. The range [P5].", sections: [{ title: "The thesis", body: "One [P1].\\nTwo [I1]." }, { title: "The record", body: "Led [P2]." }], action_plan: [{ step: "Buy the core", detail: "First [P1]." }], watch: [{ date: "2026-12-10", what: "FOMC [P1]", why: "rates" }], conviction: 7, conviction_why: "Strong record [P3]." };
     if (/grading a client/.test(p)) return { verdict: "A concentrated mega-cap portfolio [M2].", strengths: ["Low cost [M2]"], weaknesses: ["Too much in one stock [M2]"], fixes: ["Add the semiconductor ETF [E1]"] };
     if (/chief investment strategist/.test(p)) return { headline: "Chips and platforms, with a bond ballast [A1].", thesis: "One [I1].\\nTwo [I2].\\nThree [A1].", industries: ids(/^\\[(I\\d+)\\]/gm).map((id) => ({ id, stance: "overweight", why: "Its run is bullish [" + id + "].", risk: "A miss [" + id + "]" })), bonds: "Intermediate Treasuries [B1].", horizons: { "1M": { call: "neutral", why: "x [A1]" }, "12M": { call: "slightly bullish", why: "y [A1]" } }, scenarios: { bull: { probability: 30, return: "+18%", narrative: "b [A1]" }, base: { probability: 50, return: "+7%", narrative: "c" }, bear: { probability: 20, return: "-15%", narrative: "d [S1]" } } };
     if (/portfolio manager choosing/.test(p)) return { companies: ids(/^\\[(C\\d+)\\]/gm).slice(0, 10).map((id) => ({ id, why: "Best in its industry [" + id + "]." })), etfs: [...String(p).matchAll(/^\\[E\\d+\\] ([A-Z]+)/gm)].map((m, i) => ({ symbol: m[1], role: i ? "industry tilt" : "core", why: "Captures the targets [E" + (i + 1) + "].", watch: "If the call turns [E" + (i + 1) + "]" })), overlap: "Low overlap [A1].", implementation: ["Buy the core first [E1]"], left_out: "Gold [O1]." };
@@ -78,6 +79,12 @@ if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString()
   const held = r.cands.filter((c, i) => r.sels.recommended.w[i] > 0).map((c) => c.symbol);
   ok(held.every((s) => r.deep?.[s]?.stats?.periods?.length), "every recommended ETF has its returns and risk measured");
   ok(held.every((s) => r.write?.recommended?.etfs?.[s]?.verdict), `every recommended ETF has its written case (${Object.keys(r.write?.recommended?.etfs || {}).length}/${held.length})`);
+  const V = r.pf?.versions?.recommended;
+  ok(!!V?.track?.periods?.length && !!V?.risk?.rows?.length, "the recommended mix has its track record and risk split");
+  ok(!!V?.projection?.horizons?.[10]?.p50 && V.projection.horizons[1].p5 < V.projection.horizons[1].p95, "the projection covers 1-10 years with a range");
+  ok(!!V?.fundamentals?.port && V?.companies?.length > 0, "what it owns: fundamentals and the largest companies");
+  ok(!!r.pf?.current?.track, "today's portfolio has its track record");
+  ok(!!r.write?.recommended?.memo?.sections?.length && !!r.write?.improved?.memo?.summary, "the investment memo is written for each version");
   ok(r.job?.industries >= 8, `${r.job?.industries} industry runs loaded`);
   console.log(readFileSync(join(tmp, "summary.md"), "utf8")); }
 else ok(false, "no result file");
