@@ -202,6 +202,50 @@
       return { ...e, purity, align, breadth, score: purity * 0.6 + Math.sqrt(align) * 2 + Math.log10(e.aum) * 0.05 };
     }).sort((a, b) => b.score - a.score);
   }
+  /**
+   * The purest funds for each held industry: for every fund the reverse lookup found, the share of it that sits in that
+   * industry's chosen companies (weighted toward the companies the industry run likes most). Up to `per` funds per
+   * industry, so each industry brings its own specialists instead of the same broad funds every time.
+   * picksBy: {industry: {picks: [{symbol, within}]}}. Returns [{symbol, industry, share, capture, aum}].
+   */
+  function discoverByIndustry(exposures, picksBy, { minAum = 1e8, per = 6, exclude = [] } = {}) {
+    const ex = new Set(exclude), fund = new Map();
+    for (const [co, list] of Object.entries(exposures || {})) for (const x of list || []) {
+      const s = String(x.symbol || x.etfSymbol || "").toUpperCase(), w = n(x.weightPercentage) / 100, mv = n(x.marketValue);
+      if (!/^[A-Z]{2,5}$/.test(s) || MUTUAL.test(s) || ex.has(s) || !(w > 0) || w > 0.25) continue;
+      const e = fund.get(s) || { symbol: s, w: {}, aum: 0 }; e.w[co] = Math.max(e.w[co] || 0, w); if (mv > 0) e.aum = Math.max(e.aum, mv / w); fund.set(s, e);
+    }
+    const out = [];
+    for (const [ind, pk] of Object.entries(picksBy || {})) { const P = pk?.picks || []; if (!P.length) continue;
+      const rows = [...fund.values()].filter((e) => e.aum >= minAum).map((e) => { let share = 0, cap = 0, hit = 0; for (const p of P) { const w = e.w[p.symbol] || 0; if (w > 0) { share += w; cap += Math.min(w / 0.08, 1) * (p.within || 1 / P.length); hit++; } }
+        return { symbol: e.symbol, industry: ind, share, capture: cap, hits: hit, aum: e.aum }; }).filter((r) => r.hits >= Math.min(2, P.length) && r.share >= 0.08);
+      rows.sort((a, b) => b.share * 0.7 + b.capture * 0.3 - (a.share * 0.7 + a.capture * 0.3)); out.push(...rows.slice(0, per)); }
+    return out;
+  }
+  /**
+   * A fund's quality as an investment on its own (0-100): its 3-year return against the S&P 500 and its risk-adjusted
+   * return (Sharpe) ranked within the candidates, its worst drawdown, cost and size. st: EtfDeep.stats().
+   */
+  function quality(cands) {
+    const val = (c, f) => { const v = f(c); return isNum(v) ? v : NaN; }, P = (s, k) => s?.periods?.find((q) => q.k === k);
+    const feats = [[(c) => P(c.stats, "3Y")?.excess ?? P(c.stats, "1Y")?.excess, 0.3], [(c) => c.stats?.risk?.sharpe, 0.25], [(c) => c.stats?.drawdown?.depth, 0.1], [(c) => -(n(c.expense) || 0), 0.15], [(c) => Math.log10(Math.max(1, n(c.info?.assetsUnderManagement) || 1)), 0.1], [(c) => c.stats?.rolling?.beat, 0.1]];
+    const ranks = feats.map(([f]) => { const v = cands.map((c) => val(c, f)), ok = v.filter(isNum).sort((a, b) => a - b); return v.map((x) => (isNum(x) && ok.length > 2 ? ok.filter((y) => y < x).length / (ok.length - 1) : 0.5)); });
+    cands.forEach((c, i) => { if (c.isBond) { c.quality = null; return; } let s = 0, W = 0; feats.forEach(([, w], j) => { s += w * ranks[j][i]; W += w; }); c.quality = Math.round((100 * s) / W); });
+    return cands;
+  }
+  /** How spread a fund is across sectors: the largest sector's share of it. sectorOf: industry -> sector. */
+  function sectorFocus(vec, sectorOf) { const s = {}; let tot = 0; for (const [k, v] of Object.entries(vec?.ind || {})) { if (k.startsWith("(")) continue; const x = sectorOf(k) || "Other"; s[x] = (s[x] || 0) + v; tot += v; } const top = Math.max(0, ...Object.values(s)); return tot > 0 ? top / tot : NaN; }
+  /**
+   * For each held industry, the funds that could carry it, ranked: the share of the fund in the industry, how much of
+   * the industry's chosen companies it holds, the fund's quality, and its cost. The page shows these as the shortlist.
+   */
+  function sleeves(held, picksBy, cands, { per = 5 } = {}) {
+    return held.map((h) => { const P = picksBy[h.name]?.picks || [];
+      const rows = cands.filter((c) => !c.isBond && (n(c.vec?.ind?.[h.name]) || 0) >= 0.05).map((c) => { const pur = n(c.vec.ind[h.name]) || 0; let cap = 0; for (const p of P) cap += Math.min((n(c.vec?.cos?.[p.symbol]) || 0) / 0.08, 1) * (p.within || 1 / Math.max(1, P.length));
+        const score = 45 * Math.min(1, pur / 0.6) + 30 * Math.min(1, cap / 0.5) + 0.25 * (isNum(c.quality) ? c.quality : 50);
+        return { symbol: c.symbol, purity: pur, capture: cap, quality: c.quality, score: Math.round(score) }; }).sort((a, b) => b.score - a.score).slice(0, per);
+      return { industry: h.name, target: h.target, picks: P.map((p) => p.symbol), funds: rows }; });
+  }
   /** Per ETF: industry exposure, company exposure and the full look-through for overlap (weights 0-1). mapped: Portfolio.mapHoldings rows. */
   function vectors(mapped) {
     const tot = (mapped || []).reduce((a, h) => a + (n(h.weight) || 0), 0) || 1, ind = {}, cos = {};
@@ -239,7 +283,7 @@
    * target of an industry not held is zero), risk (lambda, raised until volatility is under the ceiling), costs, and a
    * small pull toward the higher expected returns (delta).
    */
-  function mix(cands, target, cov, goal, { alpha = 6, beta = 4, gamma = 0.8, delta = 0.1, w0 = null, kappa = 0, maxN = goal.maxN, volCap = goal.vol, keep = [] } = {}) {
+  function mix(cands, target, cov, goal, { alpha = 6, beta = 7, gamma = 1.2, delta = 0.1, eta = 0.25, w0 = null, kappa = 0, maxN = goal.maxN, volCap = goal.vol, keep = [] } = {}) {
     let live = cands.map((_, i) => i); const cap = (goal.cap || 15) / 100, minW = (goal.minW || 3) / 100;
     const keys = [...new Set([...Object.keys(target.industries), ...Object.keys(target.buckets).map((b) => "B:" + b), ...cands.flatMap((c) => (c.isBond ? ["B:" + c.bucket] : Object.keys(c.vec?.ind || {})))])];
     const tv = keys.map((k) => (k.startsWith("B:") ? target.buckets[k.slice(2)] || 0 : target.industries[k] || 0));
@@ -253,7 +297,9 @@
         for (let b = 0; b < m; b++) { const j = idx[b]; let q = 0; for (let r = 0; r < keys.length; r++) q += X[r][i] * X[r][j]; let qc = 0; for (let r = 0; r < coKeys.length; r++) qc += C[r][i] * C[r][j];
           Q[a][b] = 2 * alpha * q + 2 * beta * qc + gamma * (O[i][j] + O[j][i]) + lam * cov[i][j]; }
         let l = 0; for (let r = 0; r < keys.length; r++) l += X[r][i] * tv[r]; let lc2 = 0; for (let r = 0; r < coKeys.length; r++) lc2 += C[r][i] * Tv[r];
-        c[a] = 2 * alpha * l + 2 * beta * lc2 + delta * (n(cands[i].mu) || 0) - (n(cands[i].expense) || 0); }
+        // Fund quality (record, risk-adjusted return, cost, size) as a reward: between two funds that carry the same
+        // industry, the better-run one wins.
+        c[a] = 2 * alpha * l + 2 * beta * lc2 + delta * (n(cands[i].mu) || 0) - (n(cands[i].expense) || 0) + (cands[i].isBond || !isNum(cands[i].quality) ? 0 : eta * (cands[i].quality - 50) / 50); }
       // Bonds held to the sleeve the allocation chose (within 2pp, inside the goal's band).
       const bt = Object.values(target.buckets).reduce((a2, x) => a2 + x, 0), bHi = Math.min(goal.bonds[1], bt + 0.02) + 0.005, bLo = Math.max(goal.bonds[0], bt - 0.02) - 0.005;
       const rows = [], bondA = idx.map((i) => (cands[i].isBond ? 1 : 0)); if (bondA.some(Boolean)) { rows.push({ a: bondA, b: bHi }); if (bLo > 0) rows.push({ a: bondA.map((x) => -x), b: -bLo }); }
@@ -456,7 +502,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfStrat = { gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
+  const EtfStrat = { discoverByIndustry, quality, sectorFocus, sleeves, gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfStrat;
   else root.EtfStrat = EtfStrat;
 })(typeof globalThis !== "undefined" ? globalThis : this);

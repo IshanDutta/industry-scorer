@@ -400,6 +400,33 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .pf-version { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; border-radius: 12px; padding: 10px 12px; background: var(--sunk); }
 .pf-version.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); }
 .pf-version-t { display: grid; gap: 1px; min-width: 0; }
+.ana-nav { position: sticky; top: 0; z-index: 8; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
+.ana-nav button { border-radius: 999px; padding: 8px 16px; font-weight: 600; white-space: nowrap; background: var(--surface); color: var(--muted); }
+.ana-nav button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.ana-nav button .cnt { font: 600 11px var(--mono); opacity: .75; margin-left: 4px; }
+.ov-hero { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr); gap: 16px 22px; align-items: center; padding: 20px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: radial-gradient(100% 140% at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%), var(--surface); }
+@media (max-width: 760px) { .ov-hero { grid-template-columns: auto auto auto; } .ov-hero > .ov-kpis { grid-column: 1 / -1; } }
+.ov-arrow { font-size: 26px; color: var(--muted); }
+.ov-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.ov-kpi { background: var(--sunk); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.ov-kpi .v { font: 600 20px var(--mono); }
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.ov-card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--surface); display: grid; gap: 8px; align-content: start; min-width: 0; transition: border-color .15s, transform .15s; }
+.ov-card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); transform: translateY(-1px); }
+.ov-card .sym { font: 700 22px var(--mono); letter-spacing: -.02em; }
+.ov-card .row { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ov-wt { font: 600 20px var(--mono); }
+.ov-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.ov-mini > div { background: var(--sunk); border-radius: 8px; padding: 6px 8px; display: grid; }
+.ov-mini b { font: 600 14px var(--mono); }
+.ov-step { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 14px; border-radius: 12px; background: var(--sunk); }
+.ov-step .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font: 700 14px var(--mono); }
+.ov-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin: 6px 0 2px; }
+.ov-h h2 { font-size: 20px; }
+.ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ov-chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); }
+.goal-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .pf-manual { border-color: color-mix(in srgb, var(--c3) 45%, var(--line)); }
 .pf-steps { display: grid; gap: 10px; margin: 0; padding-left: 20px; } .pf-steps textarea { display: block; width: 100%; margin-top: 6px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11.5px; resize: vertical; }
 #rec-goal .kpi, #pf-editor .kpi { min-width: 0; } #rec-goal input:not([type=checkbox]), #rec-goal select, #pf-editor .kpis input { width: 100%; max-width: 100%; box-sizing: border-box; min-width: 0; }
@@ -11360,9 +11387,11 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
   // Broad-market and size index funds are never recommended (the S&P 500 is only the benchmark): the curated ones,
   // the other well-known ones, and any fund whose name says it tracks the whole market or a size slice of it.
   const BROAD = new Set(("VOO IVV SPY VTI SCHB ITOT SPLG IJH VO MDY IJR VB IWM SCHA IWB IWV IWR IWL SCHX SCHK SCHM VV VXF DIA OEF MGC SPTM SPMD SPSM " +
-    "VTHR VONE VTWO IVOO VIOO IYY EUSA SPYX PBUS DFUS STRV BBUS IMCB ISCB").split(" "));
-  const BROAD_NAME = /\b(s&p ?500|s&p ?100|s&p (?:mid ?cap|small ?cap|composite|total market)|s&p 1500|total (?:us |u\.s\. )?(?:stock )?market|russell (?:1000|2000|3000|top 200|mid ?cap|micro ?cap)|extended market|dow jones industrial|broad (?:us )?market|crsp us (?:total|large|mid|small)|(?:us|u\.s\.) (?:large|mid|small|mega|micro)[- ]cap(?: index| etf| equity)?|(?:mid|small|large|mega|micro|all)[- ]cap (?:index|etf|equity|stock)|msci usa(?: imi)?(?: index| etf)?$)/i;
-  const NOT_BROAD = /(growth|value|dividend|momentum|quality|low vol|min(?:imum)? vol|equal|high beta|buyback|sector|technolog|financial|health|energy|utilit|industrial|material|consumer|real estate|communication|covered call|buywrite|premium|income|leverag|inverse|\b[23]x\b|buffer|hedged|esg|factor|fundamental|enhanced|top 50|innovation|revenue|semiconductor|biotech|software|bank|insurance|defense|infrastructure|ai\b)/i;
+    "VTHR VONE VTWO IVOO VIOO IYY EUSA SPYX PBUS DFUS STRV BBUS IMCB ISCB " +
+    // Broad large-cap trackers: the Nasdaq-100, the S&P 500's top 50, and large-cap growth and value indexes.
+    "QQQ QQQM ONEQ QQQJ XLG MGK MGV IWY IWX VUG VTV IWF IWD SCHG SCHV SPYG SPYV VONG VONV IVW IVE IUSG IUSV VOOG VOOV IOO OEF RSP MTUM QUAL USMV SPLV VLUE SPHQ").split(" "));
+  const BROAD_NAME = /\b(nasdaq[- ]?100|nasdaq composite|top 50|mega[- ]cap|large[- ]cap (?:growth|value|core|blend)|russell 1000 (?:growth|value)|s&p 500 (?:growth|value)|s&p ?500|s&p ?100|s&p (?:mid ?cap|small ?cap|composite|total market)|s&p 1500|total (?:us |u\.s\. )?(?:stock )?market|russell (?:1000|2000|3000|top 200|mid ?cap|micro ?cap)|extended market|dow jones industrial|broad (?:us )?market|crsp us (?:total|large|mid|small)|(?:us|u\.s\.) (?:large|mid|small|mega|micro)[- ]cap(?: index| etf| equity)?|(?:mid|small|large|mega|micro|all)[- ]cap (?:index|etf|equity|stock)|msci usa(?: imi)?(?: index| etf)?$)/i;
+  const NOT_BROAD = /(dividend|quality|low vol|min(?:imum)? vol|equal|high beta|buyback|sector|technolog|financial|health|energy|utilit|industrial|material|consumer|real estate|communication|covered call|buywrite|premium|income|leverag|inverse|\b[23]x\b|buffer|hedged|esg|factor|fundamental|enhanced|top 50|innovation|revenue|semiconductor|biotech|software|bank|insurance|defense|infrastructure|ai\b)/i;
   /** True for a broad-market or size index fund (never recommended). info: FMP fund info (name) when known. */
   function isBroadIndex(symbol, info = null) {
     const s = String(symbol || "").toUpperCase(), e = BY.get(s);
@@ -11974,6 +12003,50 @@ Return JSON only:
       return { ...e, purity, align, breadth, score: purity * 0.6 + Math.sqrt(align) * 2 + Math.log10(e.aum) * 0.05 };
     }).sort((a, b) => b.score - a.score);
   }
+  /**
+   * The purest funds for each held industry: for every fund the reverse lookup found, the share of it that sits in that
+   * industry's chosen companies (weighted toward the companies the industry run likes most). Up to `per` funds per
+   * industry, so each industry brings its own specialists instead of the same broad funds every time.
+   * picksBy: {industry: {picks: [{symbol, within}]}}. Returns [{symbol, industry, share, capture, aum}].
+   */
+  function discoverByIndustry(exposures, picksBy, { minAum = 1e8, per = 6, exclude = [] } = {}) {
+    const ex = new Set(exclude), fund = new Map();
+    for (const [co, list] of Object.entries(exposures || {})) for (const x of list || []) {
+      const s = String(x.symbol || x.etfSymbol || "").toUpperCase(), w = n(x.weightPercentage) / 100, mv = n(x.marketValue);
+      if (!/^[A-Z]{2,5}$/.test(s) || MUTUAL.test(s) || ex.has(s) || !(w > 0) || w > 0.25) continue;
+      const e = fund.get(s) || { symbol: s, w: {}, aum: 0 }; e.w[co] = Math.max(e.w[co] || 0, w); if (mv > 0) e.aum = Math.max(e.aum, mv / w); fund.set(s, e);
+    }
+    const out = [];
+    for (const [ind, pk] of Object.entries(picksBy || {})) { const P = pk?.picks || []; if (!P.length) continue;
+      const rows = [...fund.values()].filter((e) => e.aum >= minAum).map((e) => { let share = 0, cap = 0, hit = 0; for (const p of P) { const w = e.w[p.symbol] || 0; if (w > 0) { share += w; cap += Math.min(w / 0.08, 1) * (p.within || 1 / P.length); hit++; } }
+        return { symbol: e.symbol, industry: ind, share, capture: cap, hits: hit, aum: e.aum }; }).filter((r) => r.hits >= Math.min(2, P.length) && r.share >= 0.08);
+      rows.sort((a, b) => b.share * 0.7 + b.capture * 0.3 - (a.share * 0.7 + a.capture * 0.3)); out.push(...rows.slice(0, per)); }
+    return out;
+  }
+  /**
+   * A fund's quality as an investment on its own (0-100): its 3-year return against the S&P 500 and its risk-adjusted
+   * return (Sharpe) ranked within the candidates, its worst drawdown, cost and size. st: EtfDeep.stats().
+   */
+  function quality(cands) {
+    const val = (c, f) => { const v = f(c); return isNum(v) ? v : NaN; }, P = (s, k) => s?.periods?.find((q) => q.k === k);
+    const feats = [[(c) => P(c.stats, "3Y")?.excess ?? P(c.stats, "1Y")?.excess, 0.3], [(c) => c.stats?.risk?.sharpe, 0.25], [(c) => c.stats?.drawdown?.depth, 0.1], [(c) => -(n(c.expense) || 0), 0.15], [(c) => Math.log10(Math.max(1, n(c.info?.assetsUnderManagement) || 1)), 0.1], [(c) => c.stats?.rolling?.beat, 0.1]];
+    const ranks = feats.map(([f]) => { const v = cands.map((c) => val(c, f)), ok = v.filter(isNum).sort((a, b) => a - b); return v.map((x) => (isNum(x) && ok.length > 2 ? ok.filter((y) => y < x).length / (ok.length - 1) : 0.5)); });
+    cands.forEach((c, i) => { if (c.isBond) { c.quality = null; return; } let s = 0, W = 0; feats.forEach(([, w], j) => { s += w * ranks[j][i]; W += w; }); c.quality = Math.round((100 * s) / W); });
+    return cands;
+  }
+  /** How spread a fund is across sectors: the largest sector's share of it. sectorOf: industry -> sector. */
+  function sectorFocus(vec, sectorOf) { const s = {}; let tot = 0; for (const [k, v] of Object.entries(vec?.ind || {})) { if (k.startsWith("(")) continue; const x = sectorOf(k) || "Other"; s[x] = (s[x] || 0) + v; tot += v; } const top = Math.max(0, ...Object.values(s)); return tot > 0 ? top / tot : NaN; }
+  /**
+   * For each held industry, the funds that could carry it, ranked: the share of the fund in the industry, how much of
+   * the industry's chosen companies it holds, the fund's quality, and its cost. The page shows these as the shortlist.
+   */
+  function sleeves(held, picksBy, cands, { per = 5 } = {}) {
+    return held.map((h) => { const P = picksBy[h.name]?.picks || [];
+      const rows = cands.filter((c) => !c.isBond && (n(c.vec?.ind?.[h.name]) || 0) >= 0.05).map((c) => { const pur = n(c.vec.ind[h.name]) || 0; let cap = 0; for (const p of P) cap += Math.min((n(c.vec?.cos?.[p.symbol]) || 0) / 0.08, 1) * (p.within || 1 / Math.max(1, P.length));
+        const score = 45 * Math.min(1, pur / 0.6) + 30 * Math.min(1, cap / 0.5) + 0.25 * (isNum(c.quality) ? c.quality : 50);
+        return { symbol: c.symbol, purity: pur, capture: cap, quality: c.quality, score: Math.round(score) }; }).sort((a, b) => b.score - a.score).slice(0, per);
+      return { industry: h.name, target: h.target, picks: P.map((p) => p.symbol), funds: rows }; });
+  }
   /** Per ETF: industry exposure, company exposure and the full look-through for overlap (weights 0-1). mapped: Portfolio.mapHoldings rows. */
   function vectors(mapped) {
     const tot = (mapped || []).reduce((a, h) => a + (n(h.weight) || 0), 0) || 1, ind = {}, cos = {};
@@ -12011,7 +12084,7 @@ Return JSON only:
    * target of an industry not held is zero), risk (lambda, raised until volatility is under the ceiling), costs, and a
    * small pull toward the higher expected returns (delta).
    */
-  function mix(cands, target, cov, goal, { alpha = 6, beta = 4, gamma = 0.8, delta = 0.1, w0 = null, kappa = 0, maxN = goal.maxN, volCap = goal.vol, keep = [] } = {}) {
+  function mix(cands, target, cov, goal, { alpha = 6, beta = 7, gamma = 1.2, delta = 0.1, eta = 0.25, w0 = null, kappa = 0, maxN = goal.maxN, volCap = goal.vol, keep = [] } = {}) {
     let live = cands.map((_, i) => i); const cap = (goal.cap || 15) / 100, minW = (goal.minW || 3) / 100;
     const keys = [...new Set([...Object.keys(target.industries), ...Object.keys(target.buckets).map((b) => "B:" + b), ...cands.flatMap((c) => (c.isBond ? ["B:" + c.bucket] : Object.keys(c.vec?.ind || {})))])];
     const tv = keys.map((k) => (k.startsWith("B:") ? target.buckets[k.slice(2)] || 0 : target.industries[k] || 0));
@@ -12025,7 +12098,9 @@ Return JSON only:
         for (let b = 0; b < m; b++) { const j = idx[b]; let q = 0; for (let r = 0; r < keys.length; r++) q += X[r][i] * X[r][j]; let qc = 0; for (let r = 0; r < coKeys.length; r++) qc += C[r][i] * C[r][j];
           Q[a][b] = 2 * alpha * q + 2 * beta * qc + gamma * (O[i][j] + O[j][i]) + lam * cov[i][j]; }
         let l = 0; for (let r = 0; r < keys.length; r++) l += X[r][i] * tv[r]; let lc2 = 0; for (let r = 0; r < coKeys.length; r++) lc2 += C[r][i] * Tv[r];
-        c[a] = 2 * alpha * l + 2 * beta * lc2 + delta * (n(cands[i].mu) || 0) - (n(cands[i].expense) || 0); }
+        // Fund quality (record, risk-adjusted return, cost, size) as a reward: between two funds that carry the same
+        // industry, the better-run one wins.
+        c[a] = 2 * alpha * l + 2 * beta * lc2 + delta * (n(cands[i].mu) || 0) - (n(cands[i].expense) || 0) + (cands[i].isBond || !isNum(cands[i].quality) ? 0 : eta * (cands[i].quality - 50) / 50); }
       // Bonds held to the sleeve the allocation chose (within 2pp, inside the goal's band).
       const bt = Object.values(target.buckets).reduce((a2, x) => a2 + x, 0), bHi = Math.min(goal.bonds[1], bt + 0.02) + 0.005, bLo = Math.max(goal.bonds[0], bt - 0.02) - 0.005;
       const rows = [], bondA = idx.map((i) => (cands[i].isBond ? 1 : 0)); if (bondA.some(Boolean)) { rows.push({ a: bondA, b: bHi }); if (bLo > 0) rows.push({ a: bondA.map((x) => -x), b: -bLo }); }
@@ -12228,7 +12303,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfStrat = { gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
+  const EtfStrat = { discoverByIndustry, quality, sectorFocus, sleeves, gradePrompt, grade, letterOf, GRADE_W, STYLE, BUCKETS, CALLN, industryRows, conviction, waterfill, targetIndustries, bucketOf, bondSleeve, pickCompanies, companyTargets, discover, vectors, overlap, qp, mix, achieved, opportunities, dossier, prompt, clean, idsOf, PARTS };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfStrat;
   else root.EtfStrat = EtfStrat;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -12357,6 +12432,8 @@ Return JSON only:
     if (p.isBond) add(`Bonds: ${p.bond.bucket || "n/a"}, duration about ${p.bond.duration ?? "n/a"} years; a 1-point rise in rates ${pc(p.bond.rates_up_1pp)}${isNum(p.bond.credit_stress) ? `, a credit stress ${pc(p.bond.credit_stress)}` : ""}.`);
     if (p.top.length) add(`Largest holdings: ${p.top.map((t) => `${t.symbol} ${pp(t.weight, 1)}`).join(", ")}.`);
     for (const g of p.industries) add(`Industry ${g.name}: ${pp(g.weight, 0)} of the fund. The industry run: ${goal.horizon} call ${g.call || "n/a"}${goal.horizon !== "12M" ? `, 12M call ${g.call12 || "n/a"}` : ""}, expected 12-month return ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}, conviction for this goal ${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "n/a"}, P/E ${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th percentile of its history" : "n/a"}, strategist verdict ${g.verdict || "n/a"}.${g.headline ? ` Headline: ${g.headline}` : ""}`);
+    if (isNum(p.quality)) add(`Fund quality ${p.quality}/100 among the candidates (its 3-year record against the S&P 500, Sharpe, drawdown, cost, size and how often it led over 12 months).`);
+    for (const r of p.rivals || []) add(`The shortlist for ${r.industry} (score out of 100: share of the fund in the industry, how much of the industry's chosen companies it holds, fund quality): ${r.funds.map((f) => `${f.symbol} ${f.score} (in the industry ${pp(f.purity, 0)}, holds the chosen companies ${pp(Math.min(1, f.capture), 0)}, quality ${f.quality ?? "n/a"})`).join(", ")}.`);
     add(`Expected return the recommender uses: ${pp(p.mu)} a year (market prior ${pp(p.prior)}${isNum(p.view) ? `, the industry runs' view ${pp(p.view)}, weighted ${pp(p.conf, 0)} toward the view` : ""}).`);
     return L.join("\n");
   }
@@ -18830,6 +18907,8 @@ Return JSON only:
     if (a === "ana-manual-close") { if (S.pfManual) delete S.pfManual[p.id]; renderPortfolio(); return; }
     if (a === "ana-copy") { const t = S.pfManual?.[p.id]?.b64; if (t) { try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch { $("pf-manual")?.querySelector("textarea")?.select(); b.textContent = "Selected: press Ctrl/Cmd+C"; } } return; }
     if (a.startsWith("rg-type-")) { recGoalDraft().type = a.slice(8); renderPortfolio(); return; }
+    if (a.startsWith("ana-sub-")) { S.anaSub = a.slice(8); renderPortfolio(); document.getElementById("ana-top")?.scrollIntoView?.({ behavior: "smooth", block: "start" }); return; }
+    if (a === "goal-open") { S.goalOpen = !S.goalOpen; renderPortfolio(); return; }
     if (a.startsWith("rec-key-")) { S.recKey = a.slice(8); renderPortfolio(); const R = S.pfAna?.[p.id]; if (R && S.sample && !R.write?.[S.recKey] && !R.writing?.[S.recKey]) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-write") { const R = S.pfAna?.[p.id]; if (R) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-save" || a === "rec-apply") { await recSave({ apply: a === "rec-apply" }); return; }
@@ -18951,13 +19030,16 @@ Return JSON only:
       step("Reading what you hold…", ++k, (input.holdings || []).length); }
     const wSum = held0.reduce((a, h) => a + h.weight, 0) || 1; for (const h of held0) h.weight = (h.weight / wSum) * 100;
     // 4. Every ETF that holds the target companies (reverse lookup), plus the curated funds.
-    const look = Object.entries(T).sort((a, b) => b[1] - a[1]).slice(0, 45).map(([s]) => s), exps = {}; k = 0;
+    const look = Object.entries(T).sort((a, b) => b[1] - a[1]).slice(0, 100).map(([s]) => s), exps = {}; k = 0;
     await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies…", ++k, look.length); }, run);
     const disc = EtfStrat.discover(exps, T, { exclude: goal.excludeSyms }), heldSec = new Set(tgt.held.map((h) => h.sector)), heldInd = new Set(tgt.held.map((h) => h.name));
     const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => !EtfRec.isBroadIndex(e.symbol)).filter((e) => (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
       || (e.kind === "div" && (goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
       || (EtfRec.isBond(e) && bondShare > 0 && sleeve.buckets[EtfStrat.bucketOf(e)]) || (e.kind === "gold" && goal.type !== "aggressive" && e.symbol === "GLDM"));
-    const pool0 = new Map(); for (const x of disc.slice(0, 70)) pool0.set(x.symbol, { symbol: x.symbol, via: `holds ${Object.keys(x.hits).slice(0, 4).join(", ")}${Object.keys(x.hits).length > 4 ? ` +${Object.keys(x.hits).length - 4}` : ""}`, disc: x });
+    // Each held industry brings its own specialists: the funds most concentrated in that industry's chosen companies.
+    const discInd = EtfStrat.discoverByIndustry(exps, Object.fromEntries(tgt.held.map((h) => [h.name, picksBy[h.name]]).filter(([, v]) => v)), { exclude: goal.excludeSyms });
+    const pool0 = new Map(); for (const x of discInd) if (!pool0.has(x.symbol)) pool0.set(x.symbol, { symbol: x.symbol, via: `a ${x.industry} specialist (${Math.round(x.share * 100)}% in its chosen companies)` });
+    for (const x of disc.slice(0, 40)) if (!pool0.has(x.symbol)) pool0.set(x.symbol, { symbol: x.symbol, via: `holds ${Object.keys(x.hits).slice(0, 4).join(", ")}${Object.keys(x.hits).length > 4 ? ` +${Object.keys(x.hits).length - 4}` : ""}`, disc: x });
     for (const e of curated) if (!pool0.has(e.symbol)) pool0.set(e.symbol, { symbol: e.symbol, via: "the curated list", e });
     // What you hold stays a candidate (never collapsed into a cheaper copy), so fixing it can keep it.
     for (const h of held0) if (h.asset_type !== "stock") pool0.set(h.ticker, { ...(pool0.get(h.ticker) || { symbol: h.ticker }), via: "your portfolio" });
@@ -18985,7 +19067,15 @@ Return JSON only:
       const prior = EtfRec.RF + (isNum(q.beta) ? q.beta : 1) * EtfRec.ERP, view = vw > 0 ? vs / vw : NaN, conf = Math.min(0.8, vw * 0.8);
       return { ...c, info: i, q, isBond: false, vec, mu: isNum(view) ? prior + conf * (view - prior) : prior, view, conf, prior, yield: yld, expense: num(i.expenseRatio) / 100 || 0, hard: c.e.kind === "gold" || c.e.kind === "cmdty" };
     }).filter((c) => c && series[c.symbol]?.dates?.length > 500);
-    cands.sort((a, b) => a.expense - b.expense || (num(b.info?.assetsUnderManagement) || 0) - (num(a.info?.assetsUnderManagement) || 0));
+    // Funds spread across the whole market (no sector above half of them) don't express a view: left out, except
+    // dividend funds for income and conservative goals, international funds when asked, and gold and commodities.
+    const secOf = (ind) => byRow.get(ind)?.sector;
+    const exempt = new Set(["gold", "cmdty", ...(goal.type === "income" || goal.type === "conservative" ? ["div"] : []), ...(goal.intl ? ["intl"] : [])]);
+    cands = cands.filter((c) => { if (c.isBond || exempt.has(c.e?.kind)) return true; const f = EtfStrat.sectorFocus(c.vec, secOf); if (isNum(f) && f < 0.5) { out[c.symbol] = `spread across the whole market (largest sector ${Math.round(f * 100)}%)`; return false; } return true; });
+    // Each fund on its own merits: its record against the S&P 500, risk-adjusted return, drawdown, cost and size.
+    for (const c of cands) c.stats = EtfDeep.stats(series[c.symbol], series.SPY);
+    EtfStrat.quality(cands);
+    cands.sort((a, b) => (num(b.quality) || 50) - (num(a.quality) || 50) || a.expense - b.expense);
     const keepC = []; for (const c of cands) { const twin = !c.isBond ? keepC.find((x) => !x.isBond && EtfStrat.overlap(x.vec.cos, c.vec.cos) > 0.9) : keepC.find((x) => x.isBond && x.bucket === c.bucket && Math.abs((x.e.duration || 0) - (c.e.duration || 0)) < 1 && x.e.bond === c.e.bond);
       if (twin && c.via !== "your portfolio") (twin.twins ||= []).push(c.symbol); else keepC.push(c); }
     cands = keepC;
@@ -19016,7 +19106,8 @@ Return JSON only:
     const convOf = (ind) => { let s = 0, w = 0; for (const [n2, x] of Object.entries(ind)) { const r = byRow.get(n2); if (r) { s += x * r.z; w += x; } } return w ? s / w : NaN; };
     const qualOf = (stocks) => { let s = 0, w = 0; for (const x of stocks || []) { const v = coScore[x.symbol]; if (isNum(v)) { s += x.weight * v; w += x.weight; } } return w > 0.05 ? s / w : NaN; };
     const assetsOf = (c) => ({ symbol: c.symbol, q: c.q, isBond: c.isBond, v: c.v, e: c.e }), lensOf = (ach) => { const tot = ach.stockShare || 1; return Portfolio.lookThrough({ industries: ach.industries.filter((x) => x.got > 0).map((x) => ({ industry: x.name, weight: x.got / tot })) }, digests); };
-    const res = { v: 3, at: new Date().toISOString(), day: today(), name: input.name || "", goal: d, goalFull: goal, curve, bondShare, mktExp, rows, tgt: { rows: tgt.rows, held: tgt.held, avoided: tgt.avoided }, sleeve, picksBy, T, discovered: disc.length, screened: { pool: all.length, passed: ok.length, out }, cands, cov: C.cov, shrink: C.shrink, sels, current, views: {}, grades: {} };
+    const sleeves = EtfStrat.sleeves(tgt.held, picksBy, cands);
+    const res = { v: 3, sleeves, at: new Date().toISOString(), day: today(), name: input.name || "", goal: d, goalFull: goal, curve, bondShare, mktExp, rows, tgt: { rows: tgt.rows, held: tgt.held, avoided: tgt.avoided }, sleeve, picksBy, T, discovered: disc.length, screened: { pool: all.length, passed: ok.length, out }, cands, cov: C.cov, shrink: C.shrink, sels, current, views: {}, grades: {} };
     for (const [key, sel] of Object.entries(sels)) if (sel) { const ach = EtfStrat.achieved(sel.w, cands, target, rows), v = { ach, stress: EtfRec.stress(sel.w, cands.map(assetsOf), series), lens: lensOf(ach),
         yield: sel.w.reduce((s, x, i) => s + x * (num(cands[i].yield) || 0), 0), cost: sel.w.reduce((s, x, i) => s + x * (cands[i].expense || 0), 0), mu: sel.w.reduce((s, x, i) => s + x * (num(cands[i].mu) || 0), 0), bonds: sel.w.reduce((s, x, i) => s + (cands[i].isBond ? x : 0), 0) };
       res.views[key] = v; res.grades[key] = EtfStrat.grade({ ach, conv: convOf(Object.fromEntries(ach.industries.map((x) => [x.name, x.got]))), quality: qualOf(ach.allStocks), vol: sel.vol, cost: v.cost, yield: v.yield, bonds: v.bonds, mktExp, maxOverlap: ach.pairs[0]?.overlap || 0 }, goal); }
@@ -19025,7 +19116,8 @@ Return JSON only:
     res.opps = EtfStrat.opportunities(rows, tgt, picksBy, goal, { today: today(), etfFor: (ind) => cands.filter((c) => !c.isBond && (c.vec.ind[ind] || 0) > 0.15).sort((a, b) => b.vec.ind[ind] - a.vec.ind[ind]).slice(0, 3).map((c) => ({ symbol: c.symbol, purity: c.vec.ind[ind] })) });
     // The full case for every ETF any version holds: returns, risk, drawdowns, rolling windows, holdings, industries.
     step("Measuring every chosen ETF against the S&P 500…");
-    res.deep = {}; for (const [i, c] of cands.entries()) if (Object.values(sels).some((s) => s?.w?.[i] > 0)) res.deep[c.symbol] = EtfDeep.profile(c, EtfDeep.stats(series[c.symbol], series.SPY), byRow);
+    res.deep = {}; for (const [i, c] of cands.entries()) if (Object.values(sels).some((s) => s?.w?.[i] > 0)) { res.deep[c.symbol] = EtfDeep.profile(c, c.stats || EtfDeep.stats(series[c.symbol], series.SPY), byRow);
+      res.deep[c.symbol].quality = c.quality; res.deep[c.symbol].rivals = sleeves.filter((s) => s.funds.some((f) => f.symbol === c.symbol)).map((s) => ({ industry: s.industry, funds: s.funds })); }
     // The whole portfolio: track record, where the risk comes from, projections, scenarios, what it owns underneath.
     step("Testing every mix through history and simulating where it could go…"); await new Promise((r) => setTimeout(r, 20));
     const amount = num(input.total) > 0 ? num(input.total) : num(d.amount) || 10000, muS = PfDeep.RF + PfDeep.ERP + 0.8 * (mktExp - PfDeep.RF - PfDeep.ERP);
@@ -19104,6 +19196,7 @@ Return JSON only:
     return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(trimC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
   }
   function anaGoalView(p, A, compact) {
+    if (compact && !S.goalOpen) { const d0 = recGoalDraft(), g0 = EtfRec.GOALS[d0.type]; return `<div class="goal-bar"><span><span class="eyebrow">Goal</span> <b>${esc(g0.label)}</b> <span class="small muted">· ${esc(d0.horizon)} · volatility ≤ ${Math.round((num(d0.maxVol) || g0.vol * 100))}% · bonds ${Math.round(g0.bonds[0] * 100)}–${Math.round(g0.bonds[1] * 100)}% · ${esc(d0.minN)}–${esc(d0.maxN)} ETFs</span></span><button class="sm" data-pf="goal-open">Change</button></div>`; }
     const d = recGoalDraft(), G = EtfRec.GOALS, opt = (k, v, l) => `<option value="${v}" ${String(d[k]) === String(v) ? "selected" : ""}>${l}</option>`;
     const blurb = { income: "Yield first: dividend and bond ETFs, 30-65% in bonds, volatility under 10%.", conservative: "Protect capital: 40-75% in bonds, volatility under 8%, the industries the runs rate safest.", growth: "Total return: up to 20% in bonds, volatility under 17%, tilted to the industries the runs call up.", aggressive: "Maximum return: up to 10% in bonds, volatility under 24%, the strongest industry calls." }[d.type];
     return `<section class="panel pf-goal ${compact ? "compact" : ""}"><div class="panel-head"><div><span class="eyebrow">Step 1</span><h2>Your goal</h2></div><span class="small muted">grades are measured against it · recommendations are ETFs only, each at most 15%</span></div>
@@ -19130,6 +19223,9 @@ Return JSON only:
       <ol class="pf-steps"><li><b>Copy this request</b> (your holdings and goal). <button class="sm" data-pf="ana-copy">Copy</button><textarea readonly rows="2" class="mono" onclick="this.select()">${esc(man.b64)}</textarea></li>
         <li><b>Start the workflow:</b> open <a href="${PF_ACTIONS}" target="_blank" rel="noopener">Actions → Portfolio analysis</a>, press <i>Run workflow</i>, put <code>${esc(p.id)}</code> in <i>id</i> and paste the request. It takes about 10–20 minutes on your API key.</li>
         <li><b>Bring it in:</b> when the run is green, press <i>Update everything from GitHub</i> at the top of the page. The grade and recommendations appear here by themselves.</li></ol></section>` : "";
+    if (A && !S.goalOpen) { const btns = S.mcp && S.pfGithub !== false ? `<button class="sm primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze again</button>` : `<button class="sm primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze again</button>`;
+      const bar = anaGoalView(p, A, true).replace(`<button class="sm" data-pf="goal-open">Change</button>`, `<span class="actions" style="margin:0"><button class="sm" data-pf="goal-open">Change goal</button>${btns}</span>`);
+      return status + manual + bar + (S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : "") + `<div class="small muted">Analyzed ${esc(fmtDate(A.day))} · ${A.rows?.length || 0} industry runs · ${A.discovered} ETFs found holding the target companies</div>` + anaResult(p, A); }
     return status + manual + anaGoalView(p, A, !!A) + go + (A ? anaResult(p, A) : "");
   }
   /** The report card for one version (today's portfolio or a recommendation). */
@@ -19154,7 +19250,7 @@ Return JSON only:
     const H = A.holdings || []; if (!H.length) return "";
     const W = A.write?.improved || A.write?.recommended || {}, R = new Map((W.review || []).map((r) => [r.id, r])), wr = (t) => recRich(t, W.reviewFacts || "");
     const AC = { keep: "pos", add: "pos2", trim: "warn", replace: "neg", sell: "neg2" };
-    return `<section class="panel"><div class="panel-head"><h2>Your holdings, one by one</h2><span class="small muted">each one's record against the S&amp;P 500, what the runs expect for its industries, and what to do</span></div><div class="pf-cards" style="grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))">${H.map((h, i) => { const r = R.get(`H${i + 1}`), act = r?.action || (h.broad ? "replace" : h.action), s = h.stats, P = (k) => s?.periods?.find((q) => q.k === k);
+    return `<section class="panel"><div class="panel-head"><h2>Your holdings, one by one</h2><span class="small muted">each one's record against the S&amp;P 500, what the runs expect for its industries, and what to do</span></div><div class="pf-cards" style="grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))">${H.map((h, i) => { const r = R.get(`H${i + 1}`), act = h.broad ? "replace" : r?.action || h.action, s = h.stats, P = (k) => s?.periods?.find((q) => q.k === k);
       return `<div class="pf-card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><button class="linkbtn tick" ${h.type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`} style="font-size:18px">${esc(h.ticker)}</button> <span class="pf-type">${h.type}</span><div class="small muted">${esc(trimC(h.name, 40))}</div></div><div style="text-align:right"><span class="pill ${AC[act] || "neu"}" style="font-size:13px">${esc(act.toUpperCase())}</span><div class="mono small">${pct(h.weight, false, 1)}</div></div></div>
         ${r?.headline ? `<div><b>${wr(r.headline)}</b></div>` : ""}${r?.why ? `<div class="small">${wr(r.why)}</div>` : h.why.length ? `<div class="small">${esc(h.why.join("; "))}</div>` : ""}
         ${r?.instead ? `<div class="small"><b>Instead:</b> ${wr(r.instead)}</div>` : h.alternative ? `<div class="small"><b>Instead:</b> <b class="tick">${esc(h.alternative.symbol)}</b> <span class="muted">${esc(h.alternative.why)}</span></div>` : ""}
@@ -19191,6 +19287,36 @@ Return JSON only:
       ${verdict ? `<div class="two" style="margin-top:4px">${verdict.strengths?.length ? `<div class="box pf-good"><h3>What it does well</h3><ul class="dlist small">${verdict.strengths.map((x) => `<li>${wr(x)}</li>`).join("")}</ul></div>` : ""}${verdict.weaknesses?.length ? `<div class="box pf-bad"><h3>What's wrong</h3><ul class="dlist small">${verdict.weaknesses.map((x) => `<li>${wr(x)}</li>`).join("")}</ul></div>` : ""}</div>
         ${verdict.fixes?.length ? `<div class="box pf-fix"><h3>What to change</h3><ol class="small">${verdict.fixes.map((x) => `<li>${wr(x)}</li>`).join("")}</ol></div>` : ""}` : ""}</section>`;
   }
+  /** The first screen: where you are, where the new portfolio gets you, what to do, the ETFs, the best ideas. */
+  function anaOverview(A, R) {
+    const g0 = A.grades?.current, g1 = A.grades?.[R.key], W = R.W || {}, M = W.memo, V = A.pf?.versions?.[R.key], P5 = V?.projection?.horizons?.[5], T3 = V?.track?.periods?.find((x) => x.k === "3Y");
+    const LBL = { improved: "Fix what you have", recommended: "Best mix from scratch", conviction: "High conviction", simpler: "Simplest" };
+    const hero = `<section class="ov-hero">${g0 ? `<div style="display:grid;justify-items:center;gap:4px">${gradeBadge(g0, 84)}<span class="small muted">today</span></div><span class="ov-arrow">→</span>` : "<span></span><span></span>"}<div style="display:grid;justify-items:center;gap:4px">${gradeBadge(g1, 96)}<span class="small"><b>${esc(LBL[R.key] || "")}</b></span></div>
+      <div class="ov-kpis">${[["Expected / year", pct(R.vw.mu, false), "the runs' view"], ["Volatility", pct(R.sel.vol, false), `ceiling ${pct(A.goalFull.vol, false, 0)}`], T3 ? ["Last 3 years", pct(T3.ret), `S&P 500 ${pct(T3.spy)} a year`] : null, P5 ? ["In 5 years", usd(P5.p50), `middle case of ${usd(A.pf.amount)}`] : null, ["Cost", pct(R.vw.cost, false, 2), usd(R.total * R.vw.cost) + " a year"]].filter(Boolean).map(([l, v, s]) => `<div class="ov-kpi"><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${s}</span></div>`).join("")}</div></section>`;
+    const wm = (t) => recRich(t, W.memoFacts || W.dossier || ""), steps = (M?.action_plan || []).slice(0, 5);
+    const fixes = !steps.length ? (W.verdict?.fixes || []).slice(0, 5) : [];
+    const todo = steps.length || fixes.length ? `<section><div class="ov-h"><h2>What to do</h2>${M?.conviction ? `<span class="pill ${M.conviction >= 7 ? "pos2" : "pos"}">conviction ${M.conviction}/10</span>` : ""}</div>${M?.title ? `<p style="margin:0 0 8px;font-size:16px"><b>${wm(M.title)}</b></p>` : ""}<div style="display:grid;gap:8px">${steps.length ? steps.map((s, i) => `<div class="ov-step"><span class="n">${i + 1}</span><div><b>${esc(s.step)}</b><div class="small">${wm(s.detail)}</div></div></div>`).join("") : fixes.map((f, i) => `<div class="ov-step"><span class="n">${i + 1}</span><div class="small">${recRich(f, W.dossier || "")}</div></div>`).join("")}</div></section>` : "";
+    const etfs = `<section><div class="ov-h"><h2>Your new ETFs</h2><button class="sm" data-pf="ana-sub-new">Full details</button></div><div class="ov-grid">${R.held.map(({ c, w }) => { const X = W.etfs?.[c.symbol], s = c.stats || A.deep?.[c.symbol]?.stats, P = (k) => s?.periods?.find((q) => q.k === k), top = Object.entries(c.vec?.ind || {}).filter(([k]) => !k.startsWith("(")).sort((a, b) => b[1] - a[1])[0];
+      return `<div class="ov-card"><div class="row"><div><button class="linkbtn sym" data-fund="${esc(c.symbol)}">${esc(c.symbol)}</button>${X?.conviction ? ` <span class="pill ${X.conviction >= 7 ? "pos2" : X.conviction >= 5 ? "pos" : "neu"}">${X.conviction}/10</span>` : ""}<div class="small muted ellip">${esc(trimC(c.info?.name || "", 40))}</div></div><div style="text-align:right"><div class="ov-wt">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(R.total * w)}</div></div></div>
+        ${X?.verdict ? `<div class="small">${recRich(X.verdict, W.etfFacts?.[c.symbol] || "")}</div>` : c.isBond ? `<div class="small muted">${esc(EtfStrat.BUCKETS[c.bucket] || "Bonds")} · yield ${pct(c.yield, false, 2)}</div>` : top ? `<div class="small muted">${esc(top[0])} ${pct(top[1], false, 0)}</div>` : ""}
+        <div class="ov-mini"><div><span class="small muted">1Y</span><b class="${cls(P("1Y")?.ret)}">${pct(P("1Y")?.ret, true, 0)}</b></div><div><span class="small muted">3Y/yr</span><b class="${cls(P("3Y")?.ret)}">${pct(P("3Y")?.ret, true, 0)}</b></div><div><span class="small muted">${c.isBond ? "yield" : "quality"}</span><b>${c.isBond ? pct(c.yield, false, 1) : isNum(c.quality) ? c.quality : "—"}</b></div></div></div>`; }).join("")}</div></section>`;
+    const X = W.desk, D = A.desk || [], top = (X?.top?.length ? X.top : D.slice(0, 3).map((_, i) => `Q${i + 1}`)).slice(0, 3), by = new Map((X?.opportunities || []).map((o) => [o.id, o]));
+    const opps = D.length ? `<section><div class="ov-h"><h2>Best opportunities</h2><button class="sm" data-pf="ana-sub-opps">All ${D.length}</button></div><div class="ov-grid">${top.map((id) => { const o = D[Number(id.slice(1)) - 1], w = by.get(id); if (!o) return ""; return `<div class="ov-card" style="border-color:color-mix(in srgb,var(--accent) 40%,var(--line))"><div class="row"><span class="eyebrow">${esc(o.sector)}</span>${w?.conviction ? `<span class="pill pos2">${w.conviction}/10</span>` : ""}</div><b style="font-size:16px">${esc(w?.title || o.industry)}</b>
+        <div class="ov-mini"><div><span class="small muted">12M exp.</span><b class="${cls(o.exp12)}">${isNum(o.exp12) ? o.exp12.toFixed(1) + "%" : "—"}</b></div><div><span class="small muted">P/E pct</span><b>${isNum(o.pe_pct) ? Math.round(o.pe_pct * 100) : "—"}</b></div><div><span class="small muted">you own</span><b>${pct(o.have, false, 0)}</b></div></div>
+        ${w?.how ? `<div class="small"><b>How:</b> ${recRich(w.how, W.deskFacts || "")}</div>` : o.etfs.length ? `<div class="small">${o.etfs.map((e) => `<b class="tick">${esc(e.symbol)}</b>`).join(" · ")}</div>` : ""}</div>`; }).join("")}</div></section>` : "";
+    const AC = { keep: "pos", add: "pos2", trim: "warn", replace: "neg", sell: "neg2" }, rv = new Map((W.review || []).map((r) => [r.id, r]));
+    const hold = (A.holdings || []).length ? `<section><div class="ov-h"><h2>What happens to what you hold</h2><button class="sm" data-pf="ana-sub-portfolio">Details</button></div><div class="ov-chips">${A.holdings.map((h, i) => { const act = h.broad ? "replace" : rv.get(`H${i + 1}`)?.action || h.action; return `<span class="ov-chip"><b class="tick">${esc(h.ticker)}</b><span class="mono small">${pct(h.weight, false, 0)}</span><span class="pill ${AC[act] || "neu"}">${esc(act)}</span></span>`; }).join("")}</div></section>` : "";
+    return `<div style="display:grid;gap:18px">${hero}${todo}${etfs}${opps}${hold}</div>`;
+  }
+  /** How each ETF was chosen: for every industry in the target, the shortlist of funds that could carry it. */
+  function sleevesView(A) {
+    const S2 = (A.sleeves || []).filter((s) => s.funds.length); if (!S2.length) return "";
+    const chosen = new Set(); const sel = A.sels?.[S.recKey] || A.sels?.recommended; if (sel) A.cands.forEach((c, i) => { if (sel.w[i] > 0) chosen.add(c.symbol); });
+    const byS = new Map(A.cands.map((c) => [c.symbol, c]));
+    return `<section class="panel"><div class="panel-head"><h2>How each ETF was chosen</h2><span class="small muted">for every industry in the target, the funds that could carry it, scored on how much of the fund is that industry, how much of the industry's chosen companies it holds, and the fund's own quality</span></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:10px">${S2.map((s) => `<div class="box"><div style="display:flex;justify-content:space-between"><b>${esc(s.industry)}</b><span class="mono small">target ${pct(s.target, false, 1)}</span></div><div class="small muted">chosen companies: ${s.picks.map((x) => esc(x)).join(", ")}</div>
+        <div class="tbl-wrap"><table class="wrap-table" style="font-size:12.5px"><thead><tr><th>Fund</th><th class="n">Score</th><th class="n">In industry</th><th class="n">Holds picks</th><th class="n">Quality</th><th class="n">3Y/yr</th></tr></thead><tbody>${s.funds.map((f) => { const c = byS.get(f.symbol), P3 = c?.stats?.periods?.find((q) => q.k === "3Y"); return `<tr><td><b class="tick">${esc(f.symbol)}</b>${chosen.has(f.symbol) ? ' <span class="pill pos">in the mix</span>' : ""}</td><td class="n"><b>${f.score}</b></td><td class="n">${pct(f.purity, false, 0)}</td><td class="n">${pct(Math.min(1, f.capture), false, 0)}</td><td class="n">${f.quality ?? "—"}</td><td class="n ${cls(P3?.ret)}">${pct(P3?.ret, true, 1)}</td></tr>`; }).join("")}</tbody></table></div></div>`).join("")}</div></section>`;
+  }
   function anaResult(p, A) {
     if (!A?.sels) return "";
     const W0 = A.write?.improved || A.write?.recommended || {}, wr0 = (t) => recRich(t, W0.dossier || ""), gC = A.grades?.current;
@@ -19200,7 +19326,13 @@ Return JSON only:
     if (A.current) { const got = new Map(A.current.ach.industries.map((x) => [x.name, x.got])), rows = [...A.tgt.held.map((h) => ({ name: h.name, t: h.target, g: got.get(h.name) || 0 })), ...A.current.ach.industries.filter((x) => !x.target && x.got > 0.01).map((x) => ({ name: x.name, t: 0, g: x.got }))].sort((a, b) => Math.max(b.t, b.g) - Math.max(a.t, a.g)).slice(0, 18), mx = Math.max(...rows.map((r) => Math.max(r.t, r.g)), 0.01);
       mixS = `<section class="panel"><div class="panel-head"><h2>Where you are vs where the runs say to be</h2><span class="small muted">your look-through industry mix against the target for this goal</span></div><div class="pf-vs">${rows.map((r) => `<div class="pf-vs-row"><span class="ellip">${esc(r.name)}</span><div class="pf-vs-bars"><i class="t" style="width:${(r.t / mx) * 100}%"></i><i class="g" style="width:${(r.g / mx) * 100}%"></i></div><span class="mono small ${r.g - r.t > 0.02 ? "down" : r.t - r.g > 0.02 ? "up" : "muted"}">${pct(r.g, false, 0)} → ${pct(r.t, false, 0)}</span></div>`).join("")}</div>
         <div class="legend"><span><i style="background:var(--accent)"></i>target</span><span><i style="background:var(--c3)"></i>yours today</span></div></section>`; }
-    return cur + holdingsView(A) + mixS + deskView(A) + `<div class="pf-rec-title"><span class="eyebrow">Recommendations</span><h2>ETF portfolios built from your industry research</h2></div>` + recView(A);
+    const R = recView(A, true); if (!R || typeof R === "string") return cur + holdingsView(A) + mixS + deskView(A) + (R || "");
+    const tabs = [["overview", "Overview"], ["portfolio", "Your portfolio"], ["new", "New portfolio"], ["opps", "Opportunities", (A.desk || []).length], ["deep", "Deep dive"]];
+    const sub = tabs.some(([k]) => k === S.anaSub) ? S.anaSub : "overview";
+    const nav = `<div id="ana-top"></div><nav class="ana-nav">${tabs.map(([k, l, c]) => `<button class="${k === sub ? "on" : ""}" data-pf="ana-sub-${k}">${l}${c ? `<span class="cnt">${c}</span>` : ""}</button>`).join("")}</nav>`;
+    const body = sub === "overview" ? anaOverview(A, R) : sub === "portfolio" ? cur + holdingsView(A) + mixS : sub === "opps" ? deskView(A) || `<section class="panel"><div class="small muted">No opportunities in this analysis: analyze again.</div></section>`
+      : sub === "new" ? R.head + R.memo + R.etf + R.track + R.proj + R.own + R.imp + R.plan : sleevesView(A) + R.ind + R.bond + R.co + R.ovl + R.look + R.hz + R.opp + R.risk + R.stress + R.method;
+    return nav + body;
   }
   /** Run the analysis in this page. */
   async function pfAnaHere(p) {
@@ -19396,7 +19528,7 @@ Return JSON only:
         ${cos.length ? `<h3 style="margin:10px 0 6px">The 25 largest companies underneath</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Weight</th><th>Industry</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op. margin</th><th class="n">Dividend</th><th class="n">1Y</th><th class="n">Score</th><th>Run's 12M call</th><th>Next report</th></tr></thead><tbody>${cos.map((x) => `<tr><td><button class="linkbtn tick" data-co="${esc(x.symbol)}">${esc(x.symbol)}</button><div class="small muted">${esc(trimC(x.name, 26))}</div></td><td class="n"><b>${pct(x.weight, false, 2)}</b></td><td class="small">${esc(x.industry || "—")}</td><td class="n">${fix(x.pe, 1)}</td><td class="n ${cls(x.growth)}">${pct(x.growth, true, 0)}</td><td class="n">${pct(x.opm, false, 0)}</td><td class="n">${pct(x.div, false, 1)}</td><td class="n ${cls(x.r1y)}">${pct(x.r1y, true, 0)}</td><td class="n">${isNum(x.score) ? Math.round(x.score) : "—"}</td><td class="small">${esc(x.call12 || "—")}</td><td class="small mono">${esc(x.next || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}`); }
     return out;
   }
-  function recView(res) {
+  function recView(res, asParts = false) {
     if (!res?.sels) return res?.rec ? `<section class="panel"><div class="small muted">This result is from the earlier version of the recommender: build again for the new analysis.</div></section>` : "";
     const same = (x, y) => x && y && x.w.every((v, i) => Math.abs(v - y.w[i]) < 0.005), S2 = res.sels;
     const keys = ["improved", "recommended", "conviction", "simpler"].filter((k) => S2[k] && (k === "improved" || k === "recommended" || !same(S2[k], S2.recommended)) && !(k === "simpler" && same(S2.simpler, S2.conviction)));
@@ -19497,6 +19629,7 @@ Return JSON only:
       <li><b>Projection:</b> 5,000 paths per horizon built from real six-month stretches of the mix's and the S&amp;P 500's monthly returns, reshuffled, with only the average moved to the expected returns above. <b>Scenarios:</b> each industry run's bull, base and bear, weighted by how much of that industry the mix holds.</li>
       <li><b>Write-ups:</b> one analyst per ETF and a chief strategist for the memo, each reading only these numbers and the industry research, with every claim cited.</li></ol>`);
     const pf = recPortfolio(res, key, W, total);
+    if (asParts) return { head, memo: pf.memo, imp: impS, track: pf.track, proj: pf.proj, own: pf.own, ind: indS, bond: bondS, co: coS, etf: etfS, ovl: ovS, look: lookS, hz: hzS, opp: oppS, risk: riskS, stress: strS, plan: planS, method, key, sel, vw, W, held, total };
     return head + pf.memo + impS + pf.track + pf.proj + pf.own + indS + bondS + coS + etfS + ovS + lookS + hzS + oppS + riskS + strS + histS + planS + method;
   }
   async function recSave({ apply = false } = {}) {

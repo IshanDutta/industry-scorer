@@ -122,6 +122,8 @@
     if (p.isBond) add(`Bonds: ${p.bond.bucket || "n/a"}, duration about ${p.bond.duration ?? "n/a"} years; a 1-point rise in rates ${pc(p.bond.rates_up_1pp)}${isNum(p.bond.credit_stress) ? `, a credit stress ${pc(p.bond.credit_stress)}` : ""}.`);
     if (p.top.length) add(`Largest holdings: ${p.top.map((t) => `${t.symbol} ${pp(t.weight, 1)}`).join(", ")}.`);
     for (const g of p.industries) add(`Industry ${g.name}: ${pp(g.weight, 0)} of the fund. The industry run: ${goal.horizon} call ${g.call || "n/a"}${goal.horizon !== "12M" ? `, 12M call ${g.call12 || "n/a"}` : ""}, expected 12-month return ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}, conviction for this goal ${isNum(g.z) ? (g.z > 0 ? "+" : "") + g.z.toFixed(2) : "n/a"}, P/E ${isNum(g.pe_pct) ? Math.round(g.pe_pct * 100) + "th percentile of its history" : "n/a"}, strategist verdict ${g.verdict || "n/a"}.${g.headline ? ` Headline: ${g.headline}` : ""}`);
+    if (isNum(p.quality)) add(`Fund quality ${p.quality}/100 among the candidates (its 3-year record against the S&P 500, Sharpe, drawdown, cost, size and how often it led over 12 months).`);
+    for (const r of p.rivals || []) add(`The shortlist for ${r.industry} (score out of 100: share of the fund in the industry, how much of the industry's chosen companies it holds, fund quality): ${r.funds.map((f) => `${f.symbol} ${f.score} (in the industry ${pp(f.purity, 0)}, holds the chosen companies ${pp(Math.min(1, f.capture), 0)}, quality ${f.quality ?? "n/a"})`).join(", ")}.`);
     add(`Expected return the recommender uses: ${pp(p.mu)} a year (market prior ${pp(p.prior)}${isNum(p.view) ? `, the industry runs' view ${pp(p.view)}, weighted ${pp(p.conf, 0)} toward the view` : ""}).`);
     return L.join("\n");
   }
