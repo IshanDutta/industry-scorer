@@ -400,6 +400,48 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .pf-version { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; text-align: left; border-radius: 12px; padding: 10px 12px; background: var(--sunk); }
 .pf-version.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); }
 .pf-version-t { display: grid; gap: 1px; min-width: 0; }
+.memo { display: grid; gap: 14px; }
+.memo-cover { position: relative; overflow: hidden; border-radius: 18px; padding: 22px 24px; display: grid; gap: 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: radial-gradient(120% 150% at 100% 0%, color-mix(in srgb, var(--pos) 12%, transparent), transparent 55%), radial-gradient(120% 150% at 0% 100%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%), var(--surface); }
+.memo-cover-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.memo-cover h2 { font-size: 28px; line-height: 1.15; margin: 6px 0 4px; }
+@media (max-width: 600px) { .memo-cover h2 { font-size: 22px; } .memo-cover { padding: 18px 16px; } }
+.memo-sub { margin: 0; color: var(--muted); font-size: 15px; }
+.memo-conv { --c: var(--pos); width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; align-content: center; background: radial-gradient(closest-side, var(--surface) 78%, transparent 80% 100%), conic-gradient(var(--c) calc(var(--p) * 1%), var(--line) 0); }
+.memo-conv b { font: 800 26px var(--display); line-height: 1; } .memo-conv span { font-size: 11px; color: var(--muted); }
+.memo-nums { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.memo-stat { background: color-mix(in srgb, var(--bg) 55%, transparent); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.memo-stat b { font: 600 19px var(--mono); }
+.memo-summary p { margin: 0 0 8px; font-size: 15.5px; line-height: 1.65; max-width: 95ch; }
+.memo-sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 12px; }
+.memo-side { border-radius: 14px; padding: 14px 16px; border: 1px solid var(--line); display: grid; gap: 6px; }
+.memo-side.bull { background: color-mix(in srgb, var(--pos) 8%, var(--surface)); border-color: color-mix(in srgb, var(--pos) 35%, var(--line)); }
+.memo-side.bear { background: color-mix(in srgb, var(--neg) 8%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 35%, var(--line)); }
+.memo-side p { margin: 0; } .memo-side ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13.5px; }
+.memo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 12px; align-items: start; }
+.memo-card { border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: var(--surface); display: grid; gap: 10px; min-width: 0; transition: border-color .15s; }
+.memo-card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.memo-card.wide { grid-column: 1 / -1; }
+.memo-card header { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: center; }
+.memo-card h3 { font-size: 17px; margin: 1px 0 0; }
+.memo-ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 18px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--sunk)); }
+.memo-head { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.45; }
+.memo-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.memo-stats > div { background: var(--sunk); border-radius: 10px; padding: 6px 10px; display: grid; }
+.memo-stats b { font: 600 16px var(--mono); } .memo-stats span { font-size: 11.5px; color: var(--muted); }
+.memo-pts { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13.5px; }
+.memo-pts li { padding-left: 16px; position: relative; line-height: 1.5; } .memo-pts li::before { content: ""; position: absolute; left: 2px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.memo-more > summary { font-size: 13px; color: var(--accent); font-weight: 600; }
+.memo-more .prose p { margin: 0 0 8px; font-size: 14px; }
+.memo-block { border: 1px solid var(--line); border-radius: 16px; padding: 16px; background: var(--surface); display: grid; gap: 10px; }
+.memo-block h3 { margin: 0; font-size: 17px; }
+.memo-plan { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.memo-plan li { display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; padding: 10px 12px; background: var(--sunk); border-radius: 12px; }
+.memo-plan .n { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font: 700 14px var(--mono); }
+.memo-plan-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.memo-watch { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px; }
+.memo-watch > div { border-left: 3px solid var(--accent); background: var(--sunk); border-radius: 0 10px 10px 0; padding: 8px 12px; display: grid; gap: 3px; font-size: 13.5px; }
+.memo-date { font: 600 12px var(--mono); color: var(--accent); }
 .ana-nav { position: sticky; top: 0; z-index: 8; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
 .ana-nav button { border-radius: 999px; padding: 8px 16px; font-weight: 600; white-space: nowrap; background: var(--surface); color: var(--muted); }
 .ana-nav button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
@@ -7296,11 +7338,27 @@ a.btnlink:hover { border-color: var(--accent); }
   function recPortfolio(res, key, W, total) {
     const A = res.pf?.versions?.[key], cur = key === "improved" ? res.pf?.current : null, out = { memo: "", track: "", proj: "", own: "" }; if (!A) return out;
     const M = W?.memo, wm = (t) => recRich(t, W?.memoFacts || W?.dossier || ""), para = (t) => String(t || "").split(/\n+/).filter(Boolean).map((x) => `<p>${wm(x)}</p>`).join("");
-    // The memo
-    if (M) out.memo = sec("rec-memo", "The investment memo", `the chief strategist's full case${M.conviction ? ` · conviction ${M.conviction}/10` : ""}`, `${M.title ? `<p style="font-size:19px;margin:0"><b>${wm(M.title)}</b></p>` : ""}<div class="prose">${para(M.summary)}</div>${M.conviction_why ? `<div class="small muted">${wm(M.conviction_why)}</div>` : ""}
-      ${M.sections.map((s, i) => `<details class="dive" ${i < 2 ? "open" : ""}><summary>${esc(s.title)}</summary><div class="dive-body prose">${para(s.body)}</div></details>`).join("")}
-      ${M.action_plan.length ? `<div class="box"><h3 style="margin:0 0 6px">The action plan</h3><ol class="small">${M.action_plan.map((a) => `<li><b>${esc(a.step)}</b> ${wm(a.detail)}</li>`).join("")}</ol></div>` : ""}
-      ${M.watch.length ? `<div class="box"><h3 style="margin:0 0 6px">What to watch</h3><ul class="dlist small">${M.watch.map((w) => `<li><b class="mono">${esc(w.date)}</b> ${wm(w.what)} <span class="muted">${wm(w.why)}</span></li>`).join("")}</ul></div>` : ""}`);
+    // The memo, as cards: the cover (title, conviction, summary, the numbers), bull and bear, one card per section, the plan, the watch list.
+    if (M) { const Pv = A.projection?.horizons || {}, T3 = A.track?.periods?.find((x) => x.k === "3Y"), sc = A.scenarios, cv = M.conviction;
+      const icons = ["◆", "◎", "▦", "◧", "↗", "⟡", "◉", "⇄", "⚑", "↻", "✦", "▲"];
+      const stat = (l, v, s2, c) => `<div class="memo-stat"><span class="eyebrow">${l}</span><b class="${c || ""}">${v}</b>${s2 ? `<span class="small muted">${s2}</span>` : ""}</div>`;
+      const nums = [stat("Expected a year", pct(res.views?.[key]?.mu, false), "the runs' view"), T3 ? stat("Last 3 years", pct(T3.ret), `S&amp;P 500 ${pct(T3.spy)}`, cls(T3.ret)) : "", Pv[5] ? stat("In 5 years", usd(Pv[5].p50), `${usd(Pv[5].p5)} – ${usd(Pv[5].p95)}`) : "", Pv[1] ? stat("Chance of a loss", pct(Pv[1].p_loss, false, 0), "over 1 year") : "",
+        sc?.bull ? stat("Bull / bear", `<span class="up">${pct(sc.bull.portfolio, true, 0)}</span> / <span class="down">${pct(sc.bear?.portfolio, true, 0)}</span>`, "the runs' 12M scenarios") : "", stat("Volatility", pct(A.risk?.vol, false), "")].join("");
+      const ring = isNum(cv) ? `<div class="memo-conv" style="--p:${cv * 10}"><b>${cv}</b><span>/10</span></div>` : "";
+      const side = (k, x) => (x && (x.case || x.points.length) ? `<div class="memo-side ${k}"><div class="eyebrow">${k === "bull" ? "What goes right" : "What goes wrong"}</div>${x.case ? `<p>${wm(x.case)}</p>` : ""}${x.points.length ? `<ul>${x.points.map((q) => `<li>${wm(q)}</li>`).join("")}</ul>` : ""}</div>` : "");
+      const card = (s2, i) => { const paras = String(s2.body || "").split(/\n+/).filter(Boolean), short = paras.slice(0, 1), rest = paras.slice(1);
+        return `<article class="memo-card${i === 0 ? " wide" : ""}"><header><span class="memo-ic">${icons[i % icons.length]}</span><div><span class="eyebrow">${String(i + 1).padStart(2, "0")}</span><h3>${esc(s2.title)}</h3></div></header>
+          ${s2.headline ? `<p class="memo-head">${wm(s2.headline)}</p>` : ""}
+          ${s2.stats?.length ? `<div class="memo-stats">${s2.stats.map((q) => `<div><b>${esc(q.value)}</b><span>${esc(q.label)}</span></div>`).join("")}</div>` : ""}
+          ${s2.points?.length ? `<ul class="memo-pts">${s2.points.map((q) => `<li>${wm(q)}</li>`).join("")}</ul>` : ""}
+          ${paras.length ? (s2.points?.length ? `<details class="memo-more"><summary>Read the full section</summary><div class="prose">${paras.map((x) => `<p>${wm(x)}</p>`).join("")}</div></details>` : `<div class="prose">${short.map((x) => `<p>${wm(x)}</p>`).join("")}</div>${rest.length ? `<details class="memo-more"><summary>Read more</summary><div class="prose">${rest.map((x) => `<p>${wm(x)}</p>`).join("")}</div></details>` : ""}`) : ""}</article>`; };
+      const WHEN = { now: "pos2", "this week": "pos", "this month": "neu", "on a dip": "warn", ongoing: "neu" };
+      out.memo = `<section class="memo"><div class="memo-cover"><div class="memo-cover-top"><div><span class="eyebrow">Investment memo · ${esc(A.holdings?.length || 0)} ETFs · ${esc(fmtDate(res.day))}</span><h2>${wm(M.title || "The investment memo")}</h2>${M.subtitle ? `<p class="memo-sub">${wm(M.subtitle)}</p>` : ""}</div>${ring}</div>
+          <div class="memo-nums">${nums}</div>${M.summary ? `<div class="memo-summary">${para(M.summary)}</div>` : ""}${M.conviction_why ? `<div class="small muted">Conviction: ${wm(M.conviction_why)}</div>` : ""}</div>
+        ${M.bull || M.bear ? `<div class="memo-sides">${side("bull", M.bull)}${side("bear", M.bear)}</div>` : ""}
+        <div class="memo-grid">${M.sections.map(card).join("")}</div>
+        ${M.action_plan.length ? `<div class="memo-block"><h3>The action plan</h3><ol class="memo-plan">${M.action_plan.map((a2, i) => `<li><span class="n">${i + 1}</span><div><div class="memo-plan-top"><b>${esc(a2.step)}</b>${a2.when ? `<span class="pill ${WHEN[a2.when] || "neu"}">${esc(a2.when)}</span>` : ""}</div><div class="small">${wm(a2.detail)}</div></div></li>`).join("")}</ol></div>` : ""}
+        ${M.watch.length ? `<div class="memo-block"><h3>What to watch</h3><div class="memo-watch">${M.watch.map((w) => `<div><span class="memo-date">${esc(/^\d{4}-\d{2}-\d{2}$/.test(w.date) ? fmtDate(w.date) : w.date)}</span><b>${wm(w.what)}</b><span class="small muted">${wm(w.why)}</span></div>`).join("")}</div></div>` : ""}</section>`; }
     else if (res.writing?.[key]) out.memo = sec("rec-memo", "The investment memo", "", `<div class="notice info"><span>The chief strategist is writing the memo…</span></div>`);
     // Track record
     const s = A.track, c = cur?.track;

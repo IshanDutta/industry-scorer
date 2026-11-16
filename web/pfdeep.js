@@ -172,6 +172,7 @@
     return L.join("\n");
   }
   function memoPrompt(goal, facts, { improving = false, label = "the recommended mix" } = {}) {
+    const sec = (title, what) => `  {"title": "${title}", "headline": "one sentence: the point of this section", "points": ["3-5 bullets, each one specific fact with its number and id"], "body": "${what}", "stats": [{"label": "short", "value": "a number from the facts, e.g. +18.2% or $142,000"}]}`;
     return `You are the chief investment strategist writing the full investment memo for ${label}, an ETF-only ${goal.label.toLowerCase()} portfolio (horizon ${goal.horizon})${improving ? " that replaces the client's current holdings" : ""}. A quantitative process built it from full research reports on every industry; the weights are final. Your job is the complete argument: why this portfolio, why now, what each piece does, what to expect in numbers, what can go wrong, and exactly what to do.
 
 Write for a sharp investor who wants depth: specific, quantitative, plain English, no filler. Every claim cites fact ids in brackets like [P3], [I2] or [E1]; use only ids that appear below, and never invent a number. Past returns don't guarantee future ones: weigh the record against the forward view and say where they disagree. Never recommend broad-market or size index funds (S&P 500, total market, Russell, mid- or small-cap index funds such as SPY, VOO, IVV, VTI or IWM); the S&P 500 is only the benchmark.
@@ -179,21 +180,25 @@ Write for a sharp investor who wants depth: specific, quantitative, plain Englis
 Facts:
 ${facts}
 
+Each section has a one-sentence headline, 3-5 bullet points (one fact each, with its number), a body of full paragraphs separated by \\n, and 1-3 stats (label and value taken from the facts).
 Return JSON only:
 {"title": "a sharp one-line title",
+ "subtitle": "one sentence: who it's for and what it's built to do",
  "summary": "6-8 sentences: the recommendation, the case, the numbers that matter (expected return, risk, projection), the biggest risk, and what to do",
+ "bull": {"case": "2 sentences: what goes right", "points": ["3 bullets with numbers"]},
+ "bear": {"case": "2 sentences: what goes wrong", "points": ["3 bullets with numbers"]},
  "sections": [
-  {"title": "The thesis", "body": "3-4 paragraphs separated by \\n"},
-  {"title": "The market and macro backdrop", "body": "2-3 paragraphs"},
-  {"title": "How the money is allocated and why", "body": "3-4 paragraphs: industries, bonds, what is avoided"},
-  {"title": "Every ETF and the job it does", "body": "one paragraph per ETF, in weight order, separated by \\n"},
-  {"title": "The record: how this mix would have done", "body": "2-3 paragraphs against the S&P 500 and today's portfolio: periods, years, drawdowns, consistency"},
-  {"title": "What to expect: projections and scenarios", "body": "2-3 paragraphs: the simulated ranges in dollars, the chance of a loss and of beating the S&P 500, and the runs' bull/base/bear"},
-  {"title": "What you really own", "body": "2 paragraphs: the companies underneath, valuation, growth and quality against the market"},
-  {"title": "${improving ? "What changes from today's portfolio and why" : "Who this portfolio is for"}", "body": "2-3 paragraphs"},
-  {"title": "Risks and how the portfolio handles them", "body": "3 paragraphs"},
-  {"title": "What would change the view", "body": "1-2 paragraphs"}],
- "action_plan": [{"step": "short", "detail": "1-2 sentences: what to buy or sell, in what order, how much, when"}],
+${sec("The thesis", "3-4 paragraphs")},
+${sec("The market and macro backdrop", "2-3 paragraphs")},
+${sec("How the money is allocated and why", "3-4 paragraphs: industries, bonds, what is avoided")},
+${sec("Every ETF and the job it does", "one paragraph per ETF, in weight order")},
+${sec("The record: how this mix would have done", "2-3 paragraphs against the S&P 500 and today's portfolio: periods, years, drawdowns, consistency")},
+${sec("What to expect: projections and scenarios", "2-3 paragraphs: the simulated ranges in dollars, the chance of a loss and of beating the S&P 500, and the runs' bull/base/bear")},
+${sec("What you really own", "2 paragraphs: the companies underneath, valuation, growth and quality against the market")},
+${sec(improving ? "What changes from today's portfolio and why" : "Who this portfolio is for", "2-3 paragraphs")},
+${sec("Risks and how the portfolio handles them", "3 paragraphs")},
+${sec("What would change the view", "1-2 paragraphs")}],
+ "action_plan": [{"step": "short", "detail": "1-2 sentences: what to buy or sell, in what order, how much, when", "when": "now | this week | this month | on a dip | ongoing"}],
  "watch": [{"date": "YYYY-MM-DD or 'monthly'", "what": "the event or number to check", "why": "what it would change"}],
  "conviction": 1-10,
  "conviction_why": "one sentence"}
@@ -201,11 +206,14 @@ Return JSON only:
   }
   function memoClean(x, ids) {
     if (!x || typeof x !== "object") return null;
-    const ok = new Set(ids), fix = (s) => String(s || "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (ok.has(id) ? m : "")).replace(/\s+([.,;])/g, "$1").trim();
-    const cv = Math.round(n(x.conviction));
-    return { title: fix(x.title).slice(0, 200), summary: fix(x.summary), sections: (Array.isArray(x.sections) ? x.sections.slice(0, 12) : []).map((s) => ({ title: String(s?.title || "").slice(0, 100), body: fix(s?.body) })).filter((s) => s.title && s.body),
-      action_plan: (Array.isArray(x.action_plan) ? x.action_plan.slice(0, 8) : []).map((a) => ({ step: String(a?.step || "").slice(0, 120), detail: fix(a?.detail) })).filter((a) => a.step),
-      watch: (Array.isArray(x.watch) ? x.watch.slice(0, 10) : []).map((w) => ({ date: String(w?.date || "").slice(0, 10), what: fix(w?.what), why: fix(w?.why) })).filter((w) => w.what),
+    const ok = new Set(ids), fix = (s) => String(s || "").replace(/\[([A-Z]{1,2}\d{1,3}[a-z]?)\]/g, (m, id) => (ok.has(id) ? m : "")).replace(/\s+([.,;])/g, "$1").trim();
+    const arr = (a, k) => (Array.isArray(a) ? a.slice(0, k) : []), cv = Math.round(n(x.conviction));
+    const side = (s) => (s && typeof s === "object" ? { case: fix(s.case), points: arr(s.points, 5).map(fix).filter(Boolean) } : null);
+    return { title: fix(x.title).slice(0, 200), subtitle: fix(x.subtitle).slice(0, 300), summary: fix(x.summary), bull: side(x.bull), bear: side(x.bear),
+      sections: arr(x.sections, 12).map((s) => ({ title: String(s?.title || "").slice(0, 100), headline: fix(s?.headline), points: arr(s?.points, 6).map(fix).filter(Boolean), body: fix(s?.body),
+        stats: arr(s?.stats, 3).map((q) => ({ label: String(q?.label || "").slice(0, 40), value: String(q?.value || "").slice(0, 24) })).filter((q) => q.label && q.value) })).filter((s) => s.title && (s.body || s.points.length)),
+      action_plan: arr(x.action_plan, 8).map((a) => ({ step: String(a?.step || "").slice(0, 120), detail: fix(a?.detail), when: String(a?.when || "").slice(0, 20) })).filter((a) => a.step),
+      watch: arr(x.watch, 10).map((w) => ({ date: String(w?.date || "").slice(0, 10), what: fix(w?.what), why: fix(w?.why) })).filter((w) => w.what),
       conviction: isNum(cv) ? Math.max(1, Math.min(10, cv)) : null, conviction_why: fix(x.conviction_why) };
   }
 
