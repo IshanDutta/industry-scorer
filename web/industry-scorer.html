@@ -19245,10 +19245,22 @@ Return JSON only:
     renderPortfolio();
   }
   async function pfAnaFetch(p) { if (!S.mcp || !PF_TRIGGER) return; try { await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + p.id }, { cache: false }); S.notices = [{ kind: "info", text: "Asked Claude to check GitHub for the result." }]; } catch {} }
+  /**
+   * A GitHub run usually takes 10-20 minutes, but the task that started it can stop before it finishes. While a request
+   * says "running", ask Claude to fetch the result 12 minutes after it started and then every 10 minutes (for up to
+   * three hours); a fetch that finds no newer result changes nothing.
+   */
+  function pfAutoFetch() {
+    if (!S.mcp || !PF_TRIGGER) return; const now = Date.now();
+    for (const [pid, x] of Object.entries(S.pfJobs || {})) { if (x?.state !== "running") continue; const st = Date.parse(x.started_at || x.requested_at || 0);
+      if (!(now - st > 12 * 60000) || now - st > 3 * 3600000) continue; const last = (S.pfAutoAt ||= {})[pid] || 0; if (now - last < 10 * 60000) continue; S.pfAutoAt[pid] = now;
+      S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + pid }, { cache: false }).catch(() => {}); }
+  }
   /** Watch a portfolio's GitHub request; when it's done, load the result file it names. */
   async function pfWatch(pid) {
     if (!PF_TRIGGER) return; const db = await outlookDb().catch(() => null); if (!db || (S.pfWatched ||= {})[pid]) return; S.pfWatched[pid] = true;
-    try { db.doc("pfjobs/" + pid).onSnapshot(async (d) => { const x = d.exists ? d.data() : null; (S.pfJobs ||= {})[pid] = x;
+    if (!S.pfAutoTimer) S.pfAutoTimer = setInterval(pfAutoFetch, 60000);
+    try { db.doc("pfjobs/" + pid).onSnapshot(async (d) => { const x = d.exists ? d.data() : null; (S.pfJobs ||= {})[pid] = x; pfAutoFetch();
       if (x?.state === "done" && x.path && S.pfAna?.[pid]?.from_path !== x.path + "@" + x.done_at) await pfAnaFromFile(pid, x);
       if (S.tab === "portfolios") renderPortfolio(); }, () => {}); } catch {}
   }
