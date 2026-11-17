@@ -71,7 +71,7 @@
    * reasons (the inputs that moved it most, each with its value). Code-only fills count 60%, stale runs 85%.
    */
   function conviction(rows, goal, { now = new Date().toISOString().slice(0, 10) } = {}) {
-    const st = STYLE[goal.type] || STYLE.growth, W = st.w;
+    const st = goal.style || STYLE[goal.type] || STYLE.growth, W = st.w;
     const qual = pctiles(rows, (r) => mean([r.roe, r.opm, r.fcf])), mktExp = mean(rows.map((r) => r.exp12)), volMed = mean(rows.map((r) => r.vol)), divP = pctiles(rows, (r) => r.div), revP = pctiles(rows, (r) => r.rev30);
     rows.forEach((r, i) => {
       const x = {};
@@ -112,7 +112,7 @@
    * each industry and sector capped, nothing under 1%.
    */
   function targetIndustries(rows, goal, equityShare) {
-    const st = STYLE[goal.type] || STYLE.growth;
+    const st = goal.style || STYLE[goal.type] || STYLE.growth;
     const live = rows.filter((r) => r.z > st.avoidZ && !(r.callN <= -2 && goal.type !== "aggressive"));
     let w = {}; for (const r of live) w[r.name] = r.mkt * Math.exp(st.tilt * r.z);
     // Breadth: the largest tilted weights, at least minInd and at most maxInd.
@@ -385,7 +385,7 @@
    * x: {ach (EtfStrat.achieved), conv (weighted conviction of its stock industries), quality (0-100), vol, cost, yield, bonds, mktExp, maxOverlap}
    */
   function grade(x, goal) {
-    const W = GRADE_W[goal.type] || GRADE_W.growth, P = {}, a = x.ach || {};
+    const W = goal.gradeW || GRADE_W[goal.type] || GRADE_W.growth, P = {}, a = x.ach || {};
     const effN = (() => { const s = (a.allStocks || a.stocks || []).reduce((t, v) => t + (v.weight / (a.stockShare || 1)) ** 2, 0); return s > 0 ? 1 / s : NaN; })(), maxS = n(a.stocks?.[0]?.weight);
     P.alignment = { score: isNum(a.tracking) ? 100 * (1 - clamp(a.tracking / 0.7, 0, 1)) : NaN, value: a.tracking, label: "Industry mix vs the target", note: isNum(a.tracking) ? `${Math.round(a.tracking * 100)}% of it sits in other industries than the runs' target` : "" };
     P.conviction = { score: isNum(x.conv) ? 50 + 48 * Math.tanh(x.conv / 0.45) : NaN, value: x.conv, label: "Conviction behind its industries", note: isNum(x.conv) ? `weighted conviction ${x.conv > 0 ? "+" : ""}${x.conv.toFixed(2)} (0 = the market)` : "" };
@@ -394,7 +394,7 @@
     P.diversification = { score: dv.length ? dv.reduce((s2, v) => s2 + v, 0) / dv.length : NaN, value: effN, label: "Diversification", note: `${isNum(effN) ? `about ${Math.round(effN)} effective stocks` : ""}${isNum(maxS) ? `, largest single stock ${(maxS * 100).toFixed(1)}%` : ""}${isNum(x.maxOverlap) && x.maxOverlap > 0.25 ? `, funds overlap up to ${Math.round(x.maxOverlap * 100)}%` : ""}` };
     P.risk = { score: isNum(x.vol) ? clamp(100 - Math.max(0, x.vol / goal.vol - 0.8) * 125, 0, 100) : NaN, value: x.vol, label: "Risk vs the goal", note: isNum(x.vol) ? `volatility ${(x.vol * 100).toFixed(1)}% against a ${(goal.vol * 100).toFixed(0)}% ceiling` : "" };
     P.cost = { score: lin(-x.cost, -0.0075, -0.0005), value: x.cost, label: "Cost", note: isNum(x.cost) ? `${(x.cost * 100).toFixed(2)}% a year` : "" };
-    P.income = { score: lin(x.yield, 0.005, goal.type === "income" ? 0.05 : 0.035), value: x.yield, label: "Income", note: isNum(x.yield) ? `yield ${(x.yield * 100).toFixed(2)}%` : "" };
+    P.income = { score: lin(x.yield, 0.005, isNum(goal.yieldTarget) && goal.yieldTarget > 0 ? Math.max(0.02, goal.yieldTarget * 1.2) : goal.type === "income" ? 0.05 : 0.035), value: x.yield, label: "Income", note: isNum(x.yield) ? `yield ${(x.yield * 100).toFixed(2)}%` : "" };
     P.expected = { score: isNum(a.industryExp) ? clamp(50 + (a.industryExp - (isNum(x.mktExp) ? x.mktExp : 0.05)) * 600, 0, 100) : NaN, value: a.industryExp, label: "What the runs expect", note: isNum(a.industryExp) ? `industries imply ${(a.industryExp * 100).toFixed(1)}% over 12 months${isNum(x.mktExp) ? ` (market ${(x.mktExp * 100).toFixed(1)}%)` : ""}` : "" };
     const lo = goal.bonds[0], hi = goal.bonds[1], b = n(x.bonds) || 0, off = b < lo ? lo - b : b > hi ? b - hi : 0;
     P.fit = { score: clamp(100 - off * 300, 0, 100), value: b, label: "Fit with the goal", note: `bonds ${(b * 100).toFixed(0)}% (the goal's band ${(lo * 100).toFixed(0)}-${(hi * 100).toFixed(0)}%)` };
@@ -413,7 +413,7 @@
    */
   function dossier(ctx) {
     const { goal, curve, rows, tgt, sleeve, picksBy, sel, ach, cands, opps = [], stressRes = null, lens = null, improve = null } = ctx, L = [], ids = { I: {}, C: {}, E: {} };
-    L.push(`[G1] Goal: ${goal.label} investor, horizon ${goal.horizon}, volatility ceiling ${pc(goal.vol, 0)}, bonds ${pc(goal.bonds[0], 0)}-${pc(goal.bonds[1], 0)}, any industry at most ${pc(goal.industryCap, 0)}, any sector at most ${pc(goal.sectorCap, 0)}, every ETF 3-15%, ${goal.minN}-${goal.maxN} ETFs.`);
+    L.push(`[G1] Goal: ${goal.label} investor${goal.tierLabel ? ` (${goal.tierLabel}, ${goal.risk}% on the aggressiveness scale: ${goal.tierText})` : ""}${goal.incomeLabel ? `, income: ${goal.incomeLabel}${isNum(goal.yieldTarget) ? ` (target yield ${pc(goal.yieldTarget, 1)})` : ""}` : ""}${goal.focusLabel ? `, focus: ${goal.focusLabel} (${goal.focusText})` : ""}, horizon ${goal.horizonLabel || goal.horizon}, volatility ceiling ${pc(goal.vol, 0)}, bonds ${pc(goal.bonds[0], 0)}-${pc(goal.bonds[1], 0)}, any industry at most ${pc(goal.industryCap, 0)}, any sector at most ${pc(goal.sectorCap, 0)}, every ETF 3-15%, ${goal.minN}-${goal.maxN} ETFs.`);
     if (curve) L.push(`[R1] Treasury curve ${curve.date || ""}: 3M ${curve.month3}%, 2Y ${curve.year2}%, 5Y ${curve.year5}%, 10Y ${curve.year10}%, 30Y ${curve.year30}%.`);
     if (sleeve?.share > 0) L.push(`[B1] Bond sleeve ${pc(sleeve.share, 0)}: ${Object.entries(sleeve.buckets).map(([k, v]) => `${BUCKETS[k]} ${pc(v)}`).join(", ")}. ${sleeve.notes.join(" ")}`);
     const regimes = {}; for (const r of rows) if (r.regime) regimes[r.regime] = (regimes[r.regime] || 0) + r.mkt; L.push(`[M1] How the industry runs read the macro, by market weight: ${Object.entries(regimes).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${pc(v, 0)}`).join(", ") || "n/a"}.`);

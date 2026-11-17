@@ -84,8 +84,55 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
     aggressive: { label: "Aggressive", vol: 0.24, bonds: [0, 0.10], yieldBonus: 0, sectorCap: 0.45, industryCap: 0.30, pillars: { outlook: 0.35, fit: 0.20, momentum: 0.20, value: 0.05, cost: 0.05, risk: 0.05, diversification: 0.10 } },
   };
   const HZ_MONTHS = { "1M": 1, "3M": 3, "6M": 6, "12M": 12, long: 12 };
+  // ------------------------------------------------------------------ the goals questionnaire (UserGoals)
+  const OBJECTIVES = {
+    growth: { label: "Growth", text: "Maximize long-term capital appreciation" },
+    income: { label: "Income", text: "Generate steady cash flow from dividends" },
+    preservation: { label: "Preservation", text: "Protect capital, minimize losses" },
+    balanced: { label: "Balanced", text: "Mix of growth and income" },
+  };
+  const RISK_TIERS = [
+    { max: 20, key: "preservation", label: "Capital Preservation", dd: 0.05, text: "Cannot afford to lose more than 5%. Modest returns with minimal volatility." },
+    { max: 40, key: "conservative", label: "Conservative", dd: 0.15, text: "Can handle 10-15% drops occasionally. Stable, dividend-paying assets." },
+    { max: 60, key: "moderate", label: "Moderate", dd: 0.25, text: "Balanced approach accepting 15-25% drawdowns for better long-term returns." },
+    { max: 80, key: "growth", label: "Growth-Oriented", dd: 0.35, text: "Accept 25-35% drops without panic selling. Prioritizes growth equities." },
+    { max: 100, key: "aggressive", label: "Aggressive", dd: 0.5, text: "Maximum growth focus. Can stomach 40%+ drops. High concentration acceptable." },
+  ];
+  const INCOME = {
+    none: { label: "No Income Needed", text: "Reinvesting everything for growth", yield: 0, target: "0%" },
+    some: { label: "Some Income", text: "2-3% yield as a bonus", yield: 0.015, target: "1-2%" },
+    priority: { label: "Income Priority", text: "Need 4%+ yield", yield: 0.035, target: "3-4%" },
+    max: { label: "Maximum Income", text: "Highest possible current yield", yield: 0.05, target: "5%+" },
+  };
+  const FOCUS = {
+    gems: { label: "Find Hidden Gems", text: "Undervalued stocks with strong BUY signals" },
+    risk: { label: "Reduce Risk", text: "Defensive positions to hedge exposure" },
+    income: { label: "Boost Income", text: "Higher-yielding alternatives" },
+    gaps: { label: "Fill Gaps", text: "Sectors or themes missing from your current allocation" },
+  };
+  const HORIZONS = { "1M": "1M", "3M": "3M", "6M": "6M", "1Y": "12M", "3Y": "long", "5Y": "long", "5Y+": "long" };
+  const tierOf = (r) => RISK_TIERS.find((x) => r <= x.max) || RISK_TIERS[RISK_TIERS.length - 1];
+  /**
+   * The questionnaire's answers as engine settings: which investor type's research scores to use, the volatility
+   * ceiling and bond band from the aggressiveness slider, the yield target from the income need, concentration limits,
+   * and the focus. g: {objective, risk (0-100), income, focus, horizon}.
+   */
+  function fromAnswers(g) {
+    const r = Math.max(0, Math.min(100, isNum(n(g.risk)) ? n(g.risk) : 60)), obj = OBJECTIVES[g.objective] ? g.objective : "growth", inc = INCOME[g.income] ? g.income : "none", foc = FOCUS[g.focus] ? g.focus : "gems";
+    const type = obj === "preservation" ? "conservative" : obj === "income" ? "income" : obj === "balanced" ? (r >= 55 ? "growth" : "conservative") : r > 80 ? "aggressive" : "growth";
+    let vol = 0.04 + 0.21 * r / 100; if (foc === "risk") vol *= 0.85;
+    let hi = Math.max(0.05, Math.min(0.8, 0.8 - 0.75 * r / 100)), lo = Math.max(0, Math.min(0.6, 0.6 - 0.8 * r / 100));
+    if (obj === "preservation") { lo = Math.max(lo, 0.3); hi = Math.max(hi, 0.5); } if (obj === "growth" && r > 60) lo = 0; if (obj === "income") { lo = Math.max(lo, 0.15); hi = Math.max(hi, 0.4); }
+    const tier = tierOf(r), y = INCOME[inc].yield;
+    return { type, vol, bonds: [lo, hi], risk: Math.round(r), tier: tier.key, tierLabel: tier.label, tierText: tier.text, maxDD: tier.dd, objective: obj, objectiveLabel: OBJECTIVES[obj].label,
+      income: inc, incomeLabel: INCOME[inc].label, yieldTarget: y > 0 ? y : NaN, yieldBonus: inc === "max" ? 1 : inc === "priority" ? 0.6 : inc === "some" ? 0.2 : 0,
+      focus: foc, focusLabel: FOCUS[foc].label, focusText: FOCUS[foc].text, industryCap: 0.15 + 0.15 * r / 100, sectorCap: 0.25 + 0.2 * r / 100,
+      horizonLabel: HORIZONS[g.horizon] ? g.horizon : "1Y", horizon: HORIZONS[g.horizon] || (HZ_MONTHS[g.horizon] ? g.horizon : "12M"), divOk: obj === "income" || obj === "preservation" || inc === "priority" || inc === "max" || foc === "income" };
+  }
   /** A goal with the user's settings applied: horizon, volatility ceiling, counts, exclusions, international. */
   function goalOf(g = {}) {
+    if (g.objective) { const u = fromAnswers(g), base = GOALS[u.type]; const out = goalOf({ ...g, objective: undefined, type: u.type, horizon: u.horizon, maxVol: u.vol * 100, yieldTarget: isNum(u.yieldTarget) ? u.yieldTarget * 100 : undefined });
+      return { ...out, ...u, label: u.objectiveLabel, vol: isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : u.vol, pillars: base.pillars }; }
     const base = GOALS[g.type] || GOALS.growth, vol = isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : base.vol;
     return { ...base, type: GOALS[g.type] ? g.type : "growth", horizon: HZ_MONTHS[g.horizon] ? g.horizon : "12M", vol, amount: n(g.amount) > 0 ? n(g.amount) : 10000,
       minN: Math.max(Math.ceil(100 / CAP), n(g.minN) || 8), maxN: Math.max(Math.ceil(100 / CAP), Math.min(15, n(g.maxN) || 12)), cap: CAP, minW: 3, stockCap: 0.08,
@@ -462,7 +509,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfRec = { isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
+  const EtfRec = { OBJECTIVES, RISK_TIERS, INCOME, FOCUS, HORIZONS, fromAnswers, tierOf, isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfRec;
   else root.EtfRec = EtfRec;
 })(typeof globalThis !== "undefined" ? globalThis : this);

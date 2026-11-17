@@ -468,6 +468,43 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .ov-h h2 { font-size: 20px; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ov-chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); }
+.gw .panel-head { flex-wrap: wrap; gap: 10px; }
+.gw-hz { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.gw-hz .eyebrow { margin-right: 4px; }
+.gw-chip { padding: 3px 9px; border-radius: 999px; font-size: 12px; background: var(--sunk); }
+.gw-chip.on { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
+.gw-prog { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0; margin: 4px 0 14px; }
+.gw-prog li button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: transparent; border: 0; border-bottom: 3px solid var(--line); border-radius: 0; font-size: 13px; color: var(--muted); }
+.gw-prog li.on button { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
+.gw-prog li.done button { border-bottom-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
+.gw-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--sunk); font-size: 11px; flex: none; }
+.gw-prog li.on .gw-num, .gw-prog li.done .gw-num { background: var(--accent); color: var(--accent-ink, #fff); }
+.gw-q { margin: 0 0 10px; font-size: 16px; }
+.gw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gw-card { display: grid; gap: 4px; text-align: left; align-content: start; padding: 14px; border-radius: 14px; background: var(--sunk); min-height: 92px; transition: border-color .15s, background .15s, transform .15s; }
+.gw-card:hover { transform: translateY(-1px); }
+.gw-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); box-shadow: 0 0 0 1px var(--accent) inset; }
+.gw-ico { width: 22px; height: 22px; color: var(--accent); }
+.gw-card .gw-ico { margin-bottom: 4px; }
+.gw-risk { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: var(--sunk); border: 1px solid color-mix(in srgb, var(--tc) 40%, var(--line)); }
+.gw-risk-top { display: flex; justify-content: space-between; align-items: center; }
+.gw-risk-n { font-size: 28px; color: var(--tc); font-variant-numeric: tabular-nums; }
+.gw-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: var(--tc); }
+.gw-risk input[type=range] { width: 100%; accent-color: var(--tc); }
+.gw-scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; font-size: 10.5px; color: var(--muted); }
+.gw-scale span { border-top: 4px solid var(--tc); padding-top: 3px; text-align: center; }
+.gw-tier-text { margin: 0; font-size: 14px; }
+.gw-list { display: grid; gap: 8px; }
+.gw-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px; text-align: left; padding: 12px 14px; border-radius: 12px; background: var(--sunk); width: 100%; }
+.gw-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); }
+.gw-check { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; font-weight: 700; }
+.gw-row.on .gw-check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
+.gw-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+.gw-more { margin-top: 10px; }
+.gb-items { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.gb-tag { display: inline-flex; align-items: center; gap: 5px; }
+.gb-tag .gw-ico { width: 16px; height: 16px; }
+@media (max-width: 560px) { .gw-grid { grid-template-columns: 1fr 1fr; } .gw-card { padding: 10px; min-height: 0; } .gw-prog li button { font-size: 0; gap: 0; justify-content: center; } .gw-prog .gw-num { font-size: 11px; } .gw-row { grid-template-columns: 26px 1fr; } .gw-row > :last-child { grid-column: 2; } .gw-scale { font-size: 9px; } }
 .goal-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .pf-manual { border-color: color-mix(in srgb, var(--c3) 45%, var(--line)); }
 .pf-steps { display: grid; gap: 10px; margin: 0; padding-left: 20px; } .pf-steps textarea { display: block; width: 100%; margin-top: 6px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11.5px; resize: vertical; }
@@ -11458,8 +11495,55 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
     aggressive: { label: "Aggressive", vol: 0.24, bonds: [0, 0.10], yieldBonus: 0, sectorCap: 0.45, industryCap: 0.30, pillars: { outlook: 0.35, fit: 0.20, momentum: 0.20, value: 0.05, cost: 0.05, risk: 0.05, diversification: 0.10 } },
   };
   const HZ_MONTHS = { "1M": 1, "3M": 3, "6M": 6, "12M": 12, long: 12 };
+  // ------------------------------------------------------------------ the goals questionnaire (UserGoals)
+  const OBJECTIVES = {
+    growth: { label: "Growth", text: "Maximize long-term capital appreciation" },
+    income: { label: "Income", text: "Generate steady cash flow from dividends" },
+    preservation: { label: "Preservation", text: "Protect capital, minimize losses" },
+    balanced: { label: "Balanced", text: "Mix of growth and income" },
+  };
+  const RISK_TIERS = [
+    { max: 20, key: "preservation", label: "Capital Preservation", dd: 0.05, text: "Cannot afford to lose more than 5%. Modest returns with minimal volatility." },
+    { max: 40, key: "conservative", label: "Conservative", dd: 0.15, text: "Can handle 10-15% drops occasionally. Stable, dividend-paying assets." },
+    { max: 60, key: "moderate", label: "Moderate", dd: 0.25, text: "Balanced approach accepting 15-25% drawdowns for better long-term returns." },
+    { max: 80, key: "growth", label: "Growth-Oriented", dd: 0.35, text: "Accept 25-35% drops without panic selling. Prioritizes growth equities." },
+    { max: 100, key: "aggressive", label: "Aggressive", dd: 0.5, text: "Maximum growth focus. Can stomach 40%+ drops. High concentration acceptable." },
+  ];
+  const INCOME = {
+    none: { label: "No Income Needed", text: "Reinvesting everything for growth", yield: 0, target: "0%" },
+    some: { label: "Some Income", text: "2-3% yield as a bonus", yield: 0.015, target: "1-2%" },
+    priority: { label: "Income Priority", text: "Need 4%+ yield", yield: 0.035, target: "3-4%" },
+    max: { label: "Maximum Income", text: "Highest possible current yield", yield: 0.05, target: "5%+" },
+  };
+  const FOCUS = {
+    gems: { label: "Find Hidden Gems", text: "Undervalued stocks with strong BUY signals" },
+    risk: { label: "Reduce Risk", text: "Defensive positions to hedge exposure" },
+    income: { label: "Boost Income", text: "Higher-yielding alternatives" },
+    gaps: { label: "Fill Gaps", text: "Sectors or themes missing from your current allocation" },
+  };
+  const HORIZONS = { "1M": "1M", "3M": "3M", "6M": "6M", "1Y": "12M", "3Y": "long", "5Y": "long", "5Y+": "long" };
+  const tierOf = (r) => RISK_TIERS.find((x) => r <= x.max) || RISK_TIERS[RISK_TIERS.length - 1];
+  /**
+   * The questionnaire's answers as engine settings: which investor type's research scores to use, the volatility
+   * ceiling and bond band from the aggressiveness slider, the yield target from the income need, concentration limits,
+   * and the focus. g: {objective, risk (0-100), income, focus, horizon}.
+   */
+  function fromAnswers(g) {
+    const r = Math.max(0, Math.min(100, isNum(n(g.risk)) ? n(g.risk) : 60)), obj = OBJECTIVES[g.objective] ? g.objective : "growth", inc = INCOME[g.income] ? g.income : "none", foc = FOCUS[g.focus] ? g.focus : "gems";
+    const type = obj === "preservation" ? "conservative" : obj === "income" ? "income" : obj === "balanced" ? (r >= 55 ? "growth" : "conservative") : r > 80 ? "aggressive" : "growth";
+    let vol = 0.04 + 0.21 * r / 100; if (foc === "risk") vol *= 0.85;
+    let hi = Math.max(0.05, Math.min(0.8, 0.8 - 0.75 * r / 100)), lo = Math.max(0, Math.min(0.6, 0.6 - 0.8 * r / 100));
+    if (obj === "preservation") { lo = Math.max(lo, 0.3); hi = Math.max(hi, 0.5); } if (obj === "growth" && r > 60) lo = 0; if (obj === "income") { lo = Math.max(lo, 0.15); hi = Math.max(hi, 0.4); }
+    const tier = tierOf(r), y = INCOME[inc].yield;
+    return { type, vol, bonds: [lo, hi], risk: Math.round(r), tier: tier.key, tierLabel: tier.label, tierText: tier.text, maxDD: tier.dd, objective: obj, objectiveLabel: OBJECTIVES[obj].label,
+      income: inc, incomeLabel: INCOME[inc].label, yieldTarget: y > 0 ? y : NaN, yieldBonus: inc === "max" ? 1 : inc === "priority" ? 0.6 : inc === "some" ? 0.2 : 0,
+      focus: foc, focusLabel: FOCUS[foc].label, focusText: FOCUS[foc].text, industryCap: 0.15 + 0.15 * r / 100, sectorCap: 0.25 + 0.2 * r / 100,
+      horizonLabel: HORIZONS[g.horizon] ? g.horizon : "1Y", horizon: HORIZONS[g.horizon] || (HZ_MONTHS[g.horizon] ? g.horizon : "12M"), divOk: obj === "income" || obj === "preservation" || inc === "priority" || inc === "max" || foc === "income" };
+  }
   /** A goal with the user's settings applied: horizon, volatility ceiling, counts, exclusions, international. */
   function goalOf(g = {}) {
+    if (g.objective) { const u = fromAnswers(g), base = GOALS[u.type]; const out = goalOf({ ...g, objective: undefined, type: u.type, horizon: u.horizon, maxVol: u.vol * 100, yieldTarget: isNum(u.yieldTarget) ? u.yieldTarget * 100 : undefined });
+      return { ...out, ...u, label: u.objectiveLabel, vol: isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : u.vol, pillars: base.pillars }; }
     const base = GOALS[g.type] || GOALS.growth, vol = isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : base.vol;
     return { ...base, type: GOALS[g.type] ? g.type : "growth", horizon: HZ_MONTHS[g.horizon] ? g.horizon : "12M", vol, amount: n(g.amount) > 0 ? n(g.amount) : 10000,
       minN: Math.max(Math.ceil(100 / CAP), n(g.minN) || 8), maxN: Math.max(Math.ceil(100 / CAP), Math.min(15, n(g.maxN) || 12)), cap: CAP, minW: 3, stockCap: 0.08,
@@ -11836,7 +11920,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfRec = { isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
+  const EtfRec = { OBJECTIVES, RISK_TIERS, INCOME, FOCUS, HORIZONS, fromAnswers, tierOf, isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfRec;
   else root.EtfRec = EtfRec;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -11914,7 +11998,7 @@ Return JSON only:
    * reasons (the inputs that moved it most, each with its value). Code-only fills count 60%, stale runs 85%.
    */
   function conviction(rows, goal, { now = new Date().toISOString().slice(0, 10) } = {}) {
-    const st = STYLE[goal.type] || STYLE.growth, W = st.w;
+    const st = goal.style || STYLE[goal.type] || STYLE.growth, W = st.w;
     const qual = pctiles(rows, (r) => mean([r.roe, r.opm, r.fcf])), mktExp = mean(rows.map((r) => r.exp12)), volMed = mean(rows.map((r) => r.vol)), divP = pctiles(rows, (r) => r.div), revP = pctiles(rows, (r) => r.rev30);
     rows.forEach((r, i) => {
       const x = {};
@@ -11955,7 +12039,7 @@ Return JSON only:
    * each industry and sector capped, nothing under 1%.
    */
   function targetIndustries(rows, goal, equityShare) {
-    const st = STYLE[goal.type] || STYLE.growth;
+    const st = goal.style || STYLE[goal.type] || STYLE.growth;
     const live = rows.filter((r) => r.z > st.avoidZ && !(r.callN <= -2 && goal.type !== "aggressive"));
     let w = {}; for (const r of live) w[r.name] = r.mkt * Math.exp(st.tilt * r.z);
     // Breadth: the largest tilted weights, at least minInd and at most maxInd.
@@ -12228,7 +12312,7 @@ Return JSON only:
    * x: {ach (EtfStrat.achieved), conv (weighted conviction of its stock industries), quality (0-100), vol, cost, yield, bonds, mktExp, maxOverlap}
    */
   function grade(x, goal) {
-    const W = GRADE_W[goal.type] || GRADE_W.growth, P = {}, a = x.ach || {};
+    const W = goal.gradeW || GRADE_W[goal.type] || GRADE_W.growth, P = {}, a = x.ach || {};
     const effN = (() => { const s = (a.allStocks || a.stocks || []).reduce((t, v) => t + (v.weight / (a.stockShare || 1)) ** 2, 0); return s > 0 ? 1 / s : NaN; })(), maxS = n(a.stocks?.[0]?.weight);
     P.alignment = { score: isNum(a.tracking) ? 100 * (1 - clamp(a.tracking / 0.7, 0, 1)) : NaN, value: a.tracking, label: "Industry mix vs the target", note: isNum(a.tracking) ? `${Math.round(a.tracking * 100)}% of it sits in other industries than the runs' target` : "" };
     P.conviction = { score: isNum(x.conv) ? 50 + 48 * Math.tanh(x.conv / 0.45) : NaN, value: x.conv, label: "Conviction behind its industries", note: isNum(x.conv) ? `weighted conviction ${x.conv > 0 ? "+" : ""}${x.conv.toFixed(2)} (0 = the market)` : "" };
@@ -12237,7 +12321,7 @@ Return JSON only:
     P.diversification = { score: dv.length ? dv.reduce((s2, v) => s2 + v, 0) / dv.length : NaN, value: effN, label: "Diversification", note: `${isNum(effN) ? `about ${Math.round(effN)} effective stocks` : ""}${isNum(maxS) ? `, largest single stock ${(maxS * 100).toFixed(1)}%` : ""}${isNum(x.maxOverlap) && x.maxOverlap > 0.25 ? `, funds overlap up to ${Math.round(x.maxOverlap * 100)}%` : ""}` };
     P.risk = { score: isNum(x.vol) ? clamp(100 - Math.max(0, x.vol / goal.vol - 0.8) * 125, 0, 100) : NaN, value: x.vol, label: "Risk vs the goal", note: isNum(x.vol) ? `volatility ${(x.vol * 100).toFixed(1)}% against a ${(goal.vol * 100).toFixed(0)}% ceiling` : "" };
     P.cost = { score: lin(-x.cost, -0.0075, -0.0005), value: x.cost, label: "Cost", note: isNum(x.cost) ? `${(x.cost * 100).toFixed(2)}% a year` : "" };
-    P.income = { score: lin(x.yield, 0.005, goal.type === "income" ? 0.05 : 0.035), value: x.yield, label: "Income", note: isNum(x.yield) ? `yield ${(x.yield * 100).toFixed(2)}%` : "" };
+    P.income = { score: lin(x.yield, 0.005, isNum(goal.yieldTarget) && goal.yieldTarget > 0 ? Math.max(0.02, goal.yieldTarget * 1.2) : goal.type === "income" ? 0.05 : 0.035), value: x.yield, label: "Income", note: isNum(x.yield) ? `yield ${(x.yield * 100).toFixed(2)}%` : "" };
     P.expected = { score: isNum(a.industryExp) ? clamp(50 + (a.industryExp - (isNum(x.mktExp) ? x.mktExp : 0.05)) * 600, 0, 100) : NaN, value: a.industryExp, label: "What the runs expect", note: isNum(a.industryExp) ? `industries imply ${(a.industryExp * 100).toFixed(1)}% over 12 months${isNum(x.mktExp) ? ` (market ${(x.mktExp * 100).toFixed(1)}%)` : ""}` : "" };
     const lo = goal.bonds[0], hi = goal.bonds[1], b = n(x.bonds) || 0, off = b < lo ? lo - b : b > hi ? b - hi : 0;
     P.fit = { score: clamp(100 - off * 300, 0, 100), value: b, label: "Fit with the goal", note: `bonds ${(b * 100).toFixed(0)}% (the goal's band ${(lo * 100).toFixed(0)}-${(hi * 100).toFixed(0)}%)` };
@@ -12256,7 +12340,7 @@ Return JSON only:
    */
   function dossier(ctx) {
     const { goal, curve, rows, tgt, sleeve, picksBy, sel, ach, cands, opps = [], stressRes = null, lens = null, improve = null } = ctx, L = [], ids = { I: {}, C: {}, E: {} };
-    L.push(`[G1] Goal: ${goal.label} investor, horizon ${goal.horizon}, volatility ceiling ${pc(goal.vol, 0)}, bonds ${pc(goal.bonds[0], 0)}-${pc(goal.bonds[1], 0)}, any industry at most ${pc(goal.industryCap, 0)}, any sector at most ${pc(goal.sectorCap, 0)}, every ETF 3-15%, ${goal.minN}-${goal.maxN} ETFs.`);
+    L.push(`[G1] Goal: ${goal.label} investor${goal.tierLabel ? ` (${goal.tierLabel}, ${goal.risk}% on the aggressiveness scale: ${goal.tierText})` : ""}${goal.incomeLabel ? `, income: ${goal.incomeLabel}${isNum(goal.yieldTarget) ? ` (target yield ${pc(goal.yieldTarget, 1)})` : ""}` : ""}${goal.focusLabel ? `, focus: ${goal.focusLabel} (${goal.focusText})` : ""}, horizon ${goal.horizonLabel || goal.horizon}, volatility ceiling ${pc(goal.vol, 0)}, bonds ${pc(goal.bonds[0], 0)}-${pc(goal.bonds[1], 0)}, any industry at most ${pc(goal.industryCap, 0)}, any sector at most ${pc(goal.sectorCap, 0)}, every ETF 3-15%, ${goal.minN}-${goal.maxN} ETFs.`);
     if (curve) L.push(`[R1] Treasury curve ${curve.date || ""}: 3M ${curve.month3}%, 2Y ${curve.year2}%, 5Y ${curve.year5}%, 10Y ${curve.year10}%, 30Y ${curve.year30}%.`);
     if (sleeve?.share > 0) L.push(`[B1] Bond sleeve ${pc(sleeve.share, 0)}: ${Object.entries(sleeve.buckets).map(([k, v]) => `${BUCKETS[k]} ${pc(v)}`).join(", ")}. ${sleeve.notes.join(" ")}`);
     const regimes = {}; for (const r of rows) if (r.regime) regimes[r.regime] = (regimes[r.regime] || 0) + r.mkt; L.push(`[M1] How the industry runs read the macro, by market weight: ${Object.entries(regimes).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${k} ${pc(v, 0)}`).join(", ") || "n/a"}.`);
@@ -12463,7 +12547,7 @@ Return JSON only:
   function text(p, goal, rl, { mixLabel = "this mix", others = [] } = {}) {
     const L = [], s = p.stats, add = (t) => L.push(`[D${L.length + 1}] ${t}`);
     add(`${p.symbol} ${p.name}${p.issuer ? ` (${p.issuer})` : ""}: cost ${pp(p.expense, 2)} a year, $${isNum(p.aum) ? (p.aum / 1e9).toFixed(1) : "n/a"}B in assets, started ${p.inception || "n/a"}, ${p.holdings || "n/a"} holdings${p.effN ? ` (effectively ${Math.round(p.effN)} equal positions)` : ""}, yield ${pp(p.yield, 2)}. Found via ${p.via}.${p.twins.length ? ` Near-identical funds collapsed into it: ${p.twins.slice(0, 4).join(", ")}.` : ""}`);
-    if (rl) add(`Role in ${mixLabel} (a ${goal.label.toLowerCase()} portfolio, ${goal.horizon}): ${pp(rl.weight, 1)} of the portfolio.${rl.unique.length ? ` Main source of the target companies ${rl.unique.map((u) => `${u.symbol} (${pp(u.share, 0)} of the mix's ${u.symbol})`).join(", ")}.` : ""}${rl.overlap ? ` Largest overlap: ${rl.overlap.symbol}, ${pp(rl.overlap.overlap, 0)} the same stocks.` : ""}${others.length ? ` The other ETFs in the mix: ${others.join(", ")}.` : ""}`);
+    if (rl) add(`Role in ${mixLabel} (a ${goal.label.toLowerCase()} portfolio, ${goal.horizonLabel || goal.horizon}): ${pp(rl.weight, 1)} of the portfolio.${rl.unique.length ? ` Main source of the target companies ${rl.unique.map((u) => `${u.symbol} (${pp(u.share, 0)} of the mix's ${u.symbol})`).join(", ")}.` : ""}${rl.overlap ? ` Largest overlap: ${rl.overlap.symbol}, ${pp(rl.overlap.overlap, 0)} the same stocks.` : ""}${others.length ? ` The other ETFs in the mix: ${others.join(", ")}.` : ""}`);
     if (s) {
       add(`Returns with dividends reinvested, to ${s.as_of} (S&P 500 in brackets; 3Y, 5Y and the longest window are a year): ${s.periods.map((x) => `${x.k} ${pc(x.ret)} [${pc(x.spy)}]`).join(", ")}.`);
       add(`By calendar year (S&P 500 in brackets): ${s.years.map((y) => `${y.year}${y.partial ? " so far" : ""} ${pc(y.ret)} [${pc(y.spy)}]`).join(", ")}. $10,000 from ${s.growth.from} is $${Math.round(s.growth.value).toLocaleString("en-US")} (S&P 500 $${Math.round(s.growth.spy).toLocaleString("en-US")}).`);
@@ -12481,7 +12565,7 @@ Return JSON only:
   }
 
   function prompt(sym, goal, facts, { improving = false } = {}) {
-    return `You are the ETF analyst writing the full case for ${sym}, one fund in an ETF-only ${goal.label.toLowerCase()} portfolio${improving ? " that improves the client's current holdings" : ""} (horizon ${goal.horizon}). A quantitative process chose it and its weight from the industry research; your job is to tell the client, with the evidence, why they should own it, what it adds, what can go wrong and when to sell. Do not change the weight and do not invent numbers: every figure comes from the facts.
+    return `You are the ETF analyst writing the full case for ${sym}, one fund in an ETF-only ${goal.label.toLowerCase()} portfolio${improving ? " that improves the client's current holdings" : ""} (horizon ${goal.horizonLabel || goal.horizon}). A quantitative process chose it and its weight from the industry research; your job is to tell the client, with the evidence, why they should own it, what it adds, what can go wrong and when to sell. Do not change the weight and do not invent numbers: every figure comes from the facts.
 
 Write for a sharp investor, plainly and specifically. Every claim cites fact ids in brackets like [D3]; use only ids that appear below. Past returns don't guarantee future ones: lean on the industry runs' forward view as much as on the record, and say plainly where the record is weak.
 Never recommend, suggest or compare against buying broad-market or size index funds (S&P 500, total market, Russell 1000/2000, mid-cap or small-cap index funds such as SPY, VOO, IVV, VTI or IWM): the S&P 500 is only the benchmark.
@@ -12693,7 +12777,7 @@ Return JSON only:
   }
   function memoPrompt(goal, facts, { improving = false, label = "the recommended mix" } = {}) {
     const sec = (title, what) => `  {"title": "${title}", "headline": "one sentence: the point of this section", "points": ["3-5 bullets, each one specific fact with its number and id"], "body": "${what}", "stats": [{"label": "short", "value": "a number from the facts, e.g. +18.2% or $142,000"}]}`;
-    return `You are the chief investment strategist writing the full investment memo for ${label}, an ETF-only ${goal.label.toLowerCase()} portfolio (horizon ${goal.horizon})${improving ? " that replaces the client's current holdings" : ""}. A quantitative process built it from full research reports on every industry; the weights are final. Your job is the complete argument: why this portfolio, why now, what each piece does, what to expect in numbers, what can go wrong, and exactly what to do.
+    return `You are the chief investment strategist writing the full investment memo for ${label}, an ETF-only ${goal.label.toLowerCase()} portfolio (horizon ${goal.horizonLabel || goal.horizon})${improving ? " that replaces the client's current holdings" : ""}. A quantitative process built it from full research reports on every industry; the weights are final. Your job is the complete argument: why this portfolio, why now, what each piece does, what to expect in numbers, what can go wrong, and exactly what to do.
 
 Write for a sharp investor who wants depth: specific, quantitative, plain English, no filler. Every claim cites fact ids in brackets like [P3], [I2] or [E1]; use only ids that appear below, and never invent a number. Past returns don't guarantee future ones: weigh the record against the forward view and say where they disagree. Never recommend broad-market or size index funds (S&P 500, total market, Russell, mid- or small-cap index funds such as SPY, VOO, IVV, VTI or IWM); the S&P 500 is only the benchmark.
 
@@ -12789,12 +12873,18 @@ ${sec("What would change the view", "1-2 paragraphs")}],
         events: (r.events || []).filter((e) => e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || ""))).slice(0, 4).map((e) => ({ date: e.date, title: e.title, detail: String(e.detail || "").slice(0, 200) })),
         picks: picksFor(r.name).slice(0, 5), etfs: etfsFor(r.name).slice(0, 3) }); };
     const ok = (r) => r.verdict !== "no" && !(isNum(r.callN12) && r.callN12 < 0);
-    for (const r of rows.filter((r) => isNum(r.z) && r.z > 0.35 && ok(r)).sort((a, b) => b.z - a.z).slice(0, Math.ceil(k * 0.6))) push(r, "conviction", "the strongest case for this goal across every input");
+    for (const r of rows.filter((r) => isNum(r.z) && r.z > 0.35 && ok(r)).sort((a, b) => b.z - a.z).slice(0, Math.ceil(k * (goal?.focus ? 0.8 : 0.6)))) push(r, "conviction", "the strongest case for this goal across every input");
     for (const r of rows.filter((r) => isNum(r.pe_pct) && r.pe_pct < 0.3 && (r.callN12 > 0 || r.rev30 > 0.005) && ok(r)).sort((a, b) => a.pe_pct - b.pe_pct).slice(0, 4)) push(r, "value", "cheap against its own history while the outlook or estimates improve");
     for (const r of rows.filter((r) => isNum(r.rev30) && r.rev30 > 0.02 && r.callN12 > 0 && ok(r)).sort((a, b) => b.rev30 - a.rev30).slice(0, 3)) push(r, "momentum", "analysts are raising estimates fast and the call is bullish");
     for (const r of rows.filter((r) => isNum(r.skew) && r.skew > 3 && ok(r)).sort((a, b) => b.skew - a.skew).slice(0, 3)) push(r, "asymmetry", "the bull case outweighs the bear case by probability times size");
     for (const r of rows.filter((r) => (r.events || []).some((e) => e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || ""))) && isNum(r.z) && r.z > 0.15 && ok(r)).sort((a, b) => b.z - a.z).slice(0, 3)) push(r, "catalyst", "a dated catalyst inside six months on a favored industry");
-    return out.slice(0, k);
+    // The investor's focus decides which of these lead.
+    const f = goal?.focus, base = (o, i) => -i * 0.02, gap = (o) => Math.max(0, (o.target || 0) - (o.have || 0));
+    const score = (o, i) => base(o, i) + (f === "gems" ? ((o.kind === "value" || o.kind === "momentum" || o.kind === "asymmetry") ? 0.5 : 0) + (isNum(o.pe_pct) ? 0.4 * (0.5 - o.pe_pct) : 0)
+      : f === "gaps" ? 8 * gap(o) + (o.have > 0.01 ? -0.3 : 0.2)
+      : f === "income" ? 20 * (n(o.div) || 0)
+      : f === "risk" ? (isNum(o.vol) ? -1.5 * o.vol : 0) + (isNum(n(o.bear?.move)) ? 0.01 * n(o.bear.move) : 0) : 0);
+    return f ? out.map((o, i) => [o, score(o, i)]).sort((a, b) => b[1] - a[1]).map((x) => x[0]).slice(0, k) : out.slice(0, k);
   }
   function oppText(opps, goal) {
     const L = []; const f = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
@@ -12807,7 +12897,7 @@ ${sec("What would change the view", "1-2 paragraphs")}],
     return L.join("\n");
   }
   function oppPrompt(goal, facts, { holdings = "" } = {}) {
-    return `You run the opportunities desk for a ${goal.label.toLowerCase()} investor (horizon ${goal.horizon}). Below are the strongest cases code found across every industry research run (Q#), each with its evidence, best companies and the ETFs that hold it${holdings ? `, and the client's portfolio today (H#)` : ""}. Write a brief for each that a sharp investor could act on: the thesis, why now, exactly how to play it, how big, when to get in, what would kill it.
+    return `You run the opportunities desk for a ${goal.label.toLowerCase()} investor (horizon ${goal.horizonLabel || goal.horizon}). Below are the strongest cases code found across every industry research run (Q#), each with its evidence, best companies and the ETFs that hold it${holdings ? `, and the client's portfolio today (H#)` : ""}. Write a brief for each that a sharp investor could act on: the thesis, why now, exactly how to play it, how big, when to get in, what would kill it.
 
 Plain English, specific, quantitative. Every claim cites ids in brackets like [Q2], [Q2p], [Q2e] or [H1]; use only ids below and never invent a number. Be honest: if the record or the valuation argues against an idea, say so and lower its conviction. Never suggest broad-market or size index funds (S&P 500, total market, Russell, mid- or small-cap index funds such as SPY, VOO, IVV, VTI or IWM): express each idea through the industry ETFs or companies named in the facts.
 
@@ -12833,7 +12923,7 @@ Cover every Q#.`;
       return `[H${i + 1}] ${h.ticker} ${h.name} (${h.type}, ${pp(h.weight)} of the portfolio${h.broad ? ", a broad-market index fund" : ""}): 1Y ${pc(P("1Y")?.ret)} vs S&P 500 ${pc(P("1Y")?.spy)}, 3Y ${pc(P("3Y")?.ret)}/yr vs ${pc(P("3Y")?.spy)}, 5Y ${pc(P("5Y")?.ret)}/yr vs ${pc(P("5Y")?.spy)}; vol ${pp(s?.risk?.vol, 0)}, beta ${isNum(s?.risk?.beta) ? s.risk.beta.toFixed(2) : "n/a"}, worst drawdown ${pc(s?.drawdown?.depth)}, ${pc(s?.drawdown?.from_high)} from its high; cost ${pp(h.expense, 2)}, yield ${pp(h.yield, 2)}; expected ${pp(h.mu)} a year; the runs' conviction on its industries ${isNum(h.conviction) ? (h.conviction > 0 ? "+" : "") + h.conviction.toFixed(2) : "n/a"} (${h.industries.slice(0, 3).map((g) => `${g.name} ${pp(g.weight, 0)}, 12M ${g.call12 || "n/a"}, expected ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}`).join("; ")}). Code's verdict: ${h.action}${h.why.length ? ` (${h.why.join("; ")})` : ""}${h.alternative ? `; the closest recommended replacement ${h.alternative.symbol} (${h.alternative.why})` : ""}.`; }).join("\n");
   }
   function holdPrompt(goal, facts) {
-    return `You are the portfolio manager reviewing a client's current holdings, one by one, for a ${goal.label.toLowerCase()} goal (horizon ${goal.horizon}). For each holding (H#), decide keep, add, trim, replace or sell, and say why with the numbers. Code has already flagged some; you may disagree only with evidence, except that broad-market index funds (SPY, VOO, IVV, VTI, IWM and the like) are always replaced by the recommended industry ETFs.
+    return `You are the portfolio manager reviewing a client's current holdings, one by one, for a ${goal.label.toLowerCase()} goal (horizon ${goal.horizonLabel || goal.horizon}). For each holding (H#), decide keep, add, trim, replace or sell, and say why with the numbers. Code has already flagged some; you may disagree only with evidence, except that broad-market index funds (SPY, VOO, IVV, VTI, IWM and the like) are always replaced by the recommended industry ETFs.
 
 Every claim cites ids like [H2] or [E3]; use only ids below; never invent numbers.
 
@@ -18939,7 +19029,11 @@ Return JSON only:
     el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => inp.addEventListener("input", () => { clearTimeout(S.pfSugT); const q = inp.value.trim(); if (q.length < 1 || !S.mcp) return;
       S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
         const dl = $("pf-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); }));
-    el.querySelectorAll("[data-rg]").forEach((inp) => inp.addEventListener("change", () => { const d = recGoalDraft(), k = inp.dataset.rg; d[k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" ? (inp.value === "" ? "" : num(inp.value)) : inp.value; if (k === "intl" || k === "bonds") renderPortfolio(); }));
+    el.querySelectorAll("[data-rg]").forEach((inp) => inp.addEventListener("change", () => { const d = recGoalDraft(), k = inp.dataset.rg; d[k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" || inp.type === "range" ? (inp.value === "" ? "" : num(inp.value)) : inp.value; recGoalSave(); if (k === "intl" || k === "bonds") renderPortfolio(); }));
+    // The aggressiveness slider: the tier badge, text and limits follow it live, without a re-render.
+    el.querySelectorAll("[data-gw-risk]").forEach((inp) => inp.addEventListener("input", () => { const d = recGoalDraft(); d.risk = num(inp.value); const t = EtfRec.tierOf(d.risk), box = inp.closest(".gw-risk");
+      if (!box) return; box.style.setProperty("--tc", GW_TIER_C[t.key]); const q = (k) => box.querySelector(`[data-gw="${k}"]`);
+      q("badge").textContent = t.label; q("n").textContent = Math.round(d.risk); q("text").textContent = t.text; q("means").textContent = gwMeans(d); }));
     el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
     if (!el.dataset.bound) { el.dataset.bound = "1"; el.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-pf], button[data-pf-per]"); if (b) pfClick(b); }); }
   }
@@ -18956,9 +19050,14 @@ Return JSON only:
     if (a === "ana-fetch") { pfAnaFetch(p); return; }
     if (a === "ana-manual-close") { if (S.pfManual) delete S.pfManual[p.id]; renderPortfolio(); return; }
     if (a === "ana-copy") { const t = S.pfManual?.[p.id]?.b64; if (t) { try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch { $("pf-manual")?.querySelector("textarea")?.select(); b.textContent = "Selected: press Ctrl/Cmd+C"; } } return; }
-    if (a.startsWith("rg-type-")) { recGoalDraft().type = a.slice(8); renderPortfolio(); return; }
+    if (a.startsWith("gw-obj-")) { recGoalDraft().objective = a.slice(7); recGoalSave(); renderPortfolio(); return; }
+    if (a.startsWith("gw-inc-")) { recGoalDraft().income = a.slice(7); recGoalSave(); renderPortfolio(); return; }
+    if (a.startsWith("gw-foc-")) { recGoalDraft().focus = a.slice(7); recGoalSave(); renderPortfolio(); return; }
+    if (a.startsWith("gw-step-")) { S.goalStep = Math.min(4, Math.max(1, +a.slice(8) || 1)); recGoalSave(); renderPortfolio(); return; }
+    if (a.startsWith("gw-hz-")) { const h = a.slice(6); if (EtfRec.HORIZONS[h]) { recGoalDraft().horizon = h; S.goalHzSet = true; recGoalSave(); renderPortfolio(); } return; }
+    if (a === "gw-done") { const d = recGoalDraft(); if (!S.goalHzSet) d.horizon = "1Y"; S.goalOpen = false; S.goalStep = 1; S.goalHzSet = false; recGoalSave(); renderPortfolio(); return; }
     if (a.startsWith("ana-sub-")) { S.anaSub = a.slice(8); renderPortfolio(); document.getElementById("ana-top")?.scrollIntoView?.({ behavior: "smooth", block: "start" }); return; }
-    if (a === "goal-open") { S.goalOpen = !S.goalOpen; renderPortfolio(); return; }
+    if (a === "goal-open") { S.goalOpen = !S.goalOpen; S.goalStep = 1; S.goalHzSet = false; renderPortfolio(); return; }
     if (a.startsWith("rec-key-")) { S.recKey = a.slice(8); renderPortfolio(); const R = S.pfAna?.[p.id]; if (R && S.sample && !R.write?.[S.recKey] && !R.writing?.[S.recKey]) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-write") { const R = S.pfAna?.[p.id]; if (R) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-save" || a === "rec-apply") { await recSave({ apply: a === "rec-apply" }); return; }
@@ -19071,7 +19170,7 @@ Return JSON only:
     const picksBy = {}, coScore = {}, rankedInd = new Set(); let k = 0;
     const rankInto = async (name) => { if (rankedInd.has(name)) return null; rankedInd.add(name); const dg = digests[String(name).toLowerCase()]; if (!dg) return null; const cx = await recCompanies(dg);
       for (const r of cx.rank || []) { const v = num(r.by_profile?.[goal.type]) ?? num(r.composite); if (isNum(v)) coScore[r.symbol] = v; } return cx; };
-    for (const h of tgt.held) { const cx = await rankInto(h.name); if (cx) picksBy[h.name] = EtfStrat.pickCompanies(cx.rank, goal, { k: EtfStrat.STYLE[goal.type].perInd, best: cx.best, avoid: cx.avoid, thin: cx.thin, cons: cx.cons }); step("Picking the best companies in each industry…", ++k, tgt.held.length); }
+    for (const h of tgt.held) { const cx = await rankInto(h.name); if (cx) picksBy[h.name] = EtfStrat.pickCompanies(cx.rank, goal, { k: (goal.style || EtfStrat.STYLE[goal.type]).perInd, best: cx.best, avoid: cx.avoid, thin: cx.thin, cons: cx.cons }); step("Picking the best companies in each industry…", ++k, tgt.held.length); }
     const T = EtfStrat.companyTargets(tgt.held, picksBy);
     // 3. Today's holdings: what each one is, its look-through.
     const held0 = []; k = 0;
@@ -19084,7 +19183,7 @@ Return JSON only:
     await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies…", ++k, look.length); }, run);
     const disc = EtfStrat.discover(exps, T, { exclude: goal.excludeSyms }), heldSec = new Set(tgt.held.map((h) => h.sector)), heldInd = new Set(tgt.held.map((h) => h.name));
     const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => !EtfRec.isBroadIndex(e.symbol)).filter((e) => (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
-      || (e.kind === "div" && (goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
+      || (e.kind === "div" && (goal.divOk || goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
       || (EtfRec.isBond(e) && bondShare > 0 && sleeve.buckets[EtfStrat.bucketOf(e)]) || (e.kind === "gold" && goal.type !== "aggressive" && e.symbol === "GLDM"));
     // Each held industry brings its own specialists: the funds most concentrated in that industry's chosen companies.
     const discInd = EtfStrat.discoverByIndustry(exps, Object.fromEntries(tgt.held.map((h) => [h.name, picksBy[h.name]]).filter(([, v]) => v)), { exclude: goal.excludeSyms });
@@ -19120,7 +19219,7 @@ Return JSON only:
     // Funds spread across the whole market (no sector above half of them) don't express a view: left out, except
     // dividend funds for income and conservative goals, international funds when asked, and gold and commodities.
     const secOf = (ind) => byRow.get(ind)?.sector;
-    const exempt = new Set(["gold", "cmdty", ...(goal.type === "income" || goal.type === "conservative" ? ["div"] : []), ...(goal.intl ? ["intl"] : [])]);
+    const exempt = new Set(["gold", "cmdty", ...(goal.divOk || goal.type === "income" || goal.type === "conservative" ? ["div"] : []), ...(goal.intl ? ["intl"] : [])]);
     cands = cands.filter((c) => { if (c.isBond || exempt.has(c.e?.kind)) return true; const f = EtfStrat.sectorFocus(c.vec, secOf); if (isNum(f) && f < 0.5) { out[c.symbol] = `spread across the whole market (largest sector ${Math.round(f * 100)}%)`; return false; } return true; });
     // Each fund on its own merits: its record against the S&P 500, risk-adjusted return, drawdown, cost and size.
     for (const c of cands) c.stats = EtfDeep.stats(series[c.symbol], series.SPY);
@@ -19136,7 +19235,7 @@ Return JSON only:
     const sels = { recommended: EtfStrat.mix(cands, target, C.cov, goal), simpler: EtfStrat.mix(cands, target, C.cov, goal, { maxN: goal.minN }), conviction: EtfStrat.mix(cands, target, C.cov, goal, { beta: 8, gamma: 0.3, delta: 0.4 }) };
     let current = null;
     if (held0.length) { const w0 = cands.map((c) => (held0.find((h) => h.ticker === c.symbol)?.weight || 0) / 100);
-      sels.improved = EtfStrat.mix(cands, target, C.cov, goal, { w0, kappa: 0.03, keep: w0.map((x, i) => (x > 0.03 ? i : -1)).filter((i) => i >= 0) });
+      sels.improved = EtfStrat.mix(cands, target, C.cov, goal, { w0, kappa: goal.focus === "gaps" ? 0.015 : 0.03, keep: w0.map((x, i) => (x > 0.03 ? i : -1)).filter((i) => i >= 0) });
       // Today's portfolio on the same yardsticks.
       const vec0 = { ind: {}, cos: {} }, fundVec = {}; let bonds0 = 0, cost0 = 0, yld0 = 0;
       for (const h of held0) { const w = h.weight / 100, e = EtfRec.BY.get(h.ticker), c = cands.find((x) => x.symbol === h.ticker), i = info[h.ticker] || (h.asset_type !== "stock" ? await recInfo(h.ticker).catch(() => null) : null);
@@ -19234,30 +19333,77 @@ Return JSON only:
     return { allocation: got[0], selection: got[1], risks: got[2], verdict: got[3] || null, etfs, etfFacts, memo, memoFacts, desk, deskFacts, review, reviewFacts, dossier: ds.text, ids: ds.ids, at: new Date().toISOString() };
   }
   // ------------------------------------------------------------- the Analysis tab: grade, then recommendations
-  function recGoalDefaults() { return { type: "growth", horizon: "12M", amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
-  function recGoalDraft() { return (S.recGoal ||= recGoalDefaults()); }
+  function recGoalDefaults() { return { objective: "growth", risk: 70, income: "none", focus: "gems", horizon: "1Y", amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
+  /** The goals (UserGoals): kept in this browser so they survive a reload; older saved goals are translated. */
+  function recGoalDraft() {
+    if (S.recGoal) return S.recGoal;
+    let d = null; try { d = JSON.parse(localStorage.getItem("pfGoal") || "null"); } catch {}
+    if (d && !d.objective && d.type) { const m = { growth: ["growth", 70], aggressive: ["growth", 90], conservative: ["preservation", 30], income: ["income", 35] }[d.type] || ["growth", 70]; d = { ...d, objective: m[0], risk: m[1], income: d.type === "income" ? "priority" : "none", focus: "gems", horizon: { "12M": "1Y", long: "5Y" }[d.horizon] || d.horizon || "1Y" }; delete d.type; }
+    S.recGoal = { ...recGoalDefaults(), ...(d || {}) }; if (!d) S.goalOpen = true; return S.recGoal;
+  }
+  function recGoalSave() { try { localStorage.setItem("pfGoal", JSON.stringify(S.recGoal || {})); } catch {} }
   function recGoalOf(d) {
     const ex = String(d.exclude || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
-    return EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
+    const goal = EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
+    // The focus and the income need tilt how industries are chosen and how the result is graded.
+    const st = EtfStrat.STYLE[goal.type] || EtfStrat.STYLE.growth, w = { ...st.w };
+    if (goal.focus === "gems") { w.value = (w.value || 0) + 0.6; w.revisions = (w.revisions || 0) + 0.4; w.verdict = (w.verdict || 0) + 0.2; }
+    if (goal.focus === "risk") { w.risk = (w.risk || 0) + 0.8; w.quality = (w.quality || 0) + 0.3; w.skew = (w.skew || 0) + 0.3; }
+    if (goal.focus === "income" || goal.yieldBonus > 0) w.income = (w.income || 0) + (goal.focus === "income" ? 0.8 : 0) + (goal.yieldBonus || 0);
+    goal.style = { ...st, w, tilt: st.tilt * (goal.risk >= 81 ? 1.15 : goal.risk <= 30 ? 0.8 : 1) };
+    const gw = { ...(EtfStrat.GRADE_W[goal.type] || EtfStrat.GRADE_W.growth) };
+    if (goal.yieldBonus > 0 || goal.focus === "income") gw.income = (gw.income || 0) + 0.06 + 0.1 * (goal.yieldBonus || 0);
+    if (goal.focus === "risk") gw.risk = (gw.risk || 0) + 0.08; if (goal.focus === "gems") gw.conviction = (gw.conviction || 0) + 0.05; if (goal.focus === "gaps") gw.alignment = (gw.alignment || 0) + 0.06;
+    goal.gradeW = gw;
+    return goal;
   }
   /** [E1]-style ids as small chips with the fact behind them on hover. */
   function recRich(t, ds) {
     const facts = {}; for (const line of String(ds || "").split("\n")) { const m = line.match(/^\[([A-Z]{1,2}\d{1,3})\]\s*(.*)$/); if (m) facts[m[1]] = m[2]; }
     return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(trimC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
   }
+  const GW_ICON = {
+    growth: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+    income: '<path d="M12 2v20"/><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    preservation: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    balanced: '<path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="M6 7l-3 7a3 3 0 0 0 6 0z"/><path d="M18 7l-3 7a3 3 0 0 0 6 0z"/>',
+    gems: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/><path d="M5 2l.6 1.4L7 4l-1.4.6L5 6l-.6-1.4L3 4l1.4-.6z"/>',
+    risk: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    gaps: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  };
+  GW_ICON.income_f = GW_ICON.income;
+  const gwIcon = (k) => `<svg class="gw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GW_ICON[k] || ""}</svg>`;
+  const GW_TIER_C = { preservation: "#2f80ed", conservative: "#14a38b", moderate: "#d99a1e", growth: "#ef7a2b", aggressive: "#e0453a" };
+  /** What the answers mean for the engine, in one line. */
+  function gwMeans(d) { const u = EtfRec.fromAnswers(d), vol = num(d.maxVol) || u.vol * 100;
+    return `volatility ≤ ${Math.round(vol)}% · bonds ${Math.round(u.bonds[0] * 100)}–${Math.round(u.bonds[1] * 100)}% · per industry ≤ ${Math.round(u.industryCap * 100)}% · per sector ≤ ${Math.round(u.sectorCap * 100)}%`; }
+  function gwHorizon(d) { return `<div class="gw-hz" role="group" aria-label="Investment horizon"><span class="eyebrow">Horizon</span>${Object.keys(EtfRec.HORIZONS).map((h) => `<button class="gw-chip ${d.horizon === h ? "on" : ""}" data-pf="gw-hz-${h}">${h}</button>`).join("")}</div>`; }
   function anaGoalView(p, A, compact) {
-    if (compact && !S.goalOpen) { const d0 = recGoalDraft(), g0 = EtfRec.GOALS[d0.type]; return `<div class="goal-bar"><span><span class="eyebrow">Goal</span> <b>${esc(g0.label)}</b> <span class="small muted">· ${esc(d0.horizon)} · volatility ≤ ${Math.round((num(d0.maxVol) || g0.vol * 100))}% · bonds ${Math.round(g0.bonds[0] * 100)}–${Math.round(g0.bonds[1] * 100)}% · ${esc(d0.minN)}–${esc(d0.maxN)} ETFs</span></span><button class="sm" data-pf="goal-open">Change</button></div>`; }
-    const d = recGoalDraft(), G = EtfRec.GOALS, opt = (k, v, l) => `<option value="${v}" ${String(d[k]) === String(v) ? "selected" : ""}>${l}</option>`;
-    const blurb = { income: "Yield first: dividend and bond ETFs, 30-65% in bonds, volatility under 10%.", conservative: "Protect capital: 40-75% in bonds, volatility under 8%, the industries the runs rate safest.", growth: "Total return: up to 20% in bonds, volatility under 17%, tilted to the industries the runs call up.", aggressive: "Maximum return: up to 10% in bonds, volatility under 24%, the strongest industry calls." }[d.type];
-    return `<section class="panel pf-goal ${compact ? "compact" : ""}"><div class="panel-head"><div><span class="eyebrow">Step 1</span><h2>Your goal</h2></div><span class="small muted">grades are measured against it · recommendations are ETFs only, each at most 15%</span></div>
-      <div class="pf-goals">${Object.entries(G).map(([k, g]) => `<button class="pf-goalcard ${d.type === k ? "on" : ""}" data-pf="rg-type-${k}"><b>${g.label}</b><span class="small muted">vol ≤ ${(g.vol * 100).toFixed(0)}% · bonds ${(g.bonds[0] * 100).toFixed(0)}–${(g.bonds[1] * 100).toFixed(0)}%</span></button>`).join("")}</div>
-      <div class="small muted">${esc(blurb)}</div>
-      <details ${compact ? "" : "open"}><summary class="small">Settings</summary><div class="kpis" style="margin-top:8px"><label class="kpi"><span class="eyebrow">Horizon</span><select data-rg="horizon">${opt("horizon", "1M", "1 month")}${opt("horizon", "3M", "3 months")}${opt("horizon", "6M", "6 months")}${opt("horizon", "12M", "12 months")}${opt("horizon", "long", "Longer")}</select></label>
-        <label class="kpi"><span class="eyebrow">Max volatility (%)</span><input data-rg="maxVol" type="number" min="2" max="40" step="1" placeholder="${(G[d.type].vol * 100).toFixed(0)}" value="${esc(d.maxVol)}"></label>
+    const d = recGoalDraft(), O = EtfRec.OBJECTIVES, I = EtfRec.INCOME, F = EtfRec.FOCUS, t = EtfRec.tierOf(num(d.risk) ?? 60);
+    if (compact && !S.goalOpen) return `<div class="goal-bar"><span class="gb-items"><span class="eyebrow">Goal</span><span class="gb-tag">${gwIcon(d.objective)}<b>${esc(O[d.objective]?.label || "Growth")}</b></span>
+      <span class="gw-badge" style="--tc:${GW_TIER_C[t.key]}">${esc(t.label)} · ${Math.round(num(d.risk) ?? 60)}</span><span class="gb-tag small">${esc(I[d.income]?.label || "")}</span><span class="gb-tag small">${gwIcon(d.focus === "income" ? "income" : d.focus)}${esc(F[d.focus]?.label || "")}</span></span>
+      ${gwHorizon(d)}<button class="sm" data-pf="goal-open">Change</button></div>`;
+    const st = Math.min(4, Math.max(1, S.goalStep || 1)), names = ["Objective", "Risk", "Income", "Focus"];
+    const prog = `<ol class="gw-prog">${names.map((n, i) => `<li class="${i + 1 === st ? "on" : i + 1 < st ? "done" : ""}"><button data-pf="gw-step-${i + 1}"><span class="gw-num">${i + 1 < st ? "✓" : i + 1}</span>${n}</button></li>`).join("")}</ol>`;
+    const card = (act, k, x, on, ico) => `<button class="gw-card ${on ? "on" : ""}" data-pf="${act}${k}" aria-pressed="${on}">${ico ? gwIcon(ico) : ""}<b>${esc(x.label)}</b><span class="small muted">${esc(x.text)}</span></button>`;
+    const body = st === 1 ? `<h3 class="gw-q">What is this portfolio for?</h3><div class="gw-grid">${Object.entries(O).map(([k, x]) => card("gw-obj-", k, x, d.objective === k, k)).join("")}</div>`
+      : st === 2 ? `<h3 class="gw-q">How much of a fall could you sit through?</h3>
+        <div class="gw-risk" style="--tc:${GW_TIER_C[t.key]}"><div class="gw-risk-top"><span class="gw-badge" data-gw="badge">${esc(t.label)}</span><b class="gw-risk-n" data-gw="n">${Math.round(num(d.risk) ?? 60)}</b></div>
+          <input type="range" min="0" max="100" step="1" value="${esc(num(d.risk) ?? 60)}" data-rg="risk" data-gw-risk aria-label="Aggressiveness">
+          <div class="gw-scale">${EtfRec.RISK_TIERS.map((x) => `<span style="--tc:${GW_TIER_C[x.key]}">${esc(x.label)}</span>`).join("")}</div>
+          <p class="gw-tier-text" data-gw="text">${esc(t.text)}</p><p class="small muted" data-gw="means">${esc(gwMeans(d))}</p></div>`
+      : st === 3 ? `<h3 class="gw-q">Do you need income from it?</h3><div class="gw-list">${Object.entries(I).map(([k, x]) => `<button class="gw-row ${d.income === k ? "on" : ""}" data-pf="gw-inc-${k}" aria-pressed="${d.income === k}"><span class="gw-check">${d.income === k ? "✓" : ""}</span><span><b>${esc(x.label)}</b><span class="small muted"> · ${esc(x.text)}</span></span><span class="small muted">target yield ${esc(x.target)}</span></button>`).join("")}</div>`
+      : `<h3 class="gw-q">What should the recommendations hunt for?</h3><div class="gw-grid">${Object.entries(F).map(([k, x]) => card("gw-foc-", k, x, d.focus === k, k === "income" ? "income" : k)).join("")}</div>`;
+    const opt = (k, v, l) => `<option value="${v}" ${String(d[k]) === String(v) ? "selected" : ""}>${l}</option>`; void opt;
+    const more = `<details class="gw-more"><summary class="small">More settings</summary><div class="kpis" style="margin-top:8px">
+        <label class="kpi"><span class="eyebrow">Max volatility (%)</span><input data-rg="maxVol" type="number" min="2" max="40" step="1" placeholder="${(EtfRec.fromAnswers(d).vol * 100).toFixed(0)}" value="${esc(d.maxVol)}"></label>
         <label class="kpi"><span class="eyebrow">ETFs (min–max)</span><span style="display:flex;gap:6px"><input data-rg="minN" type="number" min="7" max="15" value="${esc(d.minN)}"><input data-rg="maxN" type="number" min="7" max="15" value="${esc(d.maxN)}"></span></label>
         <label class="kpi"><span class="eyebrow">Max cost (%)</span><input data-rg="maxCost" type="number" min="0.05" max="1" step="0.05" value="${esc(d.maxCost)}"></label>
         <label class="kpi"><span class="eyebrow">Leave out</span><input data-rg="exclude" placeholder="e.g. energy, China, ARKK" value="${esc(d.exclude)}"></label></div>
-        <div class="actions" style="margin-top:8px"><label class="small"><input type="checkbox" data-rg="bonds" ${d.bonds ? "checked" : ""}> Bond ETFs</label><label class="small"><input type="checkbox" data-rg="intl" ${d.intl ? "checked" : ""}> International ETFs</label></div></details></section>`;
+        <div class="actions" style="margin-top:8px"><label class="small"><input type="checkbox" data-rg="bonds" ${d.bonds ? "checked" : ""}> Bond ETFs</label><label class="small"><input type="checkbox" data-rg="intl" ${d.intl ? "checked" : ""}> International ETFs</label></div></details>`;
+    const nav = `<div class="gw-nav">${st > 1 ? `<button data-pf="gw-step-${st - 1}">Back</button>` : `<span></span>`}<span class="small muted">Step ${st} of 4</span>${st < 4 ? `<button class="primary" data-pf="gw-step-${st + 1}">Next</button>` : `<button class="primary" data-pf="gw-done">Done</button>`}</div>`;
+    return `<section class="panel pf-goal gw"><div class="panel-head"><div><span class="eyebrow">Your goals</span><h2>Build your profile</h2></div>${gwHorizon(d)}</div>${prog}<div class="gw-body">${body}</div>${nav}${more}
+      <div class="small muted">Grades are measured against these answers · recommendations are ETFs only, each at most 15% · never broad index funds</div></section>`;
   }
   function anaView(p, A, job) {
     const run = S.pfAnaRun?.pid === p.id ? S.pfAnaRun : null, gh = job && /queued|running/.test(job.state || "") ? job : null;
@@ -19266,7 +19412,7 @@ Return JSON only:
       : gh ? `<section class="panel pf-run"><div class="pf-spin"></div><div><b>${gh.state === "queued" ? "Sent to GitHub" : "Running on GitHub"}</b><div class="small muted">${gh.state === "queued" ? `requested ${esc(elapsed(gh.requested_at))}: Claude is starting the workflow` : `started ${esc(elapsed(gh.started_at || gh.requested_at))}: about 10–20 minutes; the result appears here by itself`}${gh.run_url ? ` · <a href="${esc(gh.run_url)}" target="_blank" rel="noopener">the run</a>` : ""}</div></div>${(() => { const c = S.pfCheck?.[p.id], mins = c ? Math.round((Date.now() - c.at) / 60000) : 0;
         return `<div style="display:grid;gap:4px;justify-items:end"><button class="sm" data-pf="ana-fetch" ${c?.state === "asking" ? "disabled" : ""} title="Ask Claude to copy the result now">${c?.state === "asking" ? "Asking…" : "Check now"}</button>${c ? `<span class="small ${c.state === "failed" ? "" : "muted"}" style="${c.state === "failed" ? "color:var(--neg)" : ""};max-width:260px;text-align:right">${c.state === "failed" ? esc(c.why) : c.state === "asked" ? (mins < 4 ? "Claude is fetching it: usually 1–3 minutes" : `asked ${mins} min ago and nothing came back: the task may be waiting for your approval (Scheduled tasks → “Industry Scorer: analyze a portfolio on GitHub” → turn on Automatically approve)`) : ""}</span>` : ""}</div>`; })()}</section>`
       : job?.state === "failed" ? `<div class="notice err"><span>GitHub: ${esc(job.result || "the analysis failed")}${job.run_url ? ` (<a href="${esc(job.run_url)}" target="_blank" rel="noopener">the run</a>)` : ""}</span></div>` : "";
-    const go = `<section class="panel pf-cta"><div><span class="eyebrow">Step 2</span><h2>${A ? "Analyze again" : "Grade this portfolio"}</h2><p class="small muted">It grades what you hold against what every industry run says a ${esc(EtfRec.GOALS[recGoalDraft().type].label.toLowerCase())} portfolio should own, then recommends ETFs: the fewest changes that fix it, and the best mix from scratch.</p></div>
+    const go = `<section class="panel pf-cta"><div><span class="eyebrow">Step 2</span><h2>${A ? "Analyze again" : "Grade this portfolio"}</h2><p class="small muted">It grades what you hold against what every industry run says ${(() => { const d = recGoalDraft(); return `a ${esc(EtfRec.tierOf(num(d.risk) ?? 60).label.toLowerCase())} ${esc((EtfRec.OBJECTIVES[d.objective]?.label || "growth").toLowerCase())}`; })()} portfolio should own, then recommends ETFs: the fewest changes that fix it, and the best mix from scratch.</p></div>
       <div class="actions">${S.mcp && S.pfGithub !== false ? `<button class="primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze on GitHub</button><button data-pf="ana-here" ${run || gh ? "disabled" : ""}>Run it here instead</button>` : `<button class="primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze</button>`}</div>
       ${S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : ""}<div class="small muted">On GitHub it runs on your API key against every sector's runs and doesn't tie up this page${PF_TRIGGER ? "" : " (start it from GitHub; the result comes back with “Update everything from GitHub”)"}; here it uses your Claude plan and takes a few minutes the first time.</div></section>`;
     const man = S.pfManual?.[p.id], manual = man ? `<section class="panel pf-manual" id="pf-manual"><div class="panel-head"><div><span class="eyebrow">Run it on GitHub</span><h2>Three steps</h2></div><button class="sm" data-pf="ana-manual-close">Close</button></div>
@@ -19276,7 +19422,7 @@ Return JSON only:
     if (A && !S.goalOpen) { const btns = S.mcp && S.pfGithub !== false ? `<button class="sm primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze again</button>` : `<button class="sm primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze again</button>`;
       const bar = anaGoalView(p, A, true).replace(`<button class="sm" data-pf="goal-open">Change</button>`, `<span class="actions" style="margin:0"><button class="sm" data-pf="goal-open">Change goal</button>${btns}</span>`);
       return status + manual + bar + (S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : "") + `<div class="small muted">Analyzed ${esc(fmtDate(A.day))} · ${A.rows?.length || 0} industry runs · ${A.discovered} ETFs found holding the target companies</div>` + anaResult(p, A); }
-    return status + manual + anaGoalView(p, A, !!A) + go + (A ? anaResult(p, A) : "");
+    return status + manual + anaGoalView(p, A, true) + go + (A ? anaResult(p, A) : "");
   }
   /** The report card for one version (today's portfolio or a recommendation). */
   /** The numbers behind one grade of today's portfolio (A: the analysis result). */
@@ -19630,7 +19776,7 @@ Return JSON only:
         <td class="wr small" style="min-width:260px">${a?.why ? wr(a.why) : (h.reasons || []).map((x) => `<span class="chip-s ${x.x > 0 ? "up" : "down"}">${esc(x.label)} ${x.x > 0 ? "+" : ""}${x.x.toFixed(1)}</span>`).join(" ")}${a?.risk ? `<div class="muted" style="margin-top:3px"><b>Wrong if:</b> ${wr(a.risk)}</div>` : ""}</td></tr>`; };
     const secT = {}; for (const h of res.tgt.held) secT[h.sector] = (secT[h.sector] || 0) + h.target;
     const indS = sec("rec-ind", "1 · The industry distribution", "the market's weights tilted by each industry run's conviction for this goal", `<div class="fmix"><div class="box"><h3 style="margin:0 0 6px">By sector</h3>${donut(Object.entries(secT).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ name: k, value: v * 100 })), { center: `${res.tgt.held.length} ind.` })}</div>
-        <div class="box small"><h3 style="margin:0 0 6px">How the targets were set</h3><p>Each industry's <b>conviction</b> weighs ${esc(Object.entries(EtfStrat.STYLE[goal.type].w).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map(([k]) => ({ fit: "the run's score for this investor type", call: "the call for the horizon", expected: "the 12-month expectation", skew: "bull vs bear scenarios", value: "valuation vs history", quality: "quality", revisions: "estimate revisions", risk: "risk", income: "dividend yield", lens: "macro, world, trade and regulation", verdict: "the lead strategist's verdict" })[k]).join(", "))}. Targets are the market weight × e<sup>${EtfStrat.STYLE[goal.type].tilt} × conviction</sup>, then capped at ${pct(goal.industryCap, false, 0)} per industry and ${pct(goal.sectorCap, false, 0)} per sector, nothing under 1%.</p>
+        <div class="box small"><h3 style="margin:0 0 6px">How the targets were set</h3><p>Each industry's <b>conviction</b> weighs ${esc(Object.entries((goal.style || EtfStrat.STYLE[goal.type]).w).filter(([, v]) => v).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 6).map(([k]) => ({ fit: "the run's score for this investor type", call: "the call for the horizon", expected: "the 12-month expectation", skew: "bull vs bear scenarios", value: "valuation vs history", quality: "quality", revisions: "estimate revisions", risk: "risk", income: "dividend yield", lens: "macro, world, trade and regulation", verdict: "the lead strategist's verdict" })[k]).join(", "))}. Targets are the market weight × e<sup>${+(goal.style || EtfStrat.STYLE[goal.type]).tilt.toFixed(2)} × conviction</sup>, then capped at ${pct(goal.industryCap, false, 0)} per industry and ${pct(goal.sectorCap, false, 0)} per sector, nothing under 1%.</p>
         <p>Bars: <span style="color:var(--accent)">target</span> vs <span class="muted">market</span>. "Got" is what the ETFs actually deliver.</p></div></div>
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Target</th><th class="n">Active</th><th class="n">Got</th><th class="n">Conviction</th><th>Call</th><th>P/E</th><th>Why</th></tr></thead><tbody>${res.tgt.held.map(indRow).join("")}</tbody></table></div>
       ${res.tgt.avoided.length ? `<h3 style="margin:12px 0 6px">Avoided</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Market</th><th class="n">Conviction</th><th>Why</th></tr></thead><tbody>${res.tgt.avoided.slice(0, 10).map((h) => { const a = ind.get(ids[h.name]); return `<tr><td><b>${esc(h.name)}</b><div class="small muted">${esc(h.sector)}</div></td><td class="n">${pct(h.market, false)}</td><td class="n down">${h.z.toFixed(2)}</td><td class="wr small">${a?.why ? wr(a.why) : (h.reasons || []).map((x) => `<span class="chip-s ${x.x > 0 ? "up" : "down"}">${esc(x.label)} ${x.x.toFixed(1)}</span>`).join(" ")}</td></tr>`; }).join("")}</tbody></table></div>` : ""}`);
@@ -19687,7 +19833,7 @@ Return JSON only:
       <div class="box">${Rk?.watch?.length ? `<h3 style="margin:0 0 6px">Watch list</h3><ul class="dlist small">${Rk.watch.map((w) => `<li><b class="mono">${esc(w.date)}</b> ${wr(w.what)} <span class="muted">${wr(w.why)}</span></li>`).join("")}</ul>` : ""}${Rk?.change_mind?.length ? `<h3 style="margin:10px 0 6px">What would change the allocation</h3><ul class="dlist small">${Rk.change_mind.map((x) => `<li>${wr(x)}</li>`).join("")}</ul>` : ""}</div></div>`) : "";
     const method = sec("rec-method", "How it was built", "", `<ol class="small"><li><b>Industries:</b> ${res.rows.length} industry runs, each given a conviction for a ${esc(goal.label.toLowerCase())} investor over ${esc(goal.horizon)}; the target distribution tilts the market's own weights by conviction, drops what to avoid, and caps industries and sectors.</li>
       <li><b>Bonds:</b> ${pct(res.bondShare, false, 0)} (the goal's band, more when the industries' convictions are weak), split by the goal and the curve.</li>
-      <li><b>Companies:</b> the best ${EtfStrat.STYLE[goal.type].perInd} per industry by the run's ranking for this investor type, plus the lead strategist's best expressions; avoids and thinly traded names dropped.</li>
+      <li><b>Companies:</b> the best ${(goal.style || EtfStrat.STYLE[goal.type]).perInd} per industry by the run's ranking for this investor type, plus the lead strategist's best expressions; avoids and thinly traded names dropped.</li>
       <li><b>ETFs:</b> every US-listed fund holding the top ${Math.min(45, Object.keys(res.T).length)} target companies (FMP's reverse lookup: ${res.discovered} with $200M+), the strongest 70 of them plus curated sector, industry, factor and bond funds; broad-market and size index funds (SPY, VOO, VTI, IWM and the like) are never recommended (${res.screened.pool} in all); ${res.screened.passed} passed the screen (size, volume, age, cost, no leverage, US); full holdings matched to the industries; copies of the same index collapsed.</li>
       <li><b>The mix:</b> a quadratic program matching the industry targets and company targets, penalizing overlap between the ETFs and off-target exposure, with risk (three years of daily returns, ${pct(res.shrink, false, 0)} Ledoit-Wolf shrinkage) under the ${pct(goal.vol, false, 0)} ceiling, every ETF 3–15%, no single stock above ${pct(goal.stockCap, false, 0)} underneath.</li>
       <li><b>Expected returns:</b> each ETF's CAPM prior (4% + beta × 5%) moved toward its industries' 12-month expectations by how much of it the runs cover; bonds on carry less defaults. The S&amp;P 500's is the same prior moved toward the whole market's expectation.</li>

@@ -173,7 +173,7 @@
   }
   function memoPrompt(goal, facts, { improving = false, label = "the recommended mix" } = {}) {
     const sec = (title, what) => `  {"title": "${title}", "headline": "one sentence: the point of this section", "points": ["3-5 bullets, each one specific fact with its number and id"], "body": "${what}", "stats": [{"label": "short", "value": "a number from the facts, e.g. +18.2% or $142,000"}]}`;
-    return `You are the chief investment strategist writing the full investment memo for ${label}, an ETF-only ${goal.label.toLowerCase()} portfolio (horizon ${goal.horizon})${improving ? " that replaces the client's current holdings" : ""}. A quantitative process built it from full research reports on every industry; the weights are final. Your job is the complete argument: why this portfolio, why now, what each piece does, what to expect in numbers, what can go wrong, and exactly what to do.
+    return `You are the chief investment strategist writing the full investment memo for ${label}, an ETF-only ${goal.label.toLowerCase()} portfolio (horizon ${goal.horizonLabel || goal.horizon})${improving ? " that replaces the client's current holdings" : ""}. A quantitative process built it from full research reports on every industry; the weights are final. Your job is the complete argument: why this portfolio, why now, what each piece does, what to expect in numbers, what can go wrong, and exactly what to do.
 
 Write for a sharp investor who wants depth: specific, quantitative, plain English, no filler. Every claim cites fact ids in brackets like [P3], [I2] or [E1]; use only ids that appear below, and never invent a number. Past returns don't guarantee future ones: weigh the record against the forward view and say where they disagree. Never recommend broad-market or size index funds (S&P 500, total market, Russell, mid- or small-cap index funds such as SPY, VOO, IVV, VTI or IWM); the S&P 500 is only the benchmark.
 
@@ -269,12 +269,18 @@ ${sec("What would change the view", "1-2 paragraphs")}],
         events: (r.events || []).filter((e) => e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || ""))).slice(0, 4).map((e) => ({ date: e.date, title: e.title, detail: String(e.detail || "").slice(0, 200) })),
         picks: picksFor(r.name).slice(0, 5), etfs: etfsFor(r.name).slice(0, 3) }); };
     const ok = (r) => r.verdict !== "no" && !(isNum(r.callN12) && r.callN12 < 0);
-    for (const r of rows.filter((r) => isNum(r.z) && r.z > 0.35 && ok(r)).sort((a, b) => b.z - a.z).slice(0, Math.ceil(k * 0.6))) push(r, "conviction", "the strongest case for this goal across every input");
+    for (const r of rows.filter((r) => isNum(r.z) && r.z > 0.35 && ok(r)).sort((a, b) => b.z - a.z).slice(0, Math.ceil(k * (goal?.focus ? 0.8 : 0.6)))) push(r, "conviction", "the strongest case for this goal across every input");
     for (const r of rows.filter((r) => isNum(r.pe_pct) && r.pe_pct < 0.3 && (r.callN12 > 0 || r.rev30 > 0.005) && ok(r)).sort((a, b) => a.pe_pct - b.pe_pct).slice(0, 4)) push(r, "value", "cheap against its own history while the outlook or estimates improve");
     for (const r of rows.filter((r) => isNum(r.rev30) && r.rev30 > 0.02 && r.callN12 > 0 && ok(r)).sort((a, b) => b.rev30 - a.rev30).slice(0, 3)) push(r, "momentum", "analysts are raising estimates fast and the call is bullish");
     for (const r of rows.filter((r) => isNum(r.skew) && r.skew > 3 && ok(r)).sort((a, b) => b.skew - a.skew).slice(0, 3)) push(r, "asymmetry", "the bull case outweighs the bear case by probability times size");
     for (const r of rows.filter((r) => (r.events || []).some((e) => e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || ""))) && isNum(r.z) && r.z > 0.15 && ok(r)).sort((a, b) => b.z - a.z).slice(0, 3)) push(r, "catalyst", "a dated catalyst inside six months on a favored industry");
-    return out.slice(0, k);
+    // The investor's focus decides which of these lead.
+    const f = goal?.focus, base = (o, i) => -i * 0.02, gap = (o) => Math.max(0, (o.target || 0) - (o.have || 0));
+    const score = (o, i) => base(o, i) + (f === "gems" ? ((o.kind === "value" || o.kind === "momentum" || o.kind === "asymmetry") ? 0.5 : 0) + (isNum(o.pe_pct) ? 0.4 * (0.5 - o.pe_pct) : 0)
+      : f === "gaps" ? 8 * gap(o) + (o.have > 0.01 ? -0.3 : 0.2)
+      : f === "income" ? 20 * (n(o.div) || 0)
+      : f === "risk" ? (isNum(o.vol) ? -1.5 * o.vol : 0) + (isNum(n(o.bear?.move)) ? 0.01 * n(o.bear.move) : 0) : 0);
+    return f ? out.map((o, i) => [o, score(o, i)]).sort((a, b) => b[1] - a[1]).map((x) => x[0]).slice(0, k) : out.slice(0, k);
   }
   function oppText(opps, goal) {
     const L = []; const f = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
@@ -287,7 +293,7 @@ ${sec("What would change the view", "1-2 paragraphs")}],
     return L.join("\n");
   }
   function oppPrompt(goal, facts, { holdings = "" } = {}) {
-    return `You run the opportunities desk for a ${goal.label.toLowerCase()} investor (horizon ${goal.horizon}). Below are the strongest cases code found across every industry research run (Q#), each with its evidence, best companies and the ETFs that hold it${holdings ? `, and the client's portfolio today (H#)` : ""}. Write a brief for each that a sharp investor could act on: the thesis, why now, exactly how to play it, how big, when to get in, what would kill it.
+    return `You run the opportunities desk for a ${goal.label.toLowerCase()} investor (horizon ${goal.horizonLabel || goal.horizon}). Below are the strongest cases code found across every industry research run (Q#), each with its evidence, best companies and the ETFs that hold it${holdings ? `, and the client's portfolio today (H#)` : ""}. Write a brief for each that a sharp investor could act on: the thesis, why now, exactly how to play it, how big, when to get in, what would kill it.
 
 Plain English, specific, quantitative. Every claim cites ids in brackets like [Q2], [Q2p], [Q2e] or [H1]; use only ids below and never invent a number. Be honest: if the record or the valuation argues against an idea, say so and lower its conviction. Never suggest broad-market or size index funds (S&P 500, total market, Russell, mid- or small-cap index funds such as SPY, VOO, IVV, VTI or IWM): express each idea through the industry ETFs or companies named in the facts.
 
@@ -313,7 +319,7 @@ Cover every Q#.`;
       return `[H${i + 1}] ${h.ticker} ${h.name} (${h.type}, ${pp(h.weight)} of the portfolio${h.broad ? ", a broad-market index fund" : ""}): 1Y ${pc(P("1Y")?.ret)} vs S&P 500 ${pc(P("1Y")?.spy)}, 3Y ${pc(P("3Y")?.ret)}/yr vs ${pc(P("3Y")?.spy)}, 5Y ${pc(P("5Y")?.ret)}/yr vs ${pc(P("5Y")?.spy)}; vol ${pp(s?.risk?.vol, 0)}, beta ${isNum(s?.risk?.beta) ? s.risk.beta.toFixed(2) : "n/a"}, worst drawdown ${pc(s?.drawdown?.depth)}, ${pc(s?.drawdown?.from_high)} from its high; cost ${pp(h.expense, 2)}, yield ${pp(h.yield, 2)}; expected ${pp(h.mu)} a year; the runs' conviction on its industries ${isNum(h.conviction) ? (h.conviction > 0 ? "+" : "") + h.conviction.toFixed(2) : "n/a"} (${h.industries.slice(0, 3).map((g) => `${g.name} ${pp(g.weight, 0)}, 12M ${g.call12 || "n/a"}, expected ${isNum(g.exp12) ? g.exp12.toFixed(1) + "%" : "n/a"}`).join("; ")}). Code's verdict: ${h.action}${h.why.length ? ` (${h.why.join("; ")})` : ""}${h.alternative ? `; the closest recommended replacement ${h.alternative.symbol} (${h.alternative.why})` : ""}.`; }).join("\n");
   }
   function holdPrompt(goal, facts) {
-    return `You are the portfolio manager reviewing a client's current holdings, one by one, for a ${goal.label.toLowerCase()} goal (horizon ${goal.horizon}). For each holding (H#), decide keep, add, trim, replace or sell, and say why with the numbers. Code has already flagged some; you may disagree only with evidence, except that broad-market index funds (SPY, VOO, IVV, VTI, IWM and the like) are always replaced by the recommended industry ETFs.
+    return `You are the portfolio manager reviewing a client's current holdings, one by one, for a ${goal.label.toLowerCase()} goal (horizon ${goal.horizonLabel || goal.horizon}). For each holding (H#), decide keep, add, trim, replace or sell, and say why with the numbers. Code has already flagged some; you may disagree only with evidence, except that broad-market index funds (SPY, VOO, IVV, VTI, IWM and the like) are always replaced by the recommended industry ETFs.
 
 Every claim cites ids like [H2] or [E3]; use only ids below; never invent numbers.
 
