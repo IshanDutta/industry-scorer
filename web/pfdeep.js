@@ -112,17 +112,27 @@
     const callMix = (wOf) => { let up = 0, dn = 0, W = 0; for (const r of rows) { const w = wOf(r); if (!(w > 0) || !isNum(r.callN12)) continue; W += w; if (r.callN12 > 0) up += w; else if (r.callN12 < 0) dn += w; } return W ? { up: up / W, down: dn / W } : null; };
     return { port, mkt, calls: { port: callMix((r) => got.get(r.name) || 0), mkt: callMix((r) => r.mkt) }, metrics: METRICS.map(([k, label]) => ({ key: k, label })) };
   }
+  /**
+   * Share classes of one company: funds hold GOOGL and GOOG, BRK.B or BRK-B, while an industry run keeps one of them.
+   * classKey maps every class to one key, so a fund's holding finds the run's row and the classes count as one company.
+   */
+  const CLASS_PAIRS = [["GOOGL", "GOOG"], ["FOXA", "FOX"], ["NWSA", "NWS"], ["UAA", "UA"], ["LBRDA", "LBRDK"], ["FWONA", "FWONK"], ["LSXMA", "LSXMK"], ["BATRA", "BATRK"], ["LEN", "LEN.B"], ["HEI", "HEI.A"], ["ZG", "Z"], ["BF.A", "BF.B"], ["MOG.A", "MOG.B"], ["CWEN", "CWEN.A"], ["DISCA", "DISCK"], ["VIAC", "VIACA"], ["LILA", "LILAK"], ["QRTEA", "QRTEB"]];
+  const CLASS_OF = new Map(CLASS_PAIRS.flatMap(([a, b]) => [[a.replace(/[.\-/]/g, ""), a.replace(/[.\-/]/g, "")], [b.replace(/[.\-/]/g, ""), a.replace(/[.\-/]/g, "")]]));
+  const classKey = (sym) => { const t = String(sym || "").toUpperCase().replace(/[.\-/ ]/g, ""); return CLASS_OF.get(t) || t.replace(/^(BRK|BF|MOG|HEI|LEN|CWEN)[AB]$/, "$1"); };
   /** The largest companies underneath, with the run's numbers and the investor-type score. */
   function companies(ach, rows, coScore = {}, k = 25) {
-    const info = new Map(); for (const r of rows) for (const c of r.cos || []) if (!info.has(c.symbol)) info.set(c.symbol, { ...c, industry: r.name, call12: r.call12 });
-    return (ach?.allStocks || []).slice().sort((a, b) => b.weight - a.weight).slice(0, k).map((s) => { const c = info.get(s.symbol) || {};
-      return { symbol: s.symbol, weight: s.weight, name: c.name || "", industry: c.industry || "", pe: n(c.pe), growth: n(c.g), opm: n(c.opm), div: n(c.div), r1y: n(c.r1y), beta: n(c.beta), next: c.next || null, beats: c.beats || null, score: n(coScore[s.symbol]), call12: c.call12 || null }; });
+    const info = new Map(); for (const r of rows) for (const c of r.cos || []) { const key = classKey(c.symbol); if (!info.has(key)) info.set(key, { ...c, industry: r.name, call12: r.call12 }); }
+    // One row per company: share classes held through the funds add up.
+    const merged = new Map(); for (const s of ach?.allStocks || []) { const key = classKey(s.symbol), m = merged.get(key); if (m) { m.weight += s.weight; m.syms.push(s.symbol); } else merged.set(key, { key, symbol: s.symbol, weight: s.weight, syms: [s.symbol] }); }
+    return [...merged.values()].sort((a, b) => b.weight - a.weight).slice(0, k).map((s) => { const c = info.get(s.key) || {}, sym = c.symbol && s.syms.includes(c.symbol) ? c.symbol : s.syms[0];
+      const sc = s.syms.map((x) => n(coScore[x])).concat(c.symbol ? [n(coScore[c.symbol])] : []).find(isNum);
+      return { symbol: sym, classes: s.syms.length > 1 ? s.syms : undefined, weight: s.weight, name: c.name || "", industry: c.industry || "", pe: n(c.pe), growth: n(c.g), opm: n(c.opm), div: n(c.div), r1y: n(c.r1y), beta: n(c.beta), next: c.next || null, beats: c.beats || null, score: isNum(sc) ? sc : NaN, call12: c.call12 || null }; });
   }
   /** Earnings reports of the companies underneath and the runs' dated catalysts, inside the window. */
   function calendar(ach, rows, { today, days = 90 } = {}) {
-    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map((ach?.allStocks || []).map((s) => [s.symbol, s.weight])), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
+    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map(); for (const s of ach?.allStocks || []) w.set(classKey(s.symbol), (w.get(classKey(s.symbol)) || 0) + s.weight), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
     const out = [], seen = new Set();
-    for (const r of rows) for (const c of r.cos || []) if (c.next && c.next >= today && c.next <= until && (w.get(c.symbol) || 0) >= 0.003 && !seen.has(c.symbol)) { seen.add(c.symbol); out.push({ date: c.next, kind: "earnings", title: `${c.symbol} earnings`, weight: w.get(c.symbol), industry: r.name, beats: c.beats || null }); }
+    for (const r of rows) for (const c of r.cos || []) if (c.next && c.next >= today && c.next <= until && (w.get(classKey(c.symbol)) || 0) >= 0.003 && !seen.has(classKey(c.symbol))) { seen.add(classKey(c.symbol)); out.push({ date: c.next, kind: "earnings", title: `${c.symbol} earnings`, weight: w.get(classKey(c.symbol)), industry: r.name, beats: c.beats || null }); }
     for (const r of rows) if ((got.get(r.name) || 0) >= 0.01) for (const e of r.events || []) if (e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || "")) && !/earnings/i.test(e.title || "")) out.push({ date: e.date, kind: "catalyst", title: e.title, weight: got.get(r.name), industry: r.name, detail: e.detail || "" });
     return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.weight - a.weight)).slice(0, 30);
   }
@@ -336,7 +346,7 @@ Return JSON only:
   }
   const idsOf = (t) => [...new Set([...String(t).matchAll(/^\[([A-Z]{1,2}\d{1,3}[a-z]?)\]/gm)].map((m) => m[1]))];
 
-  const PfDeep = { holdings, gradeDetail, opportunities, oppText, oppPrompt, oppClean, holdText, holdPrompt, holdClean, idsOf, RF, ERP, nav, riskSplit, project, monthlyPair, scenarios, fundamentals, companies, calendar, build, buildCurrent, text, memoPrompt, memoClean, METRICS };
+  const PfDeep = { classKey, holdings, gradeDetail, opportunities, oppText, oppPrompt, oppClean, holdText, holdPrompt, holdClean, idsOf, RF, ERP, nav, riskSplit, project, monthlyPair, scenarios, fundamentals, companies, calendar, build, buildCurrent, text, memoPrompt, memoClean, METRICS };
   if (typeof module !== "undefined" && module.exports) module.exports = PfDeep;
   else root.PfDeep = PfDeep;
 })(typeof globalThis !== "undefined" ? globalThis : this);

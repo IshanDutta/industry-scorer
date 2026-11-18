@@ -12855,17 +12855,27 @@ Return JSON only:
     const callMix = (wOf) => { let up = 0, dn = 0, W = 0; for (const r of rows) { const w = wOf(r); if (!(w > 0) || !isNum(r.callN12)) continue; W += w; if (r.callN12 > 0) up += w; else if (r.callN12 < 0) dn += w; } return W ? { up: up / W, down: dn / W } : null; };
     return { port, mkt, calls: { port: callMix((r) => got.get(r.name) || 0), mkt: callMix((r) => r.mkt) }, metrics: METRICS.map(([k, label]) => ({ key: k, label })) };
   }
+  /**
+   * Share classes of one company: funds hold GOOGL and GOOG, BRK.B or BRK-B, while an industry run keeps one of them.
+   * classKey maps every class to one key, so a fund's holding finds the run's row and the classes count as one company.
+   */
+  const CLASS_PAIRS = [["GOOGL", "GOOG"], ["FOXA", "FOX"], ["NWSA", "NWS"], ["UAA", "UA"], ["LBRDA", "LBRDK"], ["FWONA", "FWONK"], ["LSXMA", "LSXMK"], ["BATRA", "BATRK"], ["LEN", "LEN.B"], ["HEI", "HEI.A"], ["ZG", "Z"], ["BF.A", "BF.B"], ["MOG.A", "MOG.B"], ["CWEN", "CWEN.A"], ["DISCA", "DISCK"], ["VIAC", "VIACA"], ["LILA", "LILAK"], ["QRTEA", "QRTEB"]];
+  const CLASS_OF = new Map(CLASS_PAIRS.flatMap(([a, b]) => [[a.replace(/[.\-/]/g, ""), a.replace(/[.\-/]/g, "")], [b.replace(/[.\-/]/g, ""), a.replace(/[.\-/]/g, "")]]));
+  const classKey = (sym) => { const t = String(sym || "").toUpperCase().replace(/[.\-/ ]/g, ""); return CLASS_OF.get(t) || t.replace(/^(BRK|BF|MOG|HEI|LEN|CWEN)[AB]$/, "$1"); };
   /** The largest companies underneath, with the run's numbers and the investor-type score. */
   function companies(ach, rows, coScore = {}, k = 25) {
-    const info = new Map(); for (const r of rows) for (const c of r.cos || []) if (!info.has(c.symbol)) info.set(c.symbol, { ...c, industry: r.name, call12: r.call12 });
-    return (ach?.allStocks || []).slice().sort((a, b) => b.weight - a.weight).slice(0, k).map((s) => { const c = info.get(s.symbol) || {};
-      return { symbol: s.symbol, weight: s.weight, name: c.name || "", industry: c.industry || "", pe: n(c.pe), growth: n(c.g), opm: n(c.opm), div: n(c.div), r1y: n(c.r1y), beta: n(c.beta), next: c.next || null, beats: c.beats || null, score: n(coScore[s.symbol]), call12: c.call12 || null }; });
+    const info = new Map(); for (const r of rows) for (const c of r.cos || []) { const key = classKey(c.symbol); if (!info.has(key)) info.set(key, { ...c, industry: r.name, call12: r.call12 }); }
+    // One row per company: share classes held through the funds add up.
+    const merged = new Map(); for (const s of ach?.allStocks || []) { const key = classKey(s.symbol), m = merged.get(key); if (m) { m.weight += s.weight; m.syms.push(s.symbol); } else merged.set(key, { key, symbol: s.symbol, weight: s.weight, syms: [s.symbol] }); }
+    return [...merged.values()].sort((a, b) => b.weight - a.weight).slice(0, k).map((s) => { const c = info.get(s.key) || {}, sym = c.symbol && s.syms.includes(c.symbol) ? c.symbol : s.syms[0];
+      const sc = s.syms.map((x) => n(coScore[x])).concat(c.symbol ? [n(coScore[c.symbol])] : []).find(isNum);
+      return { symbol: sym, classes: s.syms.length > 1 ? s.syms : undefined, weight: s.weight, name: c.name || "", industry: c.industry || "", pe: n(c.pe), growth: n(c.g), opm: n(c.opm), div: n(c.div), r1y: n(c.r1y), beta: n(c.beta), next: c.next || null, beats: c.beats || null, score: isNum(sc) ? sc : NaN, call12: c.call12 || null }; });
   }
   /** Earnings reports of the companies underneath and the runs' dated catalysts, inside the window. */
   function calendar(ach, rows, { today, days = 90 } = {}) {
-    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map((ach?.allStocks || []).map((s) => [s.symbol, s.weight])), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
+    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map(); for (const s of ach?.allStocks || []) w.set(classKey(s.symbol), (w.get(classKey(s.symbol)) || 0) + s.weight), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
     const out = [], seen = new Set();
-    for (const r of rows) for (const c of r.cos || []) if (c.next && c.next >= today && c.next <= until && (w.get(c.symbol) || 0) >= 0.003 && !seen.has(c.symbol)) { seen.add(c.symbol); out.push({ date: c.next, kind: "earnings", title: `${c.symbol} earnings`, weight: w.get(c.symbol), industry: r.name, beats: c.beats || null }); }
+    for (const r of rows) for (const c of r.cos || []) if (c.next && c.next >= today && c.next <= until && (w.get(classKey(c.symbol)) || 0) >= 0.003 && !seen.has(classKey(c.symbol))) { seen.add(classKey(c.symbol)); out.push({ date: c.next, kind: "earnings", title: `${c.symbol} earnings`, weight: w.get(classKey(c.symbol)), industry: r.name, beats: c.beats || null }); }
     for (const r of rows) if ((got.get(r.name) || 0) >= 0.01) for (const e of r.events || []) if (e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || "")) && !/earnings/i.test(e.title || "")) out.push({ date: e.date, kind: "catalyst", title: e.title, weight: got.get(r.name), industry: r.name, detail: e.detail || "" });
     return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : b.weight - a.weight)).slice(0, 30);
   }
@@ -13079,7 +13089,7 @@ Return JSON only:
   }
   const idsOf = (t) => [...new Set([...String(t).matchAll(/^\[([A-Z]{1,2}\d{1,3}[a-z]?)\]/gm)].map((m) => m[1]))];
 
-  const PfDeep = { holdings, gradeDetail, opportunities, oppText, oppPrompt, oppClean, holdText, holdPrompt, holdClean, idsOf, RF, ERP, nav, riskSplit, project, monthlyPair, scenarios, fundamentals, companies, calendar, build, buildCurrent, text, memoPrompt, memoClean, METRICS };
+  const PfDeep = { classKey, holdings, gradeDetail, opportunities, oppText, oppPrompt, oppClean, holdText, holdPrompt, holdClean, idsOf, RF, ERP, nav, riskSplit, project, monthlyPair, scenarios, fundamentals, companies, calendar, build, buildCurrent, text, memoPrompt, memoClean, METRICS };
   if (typeof module !== "undefined" && module.exports) module.exports = PfDeep;
   else root.PfDeep = PfDeep;
 })(typeof globalThis !== "undefined" ? globalThis : this);
@@ -15776,7 +15786,7 @@ Return JSON only:
     /** A portfolio analysis (the "Portfolio analysis" workflow): start it, watch it, read the result. */
     portfolio: (input) => { S.pfJob = { busy: true, label: "starting", result: null, error: null };
       (async () => { try { const res = await pfAnalyze(input, { step: (t, d, n) => { S.pfJob.label = t + (n ? ` (${d}/${n})` : ""); } }); res.write = {}; res.writing = {};
-        for (const key of [res.current ? "improved" : null, "recommended"].filter(Boolean)) { S.pfJob.label = "the strategists write up " + key; res.write[key] = await pfWriteUp(res, key).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }); }
+        for (const key of [res.current ? "improved" : null, "recommended", ...Object.keys(res.sels || {})].filter((k, i, a) => k && res.sels?.[k] && a.indexOf(k) === i)) { S.pfJob.label = "the strategists write up " + key; res.write[key] = await pfWriteUp(res, key).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }); }
         S.pfJob.result = jsonSafe(res); } catch (e) { S.pfJob.error = e?.message || String(e); } finally { S.pfJob.busy = false; } })(); return true; },
     portfolioStatus: () => ({ busy: !!S.pfJob?.busy, label: S.pfJob?.label || "", error: S.pfJob?.error || null, done: !!S.pfJob?.result }),
     portfolioResult: () => S.pfJob?.result || null,
@@ -19319,7 +19329,7 @@ Return JSON only:
     if (b.dataset.pfPer) { S.pfPeriod = b.dataset.pfPer; renderPortfolio(); return; }
     const a = b.dataset.pf, now = new Date().toISOString();
     if (a.startsWith("tab-")) { S.pfTab = a.slice(4); if (S.pfTab !== "edit") S.pfDraft = null; renderPortfolio(); if (S.pfTab === "analysis") pfWatch(p.id); return; }
-    if (a.startsWith("sel-")) { st.activeId = a.slice(4); S.pfDraft = null; S.pfRebal = null; await pfSave(); renderPortfolio(); pfLoad(); pfWatch(st.activeId); return; }
+    if (a.startsWith("sel-")) { st.activeId = a.slice(4); S.pfDraft = null; S.pfRebal = null; await pfSave(); renderPortfolio(); pfLoad(); pfWatch(st.activeId); if (S.pfAna?.[st.activeId]) recWriteAll(S.pfAna[st.activeId], st.activeId); return; }
     if ((a === "analyze" || a === "ana-github" || a === "ana-here") && (recGoalDraft(), !S.goalSaved)) { qOpen(a); return; }
     if (a === "analyze") { S.pfTab = "analysis"; if (PF_TRIGGER && S.mcp && (await outlookDb().catch(() => null))) pfAnaGithub(p); else pfAnaHere(p); return; }
     if (a === "ana-github") { pfAnaGithub(p); return; }
@@ -19353,7 +19363,7 @@ Return JSON only:
       pfDownload(`etf-${S.recKey}-${today()}.csv`, ["ticker,name,weight,amount_usd,expense_ratio,yield,expected_return,found_via", ...r.cands.map((c, i) => [c, i]).filter(([, i]) => sel.w[i] > 0).map(([c, i]) => [c.symbol, `"${String(c.info?.name || "").replace(/"/g, "'")}"`, (sel.w[i] * 100).toFixed(1), Math.round(sel.w[i] * tot), (c.expense * 100).toFixed(2), ((num(c.yield) || 0) * 100).toFixed(2), ((num(c.mu) || 0) * 100).toFixed(2), `"${String(c.via).replace(/"/g, "'")}"`].join(","))].join("\n"), "text/csv"); return; }
     if (a === "add") { S.pfTab = "edit"; renderPortfolio(); pfeAddRow(); return; }
     if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now, goalsPending: true }; st.list.push(x); st.activeId = x.id; S.pfTab = "edit"; S.pfDraft = null; await pfSave(); qOpen("edit"); return; }
-    if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
+    if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); pfAutoAnalyze(x); return; }
     if (a === "del") { if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return; st.list = st.list.filter((x) => x.id !== p.id); st.activeId = st.list[0]?.id || null; await pfSave(); S.pfDraft = null; renderPortfolio(); pfLoad(); return; }
     if (a === "refresh") { pfLoad({ force: true }); return; }
     if (a === "csv") { pfDownload(`${p.name.replace(/[^\w-]+/g, "_")}.csv`, PMode.toCsv({ ...p, holdings: ((hs, pos) => hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); return r && isNum(num(r.shares)) ? { ...h, shares: Math.round(r.shares * 1e4) / 1e4, avg_cost: Math.round(r.avgCost * 100) / 100 } : h; }))(pfHoldings(p, S.pfData), pfPositions(p, pfHoldings(p, S.pfData), S.pfData)) }), "text/csv"); return; }
@@ -19364,7 +19374,7 @@ Return JSON only:
     if (a.startsWith("rm-")) { S.pfDraft?.rows.splice(+a.slice(3), 1); renderPortfolio(); return; }
     if (a === "norm") { if (S.pfDraft) S.pfDraft.rows = PMode.normalizeWeights(S.pfDraft.rows.map((r) => ({ ...r, weight: pfeW(r) }))); renderPortfolio(); return; }
     if (a === "cancel") { S.pfDraft = null; S.pfTab = "overview"; renderPortfolio(); return; }
-    if (a === "save") { const dr = S.pfDraft; if (!dr) return; const rows = dr.rows.filter((r) => r.ticker).map((r) => ({ ...r, weight: pfeW(r), shares: pfeN(r.shares), avg_cost: pfeN(r.avg_cost) }));
+    if (a === "save") { const dr = S.pfDraft; if (!dr) return; const fresh = !S.pfAna?.[p.id] && !S.pfJobs?.[p.id]; const rows = dr.rows.filter((r) => r.ticker).map((r) => ({ ...r, weight: pfeW(r), shares: pfeN(r.shares), avg_cost: pfeN(r.avg_cost) }));
       const before = p.holdings.map((h) => `${h.ticker}:${num(h.weight) || 0}`).sort().join(), after = rows.map((r) => `${r.ticker}:${num(r.weight) || 0}`).sort().join();
       // With rebalances on record, new weights are a change made today (kept as one more event), not a rewrite of the past.
       if ((p.rebalanceEvents || []).length && before !== after) { if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0]));
@@ -19372,7 +19382,8 @@ Return JSON only:
       else if (before !== after) p.startWeights = undefined;
       p.startDate = /^\d{4}-\d{2}-\d{2}$/.test(dr.startDate || "") ? dr.startDate : pfStart(p);
       Object.assign(p, { name: dr.name || "Untitled", description: dr.description, totalInvestment: pfeN(dr.totalInvestment) > 0 ? pfeN(dr.totalInvestment) : 10000, holdings: rows.map((r) => ({ ticker: r.ticker, name: r.name || "", weight: num(r.weight) || 0, shares: num(r.shares) > 0 ? num(r.shares) : undefined, avg_cost: num(r.avg_cost) > 0 ? num(r.avg_cost) : undefined, asset_type: r.asset_type || undefined, sector: r.sector || undefined })), updatedAt: now });
-      S.pfDraft = null; S.pfTab = "overview"; await pfSave(); renderPortfolio(); pfLoad(); return; }
+      S.pfDraft = null; S.pfTab = "overview"; await pfSave(); renderPortfolio(); pfLoad();
+      if (fresh && p.holdings.length) pfAutoAnalyze(p); return; }
     if (a === "rebal") { S.pfRebal = { targets: Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0])) }; renderPortfolio(); $("pf-rebal")?.scrollIntoView?.({ behavior: "smooth" }); return; }
     if (a === "rb-cancel") { S.pfRebal = null; renderPortfolio(); return; }
     if (a === "rb-equal") { const k = p.holdings.length; for (const h of p.holdings) S.pfRebal.targets[h.ticker] = Math.round((1000 / k)) / 10; renderPortfolio(); return; }
@@ -20023,7 +20034,9 @@ Return JSON only:
       res.write = {}; (S.pfAna ||= {})[p.id] = res; S.recKey = res.current ? "improved" : "recommended"; step("The strategists are writing it up…");
       const key = S.recKey; res.writing = { [key]: true }; renderPortfolio();
       res.write[key] = await pfWriteUp(res, key).catch((e) => { if (FATAL.has(e?.code)) throw e; res.writeErr = e?.message || String(e); return null; }); res.writing = {};
+      if (!res.write[key]) delete res.write[key];
       await idbPut("pfAna:" + p.id, jsonSafe(res)).catch(() => {});
+      recWriteAll(res, p.id);
     } catch (e) { S.pfAnaErr[p.id] = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { if (S.pfAnaRun === run) S.pfAnaRun = null; renderPortfolio(); }
   }
@@ -20096,6 +20109,7 @@ Return JSON only:
       const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(bytes);
       const res = JSON.parse(text); res.from_path = x.path + "@" + x.done_at; res.write ||= {}; res.writing = {};
       (S.pfAna ||= {})[pid] = res; S.recKey = res.current ? "improved" : "recommended"; await idbPut("pfAna:" + pid, jsonSafe(res)).catch(() => {});
+      recWriteAll(res, pid);
     } catch (e) { (S.pfAnaErr ||= {})[pid] = "GitHub's result: " + (e?.message || e); }
   }
   /** On opening: the last analysis of each portfolio, the GitHub requests to watch, and results this page carries. */
@@ -20104,6 +20118,7 @@ Return JSON only:
     for (const x of st.list) { if (!S.pfAna?.[x.id]) { const r = await idbGet("pfAna:" + x.id).catch(() => null); if (r?.sels) (S.pfAna ||= {})[x.id] = r; } pfWatch(x.id); }
     try { const idx = await runsIndex(); if (idx) await pfPullFromIndex(idx); } catch {}
     renderPortfolio();
+    const a = pfActive(); if (a && S.pfAna?.[a.id]) recWriteAll(S.pfAna[a.id], a.id);
   }
   /** Portfolio analyses copied from GitHub with the sector runs: load each one newer than this browser's. */
   async function pfPullFromIndex(idx) {
@@ -20117,6 +20132,23 @@ Return JSON only:
   const REC_ROLE = { core: "pos", "industry tilt": "pos", "company capture": "pos", income: "neu", ballast: "neu", diversifier: "neu" };
   const REC_STANCE = { overweight: "pos", neutral: "neu", underweight: "warn", avoid: "neg" };
   const LVL = { low: "neu", medium: "warn", high: "neg" };
+  /** Every version's write-up, one after another (the one on screen first), with no button to press. One queue for the page. */
+  function recWriteAll(res, pid) {
+    if (!S.sample || !res?.sels) return Promise.resolve();
+    const keys = Object.keys(res.sels), first = keys.includes(S.recKey) ? [S.recKey] : [];
+    const todo = [...first, ...keys.filter((k) => !first.includes(k))].filter((k) => !res.write?.[k]);
+    if (!todo.length) return Promise.resolve();
+    S.recQ = (S.recQ || Promise.resolve()).then(async () => { for (const k of todo) { if (S.pfAna?.[pid] !== res) return; if (!res.write?.[k] && !res.writing?.[k]) await recWrite(res, k, pid); } }).catch(() => {});
+    return S.recQ;
+  }
+  /** A portfolio's analysis without a click: on GitHub when it can, else here. Asks for goals first if there are none. */
+  async function pfAutoAnalyze(p) {
+    if (!p?.holdings?.length || p.id !== pfActive()?.id) return;
+    if (S.pfAnaRun?.pid === p.id || /queued|running/.test(S.pfJobs?.[p.id]?.state || "")) return;
+    recGoalDraft(); if (!S.goalSaved) { qOpen("analyze"); return; }
+    S.pfTab = "analysis"; renderPortfolio();
+    if (PF_TRIGGER && S.mcp && (await outlookDb().catch(() => null))) pfAnaGithub(p); else pfAnaHere(p);
+  }
   async function recWrite(res, key, pid) {
     if (!S.sample || !res?.sels?.[key] || res.write?.[key] || res.writing?.[key]) return;
     (res.writing ||= {})[key] = true; renderPortfolio();
@@ -20213,11 +20245,15 @@ Return JSON only:
         ${pc0 ? `<div class="small">Today's portfolio, same method (expected ${pct(pc0.mu, false)} a year): ${Object.values(pc0.horizons).map((h) => `${h.years}Y middle <b>${usd(h.p50)}</b>, worst 5% ${usd(h.p5)}, loss ${pct(h.p_loss, false, 0)}`).join(" · ")}</div>` : ""}` : ""}
         ${sc ? `<h3 style="margin:10px 0 6px">The industry runs' 12-month scenarios, through this mix</h3><div class="kpis">${["bull", "base", "bear"].map((k) => sc[k] ? kpi(`${k} · ${fix(sc[k].probability, 0)}%`, `<span class="${cls(sc[k].portfolio)}">${pct(sc[k].portfolio)}</span>`, `${usd(res.pf.amount * (1 + sc[k].portfolio))} · stocks ${pct(sc[k].stocks)}`) : "").join("")}${kpi("Probability-weighted", `<span class="${cls(sc.expected)}">${pct(sc.expected)}</span>`, `${pct(sc.covered, false, 0)} of the stocks covered`)}</div>` : ""}`); }
     // What it owns
-    const F = A.fundamentals, cos = A.companies || [], cal = A.calendar || [];
+    const F = A.fundamentals, cal = A.calendar || [];
+    // Share classes (GOOGL and GOOG) as one company, the class the runs cover lending its numbers (older analyses kept them apart).
+    const cos = (() => { const m = new Map(); for (const x of A.companies || []) { const k = PfDeep.classKey(x.symbol), y = m.get(k); if (!y) { m.set(k, { ...x }); continue; }
+      const rich = x.industry && !y.industry ? x : y; m.set(k, { ...rich, weight: y.weight + x.weight, classes: [...new Set([...(y.classes || [y.symbol]), ...(x.classes || [x.symbol])])] }); }
+      return [...m.values()].sort((a, b) => b.weight - a.weight); })();
     if (F) { const raw = new Set(["pe", "fwd_pe", "beta", "exp12"]), fm = (k, v) => (raw.has(k) ? (k === "exp12" ? (isNum(v) ? v.toFixed(1) + "%" : "—") : fix(v, k === "beta" ? 2 : 1)) : pct(v, false));
       out.own = sec("rec-own", "What you really own", "the mix looked through to its industries and companies, against the whole market", `<div class="two"><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Measure</th><th class="n">This mix</th><th class="n">Market</th></tr></thead><tbody>${F.metrics.map((m) => `<tr><td>${esc(m.label)}</td><td class="n"><b>${fm(m.key, F.port[m.key])}</b></td><td class="n">${fm(m.key, F.mkt[m.key])}</td></tr>`).join("")}<tr><td>Industries the runs call up / down (12M)</td><td class="n"><b>${pct(F.calls.port?.up, false, 0)} / ${pct(F.calls.port?.down, false, 0)}</b></td><td class="n">${pct(F.calls.mkt?.up, false, 0)} / ${pct(F.calls.mkt?.down, false, 0)}</td></tr></tbody></table><div class="small muted" style="padding:6px">Industry figures weighted by how much of each the mix holds (market: by size); P/Es as earnings yields, the rest as weighted medians.</div></div>
         <div class="box"><h3 style="margin:0 0 6px">Coming up in the next 90 days</h3>${cal.length ? `<ul class="dlist small">${cal.map((e) => `<li><b class="mono">${esc(fmtDate(e.date))}</b> ${e.kind === "earnings" ? `<span class="pill neu">earnings</span>` : `<span class="pill warn">catalyst</span>`} ${esc(e.title)} <span class="muted">${pct(e.weight, false, 1)} of the mix · ${esc(e.industry)}${e.beats ? ` · beat ${esc(e.beats)} of the last reports` : ""}</span></li>`).join("")}</ul>` : `<div class="small muted">Nothing dated.</div>`}</div></div>
-        ${cos.length ? `<h3 style="margin:10px 0 6px">The 25 largest companies underneath</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Weight</th><th>Industry</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op. margin</th><th class="n">Dividend</th><th class="n">1Y</th><th class="n">Score</th><th>Run's 12M call</th><th>Next report</th></tr></thead><tbody>${cos.map((x) => `<tr><td><button class="linkbtn tick" data-co="${esc(x.symbol)}">${esc(x.symbol)}</button><div class="small muted">${esc(trimC(x.name, 26))}</div></td><td class="n"><b>${pct(x.weight, false, 2)}</b></td><td class="small">${esc(x.industry || "—")}</td><td class="n">${fix(x.pe, 1)}</td><td class="n ${cls(x.growth)}">${pct(x.growth, true, 0)}</td><td class="n">${pct(x.opm, false, 0)}</td><td class="n">${pct(x.div, false, 1)}</td><td class="n ${cls(x.r1y)}">${pct(x.r1y, true, 0)}</td><td class="n">${isNum(x.score) ? Math.round(x.score) : "—"}</td><td class="small">${esc(x.call12 || "—")}</td><td class="small mono">${esc(x.next || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}`); }
+        ${cos.length ? `<h3 style="margin:10px 0 6px">The 25 largest companies underneath</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Weight</th><th>Industry</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op. margin</th><th class="n">Dividend</th><th class="n">1Y</th><th class="n">Score</th><th>Run's 12M call</th><th>Next report</th></tr></thead><tbody>${cos.map((x) => `<tr><td><button class="linkbtn tick" data-co="${esc(x.symbol)}">${esc(x.symbol)}</button><div class="small muted">${esc(trimC(x.name, 26))}${x.classes?.length > 1 ? ` · ${esc(x.classes.join(" + "))}` : ""}${!x.industry ? `${x.name ? " · " : ""}not in the industry runs` : ""}</div></td><td class="n"><b>${pct(x.weight, false, 2)}</b></td><td class="small">${esc(x.industry || "—")}</td><td class="n">${fix(x.pe, 1)}</td><td class="n ${cls(x.growth)}">${pct(x.growth, true, 0)}</td><td class="n">${pct(x.opm, false, 0)}</td><td class="n">${pct(x.div, false, 1)}</td><td class="n ${cls(x.r1y)}">${pct(x.r1y, true, 0)}</td><td class="n">${isNum(x.score) ? Math.round(x.score) : "—"}</td><td class="small">${esc(x.call12 || "—")}</td><td class="small mono">${esc(x.next || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}`); }
     return out;
   }
   function recView(res, asParts = false) {
@@ -20334,6 +20370,7 @@ Return JSON only:
     else { const x = { id: pfId(), name: `${p0.name}: ${({ improved: "fixed", recommended: "best mix", conviction: "high conviction", simpler: "simplest" })[key] || key} (${today()})`, description: `ETF portfolio for a ${res.goalFull.label.toLowerCase()} goal, ${res.goalFull.horizon} horizon`, totalInvestment: Math.round(res.current?.total || num(res.goal.amount) || 10000), startDate: today(), holdings: hold, rebalanceEvents: [], createdAt: now, updatedAt: now };
       st.list.push(x); st.activeId = x.id; }
     await pfSave(); S.pfTab = "overview"; S.pfDraft = null; renderPortfolio(); pfLoad();
+    if (!apply) pfAutoAnalyze(pfActive());
   }
 
 
