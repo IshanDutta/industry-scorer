@@ -6675,7 +6675,9 @@ a.btnlink:hover { border-color: var(--accent); }
   }
   /** Today's positions: value, cost basis, gain, today's weight and shares (implied unless the holding has its own). */
   function pfPositions(p, hs, D) {
-    if (!D?.series) return null; const st = pfStart(p);
+    if (!D?.series) return null;
+    // Bought today (or on a day with no close yet): price it at the latest close, so shares, cost and gain still show.
+    const lastD = (D.series.SPY?.dates || []).slice(-1)[0], st0 = pfStart(p), st = lastD && st0 > lastD ? lastD : st0;
     return PMode.positions(D.series, hs, { from: st, start: p.totalInvestment > 0 ? p.totalInvestment : 10000, events: p.rebalanceEvents || [], calendar: D.series.SPY?.dates || null, base: pfLineup(p, hs, st),
       prices: Object.fromEntries(hs.map((h) => [h.ticker, h.price])) });
   }
@@ -6725,7 +6727,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function pfHoldings(p, D) {
     return p.holdings.map((h) => { const q = D?.quotes?.[h.ticker] || {}, i = D?.info?.[h.ticker] || {}, co = D?.cos?.[h.ticker] || {}, ser = D?.series?.[h.ticker];
       const last = ser?.closes?.length ? ser.closes[ser.closes.length - 1] : NaN, price = num(q.price) > 0 ? num(q.price) : last;
-      const type = h.asset_type || i.type || "stock";
+      const nm0 = h.name || i.name || q.name || "", type = h.asset_type || i.type || (/\bETF\b|\bFund\b/i.test(nm0) ? "etf" : "stock");
       return { ...h, name: h.name || i.name || q.name || "", asset_type: type, sector: (type === "stock" ? h.sector || i.sector || co.sector : D?.fsec?.[h.ticker] ? Object.entries(D.fsec[h.ticker]).sort((a, b) => b[1] - a[1])[0][0] : h.sector) || "", sectorTop: type !== "stock" && !!D?.fsec?.[h.ticker], price, change: num(q.changePercentage ?? q.changesPercentage),
         pe: num(i.pe) > 0 ? num(i.pe) : num(q.pe) > 0 ? num(q.pe) : num(co.pe) > 0 ? num(co.pe) : D?.fpe?.[h.ticker] > 0 ? D.fpe[h.ticker] : NaN,
         yield: num(i.divYield) >= 0 && type === "stock" && isNum(num(i.divYield)) ? num(i.divYield) : num(i.lastDiv) > 0 && price > 0 ? num(i.lastDiv) / price : num(co.div_yield) > 0 ? num(co.div_yield) : type === "stock" ? 0 : NaN }; });
@@ -6780,7 +6782,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const PR = Object.fromEntries((pos?.rows || []).map((r) => [r.ticker, r])), mvS = Object.fromEntries(PMode.marketValues({ ...p, holdings: hs }).map((h) => [h.ticker, h.marketValue]));
     const maxW = Math.max(...hs.map((h) => Math.max(num(h.weight) || 0, num(PR[h.ticker]?.weightNow) || 0)), 1);
     const cards = hs.slice().sort((a, b) => (num(PR[b.ticker]?.value) || mvS[b.ticker] || 0) - (num(PR[a.ticker]?.value) || mvS[a.ticker] || 0)).map((h) => { const r = PR[h.ticker] || {}, value = isNum(num(r.value)) ? r.value : mvS[h.ticker], g = num(r.gain), cost = num(r.cost), ch = num(h.change);
-      return `<article class="pf-card"><header>${avatar(h.ticker)}<div style="min-width:0"><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted ellip">${esc(h.name || "")}</div></div><span class="pf-type">${esc(h.asset_type === "etf" ? "ETF" : h.asset_type === "fund" ? "Fund" : "Stock")}</span></header>
+      return `<article class="pf-card"><header>${avatar(h.ticker)}<div style="min-width:0"><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small ellip ${!D || h.name || isNum(num(h.price)) ? "muted" : "down"}">${esc(h.name || (!D || isNum(num(h.price)) ? "" : "Ticker not found: check the spelling"))}</div></div><span class="pf-type">${esc(h.asset_type === "etf" ? "ETF" : h.asset_type === "fund" ? "Fund" : "Stock")}</span></header>
         <div class="pf-card-v mono">${esc(usd(value))}</div>
         <div class="pf-card-row"><span class="${cls(g)}">${isNum(g) ? `${g >= 0 ? "+" : "−"}${esc(usd(Math.abs(g)))} · ${pct(g / cost, true, 1)}` : "—"}</span><span class="${cls(ch / 100)}">${isNum(ch) ? `${ch > 0 ? "+" : ""}${ch.toFixed(2)}% today` : ""}</span></div>
         <div class="pf-wbar"><i style="width:${((num(r.weightNow) || num(h.weight) || 0) / maxW) * 100}%"></i><s style="left:${((num(h.weight) || 0) / maxW) * 100}%" title="target"></s></div>
@@ -6808,7 +6810,7 @@ a.btnlink:hover { border-color: var(--accent); }
       ${stat("Sharpe", p2(m?.sharpeRatio), `geometric, Rf ${PMode.RF * 100}%`, STC[PMode.stance("sharpeRatio", m?.sharpeRatio)])}${stat("Max drawdown", isNum(m?.maxDrawdown) ? "−" + m.maxDrawdown.toFixed(1) + "%" : "—", ms ? `SPY −${ms.maxDrawdown.toFixed(1)}%` : "", tone(-(m?.maxDrawdown ?? NaN), -10, -25))}
       ${stat(`Beta (${m?.betaBasis || "monthly"})`, p2(m?.beta), `correlation ${p2(m?.correlationToSPY)}`, STC[PMode.stance("beta", m?.beta)])}${stat("Dividend yield", isNum(yl) ? pct(yl, false, 2) : "—", `covers ${Math.round(hs.filter((h) => isNum(num(h.yield))).reduce((a, h) => a + (num(h.weight) || 0), 0))}%`)}
       ${stat("P/E", p2(pe, 1), `harmonic · covers ${Math.round(hs.filter((h) => h.pe > 0).reduce((a, h) => a + (num(h.weight) || 0), 0))}%`)}${stat("Health", hsc ? `${hsc.score}<span class="small muted">/100</span>` : "—", hsc ? hsc.parts.map((x) => `${x.label.split(" ")[0]} ${x.score}`).join(" · ") : "", hsc ? tone(hsc.score, 70, 45) : "")}</div>
-      ${nv.missing.length ? `<div class="notice warn small"><span>No prices for ${esc(nv.missing.join(", "))}: left out of the numbers.</span></div>` : ""}${nv.late.filter((x) => x.first > from).length ? `<div class="small muted">The period starts ${esc(fmtDate(nv.from))}, when every holding trades (${esc(nv.late.filter((x) => x.first > from).map((x) => x.ticker).join(", "))} started later).</div>` : ""}</section>`;
+      ${nv.missing.length ? `<div class="notice warn small"><span>No prices for ${esc(nv.missing.join(", "))}: left out of the numbers. ${nv.missing.length > 1 ? "These tickers weren't" : "This ticker wasn't"} found, so check the spelling in Edit holdings.</span><button class="sm" data-pf="tab-edit">Edit holdings</button></div>` : ""}${nv.late.filter((x) => x.first > from).length ? `<div class="small muted">The period starts ${esc(fmtDate(nv.from))}, when every holding trades (${esc(nv.late.filter((x) => x.first > from).map((x) => x.ticker).join(", "))} started later).</div>` : ""}</section>`;
     // 2. Performance chart
     const up = (m?.totalReturn ?? 0) >= 0, col = up ? "#22c55e" : "#ef4444";
     const evIdx = evs.map((e) => ({ i: nv.dates.findIndex((d) => d >= e.date), label: e.label || "Rebalance" })).filter((x) => x.i > 0);
