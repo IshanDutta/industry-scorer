@@ -468,6 +468,39 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .ov-h h2 { font-size: 20px; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ov-chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); }
+.iv-seg { margin-left: auto; }
+.iv-jump { position: static; margin: 10px 0 0; flex-wrap: wrap; background: transparent; backdrop-filter: none; padding: 0; }
+.iv-jump button { padding: 6px 12px; font-size: 12.5px; }
+.iv-sec h3 { margin: 16px 0 8px; font-size: 14px; }
+.iv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; }
+.iv-kpi { display: grid; gap: 6px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunk); }
+.iv-kpi > b { font-size: 18px; }
+.iv-bar { display: flex; height: 8px; border-radius: 999px; overflow: hidden; background: var(--line); }
+.iv-bar i.up { background: var(--gA); } .iv-bar i.flat { background: var(--gC); } .iv-bar i.down { background: var(--gF); }
+.iv-scens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 8px; }
+.iv-scen { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: var(--sunk); border-top: 3px solid var(--gC); }
+.iv-scen.bull { border-top-color: var(--gA); } .iv-scen.bear { border-top-color: var(--gF); }
+.iv-scen b { font: 700 18px var(--mono); }
+.iv-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 5px 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); font-size: 13px; }
+.iv-row.top { align-items: flex-start; justify-content: flex-start; } .iv-row.top > .mono { flex: none; width: 64px; color: var(--muted); font-size: 12px; padding-top: 2px; }
+.iv-row:last-child { border-bottom: 0; }
+.iv-stack { display: grid; gap: 8px; }
+.iv-card { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 12px 14px; }
+.iv-card > summary { list-style: none; cursor: pointer; display: grid; gap: 4px; }
+.iv-card > summary::-webkit-details-marker { display: none; }
+.iv-card > summary::after { content: "Details ▾"; font-size: 11px; color: var(--accent); }
+.iv-card[open] > summary::after { content: "Less ▴"; }
+.iv-card[open] { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.iv-card-h { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.iv-more { display: grid; gap: 8px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 13px; line-height: 1.5; }
+.iv-group { display: grid; gap: 6px; margin: 10px 0; }
+.iv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+.iv-tile { display: grid; gap: 6px; align-content: start; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--sunk); }
+.iv-hz { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
+.iv-ind { display: inline-flex; gap: 4px; align-items: center; margin: 2px 8px 2px 0; font-size: 12px; }
+.iv-reads { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px 14px; }
+.iv-reads p { margin: 2px 0 0; }
+.iv-list { display: grid; }
 .q-ico { width: 16px; height: 16px; flex: none; }
 .q-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / .6); backdrop-filter: blur(2px); }
 .q-dialog { width: min(672px, 100%); max-height: 85vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; box-shadow: 0 20px 60px rgb(0 0 0 / .45); display: grid; gap: 12px; }
@@ -12980,6 +13013,76 @@ Return JSON only:
   else root.PfDeep = PfDeep;
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
+/* Industry Scorer: a portfolio through its industries' reports (code only, no I/O, nothing written by Claude).
+ *
+ * Everything here is pulled from the industry runs already saved, the way the fund page reads a fund: the macro
+ * (each industry's regime, the macro tables, how the macro reaches them, what's moving, what would flip them, the
+ * releases ahead), foreign affairs (world events, trade relations country by country, regulation and legal), the cycle
+ * and KPIs, the lead strategists' debates and scenarios, times like this, each industry's calls, drivers and risks, and
+ * the calendar, all weighted by what the portfolio holds in each industry.
+ */
+(function (root) {
+  "use strict";
+  const isNode = typeof module !== "undefined" && module.exports;
+  const FM = isNode ? require("./fundmore.js") : root.FundMore;
+  const FA = isNode ? require("./fundan.js") : root.FundAn;
+  const P = isNode ? require("./portfolio.js") : root.Portfolio;
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
+  const lc = (s) => String(s || "").toLowerCase();
+  const HZ = ["1M", "3M", "6M", "12M"];
+  const safe = (f, dflt = null) => { try { return f(); } catch (e) { return dflt; } };
+
+  /** An industry vector {name: weight} as a coverage object (equities only, renormalized, biggest first). */
+  function covOf(ind, { min = 0.002 } = {}) {
+    const rows = Object.entries(ind || {}).filter(([k, w]) => k && !k.startsWith("(") && isNum(n(w)) && n(w) > 0);
+    const tot = rows.reduce((a, [, w]) => a + n(w), 0) || 1;
+    return { industries: rows.map(([industry, w]) => ({ industry, weight: n(w) / tot })).filter((g) => g.weight >= min).sort((a, b) => b.weight - a.weight) };
+  }
+
+  /** The foreign-affairs tables without the copies the page doesn't show (each industry's whole macro table rides on its regime). */
+  function trimAff(A) {
+    if (!A) return A;
+    const K = 16;
+    return { ...A, tradeVerdicts: (A.tradeVerdicts || []).slice(0, K), regVerdicts: (A.regVerdicts || []).slice(0, K).map((v) => ({ ...v, regulators: undefined, timeline: (v.timeline || []).slice(0, 6), most_material: (v.most_material || []).slice(0, 5) })),
+      regimes: A.regimes.slice(0, K).map((r) => ({ ...r, rows: undefined, groups: undefined, moves: (r.moves || []).slice(0, 4) })),
+      indicators: A.indicators.map((x) => ({ ...x, reads: (x.reads || []).slice(0, 6) })), trade: A.trade.map((c) => ({ ...c, industries: (c.industries || []).slice(0, 8) })) };
+  }
+  /** Each industry's own report, briefly: the strategist's headline, calls, scenarios, drivers, risks and every panel's read. */
+  function briefs(cov, digests, { k = 14 } = {}) {
+    return cov.industries.slice(0, k).map((g) => { const d = digests[lc(g.industry)]; if (!d) return { industry: g.industry, weight: g.weight, missing: true };
+      const m = d.lens?.macro || {};
+      return { industry: g.industry, weight: g.weight, sector: d.sector || "", kind: d.kind, as_of: d.as_of || null, headline: d.headline || "", opportunity: d.opportunity || null, expected12: d.expected12,
+        calls: Object.fromEntries(HZ.map((h) => [h, d.lean?.[h] || d.calls?.[h]?.call || ""])), p_up: d.calls?.["12M"]?.p_up ?? null, scen: d.scen || {}, drivers: d.drivers || [], risks: d.risks || [],
+        reads: d.reads || {}, regime: m.regime || d.macro?.regime || null, macro_head: m.headline || "", positioning: d.positioning || null,
+        trade: d.trade?.rating || null, reg: d.reg ? [d.reg.stance, d.reg.intensity].filter(Boolean).join(", ") : null, cycle: d.cycle?.position || null, pricing: d.cycle?.pricing || null,
+        news: d.news ? { s7: d.news.s7, s90: d.news.s90, n30: d.news.n30, summary: d.news.news_dim?.summary || "", items: (d.news.items || []).slice(0, 4) } : null }; });
+  }
+
+  /**
+   * The whole read for one portfolio. ind: {industry: weight} (look-through, equities); stocks: [{symbol, weight}] the
+   * companies underneath (for "holdings named" and earnings dates); digests: Portfolio.digest per industry (lower case).
+   */
+  function build({ ind, stocks = [], digests = {}, today = new Date().toISOString().slice(0, 10), cos = {} } = {}) {
+    const cov = covOf(ind); if (!cov.industries.length) return null;
+    const share = stocks.reduce((a, s) => a + (n(s.weight) || 0), 0) || 1;
+    const coInfo = {}; for (const g of cov.industries) for (const c of digests[lc(g.industry)]?.cos || []) coInfo[c.symbol] = { industry: g.industry, next: c.next, beats: c.beats, name: c.name };
+    const hold = stocks.filter((s) => s.symbol).slice(0, 200).map((s) => ({ ticker: s.symbol, weight: n(s.weight) / share, industry: coInfo[s.symbol]?.industry || cos[s.symbol]?.industry || "", next: coInfo[s.symbol]?.next || null, beats: coInfo[s.symbol]?.beats || null, name: coInfo[s.symbol]?.name || "" }));
+    const covered = cov.industries.filter((g) => digests[lc(g.industry)]), on = covered.reduce((a, g) => a + g.weight, 0);
+    return {
+      v: 1, as_of: today, on, n: covered.length, industries: cov.industries.slice(0, 40).map((g) => ({ ...g, analyzed: !!digests[lc(g.industry)], kind: digests[lc(g.industry)]?.kind || null, sector: digests[lc(g.industry)]?.sector || "" })),
+      look: safe(() => { const L = P.lookThrough(cov, digests); return L && { ...L, world: undefined, trade: undefined, rules: undefined }; }),
+      aff: safe(() => trimAff(FM.affairs(cov, digests, hold, { nI: 30, nW: 14, nC: 16, nR: 14, nL: 12 }))),
+      cycle: safe(() => { const c = FM.cycleLook(cov, digests); return c && { ...c, rows: c.rows.slice(0, 16), next: c.next.slice(0, 30) }; }), debates: safe(() => FM.debates(cov, digests, 10), []), scen: safe(() => FM.scenLook(cov, digests)),
+      times: safe(() => { const T = FM.timesLook(cov, digests, null); return T && { ...T, episodes: T.episodes.map((e) => ({ ...e, path: undefined, spy_path: undefined, fund_path: undefined })) }; }),
+      cal: safe(() => FA.calendar(hold, cov, digests, today), []), briefs: briefs(cov, digests),
+    };
+  }
+
+  const api = { covOf, briefs, build, trimAff };
+  if (isNode) module.exports = api; else root.PfIntel = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
 </script>
 <script>
 (() => {
@@ -19089,6 +19192,8 @@ Return JSON only:
     if (a === "ana-manual-close") { if (S.pfManual) delete S.pfManual[p.id]; renderPortfolio(); return; }
     if (a === "ana-copy") { const t = S.pfManual?.[p.id]?.b64; if (t) { try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch { $("pf-manual")?.querySelector("textarea")?.select(); b.textContent = "Selected: press Ctrl/Cmd+C"; } } return; }
     if (a === "gq-open") { qOpen(null); return; }
+    if (a.startsWith("intel-who-")) { S.intelWho = a.slice(10); renderPortfolio(); return; }
+    if (a.startsWith("intel-go-")) { S.intelSec = a.slice(9); renderPortfolio(); return; }
     if (a === "goals-edit") { qOpen("edit"); return; }
     if (a === "gq-close") { S.gq = null; renderPortfolio(); return; }
     if (S.gq && a.startsWith("gq-")) { const q = S.gq, g = q.goals;
@@ -19346,6 +19451,12 @@ Return JSON only:
           o.etfs.push({ symbol: e.symbol, name: i2.name || "", purity: pool2.length ? null : NaN, sector_fund: !pool2.length, expense: num(i2.expenseRatio) / 100, stats: EtfDeep.stats(s2, series.SPY) }); } }
       o.picks = (pk?.picks || []).slice(0, 5).map((p) => ({ symbol: p.symbol, name: p.name || p.c?.name || "", profile: p.profile, strategist: !!p.strategist, c: { pe: p.c?.pe, ntm_growth: p.c?.ntm_growth, rev_growth: p.c?.rev_growth, ret_1Y: p.c?.ret_1Y, excess_1Y: p.c?.excess_1Y, div_yield: p.c?.div_yield } })); }
     res.desk = desk;
+    // Macro & foreign affairs: each industry report's own macro, world, trade, regulation, cycle and history, weighted by what each side holds.
+    step("Reading what every industry report says: macro, world events, trade, regulation…");
+    res.intel = {}; const newKey = sels.improved ? "improved" : "recommended";
+    try { if (current) res.intel.current = PfIntel.build({ ind: current.vec.ind, stocks: current.ach.allStocks || [], digests, today: today() });
+      const ach = res.views[newKey]?.ach; if (ach) res.intel[newKey] = PfIntel.build({ ind: Object.fromEntries(ach.industries.filter((x) => x.got > 0).map((x) => [x.name, x.got])), stocks: ach.allStocks || [], digests, today: today() });
+    } catch (e) { console.warn("intel", e); }
     res.hist = {}; for (const s of [...new Set([...cands.map((c) => c.symbol), "SPY", "AGG", ...held0.map((h) => h.ticker)])]) if (series[s]) res.hist[s] = { dates: series[s].dates.slice(-1300), closes: series[s].closes.slice(-1300) };
     return res;
   }
@@ -19467,15 +19578,6 @@ Return JSON only:
       <span class="qb-sep"></span><span class="qb-item" style="--tc:${tier.color}">${qIco("zap", "qb-zap")}<span class="muted">Risk:</span><span class="q-badge sm">${esc(tier.label)} (${Math.round(d.aggressiveness)}%)</span></span>
       <span class="qb-end"><button class="sm q-ghost" data-pf="gq-open">${qIco("pencil")}Edit Goals</button>${extra}</span></div>`;
   }
-  function goalsMore() {
-    const d = recGoalDraft(), u = EtfRec.goalOf(d);
-    return `<details class="q-more"><summary class="small">More settings <span class="muted">· ${esc(EtfRec.UG.INCOME_LABELS[d.incomeNeeds]?.label || "")} · ${esc(EtfRec.UG.FOCUS_LABELS[d.recommendationFocus]?.label || "")} · volatility ≤ ${Math.round(u.vol * 100)}% · bonds ${Math.round(u.bonds[0] * 100)}–${Math.round(u.bonds[1] * 100)}%</span></summary><div class="kpis" style="margin-top:8px">
-        <label class="kpi"><span class="eyebrow">Max volatility (%)</span><input data-rg="maxVol" type="number" min="2" max="40" step="1" placeholder="${(EtfRec.fromAnswers(d).vol * 100).toFixed(0)}" value="${esc(d.maxVol)}"></label>
-        <label class="kpi"><span class="eyebrow">ETFs (min–max)</span><span style="display:flex;gap:6px"><input data-rg="minN" type="number" min="7" max="15" value="${esc(d.minN)}"><input data-rg="maxN" type="number" min="7" max="15" value="${esc(d.maxN)}"></span></label>
-        <label class="kpi"><span class="eyebrow">Max cost (%)</span><input data-rg="maxCost" type="number" min="0.05" max="1" step="0.05" value="${esc(d.maxCost)}"></label>
-        <label class="kpi"><span class="eyebrow">Leave out</span><input data-rg="exclude" placeholder="e.g. energy, China, ARKK" value="${esc(d.exclude)}"></label></div>
-        <div class="actions" style="margin-top:8px"><label class="small"><input type="checkbox" data-rg="bonds" ${d.bonds ? "checked" : ""}> Bond ETFs</label><label class="small"><input type="checkbox" data-rg="intl" ${d.intl ? "checked" : ""}> International ETFs</label></div></details>`;
-  }
   function anaView(p, A, job) {
     const run = S.pfAnaRun?.pid === p.id ? S.pfAnaRun : null, gh = job && /queued|running/.test(job.state || "") ? job : null;
     const elapsed = (iso) => { const m = Math.round((Date.now() - Date.parse(iso || 0)) / 60000); return m < 1 ? "just now" : m + " min ago"; };
@@ -19491,9 +19593,9 @@ Return JSON only:
         <li><b>Start the workflow:</b> open <a href="${PF_ACTIONS}" target="_blank" rel="noopener">Actions → Portfolio analysis</a>, press <i>Run workflow</i>, put <code>${esc(p.id)}</code> in <i>id</i> and paste the request. It takes about 10–20 minutes on your API key.</li>
         <li><b>Bring it in:</b> when the run is green, press <i>Update everything from GitHub</i> at the top of the page. The grade and recommendations appear here by themselves.</li></ol></section>` : "";
     if (A) { const btns = S.mcp && S.pfGithub !== false ? `<button class="sm primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze again</button>` : `<button class="sm primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze again</button>`;
-      const bar = goalsBanner(btns) + goalsMore();
+      const bar = goalsBanner(btns);
       return status + manual + bar + (S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : "") + `<div class="small muted">Analyzed ${esc(fmtDate(A.day))} · ${A.rows?.length || 0} industry runs · ${A.discovered} ETFs found holding the target companies</div>` + anaResult(p, A); }
-    return status + manual + goalsBanner() + goalsMore() + go;
+    return status + manual + goalsBanner() + go;
   }
   /** The report card for one version (today's portfolio or a recommendation). */
   /** The numbers behind one grade of today's portfolio (A: the analysis result). */
@@ -19584,6 +19686,175 @@ Return JSON only:
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:10px">${S2.map((s) => `<div class="box"><div style="display:flex;justify-content:space-between"><b>${esc(s.industry)}</b><span class="mono small">target ${pct(s.target, false, 1)}</span></div><div class="small muted">chosen companies: ${s.picks.map((x) => esc(x)).join(", ")}</div>
         <div class="tbl-wrap"><table class="wrap-table" style="font-size:12.5px"><thead><tr><th>Fund</th><th class="n">Score</th><th class="n">In industry</th><th class="n">Holds picks</th><th class="n">Quality</th><th class="n">3Y/yr</th></tr></thead><tbody>${s.funds.map((f) => { const c = byS.get(f.symbol), P3 = c?.stats?.periods?.find((q) => q.k === "3Y"); return `<tr><td><b class="tick">${esc(f.symbol)}</b>${chosen.has(f.symbol) ? ' <span class="pill pos">in the mix</span>' : ""}</td><td class="n"><b>${f.score}</b></td><td class="n">${pct(f.purity, false, 0)}</td><td class="n">${pct(Math.min(1, f.capture), false, 0)}</td><td class="n">${f.quality ?? "—"}</td><td class="n ${cls(P3?.ret)}">${pct(P3?.ret, true, 1)}</td></tr>`; }).join("")}</tbody></table></div></div>`).join("")}</div></section>`;
   }
+  // ------------------------------------------------------------- Macro & foreign affairs: the portfolio through its industries' reports
+  /** The intel for one side, from the analysis (or worked out here from the saved runs for an older analysis). */
+  function pfIntel(A, who) {
+    const key = who === "current" ? "current" : A.sels?.improved ? "improved" : "recommended";
+    if (A.intel?.[key]) return A.intel[key];
+    const ck = (A.at || "") + "|" + key; S.intelCache ||= {};
+    if (S.intelCache[ck] !== undefined) return S.intelCache[ck];
+    S.intelCache[ck] = "loading";
+    (async () => { try {
+      const ind = key === "current" ? A.current?.vec?.ind : Object.fromEntries((A.views?.[key]?.ach?.industries || []).filter((x) => x.got > 0).map((x) => [x.name, x.got]));
+      const stocks = key === "current" ? A.current?.ach?.allStocks : A.views?.[key]?.ach?.allStocks;
+      const ci = await coIndex(), dg = await fundDigests(Object.keys(ind || {}).filter((k) => !k.startsWith("(")), ci);
+      S.intelCache[ck] = PfIntel.build({ ind, stocks: stocks || [], digests: dg, today: today() }) || null;
+    } catch (e) { console.warn("intel", e); S.intelCache[ck] = null; } renderPortfolio(); })();
+    return "loading";
+  }
+  const INTEL_SECS = [["iv-snap", "Snapshot"], ["iv-macro", "Macro"], ["iv-world", "World events"], ["iv-trade", "Trade"], ["iv-reg", "Regulation"], ["iv-cycle", "Cycle & KPIs"], ["iv-debate", "Debates & scenarios"], ["iv-times", "Times like this"], ["iv-ind", "Industry by industry"], ["iv-cal", "Calendar"]];
+  function intelView(A) {
+    const who = S.intelWho === "new" ? "new" : "current", hasCur = !!A.current, cur = INTEL_SECS.some(([id]) => id === S.intelSec) ? S.intelSec : "iv-snap";
+    const I = pfIntel(A, hasCur ? who : "new");
+    const seg = `<div class="seg iv-seg">${hasCur ? `<button aria-pressed="${who === "current"}" data-pf="intel-who-current">Your portfolio</button>` : ""}<button aria-pressed="${who === "new" || !hasCur}" data-pf="intel-who-new">New portfolio</button></div>`;
+    const head = `<section class="panel iv-head"><div class="panel-head"><div><span class="eyebrow">Through every industry report</span><h2>Macro & foreign affairs</h2></div>${seg}</div>
+      <p class="small muted" style="margin:0">Nothing here is written for this page: it is each industry run's own macro, world-events, trade, regulation, KPI and history analysis, weighted by what the portfolio holds in each industry.</p>
+      <nav class="iv-jump ana-nav">${INTEL_SECS.map(([id, l]) => `<button class="${id === cur ? "on" : ""}" data-pf="intel-go-${id}">${l}</button>`).join("")}</nav></section>`;
+    if (I === "loading") return head + `<section class="panel"><div class="pf-run" style="border:0;padding:0"><div class="pf-spin"></div><div class="small muted">Reading the industry reports behind this portfolio…</div></div></section>`;
+    if (!I) return head + `<section class="panel"><div class="small muted">None of this portfolio's industries has a saved run yet: run them (or their sectors) and come back.</div></section>`;
+    const L = I.look || {}, AF = I.aff || {}, st = (t) => esc(stripCites(t || "")), cut = (t, k = 320) => esc(trimC(stripCites(t || ""), k));
+    const wP = (w) => `<span class="mono muted">${pct(w, false, w < 0.1 ? 1 : 0)}</span>`;
+    const CALLC = (c) => /bull|up|buy|over/i.test(c || "") ? "pos" : /bear|down|sell|under/i.test(c || "") ? "neg" : "neu";
+    const EFF = (e) => { const x = lc(e); return /support|favor|tailwind|positive|help|benefit/.test(x) ? "pos" : /advers|headwind|negative|hurt|pressure|risk/.test(x) ? "neg" : /mixed/.test(x) ? "warn" : "neu"; };
+    const pill = (t, c) => (t ? `<span class="pill ${c || EFF(t)}">${esc(t)}</span>` : "");
+    const mix = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span class="pill ${EFF(k)}">${esc(k)} ${pct(v / (I.on || 1), false, 0)}</span>`).join(" ");
+    const bar = (parts) => `<div class="iv-bar">${parts.filter((p) => p[1] > 0.001).map(([c, w, t]) => `<i class="${c}" style="flex:${w}" title="${esc(t)}"></i>`).join("")}</div>`;
+    const sec = (id, title, sub, body) => `<section class="panel iv-sec" id="${id}"><div class="panel-head"><div><h2>${title}</h2>${sub ? `<div class="small muted">${sub}</div>` : ""}</div></div>${body}</section>`;
+    const ln = (l, t, k = 400) => (t ? `<div><b>${l}:</b> ${cut(t, k)}</div>` : "");
+    const inds = (rows, f = () => "") => (rows || []).map((r) => `<span class="iv-ind">${esc(r.industry)} ${wP(r.weight)}${f(r)}</span>`).join("");
+    const covNote = `${I.n} industries analyzed, ${pct(I.on, false, 0)} of the ${who === "current" && hasCur ? "portfolio's" : "new portfolio's"} stocks`;
+
+    // ---- Snapshot
+    const C = L.calls || {}, sc = L.scen || {}, ex = L.exp12 || {};
+    const callsRow = ["1M", "3M", "6M", "12M"].map((h) => { const c = C[h] || {}, d = c.dist || {}; return `<div class="iv-kpi"><span class="eyebrow">${h}</span>${pill(c.lean || c.call || "—", CALLC(c.lean || c.call))}
+      ${bar([["up", d.up || 0, `up ${pct(d.up, false, 0)}`], ["flat", d.flat || 0, `flat ${pct(d.flat, false, 0)}`], ["down", d.down || 0, `down ${pct(d.down, false, 0)}`]])}<span class="small muted">${pct(d.up, false, 0)} of it called up${isNum(num(c.expected)) ? ` · expected ${num(c.expected) > 0 ? "+" : ""}${fix(c.expected, 1)}%` : ""}${isNum(num(c.p_up)) ? ` · ${fix(c.p_up, 0)}% odds up` : ""}</span></div>`; }).join("");
+    const scen = ["bull", "base", "bear"].filter((k) => sc[k]).map((k) => `<div class="iv-scen ${k}"><span class="eyebrow">${k}</span><b>${isNum(num(sc[k].move)) ? `${sc[k].move > 0 ? "+" : ""}${fix(sc[k].move, 1)}%` : "—"}</b><span class="small muted">${isNum(num(sc[k].p)) ? fix(sc[k].p, 0) + "% likely" : ""}</span></div>`).join("");
+    const contrib = (L.contrib || []).slice(0, 6), drag = (L.contrib || []).slice(-3).reverse().filter((x) => x.pts < 0);
+    const snap = sec("iv-snap", "Snapshot", covNote, `<div class="iv-kpis">${callsRow}</div>
+      <div class="two" style="margin-top:12px"><div class="box"><h3>The industries' scenarios, weighted</h3><div class="iv-scens">${scen}</div>${isNum(num(ex.v)) ? `<div class="small muted">Weighted 12-month expectation from the lead strategists: <b>${ex.v > 0 ? "+" : ""}${fix(ex.v, 1)}%</b></div>` : ""}</div>
+        <div class="box"><h3>Macro regimes it sits in</h3><div class="actions" style="justify-content:flex-start">${mix(AF.regime_mix) || "—"}</div>
+          <h3 style="margin-top:10px">Trade verdicts</h3><div class="actions" style="justify-content:flex-start">${mix(AF.trade_mix) || "—"}</div>
+          <h3 style="margin-top:10px">Regulatory stance</h3><div class="actions" style="justify-content:flex-start">${mix(AF.reg_mix) || "—"}</div></div></div>
+      <div class="two" style="margin-top:12px"><div class="box"><h3>What adds most to the expected return</h3>${contrib.map((x) => `<div class="iv-row"><span>${esc(x.industry)} ${wP(x.weight)}</span><span>${pill(x.call12 || "", CALLC(x.call12))} <b class="mono">${x.expected > 0 ? "+" : ""}${fix(x.expected, 1)}%</b></span></div>`).join("")}</div>
+        <div class="box"><h3>Where the reports disagree with holding it</h3>${drag.length ? drag.map((x) => `<div class="iv-row"><span>${esc(x.industry)} ${wP(x.weight)}</span><span>${pill(x.call12 || "", CALLC(x.call12))} <b class="mono">${fix(x.expected, 1)}%</b></span></div>`).join("") : `<div class="small muted">No industry it holds is expected to fall over 12 months.</div>`}
+          ${(L.sens || []).length ? `<h3 style="margin-top:10px">Measured macro sensitivity</h3>${L.sens.slice(0, 6).map((f) => `<div class="iv-row"><span>${esc(f.label)} <span class="small muted">${esc(f.shock)}</span></span><b class="mono ${f.effect >= 0 ? "up" : "down"}">${pct(f.effect, true, 1)}</b></div>`).join("")}<div class="small muted">Each industry's regression on the factor, weighted.</div>` : ""}</div></div>`);
+
+    // ---- Macro
+    const CH = [["demand", "Demand"], ["cost", "Costs"], ["capital", "Capital & valuation"], ["regulatory", "Policy & regulation"]];
+    const lead = (AF.regimes || [])[0];
+    const reg = (AF.regimes || []).map((r) => `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(r.industry)}</b> ${wP(r.weight)} ${pill(r.regime || "", /expan|goldi|recover|boom/.test(r.regime || "") ? "pos" : /mixed|transit/.test(r.regime || "") ? "warn" : /slow|contract|stagfl|recess|tight/.test(r.regime || "") ? "neg" : "neu")}${r.confidence ? `<span class="small muted">${esc(r.confidence)} confidence</span>` : ""}</div><div class="small">${cut(r.headline, 280)}</div></summary>
+        <div class="iv-more">${ln("Summary", r.summary, 700)}${ln("State of the world", r.state, 500)}
+        ${r.horizons && Object.keys(r.horizons).length ? `<div class="iv-hz">${Object.entries(r.horizons).map(([h, x]) => `<div><span class="eyebrow">${h}</span> ${pill(x.call, CALLC(x.call))}<div class="small">${cut(x.text, 220)}</div></div>`).join("")}</div>` : ""}
+        ${r.supports?.length ? `<div><b>Supports:</b><ul class="dlist">${r.supports.map((x) => `<li>${cut(x, 220)}</li>`).join("")}</ul></div>` : ""}${r.risks?.length ? `<div><b>Risks:</b><ul class="dlist">${r.risks.map((x) => `<li>${cut(x, 220)}</li>`).join("")}</ul></div>` : ""}</div></details>`).join("");
+    const chans = CH.filter(([k]) => AF.channels?.[k]?.length).map(([k, l]) => `<div class="box"><h3>${l}</h3>${AF.channels[k].map((x) => `<div class="small" style="margin-bottom:6px"><b>${esc(x.industry)}</b> ${wP(x.weight)} ${cut(x.text, 300)}</div>`).join("")}</div>`).join("");
+    const moves = (AF.moves || []).length ? `<h3>What's moving and why</h3><div class="iv-grid">${AF.moves.map((m) => `<div class="iv-tile"><div class="iv-card-h">${m.id ? `<span class="idtag">${esc(m.id)}</span>` : ""}<b>${esc(m.label)}</b><span class="small muted">reaches ${pct(m.reach / (I.on || 1), false, 0)}</span></div><div class="small"><b>${cut(m.move, 180)}</b></div>${m.driver ? `<div class="small muted">${cut(m.driver, 240)}</div>` : ""}
+        ${(m.so_whats || []).filter((x) => x.so_what).slice(0, 2).map((x) => `<div class="small"><b>${esc(x.industry)}:</b> ${cut(x.so_what, 200)}</div>`).join("")}</div>`).join("")}</div>` : "";
+    const chg = (x) => [["1M", x.chg_1m], ["3M", x.chg_3m], ["1Y", x.chg_1y]].filter(([, v]) => isNum(num(v))).map(([l, v]) => `<span class="${v >= 0 ? "up" : "down"}">${l} ${v >= 0 ? "+" : ""}${fix(v, 1)}%</span>`).join(" ");
+    const val = (x) => isNum(num(x.value)) ? `${Math.abs(x.value) >= 1000 ? Math.round(x.value).toLocaleString() : fix(x.value, Math.abs(x.value) < 10 ? 2 : 1)}${x.unit && x.unit.length <= 3 ? x.unit : ""}` : "—";
+    const effMix = (o) => Object.entries(o || {}).filter(([, w]) => w > 0.004).sort((a, b) => b[1] - a[1]).map(([k, w]) => `<span class="pill ${EFF(k)}">${esc(k)} ${pct(w / (I.on || 1), false, 0)}</span>`).join(" ");
+    const icard = (x) => `<details class="iv-card ind"><summary><div class="iv-card-h"><span class="idtag">${esc(x.id)}</span><b>${esc(x.label)}</b><span class="mono">${esc(val(x))}</span><span class="small">${chg(x)}</span></div>
+        <div class="actions" style="justify-content:flex-start;margin:4px 0 0">${effMix(x.effects) || `<span class="small muted">low relevance</span>`}<span class="small muted">in the tables of ${pct(x.reach / (I.on || 1), false, 0)}</span></div></summary>
+        <div class="iv-more">${x.reason ? ln("Chosen because", x.reason) : ""}${ln("What's driving it", x.driver)}${ln("Next to watch", x.next)}
+          ${(x.reads || []).map((r) => `<div class="small"><b>${esc(r.industry)}</b> ${wP(r.weight)} ${pill(r.effect || "")} ${r.relevance ? `<span class="small muted">${esc(r.relevance)} relevance</span>` : ""} ${cut(r.why || r.relevance_why, 260)}</div>`).join("")}</div></details>`;
+    const table = (AF.indicators || []).length ? `<h3>The macro table</h3><div class="small muted">Every indicator its industries' macro planners chose, most relevant to this portfolio first; open one for each industry's read.</div>${(AF.groups || []).map((g) => { const rs = AF.indicators.filter((x) => x.group === g); return rs.length ? `<div class="iv-group"><span class="eyebrow">${esc(g)}</span>${rs.map(icard).join("")}</div>` : ""; }).join("")}` : "";
+    const flips = (AF.flips || []).length ? `<div class="box"><h3>What would flip the macro calls</h3><ul class="dlist small">${AF.flips.map((f) => `<li><b>${cut(f.trigger, 160)}</b> ${cut(f.mechanism, 200)}${f.watch ? ` <span class="muted">Watch: ${cut(f.watch, 120)}</span>` : ""} <span class="muted">(${esc(f.industry)})</span></li>`).join("")}</ul></div>` : "";
+    const wn = (AF.watchNext || []).length ? `<div class="box"><h3>Macro releases to watch</h3><div class="iv-list">${AF.watchNext.map((w) => `<div class="iv-row top"><span class="mono">${esc(fmtShort(w.date))}</span><span><b>${cut(w.event, 140)}</b><div class="small muted">${cut(w.why, 180)}</div></span></div>`).join("")}</div></div>` : "";
+    const macro = sec("iv-macro", "Macro", `${(AF.regimes || []).length} industries' macro reports${(AF.indicators || []).length ? ` · ${AF.indicators.length} indicators` : ""}`,
+      `${lead?.state ? `<div class="callout"><span class="eyebrow">The state of the world (${esc(lead.industry)}'s macro analyst, ${esc(fmtShort(lead.as_of))})</span><p class="small" style="margin:4px 0 0">${cut(lead.state, 700)}</p></div>` : ""}
+       <h3>Each industry's macro regime${(AF.regimes || []).length >= 16 ? ` <span class="small muted">(the biggest 16)</span>` : ""}</h3><div class="iv-stack">${reg}</div>${chans ? `<h3>How the macro reaches it</h3><div class="two">${chans}</div>` : ""}${moves}${table}<div class="two">${flips}${wn}</div>`);
+
+    // ---- World events
+    const world = (AF.world || []).map((x) => `<details class="iv-card"><summary><div class="iv-card-h"><span class="idtag">${esc(x.id)}</span><b>${esc(x.title)}</b>${x.deep_any ? "" : `<span class="pill neu">tracked</span>`}</div>
+        <div class="small muted">${esc([x.category, x.region, x.status, x.since ? `since ${fmtShort(x.since)}` : ""].filter(Boolean).join(" · "))} · reaches <b>${pct(x.reach / (I.on || 1), false, 0)}</b></div>
+        <div class="actions" style="justify-content:flex-start;margin:4px 0">${x.adverse > 0.002 ? `<span class="pill neg">adverse for ${pct(x.adverse / (I.on || 1), false, 0)}</span>` : ""}${x.favorable > 0.002 ? `<span class="pill pos">favorable for ${pct(x.favorable / (I.on || 1), false, 0)}</span>` : ""}</div>
+        <div class="small">${cut(x.summary, 320)}</div></summary>
+        <div class="iv-more">${ln("Now", x.now)}${ln("Why now", x.why_now)}${ln("Trigger", x.trigger)}${ln("First-order effect", x.first_order)}${ln("Near term", x.near_term)}${ln("Structural", x.structural)}
+          ${x.developments?.length ? `<div><b>Latest:</b><ul class="dlist">${x.developments.map((d) => `<li><span class="mono">${esc(fmtShort(d.date))}</span> ${cut(d.text, 200)}</li>`).join("")}</ul></div>` : ""}
+          ${x.channels?.length ? `<div><b>How it reaches the industries:</b> ${x.channels.map((c) => cut(typeof c === "string" ? c : c.text || c.channel || "", 160)).join("; ")}</div>` : ""}
+          ${x.scenarios?.length ? `<div><b>Scenarios:</b>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name || "")}${c.trigger ? ` <span class="muted">if ${cut(c.trigger, 140)}</span>` : ""}${c.outcome ? ` → ${cut(c.outcome, 180)}` : ""}</div>`).join("")}</div>` : ""}
+          ${x.watch?.length ? `<div><b>Watch:</b> ${x.watch.map((w) => typeof w === "string" ? cut(w, 120) : `${esc(w.indicator || "")} <span class="muted">(${cut(w.signal, 120)})</span>`).join("; ")}</div>` : ""}${ln("Most exposed", x.exposure)}
+          ${x.winners_held?.length || x.losers_held?.length ? `<div><b>Companies you own it names:</b> ${(x.winners_held || []).map((h) => `<span class="pill pos">${esc(h.symbol)}</span>`).join(" ")} ${(x.losers_held || []).map((h) => `<span class="pill neg">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}
+          <div><b>Its industries following it:</b> ${inds(x.industries, (r) => ` ${pill(r.stance || "")}`)}</div></div></details>`).join("");
+    const worldS = world ? sec("iv-world", "World events", `${(AF.world || []).filter((x) => x.deep_any).length} deep dives and ${(AF.world || []).filter((x) => !x.deep_any).length} tracked situations from its industries' world-events reports`, `<div class="iv-stack">${world}</div>`) : "";
+
+    // ---- Trade
+    const STC = { allied: "pos", ally: "pos", partner: "pos", neutral: "neu", competitor: "warn", competitive: "warn", rival: "neg", adversary: "neg", adversarial: "neg" };
+    const tv = (AF.tradeVerdicts || []).map((v) => `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(v.industry)}</b> ${wP(v.weight)} ${pill(v.rating || v.band || "", /manage|low|resil/i.test(v.rating || "") ? "pos" : /high|severe|crit|vulner/i.test(v.rating || "") ? "neg" : "warn")}${isNum(num(v.health)) ? `<span class="small muted">health ${v.health}/100</span>` : ""}</div><div class="small">${cut(v.headline, 300)}</div></summary>
+        <div class="iv-more">${ln("The map", v.map, 700)}${Object.entries(v).filter(([k, x]) => typeof x === "string" && !["industry", "rating", "band", "headline", "map"].includes(k) && x.length > 40).slice(0, 4).map(([k, x]) => ln(k.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()), x, 500)).join("")}</div></details>`).join("");
+    const trows = (AF.trade || []).map((c) => `<tr><td class="wr"><span class="idtag">${esc(c.id)}</span> <b>${esc(c.country)}</b><div class="small muted">${esc(c.roles || "")}</div></td><td class="n"><b>${c.rev > 0 ? pct(c.rev, false, 1) : "—"}</b>${c.rev_est ? ` <span class="small muted">est.</span>` : ""}</td><td class="n">${pct(c.reach / (I.on || 1), false, 0)}</td>
+        <td>${pill(c.stance || "", STC[lc(c.stance)] || "neu")} ${c.importance ? pill(c.importance, c.importance === "existential" || c.importance === "high" ? "warn" : "neu") : ""} ${c.threat && !["none", "low"].includes(lc(c.threat)) ? pill(`${c.threat} threat`, "neg") : ""}</td></tr>`).join("");
+    const tcards = (AF.trade || []).slice(0, 10).map((c) => `<details class="iv-card"><summary><div class="iv-card-h"><span class="idtag">${esc(c.id)}</span><b>${esc(c.country)}</b>${pill(c.stance || "", STC[lc(c.stance)] || "neu")}${c.trajectory ? `<span class="small muted">${esc(c.trajectory)}</span>` : ""}</div><div class="small">${cut(c.headline || c.why, 260)}</div></summary>
+        <div class="iv-more">${ln("Why it matters", c.why)}${ln("Relationship", [c.alliance, c.relationship].filter(Boolean).join(". "))}
+          ${c.risks?.length ? `<div><b>Risks:</b><ul class="dlist">${c.risks.map((r) => `<li><b>${cut(r.risk, 140)}</b> <span class="muted">${esc([r.type, r.likelihood && r.likelihood + " likelihood", r.impact && r.impact + " impact", r.timing].filter(Boolean).join(" · "))}</span>${r.mechanism ? `<div class="muted">${cut(r.mechanism, 180)}</div>` : ""}</li>`).join("")}</ul></div>` : ""}
+          ${c.security?.threat ? ln(`Security (${c.security.level || "n/a"})`, c.security.threat) : ""}${c.deps?.length ? `<div><b>What its industries depend on there:</b> ${c.deps.map((d) => `${esc(d.input)} <span class="muted">(${esc([d.criticality, d.share].filter(Boolean).join(", "))})</span>`).join("; ")}</div>` : ""}
+          ${c.developments?.length ? `<div><b>Latest:</b> ${c.developments.map((d) => `<span class="mono">${esc(fmtShort(d.date))}</span> ${cut(d.text, 200)}`).join(" ")}</div>` : ""}${ln("If trade froze", c.freeze)}${ln("Outlook", c.outlook)}
+          ${c.watch?.length ? `<div><b>Watch:</b> ${c.watch.map((w) => cut(w, 120)).join("; ")}</div>` : ""}${c.exposed_held?.length ? `<div><b>Companies you own named most exposed:</b> ${c.exposed_held.map((h) => `<span class="pill warn">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}
+          <div><b>Its industries there:</b> ${inds(c.industries, (r) => (isNum(num(r.share)) ? ` <span class="small muted">${pct(r.share, false, 0)} of revenue${r.est ? " est." : ""}</span>` : ""))}</div></div></details>`).join("");
+    const tradeS = tv || trows ? sec("iv-trade", "Trade relations", `every country on its industries' trade maps, with their country dossiers`, `${tv ? `<h3>Each industry's trade verdict</h3><div class="iv-stack">${tv}</div>` : ""}
+      ${trows ? `<h3>Where its industries' revenue is</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th class="n">Revenue there</th><th class="n">Named by</th><th>The industries' read</th></tr></thead><tbody>${trows}</tbody></table></div><div class="small muted">Revenue in the country from filings where companies name it, else the trade analyst's estimate, weighted by the portfolio's industries.</div>` : ""}
+      ${tcards ? `<h3>Country dossiers</h3><div class="iv-stack">${tcards}</div>` : ""}`) : "";
+
+    // ---- Regulation
+    const SEVC = { critical: "neg", high: "neg", medium: "warn", low: "neu" };
+    const rv = (AF.regVerdicts || []).map((v) => `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(v.industry)}</b> ${wP(v.weight)} ${pill(v.stance || "")}${v.intensity ? `<span class="small muted">${esc(v.intensity)} intensity</span>` : ""}</div><div class="small">${cut(v.headline, 300)}</div></summary>
+        <div class="iv-more">${ln("Summary", v.summary, 700)}${(v.most_material || []).length ? `<div><b>Most material:</b><ul class="dlist">${v.most_material.map((x) => `<li>${typeof x === "string" ? cut(x, 220) : `<b>${esc(x.body || x.name || x.title || "")}</b> ${cut(x.why || x.text || x.what || "", 220)}`}</li>`).join("")}</ul></div>` : ""}
+          ${(v.timeline || []).length ? `<div><b>Dated steps ahead:</b><ul class="dlist">${v.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date)}</b> ` : ""}${cut(x.event || x.what || x.text || "", 200)}</li>`).join("")}</ul></div>` : ""}
+          ${(v.winners || []).length ? `<div><b>Winners:</b> ${v.winners.map((x) => typeof x === "string" ? esc(x) : `${esc(x.symbol || x.name || "")}${x.why ? ` <span class="muted">(${cut(x.why, 100)})</span>` : ""}`).join("; ")}</div>` : ""}
+          ${(v.losers || []).length ? `<div><b>Losers:</b> ${v.losers.map((x) => typeof x === "string" ? esc(x) : `${esc(x.symbol || x.name || "")}${x.why ? ` <span class="muted">(${cut(x.why, 100)})</span>` : ""}`).join("; ")}</div>` : ""}
+          ${(v.watch || []).length ? `<div><b>Watch:</b> ${v.watch.map((x) => cut(typeof x === "string" ? x : x.what || x.event || x.text || "", 140)).join("; ")}</div>` : ""}</div></details>`).join("");
+    const rules = (AF.rules || []).map((r) => `<details class="iv-card"><summary><div class="iv-card-h"><span class="idtag">${esc(r.id)}</span><b>${esc(r.name)}</b>${pill(r.severity || "", SEVC[lc(r.severity)] || "neu")}${r.status ? `<span class="small muted">${esc(r.status)}${r.effective ? ` · effective ${esc(r.effective)}` : ""}</span>` : ""}</div>
+        <div class="small muted">${esc(r.body || "")} · reaches ${pct(r.reach / (I.on || 1), false, 0)}</div><div class="small">${cut(r.bottom_line, 300)}</div></summary>
+        <div class="iv-more">${ln("What it is", r.what)}${ln("The numbers", r.numeric)}${ln("For the industry", r.impact)}${ln("Last 12 months", r.last12)}${ln("Today", r.today)}${ln("Next 12 months", r.next12)}${ln("Citation", r.citation)}
+          ${r.named_held?.length ? `<div><b>Companies you own it names:</b> ${r.named_held.map((h) => `<span class="pill warn">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}<div><b>Its industries under it:</b> ${inds(r.industries, (x) => (x.severity ? ` <span class="small muted">${esc(x.severity)}</span>` : ""))}</div></div></details>`).join("");
+    const items = (AF.items || []).map((x) => `<div class="iv-tile"><div class="iv-card-h"><span class="idtag">${esc(x.id)}</span><span class="pill neu">${esc(x.kind || "")}</span><b>${esc(x.title)}</b></div><div class="small muted">${esc([x.status, x.date && fmtShort(x.date), x.direction, x.value].filter(Boolean).join(" · "))}</div>
+        <div class="small">${cut(x.text, 280)}</div>${x.next ? `<div class="small"><b>Next:</b> ${cut(x.next, 140)}</div>` : ""}${x.named_held?.length ? `<div class="small">${x.named_held.map((h) => `<span class="pill warn">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}</div>`).join("");
+    const regS = rv || rules || items ? sec("iv-reg", "Regulation & legal", "each industry's regulatory verdict, the rules in their rule books, and policy, litigation and deals", `${rv ? `<h3>Each industry's regulatory verdict</h3><div class="iv-stack">${rv}</div>` : ""}${rules ? `<h3>The rules that bind it</h3><div class="iv-stack">${rules}</div>` : ""}${items ? `<h3>Policy, litigation & deals</h3><div class="iv-grid">${items}</div>` : ""}`) : "";
+
+    // ---- Cycle & KPIs
+    const CY = I.cycle;
+    const cycleS = CY ? sec("iv-cycle", "Cycle & KPIs", "each industry's KPI analyst: where it is in the cycle, pricing power, what managements say, what's next", `<div class="iv-kpis">
+        <div class="iv-kpi"><span class="eyebrow">Cycle phase</span><div class="actions" style="justify-content:flex-start">${Object.entries(CY.phase || {}).map(([k, v]) => `<span class="pill ${/expan|recover|early|upturn/.test(k) ? "pos" : /contract|down|late|peak/.test(k) ? "warn" : "neu"}">${esc(k)} ${pct(v, false, 0)}</span>`).join(" ")}</div></div>
+        <div class="iv-kpi"><span class="eyebrow">Pricing power</span><div class="actions" style="justify-content:flex-start">${Object.entries(CY.pricing || {}).map(([k, v]) => `<span class="pill ${/strong|high/.test(k) ? "pos" : /weak|low/.test(k) ? "neg" : "neu"}">${esc(k)} ${pct(v, false, 0)}</span>`).join(" ")}</div></div>
+        ${CY.tone ? `<div class="iv-kpi"><span class="eyebrow">Management tone</span>${bar([["up", CY.tone.positive, "positive"], ["flat", CY.tone.mixed + CY.tone.cautious, "mixed or cautious"], ["down", CY.tone.negative, "negative"]])}<span class="small muted">${pct(CY.tone.positive, false, 0)} positive · ${pct(CY.tone.negative, false, 0)} negative</span></div>` : ""}</div>
+      <div class="iv-stack" style="margin-top:10px">${(CY.rows || []).map((r) => `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(r.industry)}</b> ${wP(r.weight)} ${r.position ? pill(r.position, "neu") : ""}${r.pricing ? `<span class="small muted">pricing ${esc(r.pricing)}</span>` : ""}${r.oplev ? `<span class="small muted">operating leverage ${esc(r.oplev)}</span>` : ""}</div><div class="small">${cut(r.text, 260)}</div></summary>
+        <div class="iv-more">${(r.kpis || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>KPI</th><th>Now</th><th>Against the cycle</th></tr></thead><tbody>${r.kpis.map((k) => `<tr><td>${esc(k.name)}</td><td class="small">${esc(k.value)}</td><td class="small">${esc(k.vs_cycle)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+          ${(r.next || []).length ? `<div><b>Next triggers:</b><ul class="dlist">${r.next.map((x) => `<li><span class="mono">${esc(fmtShort(x.date))}</span> ${esc(x.event)}${x.names?.length ? ` <span class="muted">(${x.names.map(esc).join(", ")})</span>` : ""}</li>`).join("")}</ul></div>` : ""}</div></details>`).join("")}</div>`) : "";
+
+    // ---- Debates & scenarios
+    const DB = I.debates || [], SC = I.scen;
+    const debS = DB.length || SC ? sec("iv-debate", "Debates & scenarios", "the lead strategists' biggest open questions, and each industry's bull, base and bear case", `${DB.length ? `<div class="iv-grid">${DB.map((d) => `<div class="iv-tile"><div class="iv-card-h"><span class="idtag">${esc(d.id)}</span><b>${esc(d.industry)}</b> ${wP(d.weight)}${d.lean ? pill(`leans ${d.lean}`, CALLC(d.lean)) : ""}</div><div><b>${cut(d.q, 200)}</b></div>
+        <div class="small"><span class="pill pos">bull</span> ${cut(d.bull, 240)}</div><div class="small"><span class="pill neg">bear</span> ${cut(d.bear, 240)}</div>${d.resolves ? `<div class="small muted">Resolves with: ${cut(d.resolves, 160)}</div>` : ""}</div>`).join("")}</div>` : ""}
+      ${SC?.rows?.length ? `<h3>Each industry's scenarios</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry</th><th class="n">Weight</th><th class="n">Bull</th><th class="n">Base</th><th class="n">Bear</th></tr></thead><tbody>${SC.rows.map((r) => `<tr><td><b>${esc(r.industry)}</b>${r.scen.base?.text ? `<div class="small muted">${cut(r.scen.base.text, 160)}</div>` : ""}</td><td class="n">${pct(r.weight, false, 1)}</td>${["bull", "base", "bear"].map((k) => { const x = r.scen[k]; return `<td class="n">${x ? `<b class="${num(x.move) >= 0 ? "up" : "down"}">${num(x.move) > 0 ? "+" : ""}${fix(x.move, 0)}%</b><div class="small muted">${fix(x.p, 0)}%</div>` : "—"}</td>`; }).join("")}</tr>`).join("")}
+        <tr><td><b>Portfolio, weighted</b></td><td></td>${["bull", "base", "bear"].map((k) => `<td class="n"><b>${isNum(num(SC.fund[k]?.move)) ? `${SC.fund[k].move > 0 ? "+" : ""}${fix(SC.fund[k].move, 1)}%` : "—"}</b><div class="small muted">${fix(SC.fund[k]?.p, 0)}%</div></td>`).join("")}</tr></tbody></table></div>${isNum(num(SC.ev)) ? `<div class="small muted">Probability-weighted: <b>${SC.ev > 0 ? "+" : ""}${fix(SC.ev, 1)}%</b></div>` : ""}` : ""}`) : "";
+
+    // ---- Times like this
+    const T = I.times;
+    const timesS = T?.episodes?.length ? sec("iv-times", "Times like this", `the months most like today across its industries' histories (${T.n} industries) and what followed`, `<div class="iv-kpis">${["1M", "3M", "6M", "12M"].map((h) => { const b = T.base?.[h] || {}; return `<div class="iv-kpi"><span class="eyebrow">${h} after months like this</span><b>${isNum(num(b.pos)) ? fix(b.pos, 0) + "% rose" : "—"}</b><span class="small muted">median ${isNum(num(b.median)) ? `${b.median > 0 ? "+" : ""}${fix(b.median, 1)}%` : "—"}${isNum(num(b.all_pos)) ? ` · all months ${fix(b.all_pos, 0)}% rose` : ""}${isNum(num(b.beat_spy)) ? ` · beat SPY ${fix(b.beat_spy, 0)}%` : ""}</span></div>`; }).join("")}</div>
+      <div class="iv-grid" style="margin-top:10px">${T.episodes.map((e) => `<div class="iv-tile"><div class="iv-card-h"><span class="idtag">${esc(e.id)}</span><b>${esc(e.month)}</b><span class="small muted">${pct(e.reach / (T.on || 1), false, 0)} of the portfolio's industries</span></div>
+        <div class="iv-hz">${["1M", "3M", "6M", "12M"].map((h) => `<div><span class="eyebrow">${h}</span><b class="${num(e.ind?.[h]) >= 0 ? "up" : "down"}">${isNum(num(e.ind?.[h])) ? `${e.ind[h] > 0 ? "+" : ""}${fix(e.ind[h], 1)}%` : "—"}</b><div class="small muted">SPY ${isNum(num(e.spy?.[h])) ? `${e.spy[h] > 0 ? "+" : ""}${fix(e.spy[h], 1)}%` : "—"}</div></div>`).join("")}</div>
+        ${e.note?.then ? `<div class="small"><b>Then:</b> ${cut(e.note.then, 260)}</div>` : ""}${e.note?.after ? `<div class="small"><b>After:</b> ${cut(e.note.after, 260)}</div>` : ""}${e.note?.different ? `<div class="small muted"><b>Different now:</b> ${cut(e.note.different, 200)}</div>` : ""}${e.note?.lesson ? `<div class="small"><span class="pill neu">lesson</span> ${cut(e.note.lesson, 120)}</div>` : ""}</div>`).join("")}</div>
+      ${(T.reads || []).length ? `<h3>The market historians' reads</h3>${T.reads.map((r) => `<div class="small" style="margin-bottom:6px"><b>${esc(r.industry)}</b> ${wP(r.weight)} ${cut(r.read, 600)}</div>`).join("")}` : ""}`) : "";
+
+    // ---- Industry by industry
+    const BR = I.briefs || [];
+    const READS = [["macro", "Macro"], ["world", "World"], ["trade", "Trade"], ["reg", "Regulation"], ["cycle", "Cycle"], ["calls", "Earnings calls"], ["street", "Wall Street"], ["news", "News"], ["val", "Valuation"], ["fund", "Fundamentals"], ["earn", "Earnings"], ["risk", "Risk"], ["stress", "Stress"], ["tech", "Technicals"], ["div", "Income"], ["fit", "Fit"]];
+    const indS = BR.length ? sec("iv-ind", "Industry by industry", "each industry's own report, as its analysts left it", `<div class="iv-stack">${BR.map((b) => b.missing ? `<div class="iv-card"><b>${esc(b.industry)}</b> ${wP(b.weight)} <span class="small muted">no saved run</span></div>` : `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(b.industry)}</b> ${wP(b.weight)}${b.opportunity ? pill(b.opportunity, /attract|strong|buy|over/i.test(b.opportunity) ? "pos" : /unattr|avoid|under|sell/i.test(b.opportunity) ? "neg" : "neu") : ""}${isNum(num(b.expected12)) ? `<span class="mono ${b.expected12 >= 0 ? "up" : "down"}">${b.expected12 > 0 ? "+" : ""}${fix(b.expected12, 1)}% 12M</span>` : ""}<span class="small muted">${esc(b.sector)}${b.as_of ? ` · ${esc(fmtShort(b.as_of))}` : ""}</span></div>
+        <div class="actions" style="justify-content:flex-start;margin:4px 0">${["1M", "3M", "6M", "12M"].map((h) => b.calls[h] ? `<span class="small muted">${h}</span>${pill(b.calls[h], CALLC(b.calls[h]))}` : "").join(" ")}${b.regime ? `<span class="small muted">macro</span>${pill(b.regime, "neu")}` : ""}${b.trade ? `<span class="small muted">trade</span>${pill(b.trade, "neu")}` : ""}${b.reg ? `<span class="small muted">regulation</span>${pill(b.reg)}` : ""}${b.cycle ? `<span class="small muted">cycle</span>${pill(b.cycle, "neu")}` : ""}</div>
+        <div class="small">${cut(b.headline, 300)}</div></summary>
+        <div class="iv-more">${b.drivers?.length ? `<div><b>Drivers:</b> ${b.drivers.map((x) => cut(x, 160)).join("; ")}</div>` : ""}${b.risks?.length ? `<div><b>Risks:</b> ${b.risks.map((x) => cut(x, 160)).join("; ")}</div>` : ""}
+          ${["bull", "base", "bear"].filter((k) => b.scen?.[k]?.text).map((k) => `<div class="small"><span class="pill ${k === "bull" ? "pos" : k === "bear" ? "neg" : "neu"}">${k} ${fix(b.scen[k].p, 0)}% · ${num(b.scen[k].move) > 0 ? "+" : ""}${fix(b.scen[k].move, 0)}%</span> ${cut(b.scen[k].text, 220)}</div>`).join("")}
+          <div class="iv-reads">${READS.filter(([k]) => b.reads?.[k]).map(([k, l]) => `<div><span class="eyebrow">${l}</span><p class="small">${cut(b.reads[k], 320)}</p></div>`).join("")}</div>
+          ${b.news?.items?.length ? `<div><b>Latest news:</b><ul class="dlist small">${b.news.items.map((x) => `<li><span class="mono">${esc(fmtShort(x.date))}</span> ${x.symbol ? `<b>${esc(x.symbol)}</b> ` : ""}${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</li>`).join("")}</ul></div>` : ""}</div></details>`).join("")}</div>`) : "";
+
+    // ---- Calendar
+    const cal = [...(I.cal || []).map((x) => ({ date: x.date, title: x.title, kind: x.kind, detail: x.detail, w: x.w, inds: x.industries })), ...(AF.watchNext || []).map((x) => ({ date: x.date, title: x.event, kind: "macro", detail: x.why, w: x.reach, inds: x.industries })),
+      ...(I.cycle?.next || []).map((x) => ({ date: x.date, title: x.event, kind: "KPI", detail: (x.names || []).join(", "), w: x.weight, inds: [x.industry] }))]
+      .filter((x) => x.date && x.date >= today() && (x.kind === "macro" || (num(x.w) || 0) >= 0.01)).sort((a, b) => (a.date < b.date ? -1 : 1)).filter((x, i, arr) => arr.findIndex((y) => y.date === x.date && lc(y.title).slice(0, 30) === lc(x.title).slice(0, 30)) === i).slice(0, 40);
+    const calS = cal.length ? sec("iv-cal", "Calendar", "the dated events its industries' reports are watching", `<div class="iv-list">${cal.map((x) => `<div class="iv-row top"><span class="mono">${esc(fmtShort(x.date))}</span><span><span class="pill neu">${esc(x.kind || "event")}</span> <b>${cut(x.title, 140)}</b>${x.detail ? `<div class="small muted">${cut(x.detail, 200)}</div>` : ""}${x.inds?.length ? `<div class="small muted">${[...new Set(x.inds)].slice(0, 4).map(esc).join(", ")}</div>` : ""}</span></div>`).join("")}</div>`) : "";
+
+    const body = { "iv-snap": snap, "iv-macro": macro, "iv-world": worldS, "iv-trade": tradeS, "iv-reg": regS, "iv-cycle": cycleS, "iv-debate": debS, "iv-times": timesS, "iv-ind": indS, "iv-cal": calS }[cur];
+    return head + (body || `<section class="panel"><div class="small muted">The industry reports behind this portfolio have nothing on this yet.</div></section>`);
+  }
   function anaResult(p, A) {
     if (!A?.sels) return "";
     const W0 = A.write?.improved || A.write?.recommended || {}, wr0 = (t) => recRich(t, W0.dossier || ""), gC = A.grades?.current;
@@ -19594,10 +19865,10 @@ Return JSON only:
       mixS = `<section class="panel"><div class="panel-head"><h2>Where you are vs where the runs say to be</h2><span class="small muted">your look-through industry mix against the target for this goal</span></div><div class="pf-vs">${rows.map((r) => `<div class="pf-vs-row"><span class="ellip">${esc(r.name)}</span><div class="pf-vs-bars"><i class="t" style="width:${(r.t / mx) * 100}%"></i><i class="g" style="width:${(r.g / mx) * 100}%"></i></div><span class="mono small ${r.g - r.t > 0.02 ? "down" : r.t - r.g > 0.02 ? "up" : "muted"}">${pct(r.g, false, 0)} → ${pct(r.t, false, 0)}</span></div>`).join("")}</div>
         <div class="legend"><span><i style="background:var(--accent)"></i>target</span><span><i style="background:var(--c3)"></i>yours today</span></div></section>`; }
     const R = recView(A, true); if (!R || typeof R === "string") return cur + holdingsView(A) + mixS + deskView(A) + (R || "");
-    const tabs = [["overview", "Overview"], ["portfolio", "Your portfolio"], ["new", "New portfolio"], ["opps", "Opportunities", (A.desk || []).length], ["deep", "Deep dive"]];
+    const tabs = [["overview", "Overview"], ["portfolio", "Your portfolio"], ["new", "New portfolio"], ["opps", "Opportunities", (A.desk || []).length], ["macro", "Macro & foreign affairs"], ["deep", "Deep dive"]];
     const sub = tabs.some(([k]) => k === S.anaSub) ? S.anaSub : "overview";
     const nav = `<div id="ana-top"></div><nav class="ana-nav">${tabs.map(([k, l, c]) => `<button class="${k === sub ? "on" : ""}" data-pf="ana-sub-${k}">${l}${c ? `<span class="cnt">${c}</span>` : ""}</button>`).join("")}</nav>`;
-    const body = sub === "overview" ? anaOverview(A, R) : sub === "portfolio" ? cur + holdingsView(A) + mixS : sub === "opps" ? deskView(A) || `<section class="panel"><div class="small muted">No opportunities in this analysis: analyze again.</div></section>`
+    const body = sub === "overview" ? anaOverview(A, R) : sub === "portfolio" ? cur + holdingsView(A) + mixS : sub === "macro" ? intelView(A) : sub === "opps" ? deskView(A) || `<section class="panel"><div class="small muted">No opportunities in this analysis: analyze again.</div></section>`
       : sub === "new" ? R.head + R.memo + R.etf + R.track + R.proj + R.own + R.imp + R.plan : sleevesView(A) + R.ind + R.bond + R.co + R.ovl + R.look + R.hz + R.opp + R.risk + R.stress + R.method;
     return nav + body;
   }

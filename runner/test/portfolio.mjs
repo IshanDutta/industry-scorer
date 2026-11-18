@@ -72,6 +72,11 @@ const code = await new Promise((done) => { const p = spawn(process.execPath, [jo
 ok(code === 0, `the job exits 0 (got ${code})`);
 const f = join(out, "portfolio.json.gz");
 if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString());
+  if (process.env.KEEP) writeFileSync(process.env.KEEP, readFileSync(f));
+  { const I = r.intel?.current, N = r.intel?.improved || r.intel?.recommended;
+    ok(!!I?.aff?.regimes?.length && !!I?.aff?.indicators?.length, `macro from the industry reports (${I?.aff?.regimes?.length || 0} regimes, ${I?.aff?.indicators?.length || 0} indicators)`);
+    ok(!!I?.aff?.world?.length && !!I?.aff?.trade?.length && !!(I?.aff?.rules?.length || I?.aff?.regVerdicts?.length), `world events (${I?.aff?.world?.length || 0}), trade (${I?.aff?.trade?.length || 0}) and regulation from the industry reports`);
+    ok(!!I?.briefs?.length && !!N?.aff, `each industry's brief (${I?.briefs?.length || 0}) and the new portfolio's read`); }
   ok(!!r.grades?.current?.letter, `today's portfolio graded ${r.grades?.current?.letter} (${Math.round(r.grades?.current?.score)})`);
   ok(!!r.sels?.improved && !!r.sels?.recommended, "the fix-what-you-have and from-scratch mixes are there");
   ok(r.sels.recommended.w.every((x) => x <= 0.15 + 1e-9), "every ETF at most 15%");
