@@ -63,7 +63,7 @@ const brainSrc = `window.FX = ${JSON.stringify({ cos: FX.cos, spy: FX.spy_holdin
 writeFileSync(join(tmp, "brain.js"), brainSrc);
 const brain = loadBrain(join(tmp, "brain.js"));
 await fakeMcp(brain, { port: 7811 }); const fa = await fakeAnthropic(brain, { port: 7812 });
-const req = { id: "pf_test1", name: "Growth & Value Core", total: 100000, holdings: [{ ticker: "QQQ", weight: 30 }, { ticker: "SPY", weight: 30 }, { ticker: "AAPL", weight: 15 }, { ticker: "MSFT", weight: 15 }, { ticker: "SCHD", weight: 10 }], goal: { type: "growth", horizon: "12M" } };
+const req = { id: "pf_test1", name: "Growth & Value Core", total: 100000, holdings: [{ ticker: "QQQ", weight: 30 }, { ticker: "SPY", weight: 30 }, { ticker: "AAPL", weight: 15 }, { ticker: "MSFT", weight: 15 }, { ticker: "SCHD", weight: 10 }], goal: process.env.UG ? { primaryObjective: "growth", timeHorizon: "1Y", aggressiveness: 75, incomeNeeds: "some", recommendationFocus: "hiddenGems" } : { type: "growth", horizon: "12M" } };
 writeFileSync(join(tmp, "request.json"), JSON.stringify(req));
 const out = join(tmp, "out");
 const code = await new Promise((done) => { const p = spawn(process.execPath, [join(here, "../portfolio.mjs"), "--request", join(tmp, "request.json"), "--exports", EXP, "--out", out, "--deadline-min", "25"], {

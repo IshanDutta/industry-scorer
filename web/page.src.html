@@ -468,43 +468,57 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .ov-h h2 { font-size: 20px; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ov-chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); }
-.gw .panel-head { flex-wrap: wrap; gap: 10px; }
-.gw-hz { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.gw-hz .eyebrow { margin-right: 4px; }
-.gw-chip { padding: 3px 9px; border-radius: 999px; font-size: 12px; background: var(--sunk); }
-.gw-chip.on { background: var(--accent); color: var(--accent-ink, #fff); border-color: var(--accent); }
-.gw-prog { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 0; margin: 4px 0 14px; }
-.gw-prog li button { width: 100%; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: transparent; border: 0; border-bottom: 3px solid var(--line); border-radius: 0; font-size: 13px; color: var(--muted); }
-.gw-prog li.on button { border-bottom-color: var(--accent); color: var(--ink); font-weight: 600; }
-.gw-prog li.done button { border-bottom-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--ink); }
-.gw-num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--sunk); font-size: 11px; flex: none; }
-.gw-prog li.on .gw-num, .gw-prog li.done .gw-num { background: var(--accent); color: var(--accent-ink, #fff); }
-.gw-q { margin: 0 0 10px; font-size: 16px; }
-.gw-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.gw-card { display: grid; gap: 4px; text-align: left; align-content: start; padding: 14px; border-radius: 14px; background: var(--sunk); min-height: 92px; transition: border-color .15s, background .15s, transform .15s; }
-.gw-card:hover { transform: translateY(-1px); }
-.gw-card.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); box-shadow: 0 0 0 1px var(--accent) inset; }
-.gw-ico { width: 22px; height: 22px; color: var(--accent); }
-.gw-card .gw-ico { margin-bottom: 4px; }
-.gw-risk { display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: var(--sunk); border: 1px solid color-mix(in srgb, var(--tc) 40%, var(--line)); }
-.gw-risk-top { display: flex; justify-content: space-between; align-items: center; }
-.gw-risk-n { font-size: 28px; color: var(--tc); font-variant-numeric: tabular-nums; }
-.gw-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: var(--tc); }
-.gw-risk input[type=range] { width: 100%; accent-color: var(--tc); }
-.gw-scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; font-size: 10.5px; color: var(--muted); }
-.gw-scale span { border-top: 4px solid var(--tc); padding-top: 3px; text-align: center; }
-.gw-tier-text { margin: 0; font-size: 14px; }
-.gw-list { display: grid; gap: 8px; }
-.gw-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 10px; text-align: left; padding: 12px 14px; border-radius: 12px; background: var(--sunk); width: 100%; }
-.gw-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--sunk)); }
-.gw-check { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--line); font-size: 12px; font-weight: 700; }
-.gw-row.on .gw-check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); }
-.gw-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
-.gw-more { margin-top: 10px; }
-.gb-items { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.gb-tag { display: inline-flex; align-items: center; gap: 5px; }
-.gb-tag .gw-ico { width: 16px; height: 16px; }
-@media (max-width: 560px) { .gw-grid { grid-template-columns: 1fr 1fr; } .gw-card { padding: 10px; min-height: 0; } .gw-prog li button { font-size: 0; gap: 0; justify-content: center; } .gw-prog .gw-num { font-size: 11px; } .gw-row { grid-template-columns: 26px 1fr; } .gw-row > :last-child { grid-column: 2; } .gw-scale { font-size: 9px; } }
+.q-ico { width: 16px; height: 16px; flex: none; }
+.q-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / .6); backdrop-filter: blur(2px); }
+.q-dialog { width: min(672px, 100%); max-height: 85vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; box-shadow: 0 20px 60px rgb(0 0 0 / .45); display: grid; gap: 12px; }
+.q-head { display: flex; justify-content: space-between; align-items: center; }
+.q-head h2 { margin: 0; font-size: 18px; }
+.q-close { border: 0; background: transparent; padding: 4px; color: var(--muted); }
+.q-progress { height: 6px; border-radius: 999px; background: var(--sunk); overflow: hidden; }
+.q-progress i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width .25s; }
+.q-steps { display: flex; justify-content: space-between; }
+.q-step { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: transparent; padding: 0; font-size: 11px; font-weight: 500; color: var(--muted); }
+.q-step.on { color: var(--accent); } .q-step.todo { color: color-mix(in srgb, var(--muted) 45%, transparent); cursor: default; }
+.q-dot { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line); transition: all .2s; }
+.q-step.on .q-dot { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.q-step.done .q-dot { border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 6%, transparent); color: var(--accent); }
+.q-body { min-height: 280px; padding: 8px 0; }
+.q-body h3 { margin: 0 0 14px; font-size: 15px; font-weight: 500; }
+.q-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.q-card, .q-row { text-align: left; padding: 16px; border-radius: 12px; border: 2px solid var(--line); background: transparent; display: grid; gap: 4px; align-content: start; transition: all .15s; }
+.q-card:hover, .q-row:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); background: color-mix(in srgb, var(--sunk) 60%, transparent); }
+.q-card.on, .q-row.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / .2); }
+.q-card b, .q-row b { font-size: 14px; } .q-card > span, .q-row span span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.q-card-ico { width: 20px; height: 20px; color: var(--accent); margin-bottom: 6px; }
+.q-list { display: grid; gap: 10px; }
+.q-row { width: 100%; display: flex; align-items: center; justify-content: space-between; }
+.q-row > span { display: grid; gap: 2px; }
+.q-row-check { width: 20px; height: 20px; color: var(--accent); margin-left: 8px; }
+.q-risk { display: grid; gap: 16px; padding: 0 8px; }
+.q-risk-top { display: flex; justify-content: space-between; align-items: center; }
+.q-risk-n { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.q-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--tc); border: 1px solid color-mix(in srgb, var(--tc) 30%, transparent); background: transparent; }
+.q-badge.sm { font-size: 10.5px; padding: 0 6px; }
+.q-risk input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; border-radius: 999px; background: linear-gradient(to right, var(--accent) var(--fill), var(--sunk) var(--fill)); outline: none; }
+.q-risk input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); cursor: grab; }
+.q-risk input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--bg); border: 2px solid var(--accent); cursor: grab; }
+.q-risk input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+.q-risk-ends { display: flex; justify-content: space-between; font-size: 10px; font-weight: 500; color: var(--muted); }
+.q-explain { padding: 14px; border-radius: 10px; background: color-mix(in srgb, var(--sunk) 60%, transparent); border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.q-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid var(--line); }
+.q-foot button { display: inline-flex; align-items: center; gap: 4px; }
+.q-ghost { border-color: transparent; background: transparent; display: inline-flex; align-items: center; gap: 6px; }
+.q-ghost:hover:not(:disabled) { background: var(--sunk); }
+.q-banner { justify-content: flex-start; gap: 10px 16px; padding: 10px 12px; background: color-mix(in srgb, var(--sunk) 50%, var(--surface)); border-radius: 10px; font-size: 12.5px; }
+.qb-item { display: inline-flex; align-items: center; gap: 6px; } .qb-item .q-ico { color: var(--accent); } .qb-item .qb-zap { color: var(--tc); }
+.qb-item b { font-weight: 600; }
+.qb-item select { border: 0; background: transparent; color: var(--ink); font: 600 12.5px var(--sans, inherit); padding: 0 2px; cursor: pointer; }
+.qb-sep { width: 1px; height: 16px; background: var(--line); }
+.qb-end { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+.q-banner .q-ghost { font-size: 12px; height: 28px; padding: 0 10px; }
+.q-banner .q-ghost .q-ico { width: 12px; height: 12px; }
+.q-more { margin: -4px 2px 0; }
+@media (max-width: 640px) { .q-step-t { display: none; } .qb-sep { display: none; } .q-dialog { padding: 16px; } .q-card { padding: 12px; } }
 .goal-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .pf-manual { border-color: color-mix(in srgb, var(--c3) 45%, var(--line)); }
 .pf-steps { display: grid; gap: 10px; margin: 0; padding-left: 20px; } .pf-steps textarea { display: block; width: 100%; margin-top: 6px; background: var(--sunk); color: var(--muted); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font-size: 11.5px; resize: vertical; }
@@ -6653,7 +6667,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const tabs = `<nav class="pf-tabs" role="tablist">${PF_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? "on" : ""}" data-pf="tab-${k}">${l}${k === "analysis" && g ? ` <span class="pf-mini ${GRADE_CLS(g.letter)}">${esc(g.letter)}</span>` : k === "analysis" && running ? ' <span class="pf-dot"></span>' : ""}</button>`).join("")}</nav>`;
     const notes = `${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}`;
     const body = tab === "edit" ? pfEditorView(p, hs) : tab === "analysis" ? anaView(p, A, job) : tab === "holdings" ? pfHoldingsView(p, hs, D, total, pos) : pfAnalysisView(p, hs, D, total, pos);
-    el.innerHTML = chips + hero + notes + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + tabs + `<div class="pf-body">${body}</div>`;
+    el.innerHTML = chips + hero + notes + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + tabs + `<div class="pf-body">${body}</div>` + questionnaireView();
     wireCharts(el); wireSpy(el); pfBind(el);
   }
   /** Holdings as cards (value, gain, today, weight now vs target), then the full table. */
@@ -6778,10 +6792,12 @@ a.btnlink:hover { border-color: var(--accent); }
       S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
         const dl = $("pf-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); }));
     el.querySelectorAll("[data-rg]").forEach((inp) => inp.addEventListener("change", () => { const d = recGoalDraft(), k = inp.dataset.rg; d[k] = inp.type === "checkbox" ? inp.checked : inp.type === "number" || inp.type === "range" ? (inp.value === "" ? "" : num(inp.value)) : inp.value; recGoalSave(); if (k === "intl" || k === "bonds") renderPortfolio(); }));
-    // The aggressiveness slider: the tier badge, text and limits follow it live, without a re-render.
-    el.querySelectorAll("[data-gw-risk]").forEach((inp) => inp.addEventListener("input", () => { const d = recGoalDraft(); d.risk = num(inp.value); const t = EtfRec.tierOf(d.risk), box = inp.closest(".gw-risk");
-      if (!box) return; box.style.setProperty("--tc", GW_TIER_C[t.key]); const q = (k) => box.querySelector(`[data-gw="${k}"]`);
-      q("badge").textContent = t.label; q("n").textContent = Math.round(d.risk); q("text").textContent = t.text; q("means").textContent = gwMeans(d); }));
+    // The aggressiveness slider: the badge (label and color) and the explanation follow it live, without a re-render.
+    el.querySelectorAll("[data-gq-risk]").forEach((inp) => inp.addEventListener("input", () => { if (!S.gq) return; const v = Math.round(num(inp.value)); S.gq.goals.aggressiveness = v; const t = EtfRec.getAggressivenessTier(v), box = inp.closest(".q-risk"), q = (k) => box.querySelector(`[data-gq="${k}"]`);
+      inp.style.setProperty("--fill", v + "%"); q("n").textContent = v + "%"; q("badge").textContent = t.label; q("badge").style.setProperty("--tc", t.color); q("text").textContent = t.explanation; }));
+    el.querySelectorAll("[data-gq-backdrop]").forEach((bd) => bd.addEventListener("click", (ev) => { if (ev.target === bd) { S.gq = null; renderPortfolio(); } }));
+    if (S.gq) { const f = el.querySelector(".q-dialog .q-card.on, .q-dialog .q-row.on, .q-dialog input[type=range], .q-dialog .q-next"); if (f && !el.querySelector(".q-dialog")?.contains(document.activeElement)) f.focus({ preventScroll: true }); }
+    if (!S.gqEsc) { S.gqEsc = true; document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && S.gq) { S.gq = null; renderPortfolio(); } }); }
     el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
     if (!el.dataset.bound) { el.dataset.bound = "1"; el.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-pf], button[data-pf-per]"); if (b) pfClick(b); }); }
   }
@@ -6791,6 +6807,7 @@ a.btnlink:hover { border-color: var(--accent); }
     const a = b.dataset.pf, now = new Date().toISOString();
     if (a.startsWith("tab-")) { S.pfTab = a.slice(4); if (S.pfTab !== "edit") S.pfDraft = null; renderPortfolio(); if (S.pfTab === "analysis") pfWatch(p.id); return; }
     if (a.startsWith("sel-")) { st.activeId = a.slice(4); S.pfDraft = null; S.pfRebal = null; await pfSave(); renderPortfolio(); pfLoad(); pfWatch(st.activeId); return; }
+    if ((a === "analyze" || a === "ana-github" || a === "ana-here") && (recGoalDraft(), !S.goalSaved)) { qOpen(a); return; }
     if (a === "analyze") { S.pfTab = "analysis"; if (PF_TRIGGER && S.mcp && (await outlookDb().catch(() => null))) pfAnaGithub(p); else pfAnaHere(p); return; }
     if (a === "ana-github") { pfAnaGithub(p); return; }
     if (a === "ana-here") { pfAnaHere(p); return; }
@@ -6798,14 +6815,20 @@ a.btnlink:hover { border-color: var(--accent); }
     if (a === "ana-fetch") { pfAnaFetch(p); return; }
     if (a === "ana-manual-close") { if (S.pfManual) delete S.pfManual[p.id]; renderPortfolio(); return; }
     if (a === "ana-copy") { const t = S.pfManual?.[p.id]?.b64; if (t) { try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch { $("pf-manual")?.querySelector("textarea")?.select(); b.textContent = "Selected: press Ctrl/Cmd+C"; } } return; }
-    if (a.startsWith("gw-obj-")) { recGoalDraft().objective = a.slice(7); recGoalSave(); renderPortfolio(); return; }
-    if (a.startsWith("gw-inc-")) { recGoalDraft().income = a.slice(7); recGoalSave(); renderPortfolio(); return; }
-    if (a.startsWith("gw-foc-")) { recGoalDraft().focus = a.slice(7); recGoalSave(); renderPortfolio(); return; }
-    if (a.startsWith("gw-step-")) { S.goalStep = Math.min(4, Math.max(1, +a.slice(8) || 1)); recGoalSave(); renderPortfolio(); return; }
-    if (a.startsWith("gw-hz-")) { const h = a.slice(6); if (EtfRec.HORIZONS[h]) { recGoalDraft().horizon = h; S.goalHzSet = true; recGoalSave(); renderPortfolio(); } return; }
-    if (a === "gw-done") { const d = recGoalDraft(); if (!S.goalHzSet) d.horizon = "1Y"; S.goalOpen = false; S.goalStep = 1; S.goalHzSet = false; recGoalSave(); renderPortfolio(); return; }
+    if (a === "gq-open") { qOpen(null); return; }
+    if (a === "gq-close") { S.gq = null; renderPortfolio(); return; }
+    if (S.gq && a.startsWith("gq-")) { const q = S.gq, g = q.goals;
+      if (a.startsWith("gq-obj-")) g.primaryObjective = a.slice(7); else if (a.startsWith("gq-inc-")) g.incomeNeeds = a.slice(7); else if (a.startsWith("gq-foc-")) g.recommendationFocus = a.slice(7);
+      else if (a.startsWith("gq-step-")) { const i = +a.slice(8); if (i <= q.step) q.step = i; }
+      else if (a === "gq-back") q.step = Math.max(0, q.step - 1);
+      else if (a === "gq-next" && qCanProceed(q)) {
+        if (q.step < 3) q.step++;
+        else { Object.assign(recGoalDraft(), g, { timeHorizon: g.timeHorizon || "1Y" }); recGoalSave(); S.gq = null; renderPortfolio();
+          const then = q.then || "analyze", busy = S.pfAnaRun?.pid === p.id || /queued|running/.test(S.pfJobs?.[p.id]?.state || "");
+          if (!busy) { if (then === "ana-github") pfAnaGithub(p); else if (then === "ana-here") pfAnaHere(p); else { S.pfTab = "analysis"; if (PF_TRIGGER && S.mcp && (await outlookDb().catch(() => null))) pfAnaGithub(p); else pfAnaHere(p); } }
+          return; } }
+      renderPortfolio(); return; }
     if (a.startsWith("ana-sub-")) { S.anaSub = a.slice(8); renderPortfolio(); document.getElementById("ana-top")?.scrollIntoView?.({ behavior: "smooth", block: "start" }); return; }
-    if (a === "goal-open") { S.goalOpen = !S.goalOpen; S.goalStep = 1; S.goalHzSet = false; renderPortfolio(); return; }
     if (a.startsWith("rec-key-")) { S.recKey = a.slice(8); renderPortfolio(); const R = S.pfAna?.[p.id]; if (R && S.sample && !R.write?.[S.recKey] && !R.writing?.[S.recKey]) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-write") { const R = S.pfAna?.[p.id]; if (R) recWrite(R, S.recKey, p.id); return; }
     if (a === "rec-save" || a === "rec-apply") { await recSave({ apply: a === "rec-apply" }); return; }
@@ -7081,15 +7104,20 @@ a.btnlink:hover { border-color: var(--accent); }
     return { allocation: got[0], selection: got[1], risks: got[2], verdict: got[3] || null, etfs, etfFacts, memo, memoFacts, desk, deskFacts, review, reviewFacts, dossier: ds.text, ids: ds.ids, at: new Date().toISOString() };
   }
   // ------------------------------------------------------------- the Analysis tab: grade, then recommendations
-  function recGoalDefaults() { return { objective: "growth", risk: 70, income: "none", focus: "gems", horizon: "1Y", amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
+  function recGoalDefaults() { return { ...EtfRec.UG.DEFAULT, amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
   /** The goals (UserGoals): kept in this browser so they survive a reload; older saved goals are translated. */
   function recGoalDraft() {
     if (S.recGoal) return S.recGoal;
-    let d = null; try { d = JSON.parse(localStorage.getItem("pfGoal") || "null"); } catch {}
-    if (d && !d.objective && d.type) { const m = { growth: ["growth", 70], aggressive: ["growth", 90], conservative: ["preservation", 30], income: ["income", 35] }[d.type] || ["growth", 70]; d = { ...d, objective: m[0], risk: m[1], income: d.type === "income" ? "priority" : "none", focus: "gems", horizon: { "12M": "1Y", long: "5Y" }[d.horizon] || d.horizon || "1Y" }; delete d.type; }
-    S.recGoal = { ...recGoalDefaults(), ...(d || {}) }; if (!d) S.goalOpen = true; return S.recGoal;
+    let d = null, saved = false; try { d = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); saved = !!d; if (!d) d = JSON.parse(localStorage.getItem("pfGoal") || "null"); } catch {}
+    if (d && !d.primaryObjective) {
+      if (!d.objective && d.type) { const m = { growth: ["growth", 70], aggressive: ["growth", 90], conservative: ["preservation", 30], income: ["income", 35] }[d.type] || ["balanced", 50]; d = { ...d, objective: m[0], risk: m[1], income: d.type === "income" ? "priority" : "some", horizon: { "12M": "1Y", long: "5Y" }[d.horizon] || d.horizon }; }
+      const inv = (o, v) => Object.keys(o).find((k) => o[k] === v);
+      d = { ...d, primaryObjective: d.objective || "balanced", aggressiveness: isNum(num(d.risk)) ? num(d.risk) : 50, incomeNeeds: inv(EtfRec.UG.INCOME_KEY, d.income) || "some", recommendationFocus: inv(EtfRec.UG.FOCUS_KEY, d.focus) || "hiddenGems", timeHorizon: EtfRec.HORIZONS[d.horizon] ? d.horizon : "1Y" };
+      for (const k of ["objective", "risk", "income", "focus", "horizon", "type"]) delete d[k]; saved = true;
+    }
+    S.recGoal = { ...recGoalDefaults(), ...(d || {}) }; S.goalSaved = saved; return S.recGoal;
   }
-  function recGoalSave() { try { localStorage.setItem("pfGoal", JSON.stringify(S.recGoal || {})); } catch {} }
+  function recGoalSave() { try { localStorage.setItem("portfolio_user_goals", JSON.stringify(S.recGoal || {})); S.goalSaved = true; } catch {} }
   function recGoalOf(d) {
     const ex = String(d.exclude || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
     const goal = EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
@@ -7110,48 +7138,59 @@ a.btnlink:hover { border-color: var(--accent); }
     const facts = {}; for (const line of String(ds || "").split("\n")) { const m = line.match(/^\[([A-Z]{1,2}\d{1,3})\]\s*(.*)$/); if (m) facts[m[1]] = m[2]; }
     return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(trimC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
   }
-  const GW_ICON = {
-    growth: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
-    income: '<path d="M12 2v20"/><path d="M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
-    preservation: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    balanced: '<path d="M12 3v18"/><path d="M5 21h14"/><path d="M3 7h18"/><path d="M6 7l-3 7a3 3 0 0 0 6 0z"/><path d="M18 7l-3 7a3 3 0 0 0 6 0z"/>',
-    gems: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/><path d="M5 2l.6 1.4L7 4l-1.4.6L5 6l-.6-1.4L3 4l1.4-.6z"/>',
-    risk: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
-    gaps: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  // Line icons (24px grid) for the questionnaire and the goals strip.
+  const QI = {
+    target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+    dollar: '<path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    sparkles: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15v4"/><path d="M17 17h4"/><path d="M5 3v4"/><path d="M3 5h4"/>',
+    trending: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>', left: '<path d="m15 18-6-6 6-6"/>', right: '<path d="m9 18 6-6-6-6"/>', x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>', pencil: '<path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>',
   };
-  GW_ICON.income_f = GW_ICON.income;
-  const gwIcon = (k) => `<svg class="gw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${GW_ICON[k] || ""}</svg>`;
-  const GW_TIER_C = { preservation: "#2f80ed", conservative: "#14a38b", moderate: "#d99a1e", growth: "#ef7a2b", aggressive: "#e0453a" };
-  /** What the answers mean for the engine, in one line. */
-  function gwMeans(d) { const u = EtfRec.fromAnswers(d), vol = num(d.maxVol) || u.vol * 100;
-    return `volatility ≤ ${Math.round(vol)}% · bonds ${Math.round(u.bonds[0] * 100)}–${Math.round(u.bonds[1] * 100)}% · per industry ≤ ${Math.round(u.industryCap * 100)}% · per sector ≤ ${Math.round(u.sectorCap * 100)}%`; }
-  function gwHorizon(d) { return `<div class="gw-hz" role="group" aria-label="Investment horizon"><span class="eyebrow">Horizon</span>${Object.keys(EtfRec.HORIZONS).map((h) => `<button class="gw-chip ${d.horizon === h ? "on" : ""}" data-pf="gw-hz-${h}">${h}</button>`).join("")}</div>`; }
-  function anaGoalView(p, A, compact) {
-    const d = recGoalDraft(), O = EtfRec.OBJECTIVES, I = EtfRec.INCOME, F = EtfRec.FOCUS, t = EtfRec.tierOf(num(d.risk) ?? 60);
-    if (compact && !S.goalOpen) return `<div class="goal-bar"><span class="gb-items"><span class="eyebrow">Goal</span><span class="gb-tag">${gwIcon(d.objective)}<b>${esc(O[d.objective]?.label || "Growth")}</b></span>
-      <span class="gw-badge" style="--tc:${GW_TIER_C[t.key]}">${esc(t.label)} · ${Math.round(num(d.risk) ?? 60)}</span><span class="gb-tag small">${esc(I[d.income]?.label || "")}</span><span class="gb-tag small">${gwIcon(d.focus === "income" ? "income" : d.focus)}${esc(F[d.focus]?.label || "")}</span></span>
-      ${gwHorizon(d)}<button class="sm" data-pf="goal-open">Change</button></div>`;
-    const st = Math.min(4, Math.max(1, S.goalStep || 1)), names = ["Objective", "Risk", "Income", "Focus"];
-    const prog = `<ol class="gw-prog">${names.map((n, i) => `<li class="${i + 1 === st ? "on" : i + 1 < st ? "done" : ""}"><button data-pf="gw-step-${i + 1}"><span class="gw-num">${i + 1 < st ? "✓" : i + 1}</span>${n}</button></li>`).join("")}</ol>`;
-    const card = (act, k, x, on, ico) => `<button class="gw-card ${on ? "on" : ""}" data-pf="${act}${k}" aria-pressed="${on}">${ico ? gwIcon(ico) : ""}<b>${esc(x.label)}</b><span class="small muted">${esc(x.text)}</span></button>`;
-    const body = st === 1 ? `<h3 class="gw-q">What is this portfolio for?</h3><div class="gw-grid">${Object.entries(O).map(([k, x]) => card("gw-obj-", k, x, d.objective === k, k)).join("")}</div>`
-      : st === 2 ? `<h3 class="gw-q">How much of a fall could you sit through?</h3>
-        <div class="gw-risk" style="--tc:${GW_TIER_C[t.key]}"><div class="gw-risk-top"><span class="gw-badge" data-gw="badge">${esc(t.label)}</span><b class="gw-risk-n" data-gw="n">${Math.round(num(d.risk) ?? 60)}</b></div>
-          <input type="range" min="0" max="100" step="1" value="${esc(num(d.risk) ?? 60)}" data-rg="risk" data-gw-risk aria-label="Aggressiveness">
-          <div class="gw-scale">${EtfRec.RISK_TIERS.map((x) => `<span style="--tc:${GW_TIER_C[x.key]}">${esc(x.label)}</span>`).join("")}</div>
-          <p class="gw-tier-text" data-gw="text">${esc(t.text)}</p><p class="small muted" data-gw="means">${esc(gwMeans(d))}</p></div>`
-      : st === 3 ? `<h3 class="gw-q">Do you need income from it?</h3><div class="gw-list">${Object.entries(I).map(([k, x]) => `<button class="gw-row ${d.income === k ? "on" : ""}" data-pf="gw-inc-${k}" aria-pressed="${d.income === k}"><span class="gw-check">${d.income === k ? "✓" : ""}</span><span><b>${esc(x.label)}</b><span class="small muted"> · ${esc(x.text)}</span></span><span class="small muted">target yield ${esc(x.target)}</span></button>`).join("")}</div>`
-      : `<h3 class="gw-q">What should the recommendations hunt for?</h3><div class="gw-grid">${Object.entries(F).map(([k, x]) => card("gw-foc-", k, x, d.focus === k, k === "income" ? "income" : k)).join("")}</div>`;
-    const opt = (k, v, l) => `<option value="${v}" ${String(d[k]) === String(v) ? "selected" : ""}>${l}</option>`; void opt;
-    const more = `<details class="gw-more"><summary class="small">More settings</summary><div class="kpis" style="margin-top:8px">
+  const qIco = (k, cls = "") => `<svg class="q-ico ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${QI[k] || ""}</svg>`;
+  const Q_STEPS = [["Objective", "target"], ["Risk Level", "zap"], ["Income", "dollar"], ["Focus", "sparkles"]];
+  const Q_FOCUS_ICON = { Sparkles: "sparkles", Target: "target", DollarSign: "dollar", TrendingUp: "trending" };
+  /** Open the questionnaire on a copy of the goals; `then` is the analysis to start when it's submitted. */
+  function qOpen(then) { const d = recGoalDraft(); S.gq = { step: 0, then: then || null, goals: { primaryObjective: d.primaryObjective, timeHorizon: d.timeHorizon, aggressiveness: d.aggressiveness, incomeNeeds: d.incomeNeeds, recommendationFocus: d.recommendationFocus } }; renderPortfolio(); }
+  function qCanProceed(q) { const g = q.goals; return [!!g.primaryObjective, isNum(num(g.aggressiveness)), !!g.incomeNeeds, !!g.recommendationFocus][q.step]; }
+  /** The 4-step Investment Pre-Screener, as a modal dialog. */
+  function questionnaireView() {
+    const q = S.gq; if (!q) return ""; const U = EtfRec.UG, g = q.goals, step = q.step, tier = EtfRec.getAggressivenessTier(g.aggressiveness);
+    const prog = `<div class="q-progress"><i style="width:${((step + 1) / 4) * 100}%"></i></div><div class="q-steps">${Q_STEPS.map(([t, ic], i) => `<button type="button" class="q-step ${i === step ? "on" : i < step ? "done" : "todo"}" data-pf="gq-step-${i}" ${i > step ? "disabled" : ""}><span class="q-dot">${qIco(i < step ? "check" : ic)}</span><span class="q-step-t">${t}</span></button>`).join("")}</div>`;
+    const card = (act, k, x, on, ic) => `<button type="button" class="q-card ${on ? "on" : ""}" data-pf="${act}${k}" aria-pressed="${on}">${ic ? qIco(ic, "q-card-ico") : ""}<b>${esc(x.label)}</b><span>${esc(x.description)}</span></button>`;
+    const body = step === 0 ? `<h3>What's your primary investment objective?</h3><div class="q-grid">${Object.entries(U.OBJECTIVE_LABELS).map(([k, x]) => card("gq-obj-", k, x, g.primaryObjective === k)).join("")}</div>`
+      : step === 1 ? `<h3>How aggressive should your portfolio be?</h3><div class="q-risk">
+          <div class="q-risk-top"><span class="q-risk-n" data-gq="n">${Math.round(g.aggressiveness)}%</span><span class="q-badge" data-gq="badge" style="--tc:${tier.color}">${esc(tier.label)}</span></div>
+          <input type="range" min="0" max="100" step="1" value="${Math.round(g.aggressiveness)}" data-gq-risk aria-label="Aggressiveness" style="--fill:${g.aggressiveness}%">
+          <div class="q-risk-ends"><span>Conservative (0%)</span><span>Moderate (50%)</span><span>Aggressive (100%)</span></div>
+          <div class="q-explain" data-gq="text">${esc(tier.explanation)}</div></div>`
+      : step === 2 ? `<h3>What are your income needs?</h3><div class="q-list">${Object.entries(U.INCOME_LABELS).map(([k, x]) => `<button type="button" class="q-row ${g.incomeNeeds === k ? "on" : ""}" data-pf="gq-inc-${k}" aria-pressed="${g.incomeNeeds === k}"><span><b>${esc(x.label)}</b><span>${esc(x.description)}</span></span>${g.incomeNeeds === k ? qIco("check", "q-row-check") : ""}</button>`).join("")}</div>`
+      : `<h3>What matters most for recommendations?</h3><div class="q-grid">${Object.entries(U.FOCUS_LABELS).map(([k, x]) => card("gq-foc-", k, x, g.recommendationFocus === k, Q_FOCUS_ICON[x.icon])).join("")}</div>`;
+    const ok = qCanProceed(q);
+    return `<div class="q-backdrop" data-gq-backdrop><div class="q-dialog" role="dialog" aria-modal="true" aria-labelledby="q-title">
+      <div class="q-head"><h2 id="q-title">Investment Pre-Screener</h2><button type="button" class="q-close" data-pf="gq-close" aria-label="Close">${qIco("x")}</button></div>
+      ${prog}<div class="q-body">${body}</div>
+      <div class="q-foot"><button type="button" class="q-ghost" data-pf="gq-back" ${step === 0 ? "disabled" : ""}>${qIco("left")}Back</button>
+        <button type="button" class="primary q-next" data-pf="gq-next" ${ok ? "" : "disabled"}>${step === 3 ? `${qIco("sparkles")}Analyze Portfolio` : `Next${qIco("right")}`}</button></div></div></div>`;
+  }
+  /** The active goals strip: horizon (adjustable here), objective and risk tier, with Edit Goals. */
+  function goalsBanner(extra = "") {
+    const d = recGoalDraft(), U = EtfRec.UG, tier = EtfRec.getAggressivenessTier(d.aggressiveness);
+    return `<div class="goal-bar q-banner">
+      <label class="qb-item">${qIco("clock")}<span class="muted">Horizon:</span><select data-rg="timeHorizon" aria-label="Investment horizon">${Object.entries(U.HORIZON_LABELS).map(([k, x]) => `<option value="${k}" ${d.timeHorizon === k ? "selected" : ""} title="${esc(x.description)}">${esc(x.label)}</option>`).join("")}</select></label>
+      <span class="qb-sep"></span><span class="qb-item">${qIco("target")}<span class="muted">Objective:</span><b>${esc(U.OBJECTIVE_LABELS[d.primaryObjective]?.label ?? "Balanced")}</b></span>
+      <span class="qb-sep"></span><span class="qb-item" style="--tc:${tier.color}">${qIco("zap", "qb-zap")}<span class="muted">Risk:</span><span class="q-badge sm">${esc(tier.label)} (${Math.round(d.aggressiveness)}%)</span></span>
+      <span class="qb-end"><button class="sm q-ghost" data-pf="gq-open">${qIco("pencil")}Edit Goals</button>${extra}</span></div>`;
+  }
+  function goalsMore() {
+    const d = recGoalDraft(), u = EtfRec.goalOf(d);
+    return `<details class="q-more"><summary class="small">More settings <span class="muted">· ${esc(EtfRec.UG.INCOME_LABELS[d.incomeNeeds]?.label || "")} · ${esc(EtfRec.UG.FOCUS_LABELS[d.recommendationFocus]?.label || "")} · volatility ≤ ${Math.round(u.vol * 100)}% · bonds ${Math.round(u.bonds[0] * 100)}–${Math.round(u.bonds[1] * 100)}%</span></summary><div class="kpis" style="margin-top:8px">
         <label class="kpi"><span class="eyebrow">Max volatility (%)</span><input data-rg="maxVol" type="number" min="2" max="40" step="1" placeholder="${(EtfRec.fromAnswers(d).vol * 100).toFixed(0)}" value="${esc(d.maxVol)}"></label>
         <label class="kpi"><span class="eyebrow">ETFs (min–max)</span><span style="display:flex;gap:6px"><input data-rg="minN" type="number" min="7" max="15" value="${esc(d.minN)}"><input data-rg="maxN" type="number" min="7" max="15" value="${esc(d.maxN)}"></span></label>
         <label class="kpi"><span class="eyebrow">Max cost (%)</span><input data-rg="maxCost" type="number" min="0.05" max="1" step="0.05" value="${esc(d.maxCost)}"></label>
         <label class="kpi"><span class="eyebrow">Leave out</span><input data-rg="exclude" placeholder="e.g. energy, China, ARKK" value="${esc(d.exclude)}"></label></div>
         <div class="actions" style="margin-top:8px"><label class="small"><input type="checkbox" data-rg="bonds" ${d.bonds ? "checked" : ""}> Bond ETFs</label><label class="small"><input type="checkbox" data-rg="intl" ${d.intl ? "checked" : ""}> International ETFs</label></div></details>`;
-    const nav = `<div class="gw-nav">${st > 1 ? `<button data-pf="gw-step-${st - 1}">Back</button>` : `<span></span>`}<span class="small muted">Step ${st} of 4</span>${st < 4 ? `<button class="primary" data-pf="gw-step-${st + 1}">Next</button>` : `<button class="primary" data-pf="gw-done">Done</button>`}</div>`;
-    return `<section class="panel pf-goal gw"><div class="panel-head"><div><span class="eyebrow">Your goals</span><h2>Build your profile</h2></div>${gwHorizon(d)}</div>${prog}<div class="gw-body">${body}</div>${nav}${more}
-      <div class="small muted">Grades are measured against these answers · recommendations are ETFs only, each at most 15% · never broad index funds</div></section>`;
   }
   function anaView(p, A, job) {
     const run = S.pfAnaRun?.pid === p.id ? S.pfAnaRun : null, gh = job && /queued|running/.test(job.state || "") ? job : null;
@@ -7160,17 +7199,17 @@ a.btnlink:hover { border-color: var(--accent); }
       : gh ? `<section class="panel pf-run"><div class="pf-spin"></div><div><b>${gh.state === "queued" ? "Sent to GitHub" : "Running on GitHub"}</b><div class="small muted">${gh.state === "queued" ? `requested ${esc(elapsed(gh.requested_at))}: Claude is starting the workflow` : `started ${esc(elapsed(gh.started_at || gh.requested_at))}: about 10–20 minutes; the result appears here by itself`}${gh.run_url ? ` · <a href="${esc(gh.run_url)}" target="_blank" rel="noopener">the run</a>` : ""}</div></div>${(() => { const c = S.pfCheck?.[p.id], mins = c ? Math.round((Date.now() - c.at) / 60000) : 0;
         return `<div style="display:grid;gap:4px;justify-items:end"><button class="sm" data-pf="ana-fetch" ${c?.state === "asking" ? "disabled" : ""} title="Ask Claude to copy the result now">${c?.state === "asking" ? "Asking…" : "Check now"}</button>${c ? `<span class="small ${c.state === "failed" ? "" : "muted"}" style="${c.state === "failed" ? "color:var(--neg)" : ""};max-width:260px;text-align:right">${c.state === "failed" ? esc(c.why) : c.state === "asked" ? (mins < 4 ? "Claude is fetching it: usually 1–3 minutes" : `asked ${mins} min ago and nothing came back: the task may be waiting for your approval (Scheduled tasks → “Industry Scorer: analyze a portfolio on GitHub” → turn on Automatically approve)`) : ""}</span>` : ""}</div>`; })()}</section>`
       : job?.state === "failed" ? `<div class="notice err"><span>GitHub: ${esc(job.result || "the analysis failed")}${job.run_url ? ` (<a href="${esc(job.run_url)}" target="_blank" rel="noopener">the run</a>)` : ""}</span></div>` : "";
-    const go = `<section class="panel pf-cta"><div><span class="eyebrow">Step 2</span><h2>${A ? "Analyze again" : "Grade this portfolio"}</h2><p class="small muted">It grades what you hold against what every industry run says ${(() => { const d = recGoalDraft(); return `a ${esc(EtfRec.tierOf(num(d.risk) ?? 60).label.toLowerCase())} ${esc((EtfRec.OBJECTIVES[d.objective]?.label || "growth").toLowerCase())}`; })()} portfolio should own, then recommends ETFs: the fewest changes that fix it, and the best mix from scratch.</p></div>
+    const go = `<section class="panel pf-cta"><div><span class="eyebrow">Step 2</span><h2>${A ? "Analyze again" : "Grade this portfolio"}</h2><p class="small muted">It grades what you hold against what every industry run says ${(() => { const d = recGoalDraft(); const t = EtfRec.getAggressivenessTier(d.aggressiveness).label.toLowerCase(); return `${/^[aeiou]/.test(t) ? "an" : "a"} ${esc(t)} ${esc((EtfRec.UG.OBJECTIVE_LABELS[d.primaryObjective]?.label || "balanced").toLowerCase())}`; })()} portfolio should own, then recommends ETFs: the fewest changes that fix it, and the best mix from scratch.</p></div>
       <div class="actions">${S.mcp && S.pfGithub !== false ? `<button class="primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze on GitHub</button><button data-pf="ana-here" ${run || gh ? "disabled" : ""}>Run it here instead</button>` : `<button class="primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze</button>`}</div>
       ${S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : ""}<div class="small muted">On GitHub it runs on your API key against every sector's runs and doesn't tie up this page${PF_TRIGGER ? "" : " (start it from GitHub; the result comes back with “Update everything from GitHub”)"}; here it uses your Claude plan and takes a few minutes the first time.</div></section>`;
     const man = S.pfManual?.[p.id], manual = man ? `<section class="panel pf-manual" id="pf-manual"><div class="panel-head"><div><span class="eyebrow">Run it on GitHub</span><h2>Three steps</h2></div><button class="sm" data-pf="ana-manual-close">Close</button></div>
       <ol class="pf-steps"><li><b>Copy this request</b> (your holdings and goal). <button class="sm" data-pf="ana-copy">Copy</button><textarea readonly rows="2" class="mono" onclick="this.select()">${esc(man.b64)}</textarea></li>
         <li><b>Start the workflow:</b> open <a href="${PF_ACTIONS}" target="_blank" rel="noopener">Actions → Portfolio analysis</a>, press <i>Run workflow</i>, put <code>${esc(p.id)}</code> in <i>id</i> and paste the request. It takes about 10–20 minutes on your API key.</li>
         <li><b>Bring it in:</b> when the run is green, press <i>Update everything from GitHub</i> at the top of the page. The grade and recommendations appear here by themselves.</li></ol></section>` : "";
-    if (A && !S.goalOpen) { const btns = S.mcp && S.pfGithub !== false ? `<button class="sm primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze again</button>` : `<button class="sm primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze again</button>`;
-      const bar = anaGoalView(p, A, true).replace(`<button class="sm" data-pf="goal-open">Change</button>`, `<span class="actions" style="margin:0"><button class="sm" data-pf="goal-open">Change goal</button>${btns}</span>`);
+    if (A) { const btns = S.mcp && S.pfGithub !== false ? `<button class="sm primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze again</button>` : `<button class="sm primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze again</button>`;
+      const bar = goalsBanner(btns) + goalsMore();
       return status + manual + bar + (S.pfAnaErr?.[p.id] ? `<div class="notice err"><span>${esc(S.pfAnaErr[p.id])}</span></div>` : "") + `<div class="small muted">Analyzed ${esc(fmtDate(A.day))} · ${A.rows?.length || 0} industry runs · ${A.discovered} ETFs found holding the target companies</div>` + anaResult(p, A); }
-    return status + manual + anaGoalView(p, A, true) + go + (A ? anaResult(p, A) : "");
+    return status + manual + goalsBanner() + goalsMore() + go;
   }
   /** The report card for one version (today's portfolio or a recommendation). */
   /** The numbers behind one grade of today's portfolio (A: the analysis result). */

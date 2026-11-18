@@ -92,10 +92,10 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
     balanced: { label: "Balanced", text: "Mix of growth and income" },
   };
   const RISK_TIERS = [
-    { max: 20, key: "preservation", label: "Capital Preservation", dd: 0.05, text: "Cannot afford to lose more than 5%. Modest returns with minimal volatility." },
-    { max: 40, key: "conservative", label: "Conservative", dd: 0.15, text: "Can handle 10-15% drops occasionally. Stable, dividend-paying assets." },
+    { max: 20, key: "preservation", label: "Capital Preservation", dd: 0.05, text: "Cannot afford to lose more than 5%. Expect modest returns with minimal volatility." },
+    { max: 40, key: "conservative", label: "Conservative", dd: 0.15, text: "Can handle 10-15% drops occasionally. Prefer stable, dividend-paying assets." },
     { max: 60, key: "moderate", label: "Moderate", dd: 0.25, text: "Balanced approach accepting 15-25% drawdowns for better long-term returns." },
-    { max: 80, key: "growth", label: "Growth-Oriented", dd: 0.35, text: "Accept 25-35% drops without panic selling. Prioritizes growth equities." },
+    { max: 80, key: "growth", label: "Growth-Oriented", dd: 0.35, text: "Accept 25-35% drops without panic selling. Prioritize growth stocks." },
     { max: 100, key: "aggressive", label: "Aggressive", dd: 0.5, text: "Maximum growth focus. Can stomach 40%+ drops. High concentration acceptable." },
   ];
   const INCOME = {
@@ -108,16 +108,37 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
     gems: { label: "Find Hidden Gems", text: "Undervalued stocks with strong BUY signals" },
     risk: { label: "Reduce Risk", text: "Defensive positions to hedge exposure" },
     income: { label: "Boost Income", text: "Higher-yielding alternatives" },
-    gaps: { label: "Fill Gaps", text: "Sectors or themes missing from your current allocation" },
+    gaps: { label: "Fill Gaps", text: "Sectors/themes missing from portfolio" },
   };
   const HORIZONS = { "1M": "1M", "3M": "3M", "6M": "6M", "1Y": "12M", "3Y": "long", "5Y": "long", "5Y+": "long" };
   const tierOf = (r) => RISK_TIERS.find((x) => r <= x.max) || RISK_TIERS[RISK_TIERS.length - 1];
+  // The UserGoals data contract the questionnaire stores, and how its keys map onto the engine's.
+  const UG = {
+    DEFAULT: { primaryObjective: "balanced", timeHorizon: "1Y", aggressiveness: 50, incomeNeeds: "some", recommendationFocus: "hiddenGems" },
+    OBJECTIVE_LABELS: Object.fromEntries(Object.entries(OBJECTIVES).map(([k, v]) => [k, { label: v.label, description: v.text }])),
+    HORIZON_LABELS: { "1M": { label: "1 Month", description: "Very short-term trading" }, "3M": { label: "3 Months", description: "Short-term positioning" }, "6M": { label: "6 Months", description: "Medium-term outlook" },
+      "1Y": { label: "1 Year", description: "Annual investment cycle" }, "3Y": { label: "3 Years", description: "Multi-year growth focus" }, "5Y": { label: "5 Years", description: "Long-term wealth building" }, "5Y+": { label: "5+ Years", description: "Very long-term compounding" } },
+    TIER_COLOR: { preservation: "#3b82f6", conservative: "#06b6d4", moderate: "#10b981", growth: "#f59e0b", aggressive: "#f43f5e" },
+    INCOME_LABELS: { none: { label: INCOME.none.label, description: INCOME.none.text }, some: { label: INCOME.some.label, description: INCOME.some.text }, priority: { label: INCOME.priority.label, description: INCOME.priority.text }, maximum: { label: INCOME.max.label, description: INCOME.max.text } },
+    FOCUS_LABELS: { hiddenGems: { label: FOCUS.gems.label, description: FOCUS.gems.text, icon: "Sparkles" }, reduceRisk: { label: FOCUS.risk.label, description: FOCUS.risk.text, icon: "Target" },
+      boostIncome: { label: FOCUS.income.label, description: FOCUS.income.text, icon: "DollarSign" }, fillGaps: { label: FOCUS.gaps.label, description: FOCUS.gaps.text, icon: "TrendingUp" } },
+    INCOME_KEY: { none: "none", some: "some", priority: "priority", maximum: "max" },
+    FOCUS_KEY: { hiddenGems: "gems", reduceRisk: "risk", boostIncome: "income", fillGaps: "gaps" },
+  };
+  /** The tier for an aggressiveness value: 0-20, 21-40, 41-60, 61-80, 81-100. */
+  const getAggressivenessTier = (v) => { const t = tierOf(Math.round(isNum(n(v)) ? n(v) : 50)); return { ...t, color: UG.TIER_COLOR[t.key], explanation: t.text }; };
+  /** A UserGoals object (or the older {objective, risk, income, focus, horizon}) as the engine's short answers. */
+  function answersOf(g = {}) {
+    if (!g.primaryObjective) return g;
+    return { ...g, objective: g.primaryObjective, risk: g.aggressiveness, income: UG.INCOME_KEY[g.incomeNeeds] || g.incomeNeeds, focus: UG.FOCUS_KEY[g.recommendationFocus] || g.recommendationFocus, horizon: g.timeHorizon || "1Y" };
+  }
   /**
    * The questionnaire's answers as engine settings: which investor type's research scores to use, the volatility
    * ceiling and bond band from the aggressiveness slider, the yield target from the income need, concentration limits,
    * and the focus. g: {objective, risk (0-100), income, focus, horizon}.
    */
   function fromAnswers(g) {
+    g = answersOf(g);
     const r = Math.max(0, Math.min(100, isNum(n(g.risk)) ? n(g.risk) : 60)), obj = OBJECTIVES[g.objective] ? g.objective : "growth", inc = INCOME[g.income] ? g.income : "none", foc = FOCUS[g.focus] ? g.focus : "gems";
     const type = obj === "preservation" ? "conservative" : obj === "income" ? "income" : obj === "balanced" ? (r >= 55 ? "growth" : "conservative") : r > 80 ? "aggressive" : "growth";
     let vol = 0.04 + 0.21 * r / 100; if (foc === "risk") vol *= 0.85;
@@ -131,7 +152,7 @@ VXUS|intl||| VEA|intl||| IEFA|intl||| EFA|intl||| SCHF|intl||| VWO|intl||| IEMG|
   }
   /** A goal with the user's settings applied: horizon, volatility ceiling, counts, exclusions, international. */
   function goalOf(g = {}) {
-    if (g.objective) { const u = fromAnswers(g), base = GOALS[u.type]; const out = goalOf({ ...g, objective: undefined, type: u.type, horizon: u.horizon, maxVol: u.vol * 100, yieldTarget: isNum(u.yieldTarget) ? u.yieldTarget * 100 : undefined });
+    if (g.objective || g.primaryObjective) { const u = fromAnswers(g), base = GOALS[u.type]; const out = goalOf({ ...g, objective: undefined, primaryObjective: undefined, type: u.type, horizon: u.horizon, maxVol: u.vol * 100, yieldTarget: isNum(u.yieldTarget) ? u.yieldTarget * 100 : undefined });
       return { ...out, ...u, label: u.objectiveLabel, vol: isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : u.vol, pillars: base.pillars }; }
     const base = GOALS[g.type] || GOALS.growth, vol = isNum(n(g.maxVol)) && n(g.maxVol) > 0 ? n(g.maxVol) / 100 : base.vol;
     return { ...base, type: GOALS[g.type] ? g.type : "growth", horizon: HZ_MONTHS[g.horizon] ? g.horizon : "12M", vol, amount: n(g.amount) > 0 ? n(g.amount) : 10000,
@@ -509,7 +530,7 @@ Return JSON only:
   }
   const idsOf = (text) => [...new Set([...String(text).matchAll(/^\[([A-Z]{1,2}\d{1,3})\]/gm)].map((m) => m[1]))];
 
-  const EtfRec = { OBJECTIVES, RISK_TIERS, INCOME, FOCUS, HORIZONS, fromAnswers, tierOf, isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
+  const EtfRec = { UG, getAggressivenessTier, answersOf, OBJECTIVES, RISK_TIERS, INCOME, FOCUS, HORIZONS, fromAnswers, tierOf, isBroadIndex, BROAD, RF, ERP, CAP, UNIVERSE, BY, KIND_LABEL, BOND_LABEL, GOALS, goalOf, isBond, isStock, screen, aligned, quantFacts, curveAt, bondView, equityView, tagView, pillars, covariance, blackLitterman, inv, project, solve, rowsFor, construct, recommend, mapCurrent, improve, stress, exposure, dossier, writePrompt, cleanWrite, idsOf, corr };
   if (typeof module !== "undefined" && module.exports) module.exports = EtfRec;
   else root.EtfRec = EtfRec;
 })(typeof globalThis !== "undefined" ? globalThis : this);
