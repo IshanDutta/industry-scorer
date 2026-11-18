@@ -18915,7 +18915,7 @@ Return JSON only:
     try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) { alert("Couldn't save the file: " + (e?.message || e)); } }
 
   // ------------------------------------------------------------- render: Portfolios tab
-  const PF_TABS = [["overview", "Overview"], ["holdings", "Holdings"], ["analysis", "Analysis"], ["edit", "Edit"]];
+  const PF_TABS = [["overview", "Overview"], ["holdings", "Holdings"], ["analysis", "Analysis"], ["edit", "Edit holdings"]];
   const GRADE_CLS = (l) => (/^A/.test(l) ? "gA" : /^B/.test(l) ? "gB" : /^C/.test(l) ? "gC" : /^D/.test(l) ? "gD" : /^F/.test(l) ? "gF" : "gC");
   const gradeBadge = (g, size = 56) => (g?.letter && g.letter !== "—" ? `<div class="grade-ring ${GRADE_CLS(g.letter)}" style="--sz:${size}px;--p:${Math.max(0, Math.min(100, g.score || 0))}"><b>${esc(g.letter)}</b></div>` : "");
   const tickColor = (t) => { let h = 0; for (const c of String(t)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 45%)`; };
@@ -18935,7 +18935,7 @@ Return JSON only:
         <div class="pf-value mono">${esc(usd(total))}</div>
         <div class="pf-tags">${isNum(num(day)) && D ? `<span class="pf-tag ${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${pct(day, true, 2)} today</span>` : ""}${isNum(gain) ? `<span class="pf-tag ${gain >= 0 ? "up" : "down"}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${pct(gain / pos.cost, true, 1)}) unrealized</span>` : ""}<span class="pf-tag">${hs.length} holdings</span><span class="pf-tag">bought ${esc(fmtDate(pos?.from || pfStart(p)))}</span>${A ? `<span class="pf-tag">analyzed ${esc(fmtDate(A.day))}</span>` : ""}</div></div>
       <div class="pf-hero-side">${g ? `<button class="pf-gradebtn" data-pf="tab-analysis" title="Open the analysis">${gradeBadge(g, 72)}<span><b>Grade ${esc(g.letter)}</b><span class="small muted">${Math.round(g.score)}/100 for a ${esc(A.goalFull.label.toLowerCase())} goal</span></span></button>` : ""}
-        <div class="pf-actions"><button class="primary" data-pf="analyze" ${running ? "disabled" : ""}>${running ? "Analyzing…" : A ? "Analyze again" : "Analyze"}</button><button data-pf="tab-edit">Edit</button><button data-pf="rebal">Rebalance</button>
+        <div class="pf-actions"><button class="primary" data-pf="analyze" ${running ? "disabled" : ""}>${running ? "Analyzing…" : A ? "Analyze again" : "Analyze"}</button><button data-pf="goals-edit">Edit</button><button data-pf="rebal">Rebalance</button>
           <details class="pf-more"><summary>More</summary><div><button class="sm" data-pf="dup">Duplicate</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch prices again</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete portfolio</button>` : ""}</div></details></div></div></section>`;
     const tabs = `<nav class="pf-tabs" role="tablist">${PF_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? "on" : ""}" data-pf="tab-${k}">${l}${k === "analysis" && g ? ` <span class="pf-mini ${GRADE_CLS(g.letter)}">${esc(g.letter)}</span>` : k === "analysis" && running ? ' <span class="pf-dot"></span>' : ""}</button>`).join("")}</nav>`;
     const notes = `${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}`;
@@ -19089,6 +19089,7 @@ Return JSON only:
     if (a === "ana-manual-close") { if (S.pfManual) delete S.pfManual[p.id]; renderPortfolio(); return; }
     if (a === "ana-copy") { const t = S.pfManual?.[p.id]?.b64; if (t) { try { await navigator.clipboard.writeText(t); b.textContent = "Copied"; } catch { $("pf-manual")?.querySelector("textarea")?.select(); b.textContent = "Selected: press Ctrl/Cmd+C"; } } return; }
     if (a === "gq-open") { qOpen(null); return; }
+    if (a === "goals-edit") { qOpen("edit"); return; }
     if (a === "gq-close") { S.gq = null; renderPortfolio(); return; }
     if (S.gq && a.startsWith("gq-")) { const q = S.gq, g = q.goals;
       if (a.startsWith("gq-obj-")) g.primaryObjective = a.slice(7); else if (a.startsWith("gq-inc-")) g.incomeNeeds = a.slice(7); else if (a.startsWith("gq-foc-")) g.recommendationFocus = a.slice(7);
@@ -19097,6 +19098,7 @@ Return JSON only:
       else if (a === "gq-next" && qCanProceed(q)) {
         if (q.step < 3) q.step++;
         else { Object.assign(recGoalDraft(), g, { timeHorizon: g.timeHorizon || "1Y" }); recGoalSave(); S.gq = null; renderPortfolio();
+          if (!(p.holdings || []).length) { S.pfTab = "edit"; renderPortfolio(); return; }
           const then = q.then || "analyze", busy = S.pfAnaRun?.pid === p.id || /queued|running/.test(S.pfJobs?.[p.id]?.state || "");
           if (!busy) { if (then === "ana-github") pfAnaGithub(p); else if (then === "ana-here") pfAnaHere(p); else { S.pfTab = "analysis"; if (PF_TRIGGER && S.mcp && (await outlookDb().catch(() => null))) pfAnaGithub(p); else pfAnaHere(p); } }
           return; } }
@@ -19108,7 +19110,7 @@ Return JSON only:
     if (a === "rec-csv") { const r = S.pfAna?.[p.id], sel = r?.sels?.[S.recKey]; if (!sel) return; const tot = r.current?.total || num(r.goal.amount) || 10000;
       pfDownload(`etf-${S.recKey}-${today()}.csv`, ["ticker,name,weight,amount_usd,expense_ratio,yield,expected_return,found_via", ...r.cands.map((c, i) => [c, i]).filter(([, i]) => sel.w[i] > 0).map(([c, i]) => [c.symbol, `"${String(c.info?.name || "").replace(/"/g, "'")}"`, (sel.w[i] * 100).toFixed(1), Math.round(sel.w[i] * tot), (c.expense * 100).toFixed(2), ((num(c.yield) || 0) * 100).toFixed(2), ((num(c.mu) || 0) * 100).toFixed(2), `"${String(c.via).replace(/"/g, "'")}"`].join(","))].join("\n"), "text/csv"); return; }
     if (a === "add") { S.pfTab = "edit"; renderPortfolio(); S.pfDraft.rows.push({ ticker: "", weight: 0 }); renderPortfolio(); return; }
-    if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; S.pfTab = "edit"; S.pfDraft = null; await pfSave(); renderPortfolio(); return; }
+    if (a === "new") { const x = { id: pfId(), name: "New portfolio", description: "", totalInvestment: 10000, holdings: [], rebalanceEvents: [], createdAt: now, updatedAt: now, goalsPending: true }; st.list.push(x); st.activeId = x.id; S.pfTab = "edit"; S.pfDraft = null; await pfSave(); qOpen("edit"); return; }
     if (a === "dup") { const x = { ...JSON.parse(JSON.stringify(p)), id: pfId(), name: p.name + " (copy)", createdAt: now, updatedAt: now }; st.list.push(x); st.activeId = x.id; await pfSave(); renderPortfolio(); pfLoad(); return; }
     if (a === "del") { if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return; st.list = st.list.filter((x) => x.id !== p.id); st.activeId = st.list[0]?.id || null; await pfSave(); S.pfDraft = null; renderPortfolio(); pfLoad(); return; }
     if (a === "refresh") { pfLoad({ force: true }); return; }
@@ -19379,8 +19381,12 @@ Return JSON only:
   // ------------------------------------------------------------- the Analysis tab: grade, then recommendations
   function recGoalDefaults() { return { ...EtfRec.UG.DEFAULT, amount: 10000, maxVol: "", minN: 8, maxN: 12, maxCost: 0.75, intl: false, bonds: true, exclude: "" }; }
   /** The goals (UserGoals): kept in this browser so they survive a reload; older saved goals are translated. */
+  /** Each portfolio keeps its own goals (p.goals); one without them starts from the last goals saved in this browser. */
   function recGoalDraft() {
-    if (S.recGoal) return S.recGoal;
+    const pf = typeof pfActive === "function" && S.pfStore ? pfActive() : null, key = pf?.id || "_";
+    S.recGoals = S.recGoals || {};
+    if (S.recGoals[key]) { S.recGoal = S.recGoals[key]; S.goalSaved = !!(pf ? pf.goals : S.goalSavedG); return S.recGoal; }
+    if (pf?.goals) { S.recGoal = S.recGoals[key] = { ...recGoalDefaults(), ...pf.goals }; S.goalSaved = true; return S.recGoal; }
     let d = null, saved = false; try { d = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); saved = !!d; if (!d) d = JSON.parse(localStorage.getItem("pfGoal") || "null"); } catch {}
     if (d && !d.primaryObjective) {
       if (!d.objective && d.type) { const m = { growth: ["growth", 70], aggressive: ["growth", 90], conservative: ["preservation", 30], income: ["income", 35] }[d.type] || ["balanced", 50]; d = { ...d, objective: m[0], risk: m[1], income: d.type === "income" ? "priority" : "some", horizon: { "12M": "1Y", long: "5Y" }[d.horizon] || d.horizon }; }
@@ -19388,9 +19394,14 @@ Return JSON only:
       d = { ...d, primaryObjective: d.objective || "balanced", aggressiveness: isNum(num(d.risk)) ? num(d.risk) : 50, incomeNeeds: inv(EtfRec.UG.INCOME_KEY, d.income) || "some", recommendationFocus: inv(EtfRec.UG.FOCUS_KEY, d.focus) || "hiddenGems", timeHorizon: EtfRec.HORIZONS[d.horizon] ? d.horizon : "1Y" };
       for (const k of ["objective", "risk", "income", "focus", "horizon", "type"]) delete d[k]; saved = true;
     }
-    S.recGoal = { ...recGoalDefaults(), ...(d || {}) }; S.goalSaved = saved; return S.recGoal;
+    S.recGoal = S.recGoals[key] = { ...recGoalDefaults(), ...(d || {}) }; S.goalSavedG = saved;
+    // A portfolio made before goals were per portfolio adopts the saved goals; a new one asks for its own.
+    if (pf && saved && !pf.goalsPending) { pf.goals = { ...S.recGoal }; pfSave(); }
+    S.goalSaved = pf ? !!pf.goals : saved; return S.recGoal;
   }
-  function recGoalSave() { try { localStorage.setItem("portfolio_user_goals", JSON.stringify(S.recGoal || {})); S.goalSaved = true; } catch {} }
+  function recGoalSave() { const pf = typeof pfActive === "function" && S.pfStore ? pfActive() : null, g = recGoalDraft();
+    try { localStorage.setItem("portfolio_user_goals", JSON.stringify(g)); } catch {}
+    if (pf) { pf.goals = { ...g }; delete pf.goalsPending; pf.updatedAt = new Date().toISOString(); pfSave(); } S.goalSaved = true; }
   function recGoalOf(d) {
     const ex = String(d.exclude || "").split(/[,;]+/).map((x) => x.trim()).filter(Boolean);
     const goal = EtfRec.goalOf({ ...d, exclude: ex.filter((x) => !/^[A-Z]{2,5}$/.test(x)), excludeSyms: ex.filter((x) => /^[A-Z]{2,5}$/.test(x)) });
@@ -19442,10 +19453,10 @@ Return JSON only:
       : `<h3>What matters most for recommendations?</h3><div class="q-grid">${Object.entries(U.FOCUS_LABELS).map(([k, x]) => card("gq-foc-", k, x, g.recommendationFocus === k, Q_FOCUS_ICON[x.icon])).join("")}</div>`;
     const ok = qCanProceed(q);
     return `<div class="q-backdrop" data-gq-backdrop><div class="q-dialog" role="dialog" aria-modal="true" aria-labelledby="q-title">
-      <div class="q-head"><h2 id="q-title">Investment Pre-Screener</h2><button type="button" class="q-close" data-pf="gq-close" aria-label="Close">${qIco("x")}</button></div>
+      <div class="q-head"><div><h2 id="q-title">Investment Pre-Screener</h2><div class="small muted">${esc(pfActive()?.name || "")}</div></div><button type="button" class="q-close" data-pf="gq-close" aria-label="Close">${qIco("x")}</button></div>
       ${prog}<div class="q-body">${body}</div>
       <div class="q-foot"><button type="button" class="q-ghost" data-pf="gq-back" ${step === 0 ? "disabled" : ""}>${qIco("left")}Back</button>
-        <button type="button" class="primary q-next" data-pf="gq-next" ${ok ? "" : "disabled"}>${step === 3 ? `${qIco("sparkles")}Analyze Portfolio` : `Next${qIco("right")}`}</button></div></div></div>`;
+        <button type="button" class="primary q-next" data-pf="gq-next" ${ok ? "" : "disabled"}>${step === 3 ? (pfActive()?.holdings || []).length ? `${qIco("sparkles")}Analyze Portfolio` : `Save goals · add holdings${qIco("right")}` : `Next${qIco("right")}`}</button></div></div></div>`;
   }
   /** The active goals strip: horizon (adjustable here), objective and risk tier, with Edit Goals. */
   function goalsBanner(extra = "") {
