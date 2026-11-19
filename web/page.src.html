@@ -3448,6 +3448,8 @@ a.btnlink:hover { border-color: var(--accent); }
           J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec, warn: co.thesisErr || co.leanErr || null }); }
         else if (kind === "fund") { J.label = "opening " + sym; await openFund(sym, { write: false }); const fd = S.fund;
           if (!fd || fd.sym !== sym || fd.stage !== "ready") throw new Error(fd?.err || `${sym} couldn't be opened`);
+          if (fd.bond) { J.label = "writing the bond analysis"; fd.bondFull = null; await bondWrite(fd); const rb = await idbGet("bondFull:" + sym).catch(() => null);
+            if (!rb?.w) throw new Error(fd.fullErr || "no analysis came back"); J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec: rb, warn: null }); return; }
           if (!fd.look?.n) throw new Error(`none of ${sym}'s holdings are in a saved industry run, so there's nothing to build its analysis on`);
           J.label = "writing the analysis and the calls"; fd.full = null; await fundWrite(fd, { force: true });
           const rec = await idbGet("fundFull:" + sym).catch(() => null); if (!rec?.parts) throw new Error(fd.fullErr || "no analysis came back");
@@ -5788,6 +5790,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (!fd.ser || !quiet) { step("Reading the fund's price history since 2007…"); await fundPrices(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; }); }
     await fundHistoryFacts(fd);
     if (fd.netDone) { await fundNet(fd).catch(() => {}); await fundPeers(fd).catch(() => {}); }
+    if (BondAn.isBond(fd.raw)) { step("Reading the Treasury curve and the runs' rate outlook…"); await bondPrep(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; console.warn("bond prep", e); }); } else fd.bond = null;
     fundCard(fd);
     fd.stage = "ready";
   }
@@ -5975,6 +5978,122 @@ a.btnlink:hover { border-color: var(--accent); }
       fd.full = jsonSafe({ ...cur, outlook: o, outlook_history: hist }); await idbPut("fundFull:" + fd.sym, fd.full).catch(() => {});
     } catch (e) { fd.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" || ctl.signal.aborted ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
     finally { fd.leanBusy = false; fd.leanStage = null; fd.leanCtl = null; if (S.fund === fd) renderFund(); }
+  }
+  // ============================================================= Funds tab: a bond fund (BondAn)
+  /**
+   * The market data a bond fund's analysis reads, kept 12 hours: a year of the Treasury curve (FMP), the HQM 10-year
+   * corporate yield (an investment-grade spread proxy) and the 10-year real yield (EODHD).
+   */
+  async function bondData() {
+    const c = await idbGet("bondData").catch(() => null); if (c && Date.now() - Date.parse(c.at || 0) < 12 * 3600e3) return c;
+    if (!S.mcp) return c || null;
+    if (S.eod === undefined) await detectEod();
+    const rows = new Map();
+    for (let k = 0; k < 5; k++) { const to = Horizon.addDays(today(), -k * 90), from = Horizon.addDays(to, -89);
+      const r = (await optional(() => fmp("economics", { endpoint: "treasury-rates", from_date: from, to_date: to }), [])) || [];
+      for (const x of r) if (x?.date) rows.set(String(x.date).slice(0, 10), { ...x, date: String(x.date).slice(0, 10) }); }
+    let hqm = [], real = null;
+    if (S.eod) {
+      const h = await optional(() => eodCall("get_credit_corporate_hqm_yields", { tenor: 10, type: "par", limit: 14 }), null);
+      hqm = (h?.data || []).map((x) => ({ date: String(x.as_of_date || "").slice(0, 10), y: Number(x.yield_value) })).filter((x) => x.date && isNum(x.y));
+      const m0 = await optional(() => eodCall("get_ust_real_yield_rates", { limit: 1 }), null), tot = Number(m0?.meta?.total) || 0;
+      const r = tot ? await optional(() => eodCall("get_ust_real_yield_rates", { limit: 30, offset: Math.max(0, tot - 30) }), null) : null;
+      const y10 = (r?.data || []).filter((x) => x.tenor === "10Y" && isNum(Number(x.rate))).sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+      if (y10) real = { y10: Number(y10.rate), date: y10.date };
+    }
+    const out = jsonSafe({ at: new Date().toISOString(), curve: [...rows.values()].sort((a, b) => (a.date < b.date ? 1 : -1)), hqm, real });
+    if (out.curve.length) await idbPut("bondData", out).catch(() => {});
+    return out;
+  }
+  /** From the saved industry runs: their rate, inflation, Fed and growth indicators (newest of each), the newest macro reads, and each sector's 12-month call. */
+  async function bondRunsView() {
+    const ci = await coIndex(), ind = new Map(), reads = [], bySec = {};
+    const TAGS = /^(rates|treasuries|fed|cpi|inflation|yield-curve|credit|gdp|jobs|us-labor|us-growth|us-consumer)$/;
+    const runs = Object.entries(ci.runs || {}).sort((a, b) => String(b[1].saved_at || "").localeCompare(String(a[1].saved_at || "")));
+    for (const [sl, r] of runs) {
+      const rec = await idbGet("run:" + sl).catch(() => null); if (!rec) continue;
+      for (const x of rec.macro?.rows || []) if ((x.tags || []).some((t) => TAGS.test(t)) && x.key && (!ind.has(x.key) || String(x.date || "") > String(ind.get(x.key).date || ""))) ind.set(x.key, { label: x.label, value: x.value, unit: x.unit, prior: x.prior, prior_label: x.prior_label, date: x.date });
+      const mr = rec.reports?.[sl + "--macro"]?.result; if (mr?.headline && reads.length < 4) reads.push({ industry: rec.name, date: String(rec.saved_at || "").slice(0, 10), regime: mr.regime, headline: mr.headline, summary: mr.summary });
+      const o = indOutlook(rec.name, rec.agent?.result || null), c = o?.calls?.["12M"]?.call, sg = Outlook.SIGN?.[c];
+      if (r.sector && isNum(sg)) { const b = (bySec[r.sector] ||= { s: 0, n: 0 }); b.s += sg; b.n++; }
+    }
+    const sectorCalls = Object.fromEntries(Object.entries(bySec).map(([k, v]) => { const sc = v.s / v.n, lvl = sc >= 2.5 ? "strongly bullish" : sc >= 1.5 ? "bullish" : sc > 0 ? "slightly bullish" : sc > -1.5 ? "slightly bearish" : sc > -2.5 ? "bearish" : "strongly bearish"; return [k, { score: sc, call: lvl, n: v.n }]; }));
+    return { indicators: [...ind.values()].slice(0, 18), reads, sectorCalls };
+  }
+  /** Code's part, on opening a bond fund: its profile, the market data, the runs' view, the arithmetic, and any saved analysis. */
+  async function bondPrep(fd) {
+    fd.bond = BondAn.profile(fd.raw); fd.bondFull = (await idbGet("bondFull:" + fd.sym).catch(() => null)) || null;
+    const [data, rv] = await Promise.all([bondData().catch(() => null), bondRunsView().catch(() => ({ indicators: [], reads: [], sectorCalls: {} }))]);
+    fd.bondData = data; fd.bondRuns = rv;
+    fd.bondM = BondAn.math(fd.bond, { curve: data?.curve || [], hqm: data?.hqm || [], real: data?.real, sens: fd.sens, ser: fd.ser, sectorCalls: rv.sectorCalls, today: today() });
+  }
+  /** Why a saved bond analysis is out of date: its yield or the curve at its duration moved 25bp+, or it's a week old. */
+  function bondStale(fd) {
+    const r = fd.bondFull, m = fd.bondM; if (!r?.m || !m) return [];
+    const out = [], age = Math.floor((Date.now() - Date.parse(r.at || 0)) / 864e5);
+    if (isNum(m.tsy) && isNum(r.m.tsy) && Math.abs(m.tsy - r.m.tsy) >= 0.25) out.push(`the Treasury yield at its duration moved ${Math.round((m.tsy - r.m.tsy) * 100)}bp since it was written`);
+    if (isNum(m.ytm) && isNum(r.m.ytm) && Math.abs(m.ytm - r.m.ytm) >= 0.25) out.push(`its yield to maturity moved ${Math.round((m.ytm - r.m.ytm) * 100)}bp`);
+    if (age >= 7) out.push(`it is ${age} days old`);
+    return out;
+  }
+  /** The strategist's analysis, written here (one Claude call). */
+  async function bondWrite(fd) {
+    if (fd.writing || !S.sample || !fd.bondM) return;
+    fd.writing = true; fd.fullErr = null; fd.writeStart = Date.now(); renderFund();
+    const ctl = new AbortController(); fd.ctl = ctl;
+    try {
+      const dz = BondAn.dossier(fd.bond, fd.bondM, fd.bondRuns || {}, today());
+      const w = BondAn.clean(await sampleJson(BondAn.prompt(fd.bond, dz, today()), { modelTier: "complex", signal: ctl.signal, cache: false }), dz, fd.bondM);
+      if (!w) throw { code: "empty_completion" };
+      const m = fd.bondM, ser = fd.ser;
+      const rec = jsonSafe({ sym: fd.sym, bond: true, at: new Date().toISOString(), w, idx: dz.idx, secs: Math.round((Date.now() - fd.writeStart) / 1000),
+        m: { ytm: m.ytm, tsy: m.tsy, spread: m.spread, carry: m.carry, duration: m.duration, y3m: m.curve?.y3m, y10: m.curve?.y10, asOf: m.asOf }, mark: ser?.closes?.length ? { px: ser.closes[ser.closes.length - 1], date: ser.dates[ser.dates.length - 1] } : null });
+      await idbPut("bondFull:" + fd.sym, rec).catch(() => {}); fd.bondFull = rec;
+    } catch (e) { fd.fullErr = e?.code === "cancelled" || ctl.signal.aborted ? "Stopped." : FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+    finally { fd.writing = false; fd.ctl = null; if (S.fund === fd) renderFund(); }
+  }
+  /** On GitHub when it can (the fund job writes the bond analysis for a bond fund), else here. Kept until forced or out of date. */
+  async function bondWriteAuto(fd, { force = false } = {}) {
+    if (fd.writing || fd.ghRun || !fd.bondM) return;
+    if (!force && fd.bondFull && !bondStale(fd).length) return;
+    if (!force && fd.bondFull) { renderFund(); return; } // out of date: the page says so and offers Rewrite
+    if (await ghCan()) { await ghWatch("fund", fd.sym); ghMark("fund", fd.sym); if (fd.ghRun) { renderFund(); return; }
+      fd.fullErr = null; fd.ghRun = { state: "queued", requested_at: new Date().toISOString() }; fd.ghRunWas = true; renderFund();
+      if (await ghStart("fund", fd.sym)) { ghMark("fund", fd.sym); renderFund(); return; }
+      fd.ghRun = null; fd.ghRunWas = false; }
+    return bondWrite(fd);
+  }
+  /** The bond fund's sections: verdict and calls, what you earn, rates, credit, scenarios, shocks, risks, the runs' backdrop. */
+  function bondSecs(fd) {
+    const p = fd.bond, m = fd.bondM || {}, R = fd.bondFull, w = R?.w || null, idx = R?.idx || {}, cite = (s) => fundCites(s, idx), stl = bondStale(fd);
+    const VC = { attractive: "pos", fair: "neu", unattractive: "neg" }, SZ = { low: "pos", medium: "warn", high: "neg" }, bpx = (v) => (isNum(v) ? `${v > 0 ? "+" : ""}${Math.round(v)}bp` : "—"), pc2 = (v, d = 2) => (isNum(v) ? `${Number(v).toFixed(d)}%` : "—"), sg = (v, d = 1) => (isNum(v) ? `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}%` : "—");
+    const canW = (S.sample || S.mcp) && !fd.writing && !fd.ghRun;
+    const status = fd.ghRun ? ghNotice("fund", fd) : fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s bond analysis</b> (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far): one strategist on the yield, the curve${m.credit ? ", spreads" : ""} and the runs' macro.</span><button class="sm" data-fund-stop="1">Stop</button></div>`
+      : fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span>${canW ? `<button class="sm" data-fund-write="${esc(fd.sym)}">Try again</button>` : ""}</div>`
+      : stl.length && w ? `<div class="notice warn"><span>Out of date: ${esc(stl.join("; "))}.</span>${canW ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}">Rewrite analysis</button>` : ""}</div>` : "";
+    const head = `<div class="kpis">${kpi("Yield to maturity", pc2(p.ytm), `distribution ${pc2(p.distYield)}`)}${kpi("Carry after costs", pc2(m.carry), `expense ${pc2((p.expense || 0) * 100)}`)}${kpi("Duration", isNum(p.duration) ? `${fix(p.duration, 1)} yrs` : "—", `${isNum(m.empDur) ? `moves like ${fix(m.empDur, 1)} yrs (measured)` : `maturity ${fix(p.maturity, 1)} yrs`}`)}${m.credit ? kpi("Spread over Treasuries", isNum(m.spread) ? `${Math.round(m.spread)}bp` : "—", m.igSpread ? `IG proxy ${Math.round(m.igSpread.spread)}bp` : "") : kpi("Treasury at its duration", pc2(m.tsy), m.curve ? `10-year ${pc2(m.curve.y10)}` : "")}${kpi("Breakeven", isNum(m.breakeven) ? `${Math.round(m.breakeven)}bp` : "—", "yield rise a year's carry absorbs")}</div>`;
+    const calls = w?.calls && Object.keys(w.calls).length ? `<div class="strip">${BondAn.HZ.map((h) => { const c = w.calls[h]?.call; return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}</span>${c ? `<span class="pill ${Outlook.cls(c)}" style="justify-self:start">${Outlook.SIGN[c] > 0 ? "▲" : "▼"} ${esc(Outlook.label(c))}</span>` : "—"}</div>`; }).join("")}</div>` : "";
+    const btn = canW && !stl.length ? `<button class="sm ${w ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${w ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
+    const snap = sec("bond-snap", `${esc(fd.sym)}: ${esc(BondAn.KINDS[p.kind] || "bonds")}`, w ? `written ${esc(ago(R.at))}${R.secs ? ` in ${R.secs}s` : ""}${R.via === "github" ? " on GitHub" : ""}` : "",
+      `${status}${w ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our verdict</span>${w.verdict ? `<span class="pill ${VC[w.verdict] || "neu"}">${esc(w.verdict)}</span>` : ""}${w.conviction ? `<span class="small muted">conviction ${w.conviction}/10</span>` : ""}<span style="margin-left:auto">${btn}</span></div><b>${cite(w.headline)}</b>${calls}
+        ${isNum(w.expected12) ? `<div class="small muted">Expected 12-month total return, the strategist's scenarios priced by code: <b class="${cls(w.expected12 / 100)}">${sg(w.expected12)}</b>${isNum(m.curve?.y3m) ? ` against ${pc2(m.curve.y3m)} in 3-month bills` : ""}.</div>` : ""}
+        ${w.checks?.length ? `<div class="notice warn small"><span>Code's check: ${esc(w.checks.join("; "))}.</span></div>` : ""}</div>`
+        : !fd.writing && !fd.ghRun ? `<div class="callout"><div class="small muted">${canW ? "The strategist's verdict and 1M-12M calls aren't written yet." : "Open this page in Claude to write the analysis."}</div>${btn}</div>` : ""}${head}`);
+    const whyRows = w ? BondAn.HZ.filter((h) => w.calls?.[h]?.why).map((h) => `<tr><td><b>${esc(h)}</b></td><td><span class="pill ${Outlook.cls(w.calls[h].call)}">${esc(Outlook.label(w.calls[h].call))}</span></td><td class="wr small">${cite(w.calls[h].why)}</td></tr>`).join("") : "";
+    const lean = whyRows ? sec("bond-calls", `Where ${esc(fd.sym)} is going`, "its total return against cash, each window", `<div class="tbl-wrap"><table class="wrap-table"><tbody>${whyRows}</tbody></table></div>`) : "";
+    const thesis = w ? sec("bond-thesis", "Analysis", "", `${w.thesis.split("\n").map((x) => `<p class="prose">${cite(x)}</p>`).join("")}
+      <div class="two">${w.rates ? `<div class="box"><h3>Rates and the Fed</h3><p class="small" style="margin:0">${cite(w.rates)}</p></div>` : ""}${w.credit ? `<div class="box"><h3>Credit</h3><p class="small" style="margin:0">${cite(w.credit)}</p></div>` : ""}${w.inflation ? `<div class="box"><h3>Inflation</h3><p class="small" style="margin:0">${cite(w.inflation)}</p></div>` : ""}${w.role ? `<div class="box"><h3>Its role in a portfolio</h3><p class="small" style="margin:0">${cite(w.role)}</p></div>` : ""}</div>
+      ${w.fits || w.avoid_if ? `<div class="two">${w.fits ? `<div class="box"><span class="pill pos">fits</span><p class="small" style="margin:6px 0 0">${cite(w.fits)}</p></div>` : ""}${w.avoid_if ? `<div class="box"><span class="pill neg">avoid if</span><p class="small" style="margin:6px 0 0">${cite(w.avoid_if)}</p></div>` : ""}</div>` : ""}`) : "";
+    const scen = w && Object.keys(w.scenarios || {}).length ? sec("bond-scen", "Scenarios", "the strategist's rate and spread moves, priced by code with its duration and carry", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Probability</th><th class="n">Treasury yield</th>${m.credit ? `<th class="n">Spread</th>` : ""}<th class="n">12-month return</th><th>What happens</th></tr></thead><tbody>${["bull", "base", "bear"].filter((k) => w.scenarios[k]).map((k) => { const s = w.scenarios[k]; return `<tr><td><span class="pill ${k === "bull" ? "pos" : k === "bear" ? "neg" : "neu"}">${k}</span></td><td class="n">${s.probability}%</td><td class="n">${bpx(s.rate_change_bp)}</td>${m.credit ? `<td class="n">${bpx(s.spread_change_bp)}</td>` : ""}<td class="n ${cls(s.ret / 100)}"><b>${sg(s.ret)}</b></td><td class="wr small">${cite(s.narrative)}</td></tr>`; }).join("")}</tbody></table></div>`) : "";
+    const shocks = sec("bond-shocks", "What moves its price", "code: duration, convexity and carry", `<div class="two"><div class="tbl-wrap"><table><thead><tr><th>Treasury yields</th><th class="n">Price now</th><th class="n">12 months with carry</th></tr></thead><tbody>${(m.shocks || []).map((x) => `<tr><td>${bpx(x.bp)}</td><td class="n ${cls(x.ret / 100)}">${sg(x.ret)}</td><td class="n ${cls(x.ret12 / 100)}">${sg(x.ret12)}</td></tr>`).join("")}</tbody></table></div>
+      ${m.credit && m.spreadShocks?.length ? `<div class="tbl-wrap"><table><thead><tr><th>Its spread</th><th class="n">Price now</th><th class="n">12 months with carry</th></tr></thead><tbody>${m.spreadShocks.map((x) => `<tr><td>${bpx(x.bp)}</td><td class="n ${cls(x.ret / 100)}">${sg(x.ret)}</td><td class="n ${cls(x.ret12 / 100)}">${sg(x.ret12)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="box"><h3 style="margin:0">The curve</h3>${m.curve ? `<div class="small">3-month ${pc2(m.curve.y3m)} · 2-year ${pc2(m.curve.y2)} · 10-year ${pc2(m.curve.y10)} · 30-year ${pc2(m.curve.y30)}</div><div class="small muted">2s10s ${bpx(m.slope)}${isNum(m.realY10) ? ` · 10-year real ${pc2(m.realY10)}, breakeven inflation ${pc2(m.breakevenInfl)}` : ""}</div>` : ""}${(m.moves || []).map((x) => `<div class="small">${esc(x.k)}: 2-year ${bpx(x.d2)}, 10-year ${bpx(x.d10)}, at its duration ${bpx(x.dDur)}</div>`).join("")}</div>`}</div>
+      <div class="small muted">Price change ≈ −duration × yield change + ½ × convexity × yield change². Breakeven: its yields can rise ${isNum(m.breakeven) ? Math.round(m.breakeven) + "bp" : "—"} over a year before the price loss eats the carry.${isNum(m.eqBeta) ? ` Measured over the last year: beta to the S&amp;P 500 ${fix(m.eqBeta, 2)}${isNum(m.creditBeta) ? `, to high-yield bonds ${fix(m.creditBeta, 2)}` : ""}.` : ""}</div>`);
+    const lend = m.lend?.rows?.length ? sec("bond-lend", "Who it lends to", "issuer sectors, through the industry runs' 12-month calls", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Issuers</th><th class="n">Of the fund</th><th>Runs' sector</th><th>12-month call</th></tr></thead><tbody>${m.lend.rows.map((x) => `<tr><td>${esc(x.name)}</td><td class="n">${pct(x.w, false, 1)}</td><td class="small">${esc(x.sector || "—")}</td><td>${x.call ? `<span class="pill ${Outlook.cls(x.call)}">${esc(Outlook.label(x.call))}</span> <span class="small muted">${x.n} industr${x.n === 1 ? "y" : "ies"}</span>` : `<span class="small muted">no run</span>`}</td></tr>`).join("")}</tbody></table></div>
+      <div class="small muted">${pct(m.lend.covered, false, 0)} of the fund mapped: ${pct(m.lend.up || 0, false, 0)} lent to sectors the runs call up, ${pct(m.lend.down || 0, false, 0)} to sectors they call down.${p.top?.length ? ` Largest issuers: ${esc(p.top.slice(0, 8).map((x) => `${x.name} ${fix(x.w, 2)}%`).join("; "))}.` : ""}</div>`) : "";
+    const risks = w && (w.risks?.length || w.watch?.length) ? sec("bond-risks", "Risks and what to watch", "", `<div class="two">${w.risks?.length ? `<div class="box"><h3>Risks</h3><ul class="dlist small">${w.risks.map((x) => `<li><b>${esc(x.risk)}</b> <span class="pill ${SZ[x.size] || "neu"}">${esc(x.size)}</span> ${cite(x.why)}</li>`).join("")}</ul></div>` : ""}${w.watch?.length ? `<div class="box"><h3>Watch</h3><ul class="dlist small">${w.watch.map((x) => `<li><b>${esc(x.what)}</b>: ${cite(x.why)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
+    const rv = fd.bondRuns || {}, back = rv.indicators?.length || rv.reads?.length ? sec("bond-macro", "The backdrop, from the industry runs", "their rate, inflation and growth indicators and their macro analysts' reads", `${rv.reads?.length ? rv.reads.map((x) => `<div class="coread"><span class="eyebrow">${esc(x.industry)} run · ${esc(x.date || "")}${x.regime ? ` · ${esc(x.regime)}` : ""}</span><p>${esc(x.headline)}</p></div>`).join("") : ""}
+      ${rv.indicators?.length ? `<div class="tbl-wrap"><table><thead><tr><th>Indicator</th><th class="n">Now</th><th class="n">Before</th><th>As of</th></tr></thead><tbody>${rv.indicators.map((x) => `<tr><td>${esc(x.label)}</td><td class="n">${esc(String(x.value ?? "—"))}${esc(x.unit && x.unit !== "$" ? x.unit : "")}</td><td class="n small muted">${x.prior !== undefined && x.prior !== null ? `${esc(String(x.prior))}${esc(x.unit && x.unit !== "$" ? x.unit : "")} <span class="muted">${esc(x.prior_label || "")}</span>` : "—"}</td><td class="mono small">${esc(x.date || "")}</td></tr>`).join("")}</tbody></table></div>` : ""}`) : "";
+    return [snap, lean, thesis, scen, shocks, lend, risks, back];
   }
   async function openFund(q, { refresh = false, write = true } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
@@ -6599,6 +6718,10 @@ a.btnlink:hover { border-color: var(--accent); }
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls: its industries' starting point, a move of a normal month or more, a big holding reporting, the write-up's inputs (a re-analyzed industry, shifted weights), or calls a week old. "Update my funds" on the fund list runs the same check for every fund you've analyzed and redoes only what moved: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis.</div>`) : "";
     const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
+        { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
+        { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-peers", "Peer funds"]] }, { label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] }];
+      return `<div class="shell">${sideNav(g)}<div class="stream">${[...bs, holdSec, peerSec, perfSec, riskSec, stressSec, tech, dist].filter(Boolean).join("")}</div></div>`; }
     return `<div class="shell">${sideNav(fundGroups(fd))}<div class="stream">${secs.filter(Boolean).join("")}</div></div>`;
   }
   function renderFund() {
@@ -7827,12 +7950,12 @@ a.btnlink:hover { border-color: var(--accent); }
   async function ghApply(kind, sym, x) {
     const id = ghId(kind, sym); S.ghApplied[id] = x.path + "@" + x.done_at;
     try { const res = await jobRead(x, id), rec = res?.rec; if (!rec || String(res.sym || "").toUpperCase() !== String(sym).toUpperCase()) throw new Error("the result is for something else");
-      const key = (kind === "company" ? "co:" : "fundFull:") + sym, have = await idbGet(key).catch(() => null);
+      const key = (kind === "company" ? "co:" : rec.bond ? "bondFull:" : "fundFull:") + sym, have = await idbGet(key).catch(() => null);
       if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer (written here since)
       rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
       if (kind === "company") { if (rec.outlook) await saveOutlook("co_outlooks", sym, { sym, name: rec.name, industry: rec.industry, outlook: rec.outlook, history: rec.outlook_history || [] });
         const co = ghOpen(kind, sym); if (co) { co.thesis = rec; co.idx = rec.idx || co.idx; co.thesisErr = null; co.ghRun = null; renderCompany(); coTrack(co).catch(() => {}); } }
-      else { const fd = ghOpen(kind, sym); if (fd) { fd.full = rec; fd.fullWhy = []; fd.fullErr = null; fd.ghRun = null; renderFund(); } }
+      else { const fd = ghOpen(kind, sym); if (fd) { if (rec.bond) fd.bondFull = rec; else { fd.full = rec; fd.fullWhy = []; } fd.fullErr = null; fd.ghRun = null; renderFund(); } }
     } catch (e) { const o = ghOpen(kind, sym), why = "GitHub's result couldn't be read: " + (e?.message || e); if (o) { if (kind === "company") o.thesisErr = why; else o.fullErr = why; } }
   }
   /** While a request runs, ask the task to fetch it 12 minutes in and every 10 minutes after (as for portfolios). */
@@ -7867,6 +7990,7 @@ a.btnlink:hover { border-color: var(--accent); }
   /** Fund: the same. Without force, a write-up is kept while nothing material moved, or for a day after a GitHub one. */
   async function fundWriteAuto(fd, { force = false } = {}) {
     if (fd.stage !== "ready" || fd.writing || fd.ghRun) return;
+    if (fd.bond) return bondWriteAuto(fd, { force });
     if (!(await ghCan())) return fundWrite(fd, { force });
     await ghWatch("fund", fd.sym); ghMark("fund", fd.sym); if (fd.ghRun) { renderFund(); return; }
     const rec = fd.full !== undefined ? fd.full : await idbGet("fundFull:" + fd.sym).catch(() => null), why = Portfolio.changes(rec?.fp, Portfolio.fingerprint(fd));

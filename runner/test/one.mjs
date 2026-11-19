@@ -23,8 +23,20 @@ const brainSrc = `window.COS = ${JSON.stringify(cos)};
     while (d.toISOString().slice(0, 10) <= "2026-11-18") { if (d.getUTCDay() % 6) { k++; v *= 1 + 0.011 * Math.sin(k * 0.31) * Math.cos(k * 0.017) + 0.0003 + 0.006 * Math.sin(k * 0.7 + seed); out.push({ date: d.toISOString().slice(0, 10), adjClose: v, close: v, open: v, high: v * 1.01, low: v * 0.99, volume: 1e6 }); } d.setUTCDate(d.getUTCDate() + 1); }
     return out.reverse(); };
   const fundHold = Object.entries(COS).slice(0, 40).map(([s, c]) => ({ asset: s, name: c.name, weightPercentage: 2.5 }));
-  const mcp = { async listTools() { return { servers: [] }; }, async callTool(server, tool, input) {
-    const sym = input.symbol, c = COS[sym];
+  const BONDS = { HYG: { name: "iShares iBoxx $ High Yield Corporate Bond ETF", cat: "High Yield Bonds", dur: 3.07, ytm: 7.66, cpn: 6.76 }, TLT: { name: "iShares 20+ Year Treasury Bond ETF", cat: "US Government Bonds", dur: 14.13, ytm: 5.09, cpn: 3.48 } };
+  const curveRow = (date, k) => ({ date, month1: 3.95, month2: 3.97, month3: 4.0, month6: 4.2, year1: 4.3, year2: 4.4 + 0.1 * Math.sin(k / 20), year3: 4.5, year5: 4.6, year7: 4.75, year10: 4.98 + 0.2 * Math.sin(k / 30), year20: 5.35, year30: 5.3 });
+  const mcp = { async listTools() { return { servers: [{ server: "EODHD", tools: ["get_fundamentals_data"] }] }; }, async callTool(server, tool, input) {
+    const sym = input.symbol, c = COS[sym], B = BONDS[sym] || BONDS[String(input.ticker || "").replace(/\.US$/, "")];
+    if (server === "EODHD") {
+      if (tool === "get_fundamentals_data") return { payload: B ? { General: { Code: input.ticker, Type: "ETF", Name: B.name, Category: B.cat }, ETF_Data: { Yield: B.ytm - 1, NetExpenseRatio: 0.002, Asset_Allocation: { Bond: { "Net_Assets_%": 98.5 }, Cash: { "Net_Assets_%": 1.5 } },
+        Fixed_Income: { EffectiveDuration: { "Fund_%": B.dur }, EffectiveMaturity: { "Fund_%": B.dur * 1.6 }, YieldToMaturity: { "Fund_%": B.ytm }, Coupon: { "Fund_%": B.cpn }, Price: { "Fund_%": 95 } }, Performance: { Returns_1Y: 1.5, Returns_10Y: 3 } } } : null };
+      if (tool === "get_credit_corporate_hqm_yields") return { payload: { data: [{ as_of_date: "2026-10-01T00:00:00+00:00", yield_value: 5.92 }, { as_of_date: "2025-10-01T00:00:00+00:00", yield_value: 5.4 }] } };
+      if (tool === "get_ust_real_yield_rates") return { payload: { meta: { total: 40 }, data: [{ date: "2026-11-17", tenor: "10Y", rate: 2.66 }] } };
+      return { payload: null }; }
+    if (tool === "economics" && input.endpoint === "treasury-rates") { const out = []; const d = new Date(input.from_date + "T00:00:00Z"), e = input.to_date; let k = 0; while (d.toISOString().slice(0, 10) <= e && d.toISOString().slice(0, 10) <= "2026-11-18") { if (d.getUTCDay() % 6) out.push(curveRow(d.toISOString().slice(0, 10), k++)); d.setUTCDate(d.getUTCDate() + 1); } return { payload: out.reverse() }; }
+    if (B && tool === "etfAndMutualFunds" && input.endpoint === "information") return { payload: [{ symbol: sym, name: B.name, assetClass: "Fixed Income", expenseRatio: 0.2, assetsUnderManagement: 2e10, inceptionDate: "2007-04-04", holdingsCount: 1200, sectorsList: sym === "HYG" ? [{ industry: "Communications", exposure: 15 }, { industry: "Energy", exposure: 11 }, { industry: "Consumer Cyclical", exposure: 17 }] : [] }] };
+    if (B && tool === "etfAndMutualFunds" && input.endpoint === "holdings") return { payload: [{ symbol: sym, asset: "", name: "CCO HOLDINGS LLC 4.75% 03/01/2030", weightPercentage: 0.6 }, { symbol: sym, asset: "", name: "TRANSDIGM INC 6.375% 03/01/2029", weightPercentage: 0.5 }] };
+    if (B && tool === "company") return { payload: [{ symbol: sym, companyName: B.name, price: 80, isEtf: true }] };
     if (tool === "chart") return { payload: series(sym || "X") };
     if (tool === "company") return { payload: [{ symbol: sym, companyName: c ? c.name : sym + " Fund", price: 100, mktCap: 1e11, marketCap: 1e11, beta: 1.1, lastDividend: 0.8, isEtf: !c, isFund: false, sector: c ? c.sector : "", industry: c ? c.industry : "", exchange: "NASDAQ", description: "x" }] };
     if (tool === "etfAndMutualFunds" && input.endpoint === "holdings") return { payload: fundHold.map((x) => ({ ...x, symbol: sym })) };
@@ -33,6 +45,9 @@ const brainSrc = `window.COS = ${JSON.stringify(cos)};
     if (tool === "economics") return { payload: [{ date: "2026-11-17", month1: 4.05, month3: 4.3, month6: 4.38, year1: 4.56, year2: 4.73, year3: 4.74, year5: 4.81, year7: 4.89, year10: 4.98, year20: 5.39, year30: 5.35 }] };
     return { payload: [] }; } };
   const json = async (p) => {
+    if (/fixed-income strategist/.test(p)) return { headline: "Paid to wait [B2].", verdict: "fair", conviction: 6, thesis: "Carry [B2].\\nRates [R1].\\nThe call [R3].", rates: "Flat [R1].", credit: /spread_change_bp/.test(p) ? "Tight [C1]." : null, inflation: "Sticky.", role: "Ballast.",
+      scenarios: { bull: { probability: 25, rate_change_bp: -60, spread_change_bp: -40, narrative: "soft landing" }, base: { probability: 50, rate_change_bp: 0, spread_change_bp: 10, narrative: "more of the same" }, bear: { probability: 25, rate_change_bp: 50, spread_change_bp: 200, narrative: "recession" } },
+      calls: { "1M": { call: "slightly bullish", why: "carry [B2]" }, "3M": { call: "slightly bullish", why: "x" }, "6M": { call: "slightly bullish", why: "y" }, "12M": { call: "slightly bullish", why: "z [R1]" } }, risks: [{ risk: "Defaults", why: "spreads [C1]", size: "medium" }], watch: [{ what: "CPI", why: "rates" }] };
     const ids = [...new Set([...String(p).matchAll(/\\[([A-Z]{1,2}\\d{1,3})\\]/g)].map((m) => m[1]))].slice(0, 3), c = ids.length ? " [" + ids[0] + "]" : "";
     return { headline: "A durable leader at a fair price" + c + ".", thesis: "The case" + c + ".", verdict: "outperform", confidence: "medium", summary: "Summary" + c + ".",
       horizons: { "1M": { call: "neutral", why: "x" + c }, "3M": { call: "slightly bullish", why: "y" + c }, "6M": { call: "slightly bullish", why: "y" + c }, "12M": { call: "bullish", why: "z" + c } },
@@ -49,7 +64,7 @@ const id = (KIND === "company" ? "co-" : "fd-") + SYM.replace(/[^A-Z0-9]/g, "_")
 writeFileSync(join(tmp, "request.json"), JSON.stringify({ id, kind: KIND, symbol: SYM, holdings: [], requested_at: new Date().toISOString() }));
 const out = join(tmp, "out");
 const code = await new Promise((done) => { const p = spawn(process.execPath, [join(here, "../portfolio.mjs"), "--request", join(tmp, "request.json"), "--exports", EXP, "--out", out, "--deadline-min", "15"], {
-  env: { ...process.env, ANTHROPIC_API_KEY: "test-key", ANTHROPIC_BASE_URL: "http://127.0.0.1:7822", FMP_MCP_URL: "http://127.0.0.1:7821/fmp", EODHD_MCP_URL: "", JOB_FMP_GAP_MS: "5", GITHUB_STEP_SUMMARY: join(tmp, "summary.md") }, stdio: ["ignore", "pipe", "pipe"] });
+  env: { ...process.env, ANTHROPIC_API_KEY: "test-key", ANTHROPIC_BASE_URL: "http://127.0.0.1:7822", FMP_MCP_URL: "http://127.0.0.1:7821/fmp", EODHD_MCP_URL: "http://127.0.0.1:7821/eodhd", JOB_FMP_GAP_MS: "5", GITHUB_STEP_SUMMARY: join(tmp, "summary.md") }, stdio: ["ignore", "pipe", "pipe"] });
   p.stdout.on("data", (d) => process.stdout.write("    " + String(d).trimEnd().replace(/\n/g, "\n    ") + "\n")); p.stderr.on("data", (d) => process.stderr.write("    " + d)); p.on("exit", done); });
 ok(code === 0, `the job exits 0 (got ${code})`);
 const f = join(out, "portfolio.json.gz");
@@ -57,6 +72,10 @@ if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString()
   if (process.env.KEEP) writeFileSync(process.env.KEEP, readFileSync(f));
   ok(r.kind === KIND && r.sym === SYM && !!r.at, `the result says what it is (${r.kind} ${r.sym} at ${r.at})`);
   if (KIND === "company") { ok(!!r.rec?.thesis?.headline, "the company's analysis is there: " + (r.rec?.thesis?.headline || "").slice(0, 60)); ok(r.rec?.industry === cos[SYM]?.industry, `built on its industry run (${r.rec?.industry})`); }
+  else if (r.rec?.bond) { ok(!!r.rec.w?.headline && Object.keys(r.rec.w.calls || {}).length === 4, "the bond fund's analysis and its four calls are there: " + r.rec.w?.headline);
+    ok(Number.isFinite(r.rec.w.expected12) && r.rec.w.scenarios?.bear?.ret < r.rec.w.scenarios?.bull?.ret, `scenarios priced by code (expected ${r.rec.w.expected12?.toFixed(2)}%)`);
+    ok(r.rec.m && Math.abs(r.rec.m.duration - (SYM === "TLT" ? 14.13 : 3.07)) < 0.01 && Number.isFinite(r.rec.m.tsy), `built on its duration ${r.rec.m?.duration} and the curve (${r.rec.m?.tsy?.toFixed(2)}% at its duration)`);
+    if (SYM === "HYG") ok(Number.isFinite(r.rec.m.spread) && r.rec.m.spread > 200, `its spread ${Math.round(r.rec.m.spread)}bp`); }
   else ok(!!r.rec?.parts && Object.values(r.rec.parts).some(Boolean), `the fund's analysis is there (${Object.keys(r.rec?.parts || {}).join(", ")})`);
   ok(!!r.job?.id && r.job.id === id, "the job's facts are attached");
   console.log("warn:", r.warn || "none"); console.log(readFileSync(join(tmp, "summary.md"), "utf8")); }
