@@ -130,7 +130,8 @@
   }
   /** Earnings reports of the companies underneath and the runs' dated catalysts, inside the window. */
   function calendar(ach, rows, { today, days = 90 } = {}) {
-    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map(); for (const s of ach?.allStocks || []) w.set(classKey(s.symbol), (w.get(classKey(s.symbol)) || 0) + s.weight), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
+    const until = new Date(Date.parse(today) + days * 864e5).toISOString().slice(0, 10), w = new Map(), got = new Map((ach?.industries || []).map((x) => [x.name, x.got || 0]));
+    for (const s of ach?.allStocks || []) w.set(classKey(s.symbol), (w.get(classKey(s.symbol)) || 0) + s.weight);
     const out = [], seen = new Set();
     for (const r of rows) for (const c of r.cos || []) if (c.next && c.next >= today && c.next <= until && (w.get(classKey(c.symbol)) || 0) >= 0.003 && !seen.has(classKey(c.symbol))) { seen.add(classKey(c.symbol)); out.push({ date: c.next, kind: "earnings", title: `${c.symbol} earnings`, weight: w.get(classKey(c.symbol)), industry: r.name, beats: c.beats || null }); }
     for (const r of rows) if ((got.get(r.name) || 0) >= 0.01) for (const e of r.events || []) if (e.date >= today && e.date <= until && /high|critical/i.test(String(e.importance || "")) && !/earnings/i.test(e.title || "")) out.push({ date: e.date, kind: "catalyst", title: e.title, weight: got.get(r.name), industry: r.name, detail: e.detail || "" });
