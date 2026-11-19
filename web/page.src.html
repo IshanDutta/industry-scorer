@@ -3437,6 +3437,25 @@ a.btnlink:hover { border-color: var(--accent); }
         S.pfJob.result = jsonSafe(res); } catch (e) { S.pfJob.error = e?.message || String(e); } finally { S.pfJob.busy = false; } })(); return true; },
     portfolioStatus: () => ({ busy: !!S.pfJob?.busy, label: S.pfJob?.label || "", error: S.pfJob?.error || null, done: !!S.pfJob?.result }),
     portfolioResult: () => S.pfJob?.result || null,
+    /** One company's or one fund's analysis (the same workflow, request kind "company" or "fund"): open it, write it, return what the page saves. */
+    analyzeOne: (input) => { const J = S.oneJob = { busy: true, label: "starting", result: null, error: null }, kind = input?.kind, sym = String(input?.symbol || "").toUpperCase();
+      (async () => { try {
+        if (kind === "company") { J.label = "opening " + sym; await openCompany(sym, { write: false }); const co = S.co;
+          if (!co || co.sym !== sym || co.stage === "error") throw new Error(co?.err || `${sym} couldn't be opened`);
+          if (!co.run) throw new Error(`${sym} isn't in any saved industry run, so there's no industry analysis to build its analysis on`);
+          J.label = "writing the analysis and the calls"; co.thesis = null; await writeThesis(co);
+          const rec = await idbGet("co:" + sym).catch(() => null); if (!rec?.thesis) throw new Error(co.thesisErr || "no analysis came back");
+          J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec, warn: co.thesisErr || co.leanErr || null }); }
+        else if (kind === "fund") { J.label = "opening " + sym; await openFund(sym, { write: false }); const fd = S.fund;
+          if (!fd || fd.sym !== sym || fd.stage !== "ready") throw new Error(fd?.err || `${sym} couldn't be opened`);
+          if (!fd.look?.n) throw new Error(`none of ${sym}'s holdings are in a saved industry run, so there's nothing to build its analysis on`);
+          J.label = "writing the analysis and the calls"; fd.full = null; await fundWrite(fd, { force: true });
+          const rec = await idbGet("fundFull:" + sym).catch(() => null); if (!rec?.parts) throw new Error(fd.fullErr || "no analysis came back");
+          J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec, warn: fd.fullErr || fd.leanErr || null }); }
+        else throw new Error("unknown kind " + kind);
+      } catch (e) { J.error = e?.message || String(e); } finally { J.busy = false; } })(); return true; },
+    oneStatus: () => ({ busy: !!S.oneJob?.busy, label: S.oneJob?.label || "", error: S.oneJob?.error || null, done: !!S.oneJob?.result }),
+    oneResult: () => S.oneJob?.result || null,
     /** The shared library (facts every sector can reuse): read it out, or merge one in before a run. */
     exportLibrary: async () => { await libFlush(); return jsonSafe(await libLoad()); },
     importLibrary: async (lib) => { const L = await libLoad(); libMerge(L, lib); await libFlush();
@@ -5345,7 +5364,7 @@ a.btnlink:hover { border-color: var(--accent); }
       share_change: sh0 > 0 && sh4 > 0 ? sh0 / sh4 - 1 : NaN, sbc_rev: Number(m.stockBasedCompensationToRevenueTTM) };
   }
   /** Open a company: the page shows at once from what's saved, fills in from FMP in a few seconds, then writes the thesis. */
-  async function openCompany(q) {
+  async function openCompany(q, { write = true } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
     S.tab = "companies"; S.coQuery = "";
     const co = S.co = { sym, stage: "finding", data: null, run: null, thesis: null, partial: null, err: null, idx: {} };
@@ -5379,7 +5398,8 @@ a.btnlink:hover { border-color: var(--accent); }
       // The thesis: saved, or written now (once), built on this industry run.
       const saved = await idbGet("co:" + sym).catch(() => null);
       if (saved?.thesis && saved.industry === co.run.name) { if (!saved.thesis.range_notes) { saved.thesis.range_notes = Company.fitRanges(saved.thesis, coSigmas(co)); if (saved.thesis.range_notes.length) saved.checks = Company.checks(saved.thesis, saved.px, saved.pe_basis); idbPut("co:" + sym, saved).catch(() => {}); } co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); coTrack(co).catch(() => {}); }
-      if ((!saved?.thesis || saved.industry !== co.run.name) && S.sample) writeThesis(co);
+      if (write && (!saved?.thesis || saved.industry !== co.run.name)) coWriteAuto(co);
+      else if (write) ghResume("company", co);
     } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
   }
   /**
@@ -5727,7 +5747,7 @@ a.btnlink:hover { border-color: var(--accent); }
     finally { if (had) S.industries[sl] = had; else if (S.selected !== name) delete S.industries[sl]; S.sector = sector0; }
   }
   /** Fill a fund's industries no run covers (code only), biggest first; `limit` per go, so a broad fund doesn't pull for hours. */
-  async function fillFund(fd, { limit = 8, minWeight = 0.005 } = {}) {
+  async function fillFund(fd, { limit = 8, minWeight = 0.005, write = true } = {}) {
     if (busy() || !S.mcp || fd.stage !== "ready") return;
     const todo = fd.cov.industries.filter((g) => g.status === "not_analyzed" && g.weight >= minWeight && !(fd.fillSkip || {})[g.industry]).slice(0, limit);
     if (!todo.length) return;
@@ -5744,7 +5764,7 @@ a.btnlink:hover { border-color: var(--accent); }
     finally { S.fundFill = null; }
     if (S.fund === fd) await fundAnalyze(fd, { quiet: true });
     renderAll();
-    if (S.fund === fd && !fd.writing && fd.full !== undefined) fundWrite(fd);
+    if (write && S.fund === fd && !fd.writing && fd.full !== undefined) fundWriteAuto(fd);
   }
   /** Coverage, digests, the look-through and the benchmark comparison, from the fund's raw data. */
   async function fundAnalyze(fd, { quiet = false } = {}) {
@@ -5956,7 +5976,7 @@ a.btnlink:hover { border-color: var(--accent); }
     } catch (e) { fd.leanErr = "The calls didn't finish: " + (e?.code === "cancelled" || ctl.signal.aborted ? "stopped" : FATAL.has(e?.code) ? errText(e) : e?.code ? sampleErr(e) : e?.message || String(e)); }
     finally { fd.leanBusy = false; fd.leanStage = null; fd.leanCtl = null; if (S.fund === fd) renderFund(); }
   }
-  async function openFund(q, { refresh = false } = {}) {
+  async function openFund(q, { refresh = false, write = true } = {}) {
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
     S.tab = "funds"; S.fundQuery = "";
     S.fund?.ctl?.abort();
@@ -5976,7 +5996,7 @@ a.btnlink:hover { border-color: var(--accent); }
       // Wall Street, news and distributions next (the page is already up), then the fill, then the analysis, which reads them all.
       await fundNet(fd).catch((e) => { if (FATAL.has(e?.code)) fd.netErr = errText(e); }); fd.netDone = true; if (S.fund === fd) renderFund();
       await fundPeers(fd).catch(() => {}); if (S.fund === fd) renderFund();
-      await fillFund(fd); if (S.fund === fd) fundWrite(fd);
+      await fillFund(fd, { write }); if (S.fund === fd && write) fundWriteAuto(fd);
     }
   }
 
@@ -6091,13 +6111,13 @@ a.btnlink:hover { border-color: var(--accent); }
     // What its biggest industries' reports say on a topic: the backend's own words, shown as they are.
     const IND = (key, k = 3) => { const rs = FundAn.indReads(fd.cov, fd.digests, key, k); return rs.length ? `<div class="small" style="display:grid;gap:3px;margin:6px 0;padding:8px 10px;border-left:3px solid var(--line)"><span class="eyebrow">What its biggest industries' reports say: ${esc(FundAn.IND_READ_LABEL[key] || key)}</span>${rs.map((x) => `<div><b>${esc(x.industry)}</b> <span class="mono muted">${pct(x.weight, false, 1)}</span>${x.kind === "quant" ? " · code-only" : ""}: ${esc(x.text)}</div>`).join("")}</div>` : ""; };
     const VC = { attractive: "pos", neutral: "neu", unattractive: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" };
-    const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: six analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : "";
+    const writing = fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s analysis</b> on top of its industries' analysis: six analysts at once, plus the outlook (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far). Everything else on the page is already in.</span><button class="sm" data-fund-stop="1">Stop</button></div>` : ghNotice("fund", fd);
     const fill = S.fundFill?.sym === fd.sym ? `<div class="notice info"><span>Filling the industries no run covers, code only (data and scores, no Claude): ${S.fundFill.done} of ${S.fundFill.n} done${S.fundFill.now ? `, now ${esc(S.fundFill.now)}` : ""}.</span></div>` : "";
     const left = c.industries.filter((g) => g.status === "not_analyzed" && !(fd.fillSkip || {})[g.industry]);
     const leftNote = !S.fundFill && left.length ? `<div class="notice warn"><span>${left.length} industr${left.length === 1 ? "y" : "ies"} (${pct(left.reduce((a, g) => a + g.weight, 0), false, 1)} of the fund) not covered yet.</span><button class="sm" data-fund-fill="${esc(fd.sym)}" ${busy() || !S.mcp ? "disabled" : ""}>Fill ${Math.min(left.length, 20)} more, code only</button></div>` : "";
     const skipped = Object.entries(fd.fillSkip || {}); const skipNote = skipped.length ? `<div class="small muted">Couldn't fill: ${skipped.map(([k, w]) => `${esc(k)} (${esc(String(w).replace(/\.$/, ""))})`).join("; ")}.</div>` : "";
     const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? ` Out of date: ${esc(fd.fullWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
-    const btn = !fd.writing && S.sample && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
+    const btn = !fd.writing && !fd.ghRun && (S.sample || PF_TRIGGER) && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
     // ---- snapshot: the hero, our prediction
     const lc12 = (h) => OL?.calls?.[h]?.call || "";
     const callStrip = (pfx) => `<div class="strip">${Outlook.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}${pfx}</span>${x ? `<span class="pill ${Outlook.cls(x)} lean-pill">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</div>`; }).join("")}</div>`;
@@ -7739,22 +7759,127 @@ a.btnlink:hover { border-color: var(--accent); }
       if (x?.state === "done" && x.path && S.pfAna?.[pid]?.from_path !== x.path + "@" + x.done_at) await pfAnaFromFile(pid, x);
       if (S.tab === "portfolios") renderPortfolio(); }, () => {}); } catch {}
   }
+  /** A finished GitHub request's result, read back: from the page's database (db:pfparts/<id>, in parts) or a file. */
+  async function jobRead(x, id) {
+    let b64;
+    if (String(x.path).startsWith("db:")) {
+      const db = await outlookDb(); if (!db) throw new Error("the page's database isn't available");
+      const n = Number(x.parts) || 0; if (!(n > 0)) throw new Error("the result has no parts");
+      const key = String(x.path).slice(3).replace(/^pfparts\//, "") || id;
+      const ps = await Promise.all(Array.from({ length: n }, (_, i) => db.doc(`pfparts/${key}.${i}`).get()));
+      if (ps.some((d) => !d.exists)) throw new Error("part of the result is missing from the database");
+      b64 = ps.map((d) => String(d.data()?.data || "")).join("");
+    } else {
+      const r = await fetch(x.path + "?v=" + encodeURIComponent(x.done_at || ""), { cache: "no-store" }); if (!r.ok) throw new Error(`the result file couldn't be read (${r.status})`);
+      b64 = await r.text();
+    }
+    const s = atob(b64.replace(/\s+/g, "")), bytes = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+    return JSON.parse(bytes[0] === 0x1f && bytes[1] === 0x8b ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(bytes));
+  }
+
+  // ============================================================= One company's or one fund's analysis, on GitHub
+  /**
+   * The Companies and Funds tabs write their analysis on GitHub when they can: the same request document (pfjobs/<id>,
+   * id co-<SYM> or fd-<SYM>) and the same Claude task as a portfolio, which starts the "Portfolio analysis" workflow; the
+   * workflow opens the company (or fund) in the page headless, writes the analysis and the 1M-12M calls, and the task
+   * copies the result into the page's database. The page watches the request and, when it's done, saves the result as
+   * if it had been written here. Without the task, the database or Claude Code Remote, it's written here as before.
+   */
+  const ghId = (kind, sym) => (kind === "company" ? "co-" : "fd-") + String(sym).toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 60);
+  const ghCan = async () => !JOB && !!PF_TRIGGER && !!S.mcp && !!(await outlookDb().catch(() => null));
+  const ghOpen = (kind, sym) => (kind === "company" ? (S.co?.sym === sym ? S.co : null) : S.fund?.sym === sym ? S.fund : null);
+  const ghRender = (kind) => (kind === "company" ? S.co && renderCompany() : S.fund && renderFund());
+  /** Start the analysis on GitHub. False when it can't (the caller then writes it here). */
+  async function ghStart(kind, sym) {
+    if (!(await ghCan())) return false;
+    const db = await outlookDb(), id = ghId(kind, sym), at = new Date().toISOString();
+    const req = { id, kind, symbol: sym, requested_at: at, holdings: [] };
+    const doc = { state: "queued", kind, symbol: sym, request: JSON.stringify(req), requested_at: at, started_at: null, done_at: null, result: null, path: null, run_url: null };
+    (S.ghJobs ||= {})[id] = doc;
+    try { await db.doc("pfjobs/" + id).set(doc); ghWatch(kind, sym);
+      await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "ANALYZE " + id }, { cache: false }); return true; }
+    catch (e) { const c = e?.code, why = c === "not_granted" || c === "declined" ? "this page isn't allowed to use Claude Code Remote" : e?.message || c || String(e);
+      S.ghJobs[id] = { ...doc, state: "failed", result: `couldn't start it on GitHub (${why})`, done_at: new Date().toISOString() };
+      await db.doc("pfjobs/" + id).set(S.ghJobs[id]).catch(() => {}); return false; }
+  }
+  /** Mark the open page as waiting on GitHub (or not), from the request's state. */
+  function ghMark(kind, sym) {
+    const o = ghOpen(kind, sym), x = S.ghJobs?.[ghId(kind, sym)]; if (!o) return;
+    // A request stuck "queued" for 15 minutes (the task never ran) or "running" for 3 hours (it was lost) no longer holds the page.
+    const age = Date.now() - Date.parse(x?.started_at || x?.requested_at || 0);
+    o.ghRun = (x?.state === "queued" && age < 15 * 60000) || (x?.state === "running" && age < 3 * 3600000) ? x : null;
+    if (x?.state === "failed" && o.ghRunWas) { const why = "The GitHub run didn't finish: " + (x.result || "no reason given") + ". Rewrite to try again.";
+      if (kind === "company") { if (!o.thesis) o.thesisErr = why; } else o.fullErr = why; }
+    o.ghRunWas = !!o.ghRun;
+  }
+  /** Watch a company's or fund's request; when it's done and newer than what this browser has, take the result in. */
+  async function ghWatch(kind, sym) {
+    const id = ghId(kind, sym), db = await outlookDb().catch(() => null); if (!db || (S.ghWatched ||= {})[id]) return; S.ghWatched[id] = true;
+    ghTimer();
+    // Read it once first, so a caller deciding whether to start a new request sees one that's already running.
+    try { const d0 = await db.doc("pfjobs/" + id).get(); (S.ghJobs ||= {})[id] = d0?.exists ? d0.data() : S.ghJobs?.[id] || null; } catch {}
+    try { db.doc("pfjobs/" + id).onSnapshot(async (d) => { const x = d.exists ? d.data() : null; (S.ghJobs ||= {})[id] = x;
+      if (x?.state === "done" && x.path && (S.ghApplied ||= {})[id] !== x.path + "@" + x.done_at) await ghApply(kind, sym, x);
+      ghMark(kind, sym); ghRender(kind); }, () => {}); } catch {}
+  }
+  /** Resume on opening: a request still running shows as running; a finished one newer than the saved analysis comes in. */
+  async function ghResume(kind, o) { if (await ghCan()) { await ghWatch(kind, o.sym); ghMark(kind, o.sym); ghRender(kind); } }
+  async function ghApply(kind, sym, x) {
+    const id = ghId(kind, sym); S.ghApplied[id] = x.path + "@" + x.done_at;
+    try { const res = await jobRead(x, id), rec = res?.rec; if (!rec || String(res.sym || "").toUpperCase() !== String(sym).toUpperCase()) throw new Error("the result is for something else");
+      const key = (kind === "company" ? "co:" : "fundFull:") + sym, have = await idbGet(key).catch(() => null);
+      if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer (written here since)
+      rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
+      if (kind === "company") { if (rec.outlook) await saveOutlook("co_outlooks", sym, { sym, name: rec.name, industry: rec.industry, outlook: rec.outlook, history: rec.outlook_history || [] });
+        const co = ghOpen(kind, sym); if (co) { co.thesis = rec; co.idx = rec.idx || co.idx; co.thesisErr = null; co.ghRun = null; renderCompany(); coTrack(co).catch(() => {}); } }
+      else { const fd = ghOpen(kind, sym); if (fd) { fd.full = rec; fd.fullWhy = []; fd.fullErr = null; fd.ghRun = null; renderFund(); } }
+    } catch (e) { const o = ghOpen(kind, sym), why = "GitHub's result couldn't be read: " + (e?.message || e); if (o) { if (kind === "company") o.thesisErr = why; else o.fullErr = why; } }
+  }
+  /** While a request runs, ask the task to fetch it 12 minutes in and every 10 minutes after (as for portfolios). */
+  function ghTimer() {
+    if (S.ghTimer) return;
+    S.ghTimer = setInterval(() => { if (!S.mcp || !PF_TRIGGER) return; const now = Date.now();
+      for (const [id, x] of Object.entries(S.ghJobs || {})) { if (x?.state !== "running") continue; const st = Date.parse(x.started_at || x.requested_at || 0);
+        if (!(now - st > 12 * 60000) || now - st > 3 * 3600000) continue; const last = (S.ghAutoAt ||= {})[id] || 0; if (now - last < 10 * 60000) continue; S.ghAutoAt[id] = now;
+        S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
+      if (S.co?.ghRun) renderCompany(); if (S.fund?.ghRun) renderFund(); }, 60000);
+  }
+  async function ghFetchNow(kind, sym) { const id = ghId(kind, sym); if (!S.mcp || !PF_TRIGGER) return; (S.ghAutoAt ||= {})[id] = Date.now();
+    await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
+  /** The notice while GitHub works on it. */
+  function ghNotice(kind, o) {
+    const x = o?.ghRun; if (!x) return "";
+    const m = Math.max(0, Math.round((Date.now() - Date.parse(x.started_at || x.requested_at || Date.now())) / 60000));
+    return `<div class="notice info"><span><b>Analyzing ${esc(o.sym)} on GitHub</b>: ${x.state === "queued" ? "starting the run" : `running, ${m} min so far`} (usually 10-20 minutes, on your API key). The analysis and the 1M-12M calls appear here by themselves when it's done, even if you leave this page.${x.run_url ? ` <a href="${esc(x.run_url)}" target="_blank" rel="noopener">Watch the run</a>` : ""}</span>${x.state === "running" && m >= 8 ? `<button class="sm" data-gh-fetch="${esc(kind)}:${esc(o.sym)}">Check now</button>` : ""}</div>`;
+  }
+  /** Company: the analysis on GitHub when it can, else here. A request already running is joined, not repeated. */
+  async function coWriteAuto(co, { force = false } = {}) {
+    if (co.writing || co.ghRun) return;
+    if (await ghCan()) { await ghWatch("company", co.sym); ghMark("company", co.sym);
+      if (co.ghRun) { renderCompany(); return; }
+      if (!force && co.thesis) return;
+      co.thesisErr = null; co.ghRun = { state: "queued", requested_at: new Date().toISOString() }; co.ghRunWas = true; renderCompany();
+      if (await ghStart("company", co.sym)) { ghMark("company", co.sym); renderCompany(); return; }
+      co.ghRun = null; co.ghRunWas = false; }
+    if (!S.sample) { renderCompany(); return; }
+    if (force) co.thesis = null; writeThesis(co);
+  }
+  /** Fund: the same. Without force, a write-up is kept while nothing material moved, or for a day after a GitHub one. */
+  async function fundWriteAuto(fd, { force = false } = {}) {
+    if (fd.stage !== "ready" || fd.writing || fd.ghRun) return;
+    if (!(await ghCan())) return fundWrite(fd, { force });
+    await ghWatch("fund", fd.sym); ghMark("fund", fd.sym); if (fd.ghRun) { renderFund(); return; }
+    const rec = fd.full !== undefined ? fd.full : await idbGet("fundFull:" + fd.sym).catch(() => null), why = Portfolio.changes(rec?.fp, Portfolio.fingerprint(fd));
+    fd.full = rec || null; fd.fullWhy = why;
+    const fresh = rec?.via === "github" && Date.now() - Date.parse(rec.at || 0) < 20 * 3600e3;
+    if (!force && rec && (!why.length || fresh)) { if (rec && !rec.outlook && S.sample && fd.look?.n) fundLean(fd); renderFund(); return; }
+    if (!fd.look?.n) { renderFund(); return; }
+    fd.fullErr = null; fd.ghRun = { state: "queued", requested_at: new Date().toISOString() }; fd.ghRunWas = true; renderFund();
+    if (await ghStart("fund", fd.sym)) { ghMark("fund", fd.sym); renderFund(); return; }
+    fd.ghRun = null; fd.ghRunWas = false; return fundWrite(fd, { force });
+  }
   async function pfAnaFromFile(pid, x) {
-    try { let b64;
-      if (String(x.path).startsWith("db:")) {
-        const db = await outlookDb(); if (!db) throw new Error("the page's database isn't available");
-        const n = Number(x.parts) || 0; if (!(n > 0)) throw new Error("the result has no parts");
-        const key = String(x.path).slice(3).replace(/^pfparts\//, "") || pid;
-        const ps = await Promise.all(Array.from({ length: n }, (_, i) => db.doc(`pfparts/${key}.${i}`).get()));
-        if (ps.some((d) => !d.exists)) throw new Error("part of the result is missing from the database");
-        b64 = ps.map((d) => String(d.data()?.data || "")).join("");
-      } else {
-        const r = await fetch(x.path + "?v=" + encodeURIComponent(x.done_at || ""), { cache: "no-store" }); if (!r.ok) throw new Error(`the result file couldn't be read (${r.status})`);
-        b64 = await r.text();
-      }
-      const s = atob(b64.replace(/\s+/g, "")), bytes = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
-      const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"))).text() : new TextDecoder().decode(bytes);
-      const res = JSON.parse(text); res.from_path = x.path + "@" + x.done_at; res.write ||= {}; res.writing = {};
+    try { const res = await jobRead(x, pid); res.from_path = x.path + "@" + x.done_at; res.write ||= {}; res.writing = {};
       (S.pfAna ||= {})[pid] = res; S.recKey = res.current ? "improved" : "recommended"; await idbPut("pfAna:" + pid, jsonSafe(res)).catch(() => {});
       recWriteAll(res, pid);
     } catch (e) { (S.pfAnaErr ||= {})[pid] = "GitHub's result: " + (e?.message || e); }
@@ -8281,9 +8406,10 @@ a.btnlink:hover { border-color: var(--accent); }
   function coThesis(co, t, ck) {
     const writing = co.writing;
     const el = co.writeStart ? Math.round((Date.now() - co.writeStart) / 1000) : 0;
+    if (!t && co.ghRun) return sec("co-thesis", "Analysis", "", ghNotice("company", co));
     if (!t) return sec("co-thesis", "Analysis", "", writing ? `<div class="notice info"><span><b>Writing ${esc(co.sym)}'s analysis</b> on top of the ${esc(co.run.name)} analysis: four analysts at once (the thesis; the 1M-12M calls; macro, world events and the rest of the industry report row by row; trade and regulation), a minute or two (then it's saved). Everything below is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>`
-      : co.thesisErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(co.thesisErr)}</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Try again</button></div>`
-      : `<div class="small muted">${S.sample ? `<button class="primary" data-co-rewrite="1">Write ${esc(co.sym)}'s analysis</button>` : "Open this page in Claude to write the company's analysis."}</div>`);
+      : co.thesisErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(co.thesisErr)}</span><button class="sm" data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Try again</button></div>`
+      : `<div class="small muted">${S.sample || S.mcp ? `<button class="primary" data-co-rewrite="1">Write ${esc(co.sym)}'s analysis</button>` : "Open this page in Claude to write the company's analysis."}</div>`);
     const HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VS = { outperform: "pos", "in line": "neu", underperform: "neg" }, VC = { yes: "pos", conditional: "neu", no: "neg" };
     const rng = (r) => (r?.length ? r.map((x) => (x > 0 ? "+" : "") + x + "%").join(" to ") : "—");
     const SECL = Object.fromEntries(Company.SECS), LEAN = { positive: "pos", negative: "neg", binary: "warn" }, sgn = (v) => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${v}%` : "—");
@@ -8306,7 +8432,7 @@ a.btnlink:hover { border-color: var(--accent); }
       return `<tr><td><b>${k}</b></td><td class="n">${isNum(s.probability) ? s.probability + "%" : "—"}</td><td class="n">${rng(s.eps_change)}</td><td class="n">${s.pe?.length ? s.pe.map((x) => fix(x, 1)).join("–") : "—"}</td><td class="n">${s.price_target?.length ? s.price_target.map((x) => fix(x, 0)).join("–") : "—"}</td><td class="n ${cls(num(c?.move))}">${c && isNum(num(c.move)) ? pcx(c.move, 0) : "—"}</td><td class="wr small">${rich(s.narrative)}</td></tr>`; }).join("");
     const math = ck && isNum(num(ck.expected_return)) ? `<div class="kpis">${kpi("Expected 12M return", pcx(ck.expected_return, 1), "probability-weighted, from the scenarios", cls(num(ck.expected_return)))}${kpi("Upside (bull)", pcx(ck.upside, 0))}${kpi("Downside (bear)", pcx(ck.downside, 0))}${t.valuation?.fair_value?.length ? kpi("Fair value", t.valuation.fair_value.map((x) => fix(x, 0)).join("–"), isNum(co.px) ? `vs ${fix(co.px, 2)} now` : "") : ""}</div>` : "";
     return sec("co-thesis", `Analysis${writing ? " · writing…" : ""}`, co.thesis ? `written ${esc(ago(co.thesis.at))}${co.thesis.secs ? ` in ${co.thesis.secs}s` : ""} on the ${esc(fmtShort(co.thesis.industry_run_at || ""))} industry run${co.thesis.thesis?.confidence ? ` · ${esc(co.thesis.thesis.confidence)} confidence` : ""}` : "",
-      `${writing ? `<div class="notice info"><span>Still writing (${el}s); sections fill in as they arrive.</span><button class="sm" data-co-stop="1">Stop</button></div>` : ""}
+      `${ghNotice("company", co)}${writing ? `<div class="notice info"><span>Still writing (${el}s); sections fill in as they arrive.</span><button class="sm" data-co-stop="1">Stop</button></div>` : ""}
       ${co.thesisErr && !writing ? `<div class="notice warn small">${esc(co.thesisErr)}</div>` : ""}
       ${t.headline ? `<div class="headline">${rich(t.headline)}</div>` : ""}
       <div class="actions" style="justify-content:flex-start;align-items:center">${t.verdict?.call ? `<span class="pill ${VC[t.verdict.call] || "neu"}">Opportunity: ${esc(t.verdict.call)}</span>` : ""}${t.vs_industry?.call ? `<span class="pill ${VS[t.vs_industry.call] || "neu"}">${esc(t.vs_industry.call)} vs ${esc(co.run.name)}</span>` : ""}</div>
@@ -8437,7 +8563,7 @@ a.btnlink:hover { border-color: var(--accent); }
   function lensNote(co, t) {
     if (t?.lens) return "";
     if (co.writing) return `<div class="small muted">${esc(co.sym)}'s read on each row is being written…</div>`;
-    if (co.thesis) return `<div class="notice info small"><span>This analysis was written before ${esc(co.sym)} got its own read on each row of the industry report.</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite</button></div>`;
+    if (co.thesis) return `<div class="notice info small"><span>This analysis was written before ${esc(co.sym)} got its own read on each row of the industry report.</span><button class="sm" data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite</button></div>`;
     return "";
   }
   const pend = (co, t) => (t?.lens ? `<span class="muted">—</span>` : co.writing ? `<span class="muted">writing…</span>` : `<span class="muted">—</span>`);
@@ -8880,11 +9006,11 @@ a.btnlink:hover { border-color: var(--accent); }
       ${t.headline ? `<b>${rich(t.headline)}</b>` : ""}
       ${(() => { const ol = coOutlook(co); return ol ? `<div class="strip">${["1M", "3M", "6M", "12M"].map((h) => { const c = ol.calls?.[h]?.call; return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}</span>${c ? `<span class="pill ${Outlook.cls(c)}" style="justify-self:start">${Outlook.SIGN[c] > 0 ? "▲" : "▼"} ${esc(Outlook.label(c))}</span>` : "—"}</div>`; }).join("")}</div>` : `<div class="small muted">Where ${esc(co.sym)} is going over 1M-12M comes next: <a href="#co-lean">make the calls</a>.</div>`; })()}
       <div class="small muted">The full analysis is next: <a href="#co-lean">where it's going and why</a>, then <a href="#co-thesis">the thesis</a>.</div></div>`
-      : co.writing ? `<div class="notice info"><span><b>Our prediction is being written</b> on top of the ${esc(run?.name || "industry")} analysis (about a minute). Everything else on the page is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>` : "";
+      : co.ghRun ? ghNotice("company", co) : co.writing ? `<div class="notice info"><span><b>Our prediction is being written</b> on top of the ${esc(run?.name || "industry")} analysis (about a minute). Everything else on the page is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>` : "";
     return `<section class="panel" id="co-snap"><div class="panel-head"><div style="display:grid;gap:2px"><span class="eyebrow">${esc([co.industry || co.hit?.industry, sector].filter(Boolean).join(" · "))}</span>
         <h1 style="font-size:26px">${esc(name)} <span class="mono muted" style="font-size:.6em">${esc(co.sym)}</span> ${p.exchange ? `<span class="badge">${esc(p.exchange)}</span>` : ""}</h1>
         <div class="mono"><span style="font-size:22px;font-weight:600">${isNum(co.px) ? fix(co.px, 2) : "—"}</span> ${isNum(chg) ? `<span class="${chg >= 0 ? "up" : "down"}">${isNum(chgD) ? `${chgD >= 0 ? "+" : ""}${fix(chgD, 2)} ` : ""}(${chg >= 0 ? "+" : ""}${fix(chg, 2)}%)</span>` : ""} <span class="small muted">${co.data?.ser?.dates?.length ? "as of " + esc(fmtDate(co.data.ser.dates[co.data.ser.dates.length - 1])) : ""}</span></div></div>
-        <div class="actions">${run ? `<button data-open-industry="${esc(run.name)}">← ${esc(run.name)} report</button>` : ""}${co.thesis && !co.writing ? `<button data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite analysis</button>` : ""}</div></div>
+        <div class="actions">${run ? `<button data-open-industry="${esc(run.name)}">← ${esc(run.name)} report</button>` : ""}${co.thesis && !co.writing && !co.ghRun ? `<button data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite analysis</button>` : ""}</div></div>
       ${grid}${badges}${pred}</section>`;
   }
 
@@ -9179,7 +9305,7 @@ a.btnlink:hover { border-color: var(--accent); }
       <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
       ${sv.eps_view ? `<div class="small"><b>Our EPS versus consensus:</b> ${sv.eps_view.fy1 ? `next fiscal year <span class="pill ${IVC[sv.eps_view.fy1] || "neu"}">${esc(sv.eps_view.fy1)}</span>` : ""} ${sv.eps_view.fy2 ? `the year after <span class="pill ${IVC[sv.eps_view.fy2] || "neu"}">${esc(sv.eps_view.fy2)}</span>` : ""} ${sv.eps_view.why ? rich(sv.eps_view.why) : ""}</div>` : ""}
       ${(sv.differences || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where we differ</th><th>The street assumes</th><th>We assume</th><th>Why</th></tr></thead><tbody>${sv.differences.map((d) => `<tr><td class="wr"><b>${esc(d.topic)}</b></td><td class="wr small">${rich(d.street)}</td><td class="wr small">${rich(d.ours)}</td><td class="wr small">${rich(d.why)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`
-      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="notice info small"><span>This analysis was written before it compared itself with the street.</span><button class="sm" data-co-rewrite="1" ${!S.sample ? "disabled" : ""}>Rewrite</button></div>` : "";
+      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="notice info small"><span>This analysis was written before it compared itself with the street.</span><button class="sm" data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite</button></div>` : "";
     const rb = cs?.low && cs?.high ? `<h3>Price targets</h3>${rangeBar(cs.low, cs.high, [{ v: cs.low, label: `Low ${fix(cs.low, 0)}` }, { v: cs.high, label: `High ${fix(cs.high, 0)}` }, { v: cs.target, label: `Consensus ${fix(cs.target, 0)}`, top: true }, ...(cs.median && Math.abs(cs.median - cs.target) / cs.target > 0.01 ? [{ v: cs.median, label: `Median ${fix(cs.median, 0)}` }] : []), { v: co.px, label: `Price ${fix(co.px, 2)}`, cls: "px", top: true }, ...(sv?.our_target ? [{ v: sv.our_target, label: `Ours ${fix(sv.our_target, 0)}`, cls: "px" }] : [])])}
       <div class="small muted">Implied ${pct(cs.target / co.px - 1)} to the consensus target; ${pct(cs.low / co.px - 1, true, 0)} to the lowest and ${pct(cs.high / co.px - 1, true, 0)} to the highest.</div>` : "";
     const rh = f.rhist || [], qs = rh.filter((x) => ["01", "04", "07", "10"].includes(x.date.slice(5, 7))).slice(0, 4), RC = [["sb", "Strong buy", "var(--pos)"], ["b", "Buy", "color-mix(in srgb, var(--pos) 60%, var(--surface))"], ["h", "Hold", "var(--bench)"], ["s", "Underperform", "color-mix(in srgb, var(--neg) 60%, var(--surface))"], ["ss", "Sell", "var(--neg)"]];
@@ -9281,7 +9407,7 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.fund) { openFund(t.dataset.fund); return; }
     if (t.dataset.fundRefresh) { openFund(t.dataset.fundRefresh, { refresh: true }); return; }
     if (t.dataset.fundList) { S.fund?.ctl?.abort(); S.fund = null; renderFund(); return; }
-    if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundWrite(S.fund, { force: true }); return; }
+    if (t.dataset.fundWrite) { if (S.fund?.sym === t.dataset.fundWrite) fundWriteAuto(S.fund, { force: true }); return; }
     if (t.dataset.fundRet) { S.fundRet = t.dataset.fundRet; renderFund(); return; }
     if (t.dataset.fundTf) { S.fundTf = t.dataset.fundTf; renderFund(); return; }
     if (t.dataset.fundStop) { S.fund?.ctl?.abort(); S.fund?.leanCtl?.abort(); return; }
@@ -9291,9 +9417,10 @@ a.btnlink:hover { border-color: var(--accent); }
     if (t.dataset.fundFill) { if (S.fund?.sym === t.dataset.fundFill) fillFund(S.fund, { limit: 20, minWeight: 0 }); return; }
     if (t.dataset.co) { openCompany(t.dataset.co); return; }
     if (t.dataset.coList) { if (S.co?.ctl) S.co.ctl.abort(); S.co = null; renderCompany(); return; }
-    if (t.dataset.coRewrite) { if (S.co) { S.co.thesis = null; writeThesis(S.co); } return; }
+    if (t.dataset.coRewrite) { if (S.co) coWriteAuto(S.co, { force: true }); return; }
     if (t.dataset.coLean) { if (S.co) coLean(S.co); return; }
     if (t.dataset.coStop) { S.co?.ctl?.abort(); return; }
+    if (t.dataset.ghFetch) { const [k, sy] = t.dataset.ghFetch.split(":"); t.disabled = true; t.textContent = "Asked"; ghFetchNow(k, sy); return; }
     if (t.dataset.coRange) { S.coRange = t.dataset.coRange; renderCompany(); return; }
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }
     if (t.dataset.trkH) { S.trkH = t.dataset.trkH; if (S.tab === "companies") renderCompany(); else renderReport(); return; }
