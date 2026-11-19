@@ -16925,7 +16925,8 @@ The calls are about this fund's total return (price plus income) against holding
       since = `<div class="small">Since these calls (${esc(fmtDate(l.date))}): the industry is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`;
     }
     const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
-    const btn = `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call on a digest of every component (about a minute)">${working ? "Making the calls…" : l && !l.provisional ? "Redo the calls" : "Make the calls now"}</button>`;
+    // Once made, the calls are redone by the scheduled passes, never from a button here.
+    const btn = l && !l.provisional && !working ? "" : `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call on a digest of every component (about a minute)">${working ? "Making the calls…" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(S.leanStage) : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
     const by = !l || l.provisional ? "" : l.made_by === "github" || (!l.made_by && r.outlook && !r.outlook.provisional && r.outlook.date === l.date && r.outlook.headline === l.headline) ? "made on GitHub" : "made here";
     const head = `<div class="callout-head"><span class="eyebrow">Where it's going${l?.provisional ? " (provisional)" : ""}</span>${l?.date && !l.provisional ? `<span class="small muted">as of ${esc(fmtDate(l.date))} · ${by}</span>` : l?.provisional ? `<span class="small muted">not made yet: the next calls pass on GitHub makes it, or press the button</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
@@ -16951,7 +16952,8 @@ The calls are about this fund's total return (price plus income) against holding
     const rec = co.thesis, l = coOutlook(co), ind = co.run ? indOutlook(co.run.name, co.run.lead) : null;
     const working = co.leanBusy;
     const can = S.sample && !co.writing && !working && co.run;
-    const btn = `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers and news, the industry's outlook and the lead's verdict">${working ? "Making the calls…" : l ? "Redo the calls" : "Make the calls now"}</button>`;
+    // Once made, the calls are redone by themselves when the page opens and they're out of step (coAutoRefresh).
+    const btn = l && !working ? "" : `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers and news, the industry's outlook and the lead's verdict">${working ? "Making the calls…" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Where ${esc(co.sym)} is going</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
@@ -18008,7 +18010,7 @@ The calls are about this fund's total return (price plus income) against holding
       const saved = await idbGet("co:" + sym).catch(() => null);
       if (saved?.thesis && saved.industry === co.run.name) { if (!saved.thesis.range_notes) { saved.thesis.range_notes = Company.fitRanges(saved.thesis, coSigmas(co)); if (saved.thesis.range_notes.length) saved.checks = Company.checks(saved.thesis, saved.px, saved.pe_basis); idbPut("co:" + sym, saved).catch(() => {}); } co.thesis = saved; co.idx = saved.idx || co.idx; renderCompany(); coTrack(co).catch(() => {}); }
       if (write && (!saved?.thesis || saved.industry !== co.run.name)) coWriteAuto(co);
-      else if (write) ghResume("company", co);
+      else if (write) ghResume("company", co).catch(() => {}).then(() => coAutoRefresh(co));
     } catch (e) { if (S.co === co) { co.err = e?.message || String(e); co.stage = "error"; renderCompany(); } }
   }
   /**
@@ -18192,6 +18194,17 @@ The calls are about this fund's total return (price plus income) against holding
     if (a.scen && b.scen && a.scen !== b.scen && !/^null/.test(a.scen)) writeup.push(`the industry's bull/base/bear odds moved (${a.scen} → ${b.scen})`);
     if (a.own !== undefined && b.own && a.own !== b.own) calls.push(a.own ? `${sym}'s next report date moved (${a.own} → ${b.own})` : `${sym}'s next report date is now set (${b.own})`);
     return { calls, writeup };
+  }
+  /**
+   * When the page opens a company, whatever moved in its industry since the analysis is redone by itself (no button):
+   * the whole write-up when what it rests on changed, else just the calls (one Claude call). Once per opening.
+   */
+  async function coAutoRefresh(co) {
+    if (co.autoTried || S.co !== co || co.writing || co.ghRun || co.leanBusy || !co.thesis || !co.run) return;
+    const run = co.run, stS = coStale(co), stale = !!(co.thesis.industry_run_at && run.saved_at && co.thesis.industry_run_at < run.saved_at);
+    const synced = stale && !stS.writeup.length && !stS.calls.length && coOutlook(co)?.ind_snap?.run_at === run.saved_at;
+    if (stS.writeup.length) { co.autoTried = true; return coWriteAuto(co, { force: true }); }
+    if ((stS.calls.length || (stale && !synced)) && S.sample) { co.autoTried = true; return coLean(co); }
   }
   /** Is the company page out of step with its industry? {calls: [...], writeup: [...], runNewer} (code; no Claude). */
   function coStale(co) {
@@ -18555,11 +18568,37 @@ The calls are about this fund's total return (price plus income) against holding
   }
   /** What the calls were made on: code's starting point for each window (its industries' outlooks, weighted). */
   const fundIndSnap = (fd) => { const pr = FundAn.prior(fd); return pr ? Object.fromEntries(Object.entries(pr).map(([h, x]) => [h, x.call])) : null; };
-  /** Why the calls are out of step: code's starting point has moved in some window since they were made. */
+  /**
+   * Why the calls are out of step: code's starting point has moved materially in some window since they were made. A
+   * fund whose score sits near zero flips between "slightly bearish" and "slightly bullish" on a single half-notch nudge
+   * (times like this, Wall Street, RSI), so a changed label counts only when the score moved a full notch or more, or
+   * landed clearly on the other side (both scores at least half a notch from zero).
+   */
   function fundStale(fd) {
-    const o = fd.full?.outlook, now = fundIndSnap(fd); if (!o?.ind_snap || !now) return [];
-    return Outlook.HZ.filter((h) => o.ind_snap[h] && now[h] && o.ind_snap[h] !== now[h]).map((h) => `the ${h} starting point from its industries moved from ${o.ind_snap[h]} to ${now[h]}`);
+    const o = fd.full?.outlook, now = FundAn.prior(fd); if (!o?.ind_snap || !now) return [];
+    const was = o.prior || null;
+    return Outlook.HZ.filter((h) => {
+      const a = o.ind_snap[h], b = now[h]?.call; if (!a || !b || a === b) return false;
+      const sa = num(was?.[h]?.score), sb = num(now[h]?.score); if (!isNum(sa) || !isNum(sb)) return true;
+      return Math.abs(sb - sa) >= 1 || Math.min(Math.abs(sa), Math.abs(sb)) >= 0.5;
+    }).map((h) => { const sa = num(was?.[h]?.score), sb = num(now[h].score), sc = (v) => (isNum(v) ? ` (${v > 0 ? "+" : ""}${Math.round(v * 100) / 100})` : "");
+      return `code's ${h} starting point moved from ${o.ind_snap[h]}${sc(sa)} to ${now[h].call}${sc(sb)}`; });
   }
+  /**
+   * When the page opens a fund, whatever moved since its calls is redone by itself (no button): the calls (one Claude
+   * call), or the whole analysis when the write-up's inputs moved. Once per opening.
+   */
+  async function fundAutoRefresh(fd) {
+    if (fd.autoTried || fd.stage !== "ready" || fd.bond || fd.writing || fd.ghRun || fd.leanBusy || !fd.full || !S.sample || !fd.look?.n || S.fund !== fd) return;
+    // A GitHub write-up less than a day old is kept (as fundWriteAuto keeps it): only what moved for the calls counts.
+    const ghFresh = fd.full.via === "github" && Date.now() - Date.parse(fd.full.at || 0) < 20 * 3600e3;
+    const W = (() => { try { return FundAn.windows(fd, today()); } catch { return []; } })();
+    const ck = FundMore.dailyCheck({ outlook: fd.full.outlook, stale: fundStale(fd), writeWhy: ghFresh ? [] : fd.fullWhy || [], ser: fd.ser, sigma1m: W.find((w) => w.h === "1M")?.sigma, seasonInfo: fd.season, today: today() });
+    if (!ck.redo) return;
+    fd.autoTried = true;
+    if (ck.redo === "write") await fundWriteAuto(fd, { force: true }); else await fundLean(fd);
+  }
+
   /**
    * The fund's 1M-12M calls (six levels, its own direction, with the reasons): the company page's outlook, on the fund's
    * finished write-up, its industries' outlooks and its numbers; one small repair call only if code finds a contradiction.
@@ -18663,7 +18702,7 @@ The calls are about this fund's total return (price plus income) against holding
   async function bondWriteAuto(fd, { force = false } = {}) {
     if (fd.writing || fd.ghRun || !fd.bondM) return;
     if (!force && fd.bondFull && !bondStale(fd).length) return;
-    if (!force && fd.bondFull) { renderFund(); return; } // out of date: the page says so and offers Rewrite
+    // Out of date: rewritten by itself, no button.
     if (await ghCan()) { await ghWatch("fund", fd.sym); ghMark("fund", fd.sym); if (fd.ghRun) { renderFund(); return; }
       fd.fullErr = null; fd.ghRun = { state: "queued", requested_at: new Date().toISOString() }; fd.ghRunWas = true; renderFund();
       if (await ghStart("fund", fd.sym)) { ghMark("fund", fd.sym); renderFund(); return; }
@@ -18677,10 +18716,10 @@ The calls are about this fund's total return (price plus income) against holding
     const canW = (S.sample || S.mcp) && !fd.writing && !fd.ghRun;
     const status = fd.ghRun ? ghNotice("fund", fd) : fd.writing ? `<div class="notice info"><span><b>Writing ${esc(fd.sym)}'s bond analysis</b> (${Math.round((Date.now() - (fd.writeStart || Date.now())) / 1000)}s so far): one strategist on the yield, the curve${m.credit ? ", spreads" : ""} and the runs' macro.</span><button class="sm" data-fund-stop="1">Stop</button></div>`
       : fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span>${canW ? `<button class="sm" data-fund-write="${esc(fd.sym)}">Try again</button>` : ""}</div>`
-      : stl.length && w ? `<div class="notice warn"><span>Out of date: ${esc(stl.join("; "))}.</span>${canW ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}">Rewrite analysis</button>` : ""}</div>` : "";
+      : stl.length && w ? `<div class="small muted">Something it rests on moved (${esc(stl.join("; "))}); it's rewritten by itself the next time the page can.</div>` : "";
     const head = `<div class="kpis">${kpi("Yield to maturity", pc2(p.ytm), `distribution ${pc2(p.distYield)}`)}${kpi("Carry after costs", pc2(m.carry), `expense ${pc2((p.expense || 0) * 100)}`)}${kpi("Duration", isNum(p.duration) ? `${fix(p.duration, 1)} yrs` : "—", `${isNum(m.empDur) ? `moves like ${fix(m.empDur, 1)} yrs (measured)` : `maturity ${fix(p.maturity, 1)} yrs`}`)}${m.credit ? kpi("Spread over Treasuries", isNum(m.spread) ? `${Math.round(m.spread)}bp` : "—", m.igSpread ? `IG proxy ${Math.round(m.igSpread.spread)}bp` : "") : kpi("Treasury at its duration", pc2(m.tsy), m.curve ? `10-year ${pc2(m.curve.y10)}` : "")}${kpi("Breakeven", isNum(m.breakeven) ? `${Math.round(m.breakeven)}bp` : "—", "yield rise a year's carry absorbs")}</div>`;
     const calls = w?.calls && Object.keys(w.calls).length ? `<div class="strip">${BondAn.HZ.map((h) => { const c = w.calls[h]?.call; return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}</span>${c ? `<span class="pill ${Outlook.cls(c)}" style="justify-self:start">${Outlook.SIGN[c] > 0 ? "▲" : "▼"} ${esc(Outlook.label(c))}</span>` : "—"}</div>`; }).join("")}</div>` : "";
-    const btn = canW && !stl.length ? `<button class="sm ${w ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${w ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
+    const btn = canW && !w ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>Write ${esc(fd.sym)}'s analysis</button>` : "";
     const snap = sec("bond-snap", `${esc(fd.sym)}: ${esc(BondAn.KINDS[p.kind] || "bonds")}`, w ? `written ${esc(ago(R.at))}${R.secs ? ` in ${R.secs}s` : ""}${R.via === "github" ? " on GitHub" : ""}` : "",
       `${status}${w ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our verdict</span>${w.verdict ? `<span class="pill ${VC[w.verdict] || "neu"}">${esc(w.verdict)}</span>` : ""}${w.conviction ? `<span class="small muted">conviction ${w.conviction}/10</span>` : ""}<span style="margin-left:auto">${btn}</span></div><b>${cite(w.headline)}</b>${calls}
         ${isNum(w.expected12) ? `<div class="small muted">Expected 12-month total return, the strategist's scenarios priced by code: <b class="${cls(w.expected12 / 100)}">${sg(w.expected12)}</b>${isNum(m.curve?.y3m) ? ` against ${pc2(m.curve.y3m)} in 3-month bills` : ""}.</div>` : ""}
@@ -18722,7 +18761,7 @@ The calls are about this fund's total return (price plus income) against holding
       // Wall Street, news and distributions next (the page is already up), then the fill, then the analysis, which reads them all.
       await fundNet(fd).catch((e) => { if (FATAL.has(e?.code)) fd.netErr = errText(e); }); fd.netDone = true; if (S.fund === fd) renderFund();
       await fundPeers(fd).catch(() => {}); if (S.fund === fd) renderFund();
-      await fillFund(fd, { write }); if (S.fund === fd && write) fundWriteAuto(fd);
+      await fillFund(fd, { write }); if (S.fund === fd && write) { await fundWriteAuto(fd); await fundAutoRefresh(fd); }
     }
   }
 
@@ -18842,8 +18881,8 @@ The calls are about this fund's total return (price plus income) against holding
     const left = c.industries.filter((g) => g.status === "not_analyzed" && !(fd.fillSkip || {})[g.industry]);
     const leftNote = !S.fundFill && left.length ? `<div class="notice warn"><span>${left.length} industr${left.length === 1 ? "y" : "ies"} (${pct(left.reduce((a, g) => a + g.weight, 0), false, 1)} of the fund) not covered yet.</span><button class="sm" data-fund-fill="${esc(fd.sym)}" ${busy() || !S.mcp ? "disabled" : ""}>Fill ${Math.min(left.length, 20)} more, code only</button></div>` : "";
     const skipped = Object.entries(fd.fillSkip || {}); const skipNote = skipped.length ? `<div class="small muted">Couldn't fill: ${skipped.map(([k, w]) => `${esc(k)} (${esc(String(w).replace(/\.$/, ""))})`).join("; ")}.</div>` : "";
-    const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? ` Out of date: ${esc(fd.fullWhy.slice(0, 3).join("; "))}.` : " Still current."}</span>` : "";
-    const btn = !fd.writing && !fd.ghRun && (S.sample || PF_TRIGGER) && L?.n ? `<button class="sm ${fd.full ? "" : "primary"}" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>${fd.full ? "Rewrite analysis" : `Write ${esc(fd.sym)}'s analysis`}</button>` : "";
+    const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? (fd.writing || fd.ghRun ? " Being brought up to date." : " Updated by itself when something material moves.") : " Still current."}</span>` : "";
+    const btn = !fd.full && !fd.writing && !fd.ghRun && (S.sample || PF_TRIGGER) && L?.n ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>Write ${esc(fd.sym)}'s analysis</button>` : "";
     // ---- snapshot: the hero, our prediction
     const lc12 = (h) => OL?.calls?.[h]?.call || "";
     const callStrip = (pfx) => `<div class="strip">${Outlook.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}${pfx}</span>${x ? `<span class="pill ${Outlook.cls(x)} lean-pill">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</div>`; }).join("")}</div>`;
@@ -18892,11 +18931,9 @@ The calls are about this fund's total return (price plus income) against holding
         ${w ? `<div><span class="muted">In this window:</span> ${w.reporting.length ? w.reporting.slice(0, 4).map((r) => `${esc(r.symbol)} reports ${esc(fmtDate(r.date))} (${r.weight}%)`).join(" · ") : "no big holding reports"}</div>` : ""}</div>`; };
     let since = "";
     if (OL?.mark?.px > 0 && fd.ser?.closes?.length && fd.ser.dates[fd.ser.dates.length - 1] > (OL.mark.date || "")) { const ri = Math.round((fd.ser.closes[fd.ser.closes.length - 1] / OL.mark.px - 1) * 1000) / 10; since = `<div class="small">Since these calls (${esc(fmtDate(OL.date))}): ${esc(fd.sym)} is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`; }
-    const stl = fundStale(fd), canLean = S.sample && !fd.writing && !fd.leanBusy && L?.n;
-    const leanBtn = `<button class="${!fd.full?.outlook ? "primary " : ""}sm" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"} title="One Claude call on the fund's write-up, its industries' outlooks and its numbers">${fd.leanBusy ? "Making the calls…" : fd.full?.outlook ? "Redo the calls" : "Make the calls"}</button>`;
-    const leanHead = `<div class="callout-head"><span class="eyebrow">Where ${esc(fd.sym)} is going</span>${OL?.date && !OL.provisional ? `<span class="small muted">as of ${esc(fmtDate(OL.date))}</span>` : ""}<span style="margin-left:auto">${leanBtn}</span></div>`;
-    const leanStatus = (fd.leanBusy ? leanSteps(fd.leanStage) : fd.leanErr ? `<div class="notice err small">${esc(fd.leanErr)}</div>` : "")
-      + (stl.length && !fd.leanBusy && fd.full?.outlook ? `<div class="notice warn small stale-note"><span><b>Out of step with its industries:</b> since these calls, ${esc(stl.join("; "))}.</span><button class="sm primary" data-fund-lean="${esc(fd.sym)}" ${canLean ? "" : "disabled"}>Redo the calls</button></div>` : "");
+    // The calls are made and redone by themselves (fundAutoRefresh): no button, no "redo" prompt.
+    const leanHead = `<div class="callout-head"><span class="eyebrow">Where ${esc(fd.sym)} is going</span>${OL?.date && !OL.provisional ? `<span class="small muted">as of ${esc(fmtDate(OL.date))}</span>` : ""}</div>`;
+    const leanStatus = fd.leanBusy ? leanSteps(fd.leanStage) : fd.leanErr ? `<div class="notice err small">${esc(fd.leanErr)}</div>` : "";
     const leanSec = OL ? sec("fund-lean", `Where ${fd.sym} is going`, "", callsCard(OL, { head: leanHead, status: leanStatus, nums: leanNums, since, history: fd.full?.outlook_history || [], verdict: "the fund write-up's verdict", verdictCall: core.verdict?.call || "" }))
       : sec("fund-lean", `Where ${fd.sym} is going`, "", `<div class="callout lean-card">${leanHead}${leanStatus}<div class="small muted">${fd.writing ? "The calls are made right after the analysis." : "No calls yet: none of its industries has an outlook to start from."}</div></div>`);
     // ---- the analysis: thesis, calls, scenarios
@@ -19319,11 +19356,11 @@ The calls are about this fund's total return (price plus income) against holding
     // ---- the daily check: what moved since the calls, and how fresh each input is
     const W1 = W5.find((w) => w.h === "1M"), ck = FundMore.dailyCheck({ outlook: fd.full?.outlook, stale: fundStale(fd), writeWhy: fd.fullWhy || [], ser: fd.ser, sigma1m: W1?.sigma, seasonInfo: fd.season, today: today() }), FR = FundMore.freshness(fd, fd.full, today());
     const ACT = { none: "nothing to redo", calls: "redid the calls", "redid the calls": "redid the calls", "rewrote the analysis and the calls": "rewrote the analysis and the calls", "needs Claude": "needs Claude (open in Claude)", failed: "failed", skipped: "already done today" };
-    const freshSec = fd.full || fd.dlog?.length ? sec("fund-fresh", "What's changed & how fresh", "the daily check: code, no Claude", `<div class="callout"><div class="callout-head"><b>${ck.redo === "write" ? "The analysis and the calls are out of date" : ck.redo ? "The calls should be redone" : "Nothing material since the calls"}</b>${ck.redo && S.sample && L?.n && !fd.writing && !fd.leanBusy ? `<span style="margin-left:auto">${ck.redo === "write" ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>Rewrite analysis</button>` : `<button class="sm primary" data-fund-lean="${esc(fd.sym)}">Redo the calls</button>`}</span>` : ""}</div>
-        ${ck.why.length ? `<ul class="dlist small">${ck.why.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">Its industries' starting point hasn't moved, the price is within a normal month of where the calls were made${isNum(ck.age) ? ` and the calls are ${ck.age} day${ck.age === 1 ? "" : "s"} old` : ""}.</div>`}</div>
+    const freshSec = fd.full || fd.dlog?.length ? sec("fund-fresh", "What's changed & how fresh", "the daily check: code, no Claude", `<div class="callout"><div class="callout-head"><b>${!ck.redo ? "Nothing material since the calls" : fd.writing || fd.ghRun ? "Rewriting the analysis and the calls now" : fd.leanBusy ? "Updating the calls now" : S.sample ? "Being updated by itself" : "Updated by itself next time the page opens in Claude"}</b></div>
+        ${ck.why.length ? `<ul class="dlist small">${ck.why.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : `<div class="small muted">Code's starting point hasn't moved materially, the price is within a normal month of where the calls were made${isNum(ck.age) ? ` and the calls are ${ck.age} day${ck.age === 1 ? "" : "s"} old` : ""}.</div>`}</div>
       <div class="tbl-wrap"><table><thead><tr><th>Input</th><th>As of</th><th class="n">Age</th><th></th></tr></thead><tbody>${FR.map((r) => `<tr><td>${esc(r.what)}</td><td class="mono">${esc(r.date || "—")}</td><td class="n ${r.age > 14 ? "down" : ""}">${r.age === null ? "—" : r.age + "d"}</td><td class="small muted">${esc(r.note)}</td></tr>`).join("")}</tbody></table></div>
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      <div class="small muted">Each time the page opens, code checks what moved since the calls: its industries' starting point, a move of a normal month or more, a big holding reporting, the write-up's inputs (a re-analyzed industry, shifted weights), or calls a week old. "Update my funds" on the fund list runs the same check for every fund you've analyzed and redoes only what moved: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis.</div>`) : "";
+      <div class="small muted">Each time the page opens, code checks what moved since the calls (code's starting point moving a full notch or clearly crossing zero, a move of a normal month or more, a big holding reporting, the write-up's inputs, or calls a week old) and redoes only that, by itself: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis. "Update my funds" on the fund list does the same for every fund you've analyzed.</div>`) : "";
     const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
     if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
         { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
@@ -21119,7 +21156,7 @@ The calls are about this fund's total return (price plus income) against holding
     const synced = stale && !stS.writeup.length && !stS.calls.length && coOutlook(co)?.ind_snap?.run_at === run?.saved_at;
     const notices = `${co.stage === "error" ? `<div class="notice err">Couldn't open ${esc(co.sym)}: ${esc(co.err)}.</div>` : ""}
       ${co.stage === "noindustry" ? `<div class="notice warn"><span>${esc(co.industry || "Its industry")} hasn't been analyzed yet, so the numbers below stand alone: there's no industry analysis to build the thesis on. Analyze the industry first (Industries tab), then open ${esc(co.sym)} again.</span>${co.industry ? `<button class="primary" data-pick-industry="${esc(co.industry)}">Go to ${esc(co.industry)}</button>` : ""}</div>` : ""}
-      ${synced ? `<div class="small muted">The calls are up to date with the ${esc(fmtShort(run.saved_at))} ${esc(run.name)} run; the write-up is from the ${esc(fmtShort(co.thesis.industry_run_at))} run and nothing it rests on has changed.</div>` : stale || stS.writeup.length ? `<div class="notice warn stale-note"><span>${stale ? `This analysis was written from an older run of the ${esc(run.name)} analysis (${esc(fmtShort(co.thesis.industry_run_at))}).` : `The ${esc(run.name)} analysis has changed since this write-up.`}${stS.writeup.length ? ` What changed: ${esc(stS.writeup.join("; "))}.` : stS.calls.length ? ` What changed for the calls: ${esc(stS.calls.join("; "))}.` : ""} ${stS.writeup.length ? "These change the write-up itself, so a rewrite is worth it." : `Usually only the calls need redoing (one call); the rest of the write-up reads off the industry's panels, which update by themselves.`}</span>${!stS.writeup.length ? `<button class="sm primary" data-co-lean="1" ${co.writing || co.leanBusy || !S.sample ? "disabled" : ""}>Update just the calls</button>` : ""}<button class="sm${stS.writeup.length ? " primary" : ""}" data-co-rewrite="1" ${co.writing || !S.sample ? "disabled" : ""}>Rewrite on the latest run</button></div>` : ""}`;
+      ${synced ? `<div class="small muted">The calls are up to date with the ${esc(fmtShort(run.saved_at))} ${esc(run.name)} run; the write-up is from the ${esc(fmtShort(co.thesis.industry_run_at))} run and nothing it rests on has changed.</div>` : stale || stS.writeup.length || stS.calls.length ? `<div class="small muted">${co.writing || co.ghRun ? `Rewriting on the latest ${esc(run.name)} run now.` : co.leanBusy ? `Updating the calls on the latest ${esc(run.name)} run now.` : `The ${esc(run.name)} analysis has moved since this was written; it's brought up to date by itself${S.sample || S.mcp ? "" : " the next time the page opens in Claude"}.`}</div>` : ""}`;
     if (co.stage === "finding" || co.stage === "data") {
       const sk = (h) => `<section class="panel"><div class="skel" style="width:30%;height:18px"></div>${Array.from({ length: h }, (_, i) => `<div class="skel" style="width:${90 - i * 12}%"></div>`).join("")}</section>`;
       const skRet = `<section class="panel" id="co-returns"><div class="skel" style="width:20%;height:18px"></div><div class="retgrid">${RET_P.map(() => `<div class="skel" style="height:56px;margin:0;border-radius:10px"></div>`).join("")}</div><div class="skel" style="height:230px;border-radius:10px"></div></section>`;
@@ -21294,7 +21331,7 @@ The calls are about this fund's total return (price plus income) against holding
   function lensNote(co, t) {
     if (t?.lens) return "";
     if (co.writing) return `<div class="small muted">${esc(co.sym)}'s read on each row is being written…</div>`;
-    if (co.thesis) return `<div class="notice info small"><span>This analysis was written before ${esc(co.sym)} got its own read on each row of the industry report.</span><button class="sm" data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite</button></div>`;
+    if (co.thesis) return `<div class="small muted">This analysis was written before ${esc(co.sym)} got its own read on each row of the industry report; the next rewrite adds it.</div>`;
     return "";
   }
   const pend = (co, t) => (t?.lens ? `<span class="muted">—</span>` : co.writing ? `<span class="muted">writing…</span>` : `<span class="muted">—</span>`);
@@ -21741,7 +21778,7 @@ The calls are about this fund's total return (price plus income) against holding
     return `<section class="panel" id="co-snap"><div class="panel-head"><div style="display:grid;gap:2px"><span class="eyebrow">${esc([co.industry || co.hit?.industry, sector].filter(Boolean).join(" · "))}</span>
         <h1 style="font-size:26px">${esc(name)} <span class="mono muted" style="font-size:.6em">${esc(co.sym)}</span> ${p.exchange ? `<span class="badge">${esc(p.exchange)}</span>` : ""}</h1>
         <div class="mono"><span style="font-size:22px;font-weight:600">${isNum(co.px) ? fix(co.px, 2) : "—"}</span> ${isNum(chg) ? `<span class="${chg >= 0 ? "up" : "down"}">${isNum(chgD) ? `${chgD >= 0 ? "+" : ""}${fix(chgD, 2)} ` : ""}(${chg >= 0 ? "+" : ""}${fix(chg, 2)}%)</span>` : ""} <span class="small muted">${co.data?.ser?.dates?.length ? "as of " + esc(fmtDate(co.data.ser.dates[co.data.ser.dates.length - 1])) : ""}</span></div></div>
-        <div class="actions">${run ? `<button data-open-industry="${esc(run.name)}">← ${esc(run.name)} report</button>` : ""}${co.thesis && !co.writing && !co.ghRun ? `<button data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite analysis</button>` : ""}</div></div>
+        <div class="actions">${run ? `<button data-open-industry="${esc(run.name)}">← ${esc(run.name)} report</button>` : ""}</div></div>
       ${grid}${badges}${pred}</section>`;
   }
 
@@ -22036,7 +22073,7 @@ The calls are about this fund's total return (price plus income) against holding
       <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
       ${sv.eps_view ? `<div class="small"><b>Our EPS versus consensus:</b> ${sv.eps_view.fy1 ? `next fiscal year <span class="pill ${IVC[sv.eps_view.fy1] || "neu"}">${esc(sv.eps_view.fy1)}</span>` : ""} ${sv.eps_view.fy2 ? `the year after <span class="pill ${IVC[sv.eps_view.fy2] || "neu"}">${esc(sv.eps_view.fy2)}</span>` : ""} ${sv.eps_view.why ? rich(sv.eps_view.why) : ""}</div>` : ""}
       ${(sv.differences || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where we differ</th><th>The street assumes</th><th>We assume</th><th>Why</th></tr></thead><tbody>${sv.differences.map((d) => `<tr><td class="wr"><b>${esc(d.topic)}</b></td><td class="wr small">${rich(d.street)}</td><td class="wr small">${rich(d.ours)}</td><td class="wr small">${rich(d.why)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`
-      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="notice info small"><span>This analysis was written before it compared itself with the street.</span><button class="sm" data-co-rewrite="1" ${!S.sample && !S.mcp ? "disabled" : ""}>Rewrite</button></div>` : "";
+      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="small muted">This analysis was written before it compared itself with the street; the next rewrite adds it.</div>` : "";
     const rb = cs?.low && cs?.high ? `<h3>Price targets</h3>${rangeBar(cs.low, cs.high, [{ v: cs.low, label: `Low ${fix(cs.low, 0)}` }, { v: cs.high, label: `High ${fix(cs.high, 0)}` }, { v: cs.target, label: `Consensus ${fix(cs.target, 0)}`, top: true }, ...(cs.median && Math.abs(cs.median - cs.target) / cs.target > 0.01 ? [{ v: cs.median, label: `Median ${fix(cs.median, 0)}` }] : []), { v: co.px, label: `Price ${fix(co.px, 2)}`, cls: "px", top: true }, ...(sv?.our_target ? [{ v: sv.our_target, label: `Ours ${fix(sv.our_target, 0)}`, cls: "px" }] : [])])}
       <div class="small muted">Implied ${pct(cs.target / co.px - 1)} to the consensus target; ${pct(cs.low / co.px - 1, true, 0)} to the lowest and ${pct(cs.high / co.px - 1, true, 0)} to the highest.</div>` : "";
     const rh = f.rhist || [], qs = rh.filter((x) => ["01", "04", "07", "10"].includes(x.date.slice(5, 7))).slice(0, 4), RC = [["sb", "Strong buy", "var(--pos)"], ["b", "Buy", "color-mix(in srgb, var(--pos) 60%, var(--surface))"], ["h", "Hold", "var(--bench)"], ["s", "Underperform", "color-mix(in srgb, var(--neg) 60%, var(--surface))"], ["ss", "Sell", "var(--neg)"]];
