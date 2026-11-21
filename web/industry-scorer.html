@@ -773,6 +773,102 @@ a.btnlink:hover { border-color: var(--accent); }
   .panel, .picker { padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .progress > i { transition: none; } }
+/* Compare tab: ticker colors come in as --tc on each element. */
+.cx-bar { position: relative; overflow: hidden; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 16px; padding: 18px 20px; display: grid; gap: 12px;
+  background: radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%), radial-gradient(90% 140% at 100% 100%, color-mix(in srgb, #c084fc 10%, transparent), transparent 60%), var(--surface); }
+.cx-bar-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: end; justify-content: space-between; }
+.cx-bar-head h2 { font-size: 24px; margin-top: 2px; }
+.cx-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 760px) { .cx-chips { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cx-chip { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line)); background: color-mix(in srgb, var(--tc) 9%, var(--sunk)); }
+.cx-chip > i { width: 10px; height: 10px; border-radius: 50%; background: var(--tc); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 25%, transparent); }
+.cx-chip b { font: 700 15px var(--mono); }
+.cx-chip .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cx-chip.cx-empty { border-style: dashed; border-color: var(--line); background: transparent; color: var(--faint); justify-content: center; font-size: 13px; }
+.cx-x { margin-left: auto; border: 0; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; line-height: 1; }
+.cx-x:hover { color: var(--neg); }
+.cx-quick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cx-quick .chip { cursor: pointer; border: 1px solid var(--line); }
+.cx-spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--tc, var(--accent)) 25%, transparent); border-top-color: var(--tc, var(--accent)); animation: pfspin 0.8s linear infinite; flex: none; display: inline-block; }
+.cx-loading { display: grid; gap: 6px; }
+.cx-lrow { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--tc); }
+.cx-writing { align-items: center; }
+.cx-tk { display: inline-flex; align-items: center; gap: 6px; font: 700 13px var(--mono); padding: 2px 9px; border-radius: 999px; color: var(--tc); background: color-mix(in srgb, var(--tc) 14%, transparent); border: 1px solid color-mix(in srgb, var(--tc) 40%, transparent); white-space: nowrap; }
+.cx-tk::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--tc); }
+.cx-tk.big { font-size: 18px; padding: 5px 13px; }
+.cx-hero { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 300px); gap: 20px; align-items: center; padding: 22px; border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--tc, var(--accent)) 40%, var(--line)); background: radial-gradient(110% 150% at 0% 0%, color-mix(in srgb, var(--tc, var(--accent)) 18%, transparent), transparent 60%), var(--sunk); }
+.cx-hero.cx-intro { grid-template-columns: 1fr; }
+@media (max-width: 760px) { .cx-hero { grid-template-columns: minmax(0, 1fr); padding: 16px; } }
+.cx-hero-main { display: grid; gap: 10px; min-width: 0; }
+.cx-win { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.cx-win-name { font: 700 20px var(--display); font-stretch: 85%; }
+.cx-headline { font: 700 21px/1.3 var(--display); font-stretch: 88%; margin: 0; text-wrap: balance; }
+.cx-podium { display: grid; gap: 8px; }
+.cx-pod { display: flex; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--tc) 7%, var(--surface)); border: 1px solid var(--line); }
+.cx-pod.first { border-color: color-mix(in srgb, var(--tc) 60%, var(--line)); box-shadow: 0 8px 24px -14px var(--tc); }
+.cx-place { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--mono); background: var(--line); color: var(--ink); }
+.cx-pod.first .cx-place { background: var(--tc); color: var(--accent-ink); }
+.cx-checks { border-left: 3px solid var(--c3); padding: 6px 10px; background: var(--warn-bg); color: var(--warn-ink); border-radius: 0 8px 8px 0; }
+.cx-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 12px; }
+.cx-card, .cx-case { position: relative; border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 9px; align-content: start; min-width: 0; background: var(--surface); overflow: hidden; }
+.cx-card::before, .cx-case::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--tc); }
+.cx-card-top { display: flex; gap: 10px; align-items: center; min-width: 0; }
+.cx-name { font: 700 15.5px var(--display); font-stretch: 88%; }
+.cx-px { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cx-px b { font-size: 20px; }
+.cx-src { display: flex; flex-wrap: wrap; gap: 5px; }
+.cx-badge { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.cx-badge.on { color: var(--gA); border-color: color-mix(in srgb, var(--gA) 35%, var(--line)); background: var(--gA-bg); }
+.cx-quote { border-left: 2px solid var(--tc); padding-left: 8px; color: var(--ink); }
+.cx-inv { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 12px; }
+.cx-invc { border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; align-content: start; background: linear-gradient(160deg, color-mix(in srgb, var(--tc) 10%, var(--surface)), var(--surface) 55%); }
+.cx-invc.you { border-color: var(--gA); box-shadow: 0 0 0 1px var(--gA); }
+.cx-invh { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+.cx-invpick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cx-invc p { margin: 0; }
+.cx-bars { display: grid; gap: 6px; }
+.cx-brow { display: grid; grid-template-columns: minmax(44px, auto) minmax(0, 1fr) 30px auto; gap: 8px; align-items: center; font-size: 12.5px; }
+.cx-track { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.cx-track i { display: block; height: 100%; border-radius: 4px; transition: width .4s ease; }
+.cx-fit { font-size: 10.5px; padding: 0 6px; border-radius: 999px; background: var(--sunk); color: var(--muted); }
+.cx-fit.strong { color: var(--gA); background: var(--gA-bg); } .cx-fit.good { color: var(--gB); background: var(--gB-bg); } .cx-fit.weak { color: var(--gD); background: var(--gD-bg); } .cx-fit.poor { color: var(--gF); background: var(--gF-bg); }
+.cx-from { font-size: 10.5px; white-space: nowrap; }
+.cx-dimtop { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr); gap: 16px; align-items: center; }
+@media (max-width: 760px) { .cx-dimtop { grid-template-columns: minmax(0, 1fr); } }
+.cx-radarw { display: grid; gap: 6px; justify-items: center; }
+.cx-radar { width: 100%; max-width: 520px; height: auto; }
+.cx-rlab { fill: var(--muted); font: 600 12px var(--body); }
+.cx-dlab { fill: var(--ink); font: 700 12px var(--mono); }
+.cx-tally { display: grid; gap: 8px; padding: 14px; border-radius: 12px; background: var(--sunk); }
+.cx-dims { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 10px; }
+.cx-dim { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 8px; align-content: start; }
+.cx-dimh { display: flex; gap: 8px; align-items: center; }
+.cx-ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, var(--sunk)); color: var(--accent); font-size: 13px; }
+td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-weight: 600; }
+.cx-h2h td { vertical-align: middle; }
+.cx-grp td { background: var(--sunk); font: 700 12px var(--body); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.cx-cell { display: grid; gap: 3px; justify-items: end; }
+.cx-cell i { display: block; height: 3px; border-radius: 2px; opacity: .8; justify-self: stretch; max-width: 100%; }
+.cx-corr td, .cx-corr th { text-align: center; }
+.cx-ovl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 8px; }
+.cx-cases { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 12px; }
+.cx-neg li::before { background: var(--neg) !important; }
+.cx-scen { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 6px; }
+.cx-scen > div { display: grid; gap: 1px; padding: 8px 10px; border-radius: 10px; background: var(--sunk); border-top: 2px solid var(--line); }
+.cx-scen > .bull { border-top-color: var(--pos); } .cx-scen > .bear { border-top-color: var(--neg); } .cx-scen > .base { border-top-color: var(--bench); }
+.cx-calls { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.cx-calls > span { display: grid; gap: 2px; }
+.cx-calls .pill { font-size: 10.5px; padding: 1px 6px; white-space: normal; }
+.cx-mix { display: grid; gap: 4px; }
+.cx-mix .cx-brow { grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) 44px auto; }
+.cx-cta { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; justify-content: space-between; padding: 16px 18px; border-radius: 14px; border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--sunk)); }
+.cx-cta > div { flex: 1 1 320px; display: grid; gap: 4px; }
+.cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.cx-split { display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px; margin: 6px 0; }
+.cx-split i { display: block; height: 100%; }
+
 </style>
 
 <div class="wrap">
@@ -786,6 +882,7 @@ a.btnlink:hover { border-color: var(--accent); }
   <div id="report" style="display:grid;gap:18px"></div>
   <div id="company" style="display:grid;gap:18px" hidden></div>
   <div id="fund" style="display:grid;gap:18px" hidden></div>
+  <div id="cmp" style="display:grid;gap:18px" hidden></div>
   <div id="pf" style="display:grid;gap:18px" hidden></div>
 
   <section class="method">
@@ -13418,6 +13515,344 @@ The calls are about this fund's total return (price plus income) against holding
   else root.BondAn = BondAn;
 })(typeof window !== "undefined" ? window : globalThis);
 
+/**
+ * Compare: two to four tickers (stocks, ETFs or mutual funds) side by side, built on what the page already has: each
+ * company's own numbers, its industry report, and any company or fund analysis already written (here or on GitHub).
+ * Code does the measuring (every metric, a 0-100 score per dimension on fixed scales, a fit score per investor type,
+ * correlations and holdings overlap); one Claude call reads the result and makes the calls. Pure functions; the page
+ * builds the subjects.
+ *
+ * Subject: {sym, kind: "stock"|"fund", name, sub, sector, m: {metric: value}, pillars: {pillar: 0-100}, profiles:
+ * {type: {total, fit}}, outlook: {calls: {h: {call, why}}, source}, saved, ind, ser: {dates, closes}, holdings}.
+ */
+(function (root) {
+  "use strict";
+  const isNum = (x) => typeof x === "number" && Number.isFinite(x);
+  const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
+  const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN);
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const r1 = (v) => Math.round(v * 10) / 10;
+  const HZ = ["1M", "3M", "6M", "12M"];
+  const TYPES = ["income", "conservative", "growth", "aggressive"];
+  const TYPE_LABEL = { income: "Income", conservative: "Conservative", growth: "Growth", aggressive: "Aggressive" };
+  const SIGN = { "strongly bullish": 3, bullish: 2, "slightly bullish": 1, "slightly bearish": -1, bearish: -2, "strongly bearish": -3 };
+
+  /** The dimensions code scores, and the industry/fund pillar each falls back to when the raw numbers aren't there. */
+  const GROUPS = {
+    momentum: { label: "Momentum", pillar: "momentum", icon: "↗" },
+    risk: { label: "Risk", pillar: "risk", icon: "◎" },
+    risk_reward: { label: "Risk-adjusted return", pillar: "risk_reward", icon: "⚖" },
+    valuation: { label: "Valuation", pillar: "valuation", icon: "$" },
+    growth: { label: "Growth", pillar: "growth", icon: "▲" },
+    profitability: { label: "Profitability & quality", pillar: "profitability", icon: "◆" },
+    health: { label: "Balance sheet", pillar: "health", icon: "▣" },
+    income: { label: "Income", pillar: "income", icon: "%" },
+    analyst: { label: "Wall Street", pillar: "consensus", icon: "★" },
+    outlook: { label: "Outlook (1M-12M)", pillar: "outlook", icon: "→" },
+    backdrop: { label: "Industry backdrop", pillar: null, icon: "◐" },
+    cost: { label: "Cost & structure", pillar: null, icon: "¢", fundOnly: true },
+  };
+  const GROUP_KEYS = Object.keys(GROUPS);
+
+  /**
+   * Every metric: [key, label, group, kind, lo, hi, up]. lo/hi are the fixed scale (0 at lo, 100 at hi; reversed when
+   * up is false), so a score means the same thing for every ticker and every pairing. kind: pct (a fraction shown as
+   * %), chg (signed fraction), x (multiple), n (plain number), usd.
+   */
+  const M = [
+    ["ret_1M", "Return 1M", "momentum", "chg", -0.1, 0.1, true], ["ret_3M", "Return 3M", "momentum", "chg", -0.15, 0.15, true],
+    ["ret_6M", "Return 6M", "momentum", "chg", -0.2, 0.25, true], ["ret_1Y", "Return 1Y", "momentum", "chg", -0.25, 0.4, true],
+    ["ret_3Y", "Return 3Y, a year", "momentum", "chg", -0.1, 0.25, true], ["ret_5Y", "Return 5Y, a year", "momentum", "chg", -0.05, 0.22, true],
+    ["vs_ma200", "vs its 200-day average", "momentum", "chg", -0.15, 0.15, true], ["off_high", "From its 52-week high", "momentum", "chg", -0.35, 0, true],
+    ["vol_1y", "Volatility 1Y", "risk", "pct", 0.12, 0.5, false], ["max_dd_1y", "Worst drop 1Y", "risk", "chg", -0.45, -0.08, true],
+    ["beta", "Beta to the S&P 500", "risk", "x", 0.5, 1.6, false], ["down_capture", "Down capture", "risk", "pct", 0.5, 1.3, false],
+    ["sharpe_1y", "Sharpe 1Y", "risk_reward", "x", -0.5, 2, true], ["sortino_1y", "Sortino 1Y", "risk_reward", "x", -0.5, 3, true],
+    ["alpha_1y", "Alpha 1Y", "risk_reward", "chg", -0.2, 0.2, true], ["sharpe_3y", "Sharpe 3Y", "risk_reward", "x", -0.3, 1.5, true],
+    ["pe", "P/E", "valuation", "x", 8, 45, false], ["fwd_pe", "Forward P/E", "valuation", "x", 8, 40, false],
+    ["ps", "Price / sales", "valuation", "x", 0.8, 12, false], ["ev_ebitda", "EV / EBITDA", "valuation", "x", 6, 30, false],
+    ["fcf_yield", "FCF yield", "valuation", "pct", 0, 0.08, true], ["pe_vs_hist", "P/E vs its 5-year median", "valuation", "chg", -0.3, 0.4, false],
+    ["upside_dcf", "DCF value vs price", "valuation", "chg", -0.4, 0.4, true],
+    ["rev_growth", "Revenue growth (TTM)", "growth", "chg", -0.05, 0.3, true], ["ntm_growth", "EPS growth next 12M", "growth", "chg", -0.05, 0.3, true],
+    ["rev_fwd", "Revenue growth next year (est.)", "growth", "chg", -0.03, 0.25, true], ["implied_g", "Growth the price implies", "growth", "pct", 0, 0.2, false],
+    ["gross_margin", "Gross margin", "profitability", "pct", 0.15, 0.7, true], ["op_margin", "Operating margin", "profitability", "pct", 0, 0.35, true],
+    ["net_margin", "Net margin", "profitability", "pct", 0, 0.25, true], ["fcf_margin", "FCF margin", "profitability", "pct", 0, 0.3, true],
+    ["roic", "ROIC", "profitability", "pct", 0, 0.25, true], ["roe", "ROE", "profitability", "pct", 0, 0.3, true],
+    ["piotroski", "Piotroski F-score", "profitability", "n", 2, 8, true], ["beat_rate", "Earnings beats (last 8)", "profitability", "pct", 0.4, 1, true],
+    ["de", "Debt / equity", "health", "x", 0.1, 2.5, false], ["nd_ebitda", "Net debt / EBITDA", "health", "x", -0.5, 4, false],
+    ["int_cover", "Interest cover", "health", "x", 2, 20, true], ["altman", "Altman Z", "health", "x", 1.8, 4, true],
+    ["div_yield", "Dividend yield", "income", "pct", 0, 0.05, true], ["payout", "Payout ratio", "income", "pct", 0.3, 1, false],
+    ["div_growth", "Dividend growth (5Y, a year)", "income", "chg", -0.02, 0.12, true],
+    ["upside_target", "Upside to the analysts' target", "analyst", "chg", -0.1, 0.3, true], ["buy_share", "Analysts at buy", "analyst", "pct", 0.2, 0.9, true],
+    ["rev30", "EPS estimate revisions, 30 days", "analyst", "chg", -0.05, 0.05, true],
+    ["expense", "Expense ratio", "cost", "pct", 0.0003, 0.01, false], ["top10", "Top 10 holdings", "cost", "pct", 0.15, 0.7, false],
+    ["eff_n", "Effective number of holdings", "cost", "n", 8, 120, true], ["tracking", "Tracking error vs its benchmark", "cost", "pct", 0.01, 0.12, false],
+  ].map(([key, label, group, kind, lo, hi, up]) => ({ key, label, group, kind, lo, hi, up }));
+  const MBY = Object.fromEntries(M.map((x) => [x.key, x]));
+  /** Shown but not scored (sizes and context). */
+  const INFO = [["mcap", "Market cap / assets", "usd"], ["px", "Price", "usd"], ["holdings_n", "Holdings", "n"], ["coverage", "Covered by your industry analysis", "pct"]];
+
+  /** A metric on its fixed scale: 10 at lo, 90 at hi (reversed when lower is better), easing toward 0 and 100 beyond, so two values past the same end still rank. */
+  const score1 = (def, v) => { if (!isNum(v)) return NaN; let t = (v - def.lo) / (def.hi - def.lo); if (!def.up) t = 1 - t; return 100 / (1 + Math.exp(-4.4 * (t - 0.5))); };
+  /** The outlook's calls as one number: the mean of -3..+3 over the windows, on 0-100. */
+  function outlookScore(o) { const v = HZ.map((h) => SIGN[o?.calls?.[h]?.call]).filter(isNum); return v.length ? clamp(50 + (mean(v) / 3) * 50, 0, 100) : NaN; }
+
+  /**
+   * Scores every subject: each metric on its fixed scale, each dimension as the mean of its metrics (or, with none of
+   * its numbers, the industry/fund pillar, marked "via its industries"), the outlook from its calls, and the backdrop
+   * from its industries' outlook and section pillars. Returns {SYM: {metrics: {k: {v, s}}, groups: {g: {score, from, n}}}}.
+   */
+  function scoreAll(subjects) {
+    const out = {};
+    for (const s of subjects) {
+      const metrics = {}, groups = {};
+      for (const def of M) { const v = n(s.m?.[def.key]); if (isNum(v)) metrics[def.key] = { v, s: score1(def, v) }; }
+      for (const g of GROUP_KEYS) {
+        if (GROUPS[g].fundOnly && s.kind !== "fund") continue;
+        const ms = M.filter((d) => d.group === g && isNum(metrics[d.key]?.s)).map((d) => metrics[d.key].s);
+        if (g === "outlook") { const v = outlookScore(s.outlook); if (isNum(v)) groups[g] = { score: v, from: s.outlook?.source || "calls", n: 4 }; continue; }
+        if (g === "backdrop") { const v = mean(["cycle", "macro", "world", "supply", "regulation", "sentiment"].map((p) => n(s.pillars?.[p])).filter(isNum)); const io = outlookScore(s.ind?.outlook);
+          const parts = [v, io].filter(isNum); if (parts.length) groups[g] = { score: mean(parts), from: "industries", n: parts.length }; continue; }
+        if (ms.length >= (s.kind === "fund" && !["momentum", "risk", "risk_reward", "income", "cost"].includes(g) ? 2 : 1)) { groups[g] = { score: mean(ms), from: "numbers", n: ms.length }; continue; }
+        const pv = GROUPS[g].pillar ? n(s.pillars?.[GROUPS[g].pillar]) : NaN;
+        if (isNum(pv)) groups[g] = { score: pv, from: s.kind === "fund" ? "its industries" : "vs its industry", n: 0 };
+        else if (ms.length) groups[g] = { score: mean(ms), from: "numbers", n: ms.length };
+      }
+      for (const g of Object.values(groups)) g.score = r1(g.score);
+      out[s.sym] = { metrics, groups };
+    }
+    return out;
+  }
+
+  /** What each investor type weighs, over the compare dimensions (missing ones drop out and the rest re-weigh). */
+  const WEIGHTS = {
+    income: { income: 34, health: 16, risk: 16, valuation: 12, profitability: 10, backdrop: 6, outlook: 6 },
+    conservative: { risk: 28, health: 18, profitability: 14, valuation: 12, risk_reward: 12, income: 8, backdrop: 8 },
+    growth: { growth: 26, outlook: 16, profitability: 14, momentum: 12, analyst: 10, valuation: 10, backdrop: 8, risk_reward: 4 },
+    aggressive: { momentum: 22, growth: 20, outlook: 20, risk_reward: 12, analyst: 10, backdrop: 10, valuation: 6 },
+  };
+  const OVL = { strong: 6, good: 2, weak: -3, poor: -7 };
+  const grade = (s) => (!isNum(s) ? "—" : s >= 80 ? "A" : s >= 65 ? "B" : s >= 50 ? "C" : s >= 35 ? "D" : "F");
+
+  /**
+   * Fit per investor type: the compare dimensions weighed for that investor (65%), blended with the page's own score for
+   * that investor (35%: the company against its industry, or the fund's look-through scorecard) when there is one,
+   * then nudged by a written analysis's fit (strong +6, good +2, weak -3, poor -7). Returns {type: {SYM: {...}, ranked}}.
+   */
+  function fits(subjects, sc) {
+    const out = {};
+    for (const t of TYPES) {
+      const row = {};
+      for (const s of subjects) {
+        const G = sc[s.sym]?.groups || {}; let w = 0, a = 0; const pulls = [];
+        for (const [g, wt] of Object.entries(WEIGHTS[t])) { const v = G[g]?.score; if (!isNum(v)) continue; w += wt; a += wt * v; pulls.push({ g, wt, v }); }
+        const cmp = w ? a / w : NaN, own = n(s.profiles?.[t]?.total), fit = s.saved?.fit?.[t]?.fit || s.profiles?.[t]?.fit || null;
+        // Thin evidence is pulled toward the middle: with under 70% of this investor's weights scored, the score shrinks toward 50.
+        const shrink = clamp(w / 70, 0.5, 1), cmpS = isNum(cmp) ? 50 + (cmp - 50) * shrink : NaN;
+        let total = isNum(cmpS) && isNum(own) ? 0.65 * cmpS + 0.35 * own : isNum(cmpS) ? cmpS : own;
+        if (isNum(total)) total = clamp(total + (OVL[fit] || 0), 0, 100);
+        const lift = pulls.map((p) => ({ ...p, pull: (p.wt * (p.v - 50)) / (w || 1) })).sort((x, y) => y.pull - x.pull);
+        row[s.sym] = { total: isNum(total) ? r1(total) : NaN, grade: grade(total), cmp: isNum(cmp) ? r1(cmp) : NaN, own: isNum(own) ? r1(own) : NaN, fit, coverage: w / 100,
+          lifts: lift.filter((p) => p.pull > 0.5).slice(0, 3).map((p) => p.g), holds: lift.filter((p) => p.pull < -0.5).reverse().slice(0, 3).map((p) => p.g) };
+      }
+      const ranked = subjects.map((s) => s.sym).filter((k) => isNum(row[k].total)).sort((x, y) => row[y].total - row[x].total);
+      out[t] = { ...row, ranked };
+    }
+    return out;
+  }
+
+  /** Head to head on every metric two or more of them have: values, scores and the leader. */
+  function headToHead(subjects, sc) {
+    const rows = [];
+    for (const def of M) {
+      const vals = subjects.map((s) => ({ sym: s.sym, v: sc[s.sym]?.metrics?.[def.key]?.v, s: sc[s.sym]?.metrics?.[def.key]?.s }));
+      const have = vals.filter((x) => isNum(x.v)); if (have.length < 2) continue;
+      const better = (a, b) => (def.up ? a.v > b.v : a.v < b.v), best = have.reduce((a, x) => (better(x, a) ? x : a)), tie = have.filter((x) => Math.abs(x.v - best.v) <= Math.abs(best.v) * 1e-9).length > 1;
+      rows.push({ ...def, vals, leader: tie ? null : best.sym });
+    }
+    const tally = Object.fromEntries(subjects.map((s) => [s.sym, 0])); for (const r of rows) if (r.leader) tally[r.leader]++;
+    const groups = {};
+    for (const g of GROUP_KEYS) {
+      const vals = subjects.map((s) => ({ sym: s.sym, score: sc[s.sym]?.groups?.[g]?.score, from: sc[s.sym]?.groups?.[g]?.from }));
+      const have = vals.filter((x) => isNum(x.score)); if (have.length < 2) continue;
+      const sorted = [...have].sort((a, b) => b.score - a.score), margin = sorted[0].score - sorted[1].score;
+      groups[g] = { vals, leader: margin >= 3 ? sorted[0].sym : null, margin: r1(margin) };
+    }
+    return { rows, tally, groups };
+  }
+
+  // ----------------------------------------------------------------- prices: rebasing, correlation, drawdowns
+  /** Daily returns keyed by date. */
+  function rets(ser) { const m = new Map(); const d = ser?.dates || [], c = ser?.closes || []; for (let i = 1; i < d.length; i++) if (c[i - 1] > 0 && c[i] > 0) m.set(d[i], c[i] / c[i - 1] - 1); return m; }
+  /** Correlation of daily returns over the last `days` common trading days, and what an equal mix does to volatility. */
+  function correlation(subjects, days = 252) {
+    const R = subjects.map((s) => rets(s.ser)), syms = subjects.map((s) => s.sym);
+    let common = [...(R[0]?.keys() || [])].filter((d) => R.every((m) => m.has(d))).sort(); common = common.slice(-days);
+    const k = syms.length, mat = Array.from({ length: k }, () => Array(k).fill(NaN));
+    if (common.length < 60) return { syms, corr: mat, n: common.length, vols: [], mixVol: NaN, avgVol: NaN };
+    const X = R.map((m) => common.map((d) => m.get(d))), mu = X.map(mean);
+    const sd = X.map((x, i) => Math.sqrt(mean(x.map((v) => (v - mu[i]) ** 2))));
+    for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) { const c = mean(X[i].map((v, t) => (v - mu[i]) * (X[j][t] - mu[j]))); mat[i][j] = sd[i] && sd[j] ? Math.round((c / (sd[i] * sd[j])) * 100) / 100 : NaN; }
+    const mix = common.map((_, t) => mean(X.map((x) => x[t]))), mm = mean(mix), mixVol = Math.sqrt(mean(mix.map((v) => (v - mm) ** 2))) * Math.sqrt(252);
+    const vols = sd.map((v) => v * Math.sqrt(252));
+    return { syms, corr: mat, n: common.length, vols, mixVol, avgVol: mean(vols) };
+  }
+  /** Each series rebased to 100 at the first date on or after `from`, on the dates all of them share. */
+  function rebase(subjects, from) {
+    const maps = subjects.map((s) => new Map((s.ser?.dates || []).map((d, i) => [d, s.ser.closes[i]])));
+    const dates = (subjects[0]?.ser?.dates || []).filter((d) => d >= from && maps.every((m) => m.get(d) > 0));
+    return subjects.map((s, i) => { const b = maps[i].get(dates[0]); return { sym: s.sym, dates, values: dates.map((d) => (100 * maps[i].get(d)) / b) }; });
+  }
+  /** Drawdown from the running peak, over the series (fractions, 0 or below). */
+  function drawdown(dates, values) { let pk = -Infinity; return { dates, values: values.map((v) => { pk = Math.max(pk, v); return v / pk - 1; }) }; }
+  /** Calendar-year returns for each, where the year has data for all of them. */
+  function years(subjects) {
+    const ys = {};
+    for (const s of subjects) { const d = s.ser?.dates || [], c = s.ser?.closes || []; const last = {}; d.forEach((x, i) => { last[x.slice(0, 4)] = c[i]; }); ys[s.sym] = last; }
+    const all = [...new Set(Object.values(ys).flatMap((y) => Object.keys(y)))].sort();
+    const out = [];
+    for (let i = 1; i < all.length; i++) { const y = all[i], p = all[i - 1]; const row = { year: y };
+      for (const s of subjects) { const a = ys[s.sym][p], b = ys[s.sym][y]; row[s.sym] = a > 0 && b > 0 ? b / a - 1 : NaN; }
+      if (subjects.every((s) => isNum(row[s.sym]))) out.push(row); }
+    return out.slice(-6);
+  }
+
+  /** Holdings overlap: for two funds, the weight they share (sum of the smaller weight of each common holding); for a stock and a fund, the stock's weight in the fund. */
+  function overlap(subjects) {
+    const out = [];
+    for (let i = 0; i < subjects.length; i++) for (let j = i + 1; j < subjects.length; j++) {
+      const a = subjects[i], b = subjects[j];
+      if (a.kind === "fund" && b.kind === "fund") { const wb = new Map((b.holdings || []).map((h) => [h.ticker, h.weight])); let s = 0, k = 0; const top = [];
+        for (const h of a.holdings || []) { const w = wb.get(h.ticker); if (isNum(w) && isNum(h.weight)) { const m = Math.min(w, h.weight); s += m; k++; top.push({ ticker: h.ticker, w: m }); } }
+        out.push({ a: a.sym, b: b.sym, kind: "funds", shared: s, n: k, top: top.sort((x, y) => y.w - x.w).slice(0, 5) }); }
+      else if (a.kind !== b.kind) { const f = a.kind === "fund" ? a : b, st = a.kind === "fund" ? b : a; const h = (f.holdings || []).find((x) => x.ticker === st.sym);
+        out.push({ a: st.sym, b: f.sym, kind: "stock-in-fund", shared: h ? h.weight : 0, n: h ? 1 : 0, top: [] }); }
+    }
+    return out;
+  }
+
+  // ----------------------------------------------------------------- the dossier and the one Claude call
+  const fmtV = (kind, v) => !isNum(v) ? "n/a" : kind === "pct" ? (v * 100).toFixed(1) + "%" : kind === "chg" ? (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%" : kind === "x" ? v.toFixed(2) + "x" : kind === "usd" ? (Math.abs(v) >= 1e12 ? "$" + (v / 1e12).toFixed(2) + "T" : Math.abs(v) >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(0) + "M" : "$" + v.toFixed(2)) : String(Math.round(v * 100) / 100);
+  const cut = (s, k) => { s = String(s ?? "").replace(/\[[A-Z]{1,3}\d+\]/g, "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+
+  /** Everything the call reads, as compact text: per ticker (its numbers, written analysis, industry report), then code's comparison. */
+  function dossier({ subjects, sc, fit, h2h, corr, ovl, today }) {
+    const L = [`TODAY: ${today}`, `TICKERS: ${subjects.map((s) => `${s.sym} (${s.kind}${s.sub ? `, ${s.sub}` : ""})`).join("; ")}`, ""];
+    for (const s of subjects) {
+      L.push(`=== ${s.sym}: ${s.name || ""} (${s.kind === "fund" ? "fund/ETF" : "stock"}${s.sub ? `, ${s.sub}` : ""}${s.sector ? `, ${s.sector}` : ""}) ===`);
+      const nums = M.filter((d) => isNum(n(s.m?.[d.key]))).map((d) => `${d.label} ${fmtV(d.kind, n(s.m[d.key]))}`);
+      const info = INFO.filter(([k]) => isNum(n(s.m?.[k]))).map(([k, l, kd]) => `${l} ${fmtV(kd, n(s.m[k]))}`);
+      if (info.length) L.push("Size: " + info.join("; "));
+      if (nums.length) L.push("Numbers: " + nums.join("; "));
+      const G = sc[s.sym]?.groups || {};
+      L.push("Code's dimension scores (0-100, fixed scales): " + GROUP_KEYS.filter((g) => isNum(G[g]?.score)).map((g) => `${GROUPS[g].label} ${Math.round(G[g].score)}${G[g].from !== "numbers" ? ` (${G[g].from})` : ""}`).join("; "));
+      L.push("Code's fit by investor: " + TYPES.map((t) => `${TYPE_LABEL[t]} ${isNum(fit[t][s.sym].total) ? Math.round(fit[t][s.sym].total) : "n/a"}${fit[t][s.sym].fit ? ` (written fit ${fit[t][s.sym].fit})` : ""}`).join("; "));
+      const o = s.outlook; if (o?.calls) L.push(`1M-12M calls (${o.source}${o.date ? `, ${o.date}` : ""}): ` + HZ.map((h) => `${h} ${o.calls[h]?.call || "n/a"}${o.calls[h]?.why ? ` (${cut(o.calls[h].why, 160)})` : ""}`).join("; "));
+      const v = s.saved;
+      if (v) {
+        L.push(`WRITTEN ANALYSIS (${v.via === "github" ? "made on GitHub" : "made here"}, ${String(v.at || "").slice(0, 10)}):`);
+        if (v.headline) L.push(`- Headline: ${cut(v.headline, 300)}`);
+        if (v.verdict) L.push(`- Verdict: ${v.verdict.call || ""}${v.verdict.summary ? ` — ${cut(v.verdict.summary, 400)}` : ""}`);
+        if (v.vs_benchmark) L.push(`- Against its benchmark: ${v.vs_benchmark}`);
+        if (v.thesis) L.push(`- Thesis: ${cut(v.thesis, 900)}`);
+        if (v.scenarios?.length) L.push(`- 12-month scenarios: ${v.scenarios.map((x) => `${x.k} ${x.probability ?? "?"}%${isNum(x.target) ? ` target ${x.target.toFixed(2)}` : ""}${isNum(x.move) ? ` (${fmtV("chg", x.move)})` : ""}`).join("; ")}${isNum(v.expected) ? `; probability-weighted ${fmtV("chg", v.expected)}` : ""}`);
+        for (const t of TYPES) if (v.fit?.[t]) L.push(`- For ${TYPE_LABEL[t]}: ${v.fit[t].fit || ""}${v.fit[t].why ? ` — ${cut(v.fit[t].why, 260)}` : ""}`);
+        if (v.risks?.length) L.push(`- Risks: ${v.risks.slice(0, 5).map((x) => cut(x, 140)).join(" | ")}`);
+        if (v.catalysts?.length) L.push(`- Catalysts: ${v.catalysts.slice(0, 5).map((x) => cut(x, 140)).join(" | ")}`);
+      } else L.push("WRITTEN ANALYSIS: none yet (judge from the numbers and the industry report).");
+      const ind = s.ind;
+      if (ind) {
+        L.push(`INDUSTRY REPORT${ind.name ? ` (${ind.name}${ind.saved_at ? `, ${String(ind.saved_at).slice(0, 10)}` : ""})` : ""}:`);
+        if (ind.headline) L.push(`- Lead: ${cut(ind.headline, 300)}`);
+        if (ind.opportunity) L.push(`- Opportunity: ${ind.opportunity.verdict || ""}${ind.opportunity.why ? ` — ${cut(ind.opportunity.why, 300)}` : ""}`);
+        if (ind.outlook?.calls) L.push(`- Industry calls: ${HZ.map((h) => `${h} ${ind.outlook.calls[h]?.call || "n/a"}`).join("; ")}`);
+        if (ind.scenarios) L.push(`- Industry scenarios: ${["bull", "base", "bear"].filter((k) => ind.scenarios[k]).map((k) => `${k} ${ind.scenarios[k].probability ?? "?"}%: ${cut(ind.scenarios[k].narrative, 140)}`).join(" | ")}`);
+        if (ind.drivers?.length) L.push(`- Drivers: ${ind.drivers.slice(0, 4).map((x) => cut(x, 140)).join(" | ")}`);
+        if (ind.risks?.length) L.push(`- Risks: ${ind.risks.slice(0, 4).map((x) => cut(x, 140)).join(" | ")}`);
+        if (ind.catalysts?.length) L.push(`- Catalysts: ${ind.catalysts.slice(0, 4).map((x) => cut(x, 140)).join(" | ")}`);
+        if (ind.mix?.length) L.push(`- What it holds, by industry: ${ind.mix.slice(0, 8).map((x) => `${x.industry} ${(x.weight * 100).toFixed(1)}%${x.call ? ` (12M ${x.call})` : ""}`).join("; ")}`);
+      }
+      L.push("");
+    }
+    L.push("=== CODE'S COMPARISON ===");
+    L.push("Dimension leaders: " + Object.entries(h2h.groups).map(([g, x]) => `${GROUPS[g].label}: ${x.leader || "tie"} (${x.vals.filter((y) => isNum(y.score)).map((y) => `${y.sym} ${Math.round(y.score)}`).join(", ")})`).join("; "));
+    L.push("Metric wins: " + Object.entries(h2h.tally).map(([k, v]) => `${k} ${v}`).join(", ") + ` of ${h2h.rows.length} metrics`);
+    for (const t of TYPES) L.push(`${TYPE_LABEL[t]} ranking by code: ${fit[t].ranked.map((k) => `${k} ${Math.round(fit[t][k].total)}`).join(" > ")}`);
+    if (corr?.n >= 60) L.push(`Correlation of daily returns (${corr.n} days): ${corr.syms.flatMap((a, i) => corr.syms.slice(i + 1).map((b, j) => `${a}/${b} ${corr.corr[i][i + 1 + j]}`)).join("; ")}; an equal mix's volatility ${fmtV("pct", corr.mixVol)} vs ${fmtV("pct", corr.avgVol)} on average alone`);
+    for (const o of ovl || []) L.push(o.kind === "funds" ? `Holdings overlap ${o.a}/${o.b}: ${fmtV("pct", o.shared)} shared across ${o.n} names` : `${o.a} is ${fmtV("pct", o.shared)} of ${o.b}`);
+    return L.join("\n");
+  }
+
+  function prompt(text, syms, today) {
+    const S = syms.join(" | ");
+    return `You are the head of research at an investment firm, writing the comparison desk's verdict on ${syms.join(", ")} for ${today}. Your colleagues have already done the work: the numbers, each name's industry report and, where they exist, full written analyses of the company or fund. Code has scored every dimension on fixed scales and ranked them for four investor types. Read all of it and decide.
+
+Rules:
+- Decide. Every "pick" is exactly one of: ${S}. No ties, no "it depends" without saying on what.
+- Be specific and analytical: every "why" cites the numbers that decide it (e.g. "forward P/E 18x vs 31x", "volatility 22% vs 35%", "the industry's 12M call is bullish vs bearish"). Use the written analyses and industry reports where they exist; say so when a name has no written analysis.
+- Compare like with like: a fund against a stock is a choice between owning a basket and owning one company; say what that trade means (diversification, concentration, cost).
+- You may depart from code's scores and rankings, but when you do, say why in that field.
+- Investor types: income (dependable cash income, capital preservation second), conservative (low drawdowns, steady compounding), growth (above-market growth over 1-3 years, accepts swings), aggressive (maximum upside, accepts big drawdowns).
+- Plain English, no hedging boilerplate, no invented facts: use only what is in the dossier.
+
+${text}
+
+Return ONLY a JSON object:
+{"headline": "one sentence, at most 30 words: which is better overall and the single biggest reason",
+ "overall": {"pick": "${syms[0]}", "confidence": "high | medium | low", "why": "3-5 sentences on why it wins overall and what would flip it"},
+ "ranking": [${syms.map((s) => `"${s}"`).join(", ")}] (best to worst overall),
+ "investors": {"income": {"pick": "...", "runner_up": "...", "why": "2-3 sentences with numbers", "avoid": "which to avoid for this investor and why, one sentence"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
+ "horizons": {"1M": {"pick": "...", "why": "one or two sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "dimensions": [{"key": "one of ${GROUP_KEYS.join(", ")}", "pick": "...", "why": "two sentences with the numbers"}] (every dimension where at least two of them have data),
+ "names": {"${syms[0]}": {"verdict": "buy | accumulate | hold | trim | avoid", "role": "the job it does in a portfolio, one sentence", "edge": "its single biggest advantage over the others, with a number", "strengths": ["3-5 short points with numbers"], "weaknesses": ["3-5 short points with numbers"], "bull": "the bull case in 1-2 sentences", "bear": "the bear case in 1-2 sentences", "watch": ["2-4 things or dates to watch"], "changes_mind": "what would change the verdict"}, ...one entry per ticker},
+ "together": {"pairing": "2-3 sentences: do they belong together (correlation, overlap, what each adds)?", "mix": {"${syms[0]}": 50, ...} (a suggested split for a balanced investor who wants to own some of these; whole percents summing to 100; 0 to leave one out)},
+ "risks": ["3-5 risks that cut across the comparison"],
+ "bottom_line": "3-4 sentences: what to do, for whom, and when to revisit"}`;
+  }
+
+  const LV = ["buy", "accumulate", "hold", "trim", "avoid"], CONF = ["high", "medium", "low"];
+  const str = (x, k = 900) => (typeof x === "string" ? cut(x, k) : "");
+  const arr = (x, k = 6, m = 220) => (Array.isArray(x) ? x.map((y) => str(y, m)).filter(Boolean).slice(0, k) : []);
+  /** The call's answer, checked: picks must be one of the tickers; everything trimmed; missing names filled. */
+  function clean(raw, syms) {
+    if (!raw || typeof raw !== "object") return null;
+    const up = (x) => String(x || "").toUpperCase().trim(), pick = (x) => (syms.includes(up(x)) ? up(x) : null);
+    const o = { headline: str(raw.headline, 300), overall: { pick: pick(raw.overall?.pick), confidence: CONF.includes(raw.overall?.confidence) ? raw.overall.confidence : "medium", why: str(raw.overall?.why, 1400) } };
+    o.ranking = [...new Set((Array.isArray(raw.ranking) ? raw.ranking : []).map(pick).filter(Boolean))]; for (const s of syms) if (!o.ranking.includes(s)) o.ranking.push(s);
+    if (!o.overall.pick) o.overall.pick = o.ranking[0];
+    o.investors = {}; for (const t of TYPES) { const x = raw.investors?.[t]; if (x && pick(x.pick)) o.investors[t] = { pick: pick(x.pick), runner_up: pick(x.runner_up), why: str(x.why, 900), avoid: str(x.avoid, 400) }; }
+    o.horizons = {}; for (const h of HZ) { const x = raw.horizons?.[h]; if (x && pick(x.pick)) o.horizons[h] = { pick: pick(x.pick), why: str(x.why, 500) }; }
+    o.dimensions = (Array.isArray(raw.dimensions) ? raw.dimensions : []).filter((d) => GROUPS[d?.key] && pick(d.pick)).map((d) => ({ key: d.key, pick: pick(d.pick), why: str(d.why, 600) }));
+    o.names = {};
+    for (const s of syms) { const x = raw.names?.[s] || raw.names?.[s.toLowerCase()] || {};
+      o.names[s] = { verdict: LV.includes(x.verdict) ? x.verdict : null, role: str(x.role, 300), edge: str(x.edge, 300), strengths: arr(x.strengths), weaknesses: arr(x.weaknesses), bull: str(x.bull, 500), bear: str(x.bear, 500), watch: arr(x.watch, 4, 200), changes_mind: str(x.changes_mind, 400) }; }
+    const mix = {}; let tot = 0; for (const s of syms) { const v = Math.max(0, Math.round(n(raw.together?.mix?.[s]) || 0)); mix[s] = v; tot += v; }
+    if (tot > 0) for (const s of syms) mix[s] = Math.round((mix[s] * 100) / tot);
+    o.together = { pairing: str(raw.together?.pairing, 700), mix: tot > 0 ? mix : null };
+    o.risks = arr(raw.risks, 5, 300); o.bottom_line = str(raw.bottom_line, 900);
+    return o.headline || o.overall.why ? o : null;
+  }
+
+  /** Where the verdict and code disagree by a wide margin: shown next to the verdict, not hidden. */
+  function checks(v, h2h, fit) {
+    const out = [];
+    if (!v) return out;
+    for (const d of v.dimensions) { const g = h2h.groups[d.key]; if (!g?.leader || g.leader === d.pick || g.margin < 15) continue;
+      const a = g.vals.find((x) => x.sym === g.leader)?.score, b = g.vals.find((x) => x.sym === d.pick)?.score;
+      out.push({ where: d.key, text: `${GROUPS[d.key].label}: the verdict picks ${d.pick}, but code's numbers favor ${g.leader} (${Math.round(a)} vs ${Math.round(b)})` }); }
+    for (const t of TYPES) { const x = v.investors[t], r = fit[t]; if (!x || !r.ranked.length || r.ranked[0] === x.pick) continue;
+      const a = r[r.ranked[0]].total, b = r[x.pick]?.total; if (isNum(a) && isNum(b) && a - b >= 10) out.push({ where: t, text: `${TYPE_LABEL[t]}: the verdict picks ${x.pick}, code's fit scores favor ${r.ranked[0]} (${Math.round(a)} vs ${Math.round(b)})` }); }
+    return out;
+  }
+
+  /** What the verdict rests on: if any of this changes, the comparison is made again (once a day at most otherwise). */
+  function fingerprint(subjects, day) {
+    return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
+  }
+
+  const api = { GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+
 </script>
 <script>
 (() => {
@@ -16061,6 +16496,18 @@ The calls are about this fund's total return (price plus income) against holding
           J.label = "writing the analysis and the calls"; fd.full = null; await fundWrite(fd, { force: true });
           const rec = await idbGet("fundFull:" + sym).catch(() => null); if (!rec?.parts) throw new Error(fd.fullErr || "no analysis came back");
           J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec, warn: fd.fullErr || fd.leanErr || null }); }
+        else if (kind === "compare") {
+          // The Compare tab's verdict: read each ticker the way the tab does (with the analyses already written, which the
+          // runner passes in from the exports branch), then the one Claude call. The result is what the tab keeps.
+          const syms = [...new Set((Array.isArray(input?.symbols) ? input.symbols : []).map((x) => String(x || "").toUpperCase()).filter((x) => /^[A-Z0-9.\-]{1,12}$/.test(x)))].slice(0, CMP_MAX);
+          if (syms.length < 2) throw new Error("a comparison needs two to four tickers");
+          for (const [k, r] of Object.entries(input?.saved || {})) if (/^(co|fundFull|bondFull):[A-Z0-9.\-]{1,12}$/.test(k) && r && typeof r === "object") await idbPut(k, jsonSafe({ ...r, via: "github" })).catch(() => {});
+          S.cmp = { syms, subj: {}, vCache: {}, period: "1Y", q: "", note: "" };
+          J.label = "reading " + syms.join(", "); await Promise.all(syms.map((x) => cmpLoad(x))); await cmpRefresh();
+          const bad = syms.filter((x) => S.cmp.subj[x]?.stage !== "ready"); if (bad.length) throw new Error(bad.map((x) => `${x}: ${S.cmp.subj[x]?.err || "couldn't be read"}`).join("; "));
+          J.label = "writing the verdict"; await cmpVerdict();
+          const rec = S.cmp.vCache[cmpKey(syms)]; if (!rec?.v) throw new Error(S.cmp.err || "no verdict came back");
+          J.result = jsonSafe({ kind, sym: cmpSorted(syms).join(","), at: rec.at, rec, warn: null }); }
         else throw new Error("unknown kind " + kind);
       } catch (e) { J.error = e?.message || String(e); } finally { J.busy = false; } })(); return true; },
     oneStatus: () => ({ busy: !!S.oneJob?.busy, label: S.oneJob?.label || "", error: S.oneJob?.error || null, done: !!S.oneJob?.result }),
@@ -17809,7 +18256,7 @@ The calls are about this fund's total return (price plus income) against holding
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
-  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); renderPortfolio(); keepAwake(); }
+  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); renderCompare(); renderPortfolio(); keepAwake(); }
 
   // ============================================================= Companies tab: one company, on top of its industry's analysis
   /**
@@ -20609,7 +21056,7 @@ The calls are about this fund's total return (price plus income) against holding
       for (const [id, x] of Object.entries(S.ghJobs || {})) { if (x?.state !== "running") continue; const st = Date.parse(x.started_at || x.requested_at || 0);
         if (!(now - st > 12 * 60000) || now - st > 3 * 3600000) continue; const last = (S.ghAutoAt ||= {})[id] || 0; if (now - last < 10 * 60000) continue; S.ghAutoAt[id] = now;
         S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
-      if (S.co?.ghRun) renderCompany(); if (S.fund?.ghRun) renderFund(); }, 60000);
+      if (S.co?.ghRun) renderCompany(); if (S.fund?.ghRun) renderFund(); if (S.tab === "compare" && S.cmp?.an && cmpJob(S.cmp.an.subs.map((x) => x.sym))) renderCompare(); }, 60000);
   }
   async function ghFetchNow(kind, sym) { const id = ghId(kind, sym); if (!S.mcp || !PF_TRIGGER) return; (S.ghAutoAt ||= {})[id] = Date.now();
     await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
@@ -20914,11 +21361,417 @@ The calls are about this fund's total return (price plus income) against holding
   }
 
 
+  // ============================================================= Compare tab: 2-4 tickers side by side (Compare)
+  /**
+   * Any two to four tickers, stocks or funds. Each one is read the way its own page reads it, without writing anything:
+   * its numbers (FMP, kept for the day), its industry report (or, for a fund, the industries it holds), and a company or
+   * fund analysis if one already exists here, in the page's database (a GitHub run) or in the runs synced from GitHub.
+   * Code scores and ranks everything (Compare); one Claude call writes the verdict, kept for the day and made again
+   * by itself only when what it rests on changes.
+   */
+  const CMP_MAX = 4, CMP_COLORS = ["#4ea8ff", "#34d399", "#f5a524", "#c084fc"];
+  const cmpColor = (sym) => CMP_COLORS[Math.max(0, (S.cmp?.syms || []).indexOf(sym)) % CMP_COLORS.length];
+  const cmpMean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+  const cmpTxt = (x) => (typeof x === "string" ? x : x?.risk || x?.event || x?.text || x?.title || x?.driver || x?.what || x?.name || x?.claim || "");
+
+  /** A written analysis for this ticker if one exists anywhere. Never starts one. */
+  async function cmpSaved(kind, sym) {
+    for (const k of kind === "company" ? ["co:" + sym] : ["fundFull:" + sym, "bondFull:" + sym]) { const r = await idbGet(k).catch(() => null); if (r && (r.thesis || r.parts || r.w)) return r; }
+    const id = ghId(kind, sym);
+    const keep = async (res) => { const rec = res?.rec; if (!rec || String(res.sym || rec.sym || sym).toUpperCase() !== sym) return null; rec.via = "github";
+      await idbPut((kind === "company" ? "co:" : rec.bond ? "bondFull:" : "fundFull:") + sym, jsonSafe(rec)).catch(() => {}); return rec; };
+    try { const db = await outlookDb(); if (db) { const d = await db.doc("pfjobs/" + id).get(), x = d.exists ? d.data() : null;
+      if (x?.state === "done" && x.path) { const r = await keep(await jobRead(x, id)); if (r) return r; } } } catch {}
+    try { const idx = await runsIndex(), x = (idx?.portfolios || []).find((p) => p.id === id);
+      if (x?.path) { const r = await keep(await jobRead({ path: runUrl(x), done_at: x.at }, id)); if (r) return r; } } catch {}
+    return null;
+  }
+  /** The parts of a written analysis the comparison reads, the same shape for a company, a fund and a bond fund. */
+  function cmpSavedView(kind, r) {
+    if (!r) return null;
+    const list = (a) => (Array.isArray(a) ? a.map(cmpTxt).filter(Boolean) : []);
+    if (kind === "company") { const t = r.thesis || {}, ck = r.checks || {};
+      return { at: r.at, via: r.via, industry: r.industry, headline: t.headline, verdict: t.verdict, thesis: t.thesis, fit: t.fit || null, scenarios: ck.scenarios || [], expected: num(ck.expected_return),
+        risks: list(t.risks), catalysts: list(t.catalysts), outlook: r.outlook?.v === 3 && !r.outlook.provisional ? r.outlook : null }; }
+    if (r.bond) { const w = r.w || {};
+      return { at: r.at, via: r.via, headline: w.headline, verdict: w.verdict ? { call: w.verdict, summary: "" } : null, thesis: w.thesis, fit: null, scenarios: [], expected: isNum(num(w.expected12)) ? num(w.expected12) / 100 : NaN,
+        risks: list(w.risks), catalysts: list(w.watch), outlook: w.calls && Object.keys(w.calls).length ? { calls: w.calls, date: String(r.at || "").slice(0, 10) } : null }; }
+    const P = r.parts || {}, any = (k) => Object.values(P).map((p) => p?.[k]).find((x) => x && (typeof x !== "object" || Object.keys(x).length)), core = P.core || {};
+    return { at: r.at, via: r.via, headline: core.headline || any("headline"), verdict: core.verdict || null, vs_benchmark: core.vs_benchmark?.call || null, thesis: any("thesis"), fit: core.fit || any("fit") || null, scenarios: [], expected: NaN,
+      risks: list(any("risks")), catalysts: list(any("catalysts")), outlook: r.outlook && !r.outlook.provisional ? r.outlook : null };
+  }
+  /** A stock's industry report, as the comparison reads it. */
+  function cmpIndOf(run) {
+    if (!run) return null; const L = run.lead || {}, o = indOutlook(run.name, L), list = (a) => (Array.isArray(a) ? a.map(cmpTxt).filter(Boolean) : []);
+    return { name: run.name, saved_at: run.saved_at, headline: L.headline, opportunity: L.opportunity || null, outlook: o?.calls ? o : null, scenarios: L.scenarios || null, drivers: list(L.drivers), risks: list(L.risks), catalysts: list(L.catalysts) };
+  }
+  const cmpOut = (calls, source, date = "") => (calls && Object.keys(calls).length ? { calls: Object.fromEntries(Outlook.HZ.filter((h) => calls[h]?.call).map((h) => [h, { call: calls[h].call, why: calls[h].why || "" }])), source, date } : null);
+
+  /** A stock, read without writing: its industry run, numbers, written analysis and calls. */
+  async function cmpStock(sym, ci, info, step) {
+    const hit = ci.cos[sym]; let industry = hit?.industry || info?.industry || "";
+    const co = { sym, idx: {}, data: null, run: null, row: null };
+    step("its industry report");
+    const rec = industry ? await idbGet("run:" + slug(industry)).catch(() => null) : null;
+    if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null; }
+    step("its numbers (FMP)");
+    const from5 = Horizon.addDays(today(), -1900), etfSym = Universe.ETF[co.run?.industry?.sector || hit?.sector || info?.sector] || null;
+    const [f, spy, etf] = await Promise.all([coFetch(sym, co.run), trackSeries("SPY", "2007-01-02").catch(() => null), etfSym ? trackSeries(etfSym, from5).catch(() => null) : null]);
+    co.data = f; co.spy = spy?.dates?.length ? spy : null; co.etf = etf?.dates?.length ? etf : null;
+    co.risk = coRisk(f.ser, co.spy, co.run?.bench?.rf || S.bench?.rf);
+    co.px = Number(f.profile?.price) || (f.ser.closes.length ? f.ser.closes[f.ser.closes.length - 1] : NaN);
+    if (!co.row) co.row = coRowFromFmp(sym, f, co.risk);
+    co.name = co.row?.name || f.profile?.companyName || info?.name || sym;
+    co.quality = Company.quality({ scores: f.scores, ratios: f.ratios, metrics: f.metrics, ttm: f.ttm });
+    if (co.run) try { co.peers = Company.peerTable(co.row, co.run.industry.constituents); } catch {}
+    try { coFacts(co); } catch (e) { console.warn("compare facts", e); }
+    step("any written analysis");
+    const raw = await cmpSaved("company", sym), sv = cmpSavedView("company", raw);
+    const row = co.row || {}, g1 = co.g1 || {}, q = co.quality || {}, P = co.perf || {}, cons = f.consensus || {}, tt = f.ttm || {};
+    const nextRev = (f.estimates || []).find((e) => isNum(num(e.rev)) && e.rev > 0), tot = (cons.buy || 0) + (cons.hold || 0) + (cons.sell || 0);
+    let implied = NaN; try { implied = num(Company.impliedGrowth({ fcf: tt.fcf, mcap: Number(f.profile?.marketCap) || row.market_cap, rf: co.run?.bench?.y10_latest ?? S.bench?.y10_latest, beta: co.risk?.beta ?? row.beta, erp: co.run?.bench?.erp ?? S.bench?.erp })?.g); } catch {}
+    const m = { ret_1M: P["1M"]?.ret, ret_3M: P["3M"]?.ret, ret_6M: P["6M"]?.ret, ret_1Y: P["1Y"]?.ret, ret_3Y: P["3Y"]?.ann, ret_5Y: P["5Y"]?.ann, vs_ma200: co.lv?.vs_ma200, off_high: co.lv?.off_high,
+      vol_1y: g1.vol, max_dd_1y: g1.max_dd, beta: g1.beta, down_capture: g1.down_capture, sharpe_1y: g1.sharpe, sortino_1y: g1.sortino, alpha_1y: g1.alpha, sharpe_3y: co.g3?.sharpe,
+      pe: row.pe, fwd_pe: row.fwd_pe, ps: row.ps, ev_ebitda: num(f.metrics?.evToEBITDATTM), fcf_yield: q.fcf_yield, pe_vs_hist: co.peh?.vs_median,
+      rev_growth: row.rev_growth, ntm_growth: row.ntm_growth, rev_fwd: nextRev && tt.rev > 0 ? nextRev.rev / tt.rev - 1 : NaN, implied_g: implied,
+      gross_margin: row.gross_margin, op_margin: row.op_margin, net_margin: row.net_margin, fcf_margin: row.fcf_margin, roic: q.roic, roe: q.roe, piotroski: q.piotroski, beat_rate: co.earn?.beat_rate,
+      de: row.de, nd_ebitda: row.nd_ebitda ?? q.nd_ebitda, int_cover: row.int_cover ?? q.int_cover, altman: q.altman,
+      div_yield: row.div_yield, payout: q.payout, div_growth: co.div?.cagr5,
+      upside_target: num(cons.target) > 0 && co.px > 0 ? cons.target / co.px - 1 : NaN, buy_share: tot > 0 ? cons.buy / tot : NaN, rev30: row.rev30,
+      mcap: Number(f.profile?.marketCap) || row.market_cap, px: co.px };
+    for (const k of Object.keys(m)) { const v = num(m[k]); m[k] = isNum(v) ? v : null; }
+    const pillars = Object.fromEntries(Object.entries(co.scores?.pillars || {}).map(([k, x]) => [k, x.score]));
+    const profiles = Object.fromEntries(Object.entries(co.scores?.profiles || {}).map(([k, x]) => [k, { total: x.total }]));
+    const so = S.savedCoOutlooks?.[sym];
+    const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || (so?.outlook?.calls && (!co.run || so.industry === co.run.name) && cmpOut(so.outlook.calls, "saved calls", so.outlook.date))
+      || (co.run && cmpOut(coPrior(co), "from its industry"));
+    const cl = f.ser?.closes || [];
+    return { sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
+      px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
+      m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run };
+  }
+  /** A fund, read the way its page reads it (look-through, prices, Wall Street on its holdings), without writing an analysis. */
+  async function cmpFund(sym, step) {
+    const fd = { sym, stage: "loading" };
+    step("its holdings and facts");
+    fd.raw = await fundRaw(sym);
+    step("its look-through (your industry reports)");
+    await fundAnalyze(fd, { quiet: true });
+    step("Wall Street on its holdings");
+    await fundNet(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; }); fd.netDone = true;
+    step("any written analysis");
+    const raw = await cmpSaved("fund", sym), sv = cmpSavedView("fund", raw);
+    try { fundCard(fd, raw?.parts?.core?.fit || null); } catch {}
+    const f = fd.facts || {}, g1 = fd.g1 || {}, P = fd.ser ? CoFacts.performance(fd.ser, { spy: fd.spy }) : {}, cl = fd.ser?.closes || [];
+    const m = { ret_1M: P["1M"]?.ret, ret_3M: P["3M"]?.ret, ret_6M: P["6M"]?.ret, ret_1Y: P["1Y"]?.ret, ret_3Y: P["3Y"]?.ann, ret_5Y: P["5Y"]?.ann, vs_ma200: fd.lv?.vs_ma200, off_high: fd.lv?.off_high,
+      vol_1y: g1.vol, max_dd_1y: g1.max_dd, beta: fd.gS?.beta ?? g1.beta, down_capture: g1.down_capture, sharpe_1y: g1.sharpe, sortino_1y: g1.sortino, alpha_1y: g1.alpha, sharpe_3y: fd.g3?.sharpe,
+      div_yield: num(fd.dist?.yield) || num(f.yield), expense: f.expense, top10: fd.conc?.top10, eff_n: fd.conc?.effective_n, tracking: fd.bench?.symbol !== "SPY" ? g1.tracking_error : null,
+      upside_target: fd.street?.upside, buy_share: fd.street?.buy_share, mcap: f.aum, px: cl[cl.length - 1], holdings_n: f.holdings_count, coverage: fd.cov?.covered };
+    for (const k of Object.keys(m)) { const v = num(m[k]); m[k] = isNum(v) ? v : null; }
+    const pillars = Object.fromEntries(Object.entries(fd.card?.pillars || {}).map(([k, x]) => [k, x.score]));
+    const profiles = Object.fromEntries(Object.entries(fd.card?.profiles || {}).map(([k, x]) => [k, { total: x.total, fit: x.fit }]));
+    let prior = null; try { prior = fd.bond ? null : FundAn.prior(fd); } catch {}
+    const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || cmpOut(prior, "from its industries");
+    const mix = (fd.cov?.industries || []).slice(0, 10).map((g) => { const d = fd.digests?.[lc(g.industry)]; return { industry: g.industry, weight: g.weight, call: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "" }; });
+    const lookCalls = fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]?.call).map((h) => [h, { call: fd.look.calls[h].call }])) : null;
+    return { sym, kind: "fund", name: f.name || sym, sub: [f.type, f.category].filter(Boolean).join(" · ") || (fd.bond ? "bond fund" : "fund"), sector: "",
+      px: m.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: "", bond: !!fd.bond, bench: fd.bench?.symbol || "",
+      m, pillars, profiles, outlook, saved: sv, best: fd.card?.best || null,
+      ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
+      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })) };
+  }
+  /** Load one ticker into the comparison (once; kept while the tab is open). */
+  async function cmpLoad(sym) {
+    const c = S.cmp; if (c.subj[sym]?.stage === "ready" || c.subj[sym]?.stage === "loading") return;
+    const x = c.subj[sym] = { stage: "loading", step: "Finding it…", err: null, s: null }; renderCompare();
+    const step = (t) => { x.step = t; renderCompare(); };
+    try {
+      if (!S.mcp) throw new Error("open this page in Claude to look tickers up");
+      const ci = await coIndex(); let info = null, kind = ci.cos[sym] ? "stock" : null;
+      if (!kind) { info = await pfInfo(sym); kind = info.type === "etf" || info.type === "fund" ? "fund" : info.type === "stock" ? "stock" : null; }
+      if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`FMP doesn't know ${sym}`); } }
+      x.s = kind === "fund" ? await cmpFund(sym, step) : await cmpStock(sym, ci, info, step);
+      if (!x.s.ser?.dates?.length) throw new Error(`no price history for ${sym}`);
+      x.stage = "ready";
+    } catch (e) { x.stage = "error"; x.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
+    renderCompare(); cmpRefresh();
+  }
+  async function cmpAdd(q) {
+    const c = S.cmp, raw = String(q || "").trim(); if (!raw) return;
+    const syms = raw.toUpperCase().split(/[\s,;]+/).map((s) => s.replace(/[^A-Z0-9.\-]/g, "")).filter(Boolean);
+    for (const sym of syms) { if (c.syms.includes(sym)) continue; if (c.syms.length >= CMP_MAX) { c.note = `Up to ${CMP_MAX} tickers at a time: remove one to add ${sym}.`; break; } c.syms.push(sym); }
+    c.q = ""; idbPut("cmpSyms", c.syms).catch(() => {}); renderCompare();
+    for (const s of c.syms) cmpLoad(s);
+    cmpRefresh();
+  }
+  function cmpDel(sym) { const c = S.cmp; c.syms = c.syms.filter((s) => s !== sym); c.note = ""; idbPut("cmpSyms", c.syms).catch(() => {}); renderCompare(); cmpRefresh(); }
+  /** Code's whole comparison for the tickers that are in (no Claude). */
+  function cmpAnalysis(subs) {
+    const sc = Compare.scoreAll(subs), fit = Compare.fits(subs, sc), h2h = Compare.headToHead(subs, sc);
+    let corr = null; try { corr = Compare.correlation(subs); } catch {}
+    return { subs, sc, fit, h2h, corr, ovl: Compare.overlap(subs), key: subs.map((s) => s.sym).join(",") };
+  }
+  // The verdict is made when you press Compare: on GitHub (the same request document, Claude task and workflow as a
+  // company's or fund's analysis, request kind "compare"), or here when GitHub can't be used. The result is kept per set
+  // of tickers (IDB "cmp:<SYMS>") and shown whenever that set is on screen.
+  const cmpSorted = (syms) => [...syms].sort();
+  const cmpKey = (syms) => "cmp:" + cmpSorted(syms).join(",");
+  const cmpGhId = (syms) => "cmp-" + cmpSorted(syms).map((s) => s.toUpperCase().replace(/[^A-Z0-9]/g, "_")).join("-").slice(0, 60);
+  const cmpJob = (syms) => { const x = S.ghJobs?.[cmpGhId(syms)]; if (!x) return null; const age = Date.now() - Date.parse(x.started_at || x.requested_at || 0);
+    return (x.state === "queued" && age < 15 * 60000) || (x.state === "running" && age < 3 * 3600000) ? x : x.state === "failed" ? x : null; };
+  /** Code's comparison for the tickers on screen, the verdict kept for them, and a watch on their GitHub request. No Claude. */
+  async function cmpRefresh() {
+    const c = S.cmp; if (!c) return;
+    const ready = c.syms.map((s) => c.subj[s]).filter((x) => x?.stage === "ready").map((x) => x.s);
+    if (ready.length < 2 || c.syms.some((s) => c.subj[s]?.stage === "loading")) { renderCompare(); return; }
+    const syms = ready.map((s) => s.sym), key = cmpKey(syms);
+    c.an = cmpAnalysis(ready); c.vKey = key;
+    if (!c.vCache[key]) { const have = await idbGet(key).catch(() => null); if (have?.v) c.vCache[key] = have; }
+    renderCompare();
+    if (!JOB) cmpWatch(syms);
+  }
+  /** Watch this set's GitHub request; when it's done and newer than the verdict here, take it in. */
+  async function cmpWatch(syms) {
+    const id = cmpGhId(syms); if ((S.ghWatched ||= {})[id] || !(await ghCan())) return; S.ghWatched[id] = true;
+    const db = await outlookDb(); ghTimer();
+    try { db.doc("pfjobs/" + id).onSnapshot(async (d) => { const x = d.exists ? d.data() : null; (S.ghJobs ||= {})[id] = x;
+      if (x?.state === "done" && x.path && (S.ghApplied ||= {})[id] !== x.path + "@" + x.done_at) await cmpApply(syms, x);
+      if (S.tab === "compare") renderCompare(); }, () => {}); } catch {}
+  }
+  async function cmpApply(syms, x) {
+    const id = cmpGhId(syms), key = cmpKey(syms), c = S.cmp; (S.ghApplied ||= {})[id] = x.path + "@" + x.done_at;
+    try { const res = await jobRead(x, id), rec = res?.rec;
+      // A result without a verdict came from a workflow that doesn't know comparisons (main before the Compare tab was merged): it ran a portfolio analysis instead.
+      if (res?.kind !== "compare" && (res?.sleeves || res?.sels)) throw new Error("GitHub ran an older version of the workflow that doesn't do comparisons yet, so it wrote a portfolio analysis instead. Merge the Compare pull request into main, then press Compare again");
+      if (res?.kind !== "compare" || !rec?.v || cmpSorted(rec.syms || []).join(",") !== cmpSorted(syms).join(",")) throw new Error("the result is for something else");
+      const have = c?.vCache[key] || (await idbGet(key).catch(() => null)); if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer
+      rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
+      if (c) { c.vCache[key] = rec; if (c.vKey === key) c.err = null; }
+    } catch (e) { if (c && c.vKey === key) c.err = "GitHub's result couldn't be read: " + (e?.message || e); }
+  }
+  /** The Compare button: start the comparison on GitHub, or write it here when GitHub can't be used. */
+  async function cmpRun() {
+    const c = S.cmp; if (!c?.an || c.busy) return;
+    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null;
+    if (await ghCan()) {
+      const db = await outlookDb(), at = new Date().toISOString();
+      const req = { id, kind: "compare", symbols: syms, requested_at: at, holdings: [] };
+      const doc = { state: "queued", kind: "compare", symbol: syms.join(","), request: JSON.stringify(req), requested_at: at, started_at: null, done_at: null, result: null, path: null, run_url: null };
+      (S.ghJobs ||= {})[id] = doc; renderCompare();
+      try { await db.doc("pfjobs/" + id).set(doc); cmpWatch(syms);
+        await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "ANALYZE " + id }, { cache: false }); renderCompare(); return; }
+      catch (e) { const code = e?.code, why = code === "not_granted" || code === "declined" ? "this page isn't allowed to use Claude Code Remote" : e?.message || code || String(e);
+        S.ghJobs[id] = { ...doc, state: "failed", result: `couldn't start it on GitHub (${why})`, done_at: new Date().toISOString() }; await db.doc("pfjobs/" + id).set(S.ghJobs[id]).catch(() => {}); }
+    }
+    if (S.sample) return cmpVerdict();
+    c.err = "Open this page in Claude to run the comparison."; renderCompare();
+  }
+  /** The verdict written here: one Claude call (the Compare button without GitHub, and the GitHub job itself). */
+  async function cmpVerdict() {
+    const c = S.cmp; if (!c?.an || !S.sample) return;
+    const an = c.an, ready = an.subs, syms = ready.map((s) => s.sym), key = cmpKey(syms), fp = Compare.fingerprint([...ready].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
+    if (c.busy === key) return;
+    c.ctl?.abort(); const ctl = new AbortController(); c.ctl = ctl; c.busy = key; c.err = null; c.partial = null; c.start = Date.now(); renderCompare();
+    try {
+      const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
+      let last = 0;
+      const out = await sampleJson(Compare.prompt(text.slice(0, 200000), syms, today()), { modelTier: "complex", cache: false, signal: ctl.signal,
+        onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
+      const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
+      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
+      c.vCache[key] = rec; await idbPut(key, rec).catch(() => {});
+    } catch (e) { if (!ctl.signal.aborted) c.err = FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
+    finally { if (c.busy === key) { c.busy = null; c.partial = null; } c.ctl = null; renderCompare(); }
+  }
+
+  // ------------------------------------------------------------- render: Compare tab
+  function renderCompare() {
+    const el = $("cmp"); if (!el || S.tab !== "compare") return;
+    if (!S.cmp) { S.cmp = { syms: [], subj: {}, vCache: {}, period: "1Y", q: "", note: "" };
+      idbGet("cmpSyms").then((l) => { if (Array.isArray(l) && l.length && !S.cmp.syms.length) cmpAdd(l.join(",")); }).catch(() => {});
+      if (!S.coIdx) coIndex().then(() => renderCompare()).catch(() => {});
+      if (!S.fundList) idbGet("funds").then((l) => { S.fundList = l || []; renderCompare(); }).catch(() => {}); }
+    const had = document.activeElement?.id === "cmp-q" ? { v: document.activeElement.value, a: document.activeElement.selectionStart } : null;
+    el.innerHTML = cmpBar() + cmpView();
+    wireCharts(el); wireSpy(el);
+    $("cmp-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); cmpAdd($("cmp-q").value); });
+    if (had) { const q = $("cmp-q"); if (q) { q.value = had.v; q.focus(); try { q.setSelectionRange(had.a, had.a); } catch {} } }
+  }
+  /** The ticker bar: up to four chips, an input with suggestions from your saved companies and funds. */
+  function cmpBar() {
+    const c = S.cmp, cos = Object.values(S.coIdx?.cos || {}).sort((a, b) => (num(b.market_cap) || 0) - (num(a.market_cap) || 0)).slice(0, 1500), funds = S.fundList || [];
+    const chips = c.syms.map((s) => { const x = c.subj[s], st = x?.stage;
+      return `<span class="cx-chip" style="--tc:${cmpColor(s)}"><i></i><b>${esc(s)}</b>${st === "loading" ? `<span class="cx-spin"></span>` : st === "error" ? `<span class="pill neg">!</span>` : `<span class="muted small">${esc(trimC(x?.s?.name || "", 22))}</span>`}<button class="cx-x" data-cmp-del="${esc(s)}" aria-label="Remove ${esc(s)}">×</button></span>`; }).join("");
+    const empty = Array.from({ length: Math.max(0, CMP_MAX - c.syms.length) }, (_, i) => `<span class="cx-chip cx-empty">${i === 0 && c.syms.length < 2 ? "add a ticker" : "+"}</span>`).join("");
+    const quick = !c.syms.length ? `<div class="cx-quick small muted">Try: ${[["AAPL,MSFT", "AAPL vs MSFT"], ["XOM,CVX", "XOM vs CVX"], ["SPY,QQQ", "SPY vs QQQ"], ["KO,PEP,MDLZ", "KO, PEP, MDLZ"]].map(([v, l]) => `<button class="chip" data-cmp-quick="${v}">${l}</button>`).join(" ")}</div>` : "";
+    return `<section class="cx-bar"><div class="cx-bar-head"><div><span class="eyebrow">Compare</span><h2>Head to head, up to ${CMP_MAX} tickers</h2></div><span class="small muted">Stocks or funds · built on your industry reports and any analysis already written · one Claude call for the verdict</span></div>
+      <div class="cx-chips">${chips}${empty}</div>
+      ${c.syms.length < CMP_MAX ? `<form id="cmp-form" class="co-form"><input type="search" id="cmp-q" list="cmp-list" placeholder="Ticker(s), e.g. NVDA or NVDA, AMD" aria-label="Add a ticker" autocomplete="off" value="${esc(c.q || "")}"><button class="primary" type="submit">Add</button></form>
+      <datalist id="cmp-list">${funds.map((x) => `<option value="${esc(x.sym)}">${esc(x.name || "")} · fund</option>`).join("")}${cos.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")} · ${esc(x.industry || "")}</option>`).join("")}</datalist>` : ""}
+      ${c.note ? `<div class="small warn-t">${esc(c.note)}</div>` : ""}${quick}</section>`;
+  }
+  const cmpTick = (s, big = false) => `<span class="cx-tk${big ? " big" : ""}" style="--tc:${cmpColor(s)}">${esc(s)}</span>`;
+  const cmpRing = (score, color, sz = 54, label = "") => `<div class="grade-ring" style="--p:${isNum(score) ? Math.round(score) : 0};--sz:${sz}px;--c:${color}"><b>${label || (isNum(score) ? Math.round(score) : "—")}</b></div>`;
+  /** A radar of the dimension scores, one polygon per ticker. */
+  function cmpRadar(subs, sc) {
+    const keys = Compare.GROUP_KEYS.filter((g) => subs.filter((s) => isNum(sc[s.sym]?.groups?.[g]?.score)).length >= 2);
+    if (keys.length < 3) return "";
+    const W = 420, cx = 210, cy = 200, R = 150, ang = (i) => -Math.PI / 2 + (2 * Math.PI * i) / keys.length, pt = (i, v) => [cx + Math.cos(ang(i)) * R * v / 100, cy + Math.sin(ang(i)) * R * v / 100];
+    const rings = [25, 50, 75, 100].map((v) => `<polygon points="${keys.map((_, i) => pt(i, v).join(",")).join(" ")}" fill="none" stroke="var(--line)" stroke-width="1"/>`).join("");
+    const spokes = keys.map((g, i) => { const [x, y] = pt(i, 100), [lx, ly] = pt(i, 118); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/><text x="${lx}" y="${ly}" text-anchor="${Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end"}" dominant-baseline="middle" class="cx-rlab">${esc(Compare.GROUPS[g].label.replace(" & quality", "").replace(" (1M-12M)", "").replace("Risk-adjusted return", "Risk-adj. return").replace("Industry backdrop", "Backdrop"))}</text>`; }).join("");
+    const polys = subs.map((s) => { const c0 = cmpColor(s.sym), p = keys.map((g, i) => pt(i, sc[s.sym]?.groups?.[g]?.score ?? 0).join(",")).join(" ");
+      return `<polygon points="${p}" fill="${c0}" fill-opacity="0.13" stroke="${c0}" stroke-width="2" stroke-linejoin="round"><title>${esc(s.sym)}</title></polygon>`; }).join("");
+    return `<svg viewBox="-80 -14 ${W + 160} ${W + 4}" class="cx-radar" role="img" aria-label="Dimension scores">${rings}${spokes}${polys}</svg>`;
+  }
+  /** Volatility against return (1Y), bubble per ticker. */
+  function cmpScatter(subs) {
+    const pts = subs.map((s) => ({ s: s.sym, x: num(s.m.vol_1y), y: num(s.m.ret_1Y) })).filter((p) => isNum(p.x) && isNum(p.y)); if (pts.length < 2) return "";
+    const W = 420, H = 260, P = { l: 46, r: 16, t: 14, b: 34 }, xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+    let x0 = Math.min(...xs, 0.1) * 0.85, x1 = Math.max(...xs) * 1.15, y0 = Math.min(...ys, 0) - 0.05, y1 = Math.max(...ys, 0) + 0.05;
+    const X = (v) => P.l + ((v - x0) / (x1 - x0)) * (W - P.l - P.r), Y = (v) => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+    const grid = [0, 1, 2, 3, 4].map((k) => { const v = y0 + ((y1 - y0) * k) / 4; return `<line class="grid" x1="${P.l}" x2="${W - P.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${P.l - 6}" y="${Y(v) + 4}" text-anchor="end">${pct(v, true, 0)}</text>`; }).join("")
+      + [0, 1, 2, 3].map((k) => { const v = x0 + ((x1 - x0) * k) / 3; return `<text x="${X(v)}" y="${H - 14}" text-anchor="middle">${pct(v, false, 0)}</text>`; }).join("");
+    const zero = y0 < 0 && y1 > 0 ? `<line x1="${P.l}" x2="${W - P.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--faint)"/>` : "";
+    const dots = pts.map((p) => `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="9" fill="${cmpColor(p.s)}" fill-opacity="0.85" stroke="var(--surface)" stroke-width="2"/><text x="${X(p.x) + 13}" y="${Y(p.y) + 4}" class="cx-dlab">${esc(p.s)}</text>`).join("");
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Risk against return">${grid}${zero}${dots}<text x="${(W + P.l) / 2}" y="${H - 1}" text-anchor="middle">volatility, last year →</text></svg></div>`;
+  }
+  const cmpVal = (kind, v) => (!isNum(v) ? "—" : kind === "pct" ? pct(v, false, 1) : kind === "chg" ? pct(v) : kind === "x" ? fix(v, 2) + "×" : kind === "usd" ? cap(v) : fix(v, v % 1 ? 1 : 0));
+  const CMP_VERD = { buy: "pos2", accumulate: "pos", hold: "neu", trim: "warn", avoid: "neg" };
+
+  function cmpView() {
+    const c = S.cmp, list = c.syms.map((s) => c.subj[s]).filter(Boolean);
+    const loading = list.filter((x) => x.stage === "loading"), errs = c.syms.filter((s) => c.subj[s]?.stage === "error");
+    const errNote = errs.length ? `<div class="notice err"><span>${errs.map((s) => `<b>${esc(s)}</b>: ${esc(c.subj[s].err)}`).join("<br>")}</span></div>` : "";
+    const ld = loading.length ? `<div class="cx-loading">${c.syms.filter((s) => c.subj[s]?.stage === "loading").map((s) => `<div class="cx-lrow" style="--tc:${cmpColor(s)}"><span class="cx-spin"></span><b>${esc(s)}</b><span class="small muted">${esc(c.subj[s].step || "")}</span></div>`).join("")}</div>` : "";
+    const an = c.an && c.an.key === c.syms.filter((s) => c.subj[s]?.stage === "ready").join(",") ? c.an : null;
+    if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
+    const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
+    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>: one Claude call on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
+    const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
+    // The GitHub request for this set: queued, running (with a link to the run), or failed.
+    const J = cmpJob(syms), jRun = J && J.state !== "failed", jAge = J ? Math.round((Date.now() - Date.parse(J.started_at || J.requested_at || 0)) / 60000) : 0;
+    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `the run is reading ${subs.length} tickers and writing the verdict`} (${jAge} min so far; usually 5-10). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
+      : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
+    const canRun = !busy && !jRun && (S.sample || S.mcp);
+    const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
+    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "One Claude call on GitHub reads everything below, plus each name's written analysis and industry report, and writes the verdict: who wins overall, for each investor and each window." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
+    // Your saved goals (Portfolios tab), when there are any: that investor type is marked.
+    const userType = (() => { try { const g = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); return g?.primaryObjective ? EtfRec.UG.fromAnswers({ ...EtfRec.UG.DEFAULT, ...g })?.type || null : null; } catch { return null; } })();
+
+    // ---- verdict hero
+    const ov = v?.overall?.pick, codeBest = (() => { const avg = (s) => cmpMean(Compare.TYPES.map((t) => fit[t][s]?.total).filter(isNum)); return [...syms].sort((a, b) => (avg(b) || 0) - (avg(a) || 0))[0]; })();
+    const win = ov || codeBest, rank = v?.ranking?.length ? v.ranking : [...syms].sort((a, b) => (cmpMean(Compare.TYPES.map((t) => fit[t][b]?.total).filter(isNum)) || 0) - (cmpMean(Compare.TYPES.map((t) => fit[t][a]?.total).filter(isNum)) || 0));
+    const podium = rank.map((s, i) => `<div class="cx-pod${i === 0 ? " first" : ""}" style="--tc:${cmpColor(s)}"><span class="cx-place">${i + 1}</span>${cmpTick(s)}${v?.names?.[s]?.verdict ? `<span class="pill ${CMP_VERD[v.names[s].verdict]}">${esc(v.names[s].verdict)}</span>` : ""}</div>`).join("");
+    const checks = (V?.checks || []).length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${V.checks.map((x) => esc(x.text)).join("; ")}.</div>` : "";
+    const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.via === "github" ? ` on GitHub${V.run_url ? ` · <a href="${esc(V.run_url)}" target="_blank" rel="noopener">run</a>` : ""}` : ""}${V.secs ? ` in ${V.secs}s` : ""}` : "",
+      `${writing}${ghNote}${err}${noClaude}${v || busy || jRun ? `<div class="cx-runrow">${runBtn}<span class="small muted">${V ? `Last compared ${esc(ago(V.at))}.` : ""}</span></div>` : ""}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
+        <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}</div></div>
+        ${v?.headline ? `<p class="cx-headline">${esc(v.headline)}</p>` : busy ? `<div class="skel" style="width:80%;height:18px"></div>` : ""}
+        ${v?.overall?.why ? `<p class="prose">${esc(v.overall.why)}</p>` : ""}</div>
+        <div class="cx-podium">${podium}</div></div>
+      ${v?.bottom_line ? `<div class="coread"><span class="eyebrow">Bottom line</span><p>${esc(v.bottom_line)}</p></div>` : ""}${checks}`);
+
+    // ---- the line-up
+    const lineup = sec("cmp-lineup", "The line-up", "what each one is, and what the comparison reads for it", `<div class="cx-cards">${subs.map((s) => { const n0 = v?.names?.[s.sym] || {}, sv = s.saved;
+      return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym, true)}<div style="min-width:0"><div class="cx-name ellip">${esc(s.name)}</div><div class="small muted ellip">${esc(s.kind === "fund" ? "Fund · " + s.sub : s.sub || "Stock")}</div></div></div>
+        <div class="cx-px"><b class="mono">${isNum(s.px) ? fix(s.px, 2) : "—"}</b> <span class="${cls(s.chg)} small mono">${isNum(s.chg) ? pct(s.chg, true, 2) : ""}</span><span class="small muted" style="margin-left:auto">${s.kind === "fund" ? "assets" : "market cap"} ${cap(s.m.mcap)}</span></div>
+        ${n0.verdict || n0.role ? `<div class="small">${n0.verdict ? `<span class="pill ${CMP_VERD[n0.verdict]}">${esc(n0.verdict)}</span> ` : ""}${esc(n0.role || "")}</div>` : ""}
+        <div class="cx-src">${sv ? `<span class="cx-badge on">${s.kind === "fund" ? "Fund" : "Company"} analysis · ${sv.via === "github" ? "GitHub" : "here"} · ${esc(ago(sv.at))}</span>` : `<span class="cx-badge">No written analysis yet</span>`}
+          ${s.kind === "stock" ? (s.hasRun ? `<span class="cx-badge on">Industry report · ${esc(s.ind?.name || "")}${s.ind?.saved_at ? ` · ${esc(fmtShort(s.ind.saved_at))}` : ""}</span>` : `<span class="cx-badge">Industry not analyzed yet</span>`) : `<span class="cx-badge on">Look-through · ${pct(s.m.coverage, false, 0)} covered</span>`}
+          ${s.outlook ? `<span class="cx-badge">Calls: ${esc(s.outlook.source)}</span>` : ""}</div>
+        ${sv?.headline ? `<div class="small cx-quote">${esc(stripCites(sv.headline))}</div>` : ""}</div>`; }).join("")}</div>`);
+
+    // ---- by investor
+    const inv = sec("cmp-investors", "Which one, for which investor", "the verdict's pick, with code's fit score for each (0-100)", `<div class="cx-inv">${Compare.TYPES.map((t) => { const x = v?.investors?.[t], R = fit[t], pick = x?.pick || R.ranked[0];
+      return `<div class="cx-invc${userType === t ? " you" : ""}" style="--tc:${cmpColor(pick)}"><div class="cx-invh"><span class="eyebrow">${esc(Compare.TYPE_LABEL[t])}</span>${userType === t ? `<span class="pill pos">your goals</span>` : ""}</div>
+        <div class="cx-invpick">${cmpTick(pick, true)}${x?.runner_up ? `<span class="small muted">then ${esc(x.runner_up)}</span>` : ""}</div>
+        <div class="cx-bars">${syms.map((s) => { const f0 = R[s] || {}; return `<div class="cx-brow"><span class="tick">${esc(s)}</span><div class="cx-track"><i style="width:${isNum(f0.total) ? f0.total : 0}%;background:${cmpColor(s)}"></i></div><b class="mono">${isNum(f0.total) ? Math.round(f0.total) : "—"}</b>${f0.fit ? `<span class="cx-fit ${f0.fit}">${esc(f0.fit)}</span>` : ""}</div>`; }).join("")}</div>
+        ${x?.why ? `<p class="small">${esc(x.why)}</p>` : `<p class="small muted">${R[pick]?.lifts?.length ? `Code: carried by ${esc(R[pick].lifts.map((g) => Compare.GROUPS[g].label.toLowerCase()).join(", "))}.` : ""}</p>`}
+        ${x?.avoid ? `<p class="small muted"><b>Avoid:</b> ${esc(x.avoid)}</p>` : ""}</div>`; }).join("")}</div>
+      <div class="small muted">Fit = the dimensions weighed for that investor (65%; pulled toward 50 when fewer than 70% of its weights have data) blended with the page's own score for that investor (35%: the company against its industry, or the fund's look-through scorecard), nudged by a written analysis's fit (strong, good, weak, poor).</div>`);
+
+    // ---- dimensions
+    const dimRows = Compare.GROUP_KEYS.filter((g) => h2h.groups[g]).map((g) => { const G = h2h.groups[g], d = v?.dimensions?.find((x) => x.key === g), pick = d?.pick || G.leader;
+      return `<div class="cx-dim"><div class="cx-dimh"><span class="cx-ic">${Compare.GROUPS[g].icon}</span><b>${esc(Compare.GROUPS[g].label)}</b>${pick ? `<span style="margin-left:auto" class="small muted">edge</span>${cmpTick(pick)}` : `<span style="margin-left:auto" class="small muted">even</span>`}</div>
+        <div class="cx-bars">${G.vals.map((x) => `<div class="cx-brow"><span class="tick">${esc(x.sym)}</span><div class="cx-track"><i style="width:${isNum(x.score) ? x.score : 0}%;background:${cmpColor(x.sym)}"></i></div><b class="mono">${isNum(x.score) ? Math.round(x.score) : "—"}</b>${isNum(x.score) && x.from && x.from !== "numbers" ? `<span class="small muted cx-from">${esc(x.from)}</span>` : ""}</div>`).join("")}</div>
+        ${d?.why ? `<p class="small" style="margin:0">${esc(d.why)}</p>` : ""}</div>`; }).join("");
+    const dims = sec("cmp-dims", "Dimension by dimension", "code's 0-100 scores on fixed scales (the same scale for every ticker), with the verdict's read", `<div class="cx-dimtop"><div class="cx-radarw">${cmpRadar(subs, sc)}<div class="legend">${syms.map((s) => `<span><i style="background:${cmpColor(s)}"></i>${esc(s)}</span>`).join("")}</div></div>
+      <div class="cx-tally"><span class="eyebrow">Metrics won</span>${syms.map((s) => `<div class="cx-brow"><span class="tick">${esc(s)}</span><div class="cx-track"><i style="width:${h2h.rows.length ? (100 * h2h.tally[s]) / h2h.rows.length : 0}%;background:${cmpColor(s)}"></i></div><b class="mono">${h2h.tally[s]}</b></div>`).join("")}<div class="small muted">of ${h2h.rows.length} metrics two or more of them report</div></div></div>
+      <div class="cx-dims">${dimRows}</div>`);
+
+    // ---- performance
+    const per = c.period || "1Y", from = per === "YTD" ? today().slice(0, 4) + "-01-01" : Horizon.addDays(today(), -Math.round({ "6M": 0.5, "1Y": 1, "3Y": 3, "5Y": 5 }[per] * 365.25));
+    const rb = Compare.rebase(subs, from), lines = rb.filter((x) => x.dates.length > 5).map((x) => ({ name: x.sym, color: cmpColor(x.sym), dates: x.dates, values: x.values }));
+    const dd = lines.map((l) => ({ ...l, ...Compare.drawdown(l.dates, l.values), values: Compare.drawdown(l.dates, l.values).values.map((x) => x * 100) }));
+    const rr = ["ret_1M", "ret_3M", "ret_6M", "ret_1Y", "ret_3Y", "ret_5Y"], RL = { ret_1M: "1M", ret_3M: "3M", ret_6M: "6M", ret_1Y: "1Y", ret_3Y: "3Y a yr", ret_5Y: "5Y a yr" };
+    const best = (k, hi = true) => { const a = subs.map((s) => [s.sym, num(s.m[k])]).filter(([, x]) => isNum(x)); if (a.length < 2) return null; return a.sort((p, q) => (hi ? q[1] - p[1] : p[1] - q[1]))[0][0]; };
+    const yrs = Compare.years(subs);
+    const perf = sec("cmp-perf", "Performance", "rebased to 100 · dividend-adjusted", `<div class="seg" style="justify-self:start" role="group" aria-label="Period">${["6M", "YTD", "1Y", "3Y", "5Y"].map((p) => `<button data-cmp-period="${p}" aria-pressed="${per === p}">${p}</button>`).join("")}</div>
+      ${lines.length >= 2 ? `<div class="chart">${lineChart(lines, { height: 260, fmtY: (y) => fix(y, 0), baseLine: 100, width: 760 })}<div class="tip" hidden></div><div class="legend">${lines.map((l) => `<span><i style="background:${l.color}"></i>${esc(l.name)} ${pct(l.values[l.values.length - 1] / 100 - 1)}</span>`).join("")}</div></div>` : `<div class="small muted">Not enough shared history for this period.</div>`}
+      <div class="two"><div class="tbl-wrap"><table><thead><tr><th>Return</th>${syms.map((s) => `<th class="n">${cmpTick(s)}</th>`).join("")}</tr></thead><tbody>${rr.map((k) => { const b = best(k); return `<tr><td>${RL[k]}</td>${subs.map((s) => `<td class="n ${cls(num(s.m[k]))}${b === s.sym ? " cx-best" : ""}">${pct(num(s.m[k]))}</td>`).join("")}</tr>`; }).join("")}</tbody></table></div>
+      ${yrs.length ? `<div class="tbl-wrap"><table><thead><tr><th>Year</th>${syms.map((s) => `<th class="n">${cmpTick(s)}</th>`).join("")}</tr></thead><tbody>${yrs.map((y) => { const b = [...syms].sort((p, q) => y[q] - y[p])[0]; return `<tr><td>${y.year}${y.year === today().slice(0, 4) ? ` <span class="muted small">so far</span>` : ""}</td>${syms.map((s) => `<td class="n ${cls(y[s])}${b === s ? " cx-best" : ""}">${pct(y[s])}</td>`).join("")}</tr>`; }).join("")}</tbody></table></div>` : ""}</div>
+      ${dd.length >= 2 ? `<h3>Drawdown from the peak</h3><div class="chart">${lineChart(dd, { height: 170, fmtY: (y) => fix(y, 0) + "%", width: 760 })}<div class="tip" hidden></div></div>` : ""}`);
+
+    // ---- risk & diversification
+    const cm = corr?.n >= 60 ? `<div class="tbl-wrap"><table class="cx-corr"><thead><tr><th></th>${corr.syms.map((s) => `<th class="n">${cmpTick(s)}</th>`).join("")}</tr></thead><tbody>${corr.syms.map((a, i) => `<tr><td>${cmpTick(a)}</td>${corr.corr[i].map((x, j) => (i === j ? `<td class="n muted">—</td>` : `<td class="n" style="background:color-mix(in srgb, ${x >= 0 ? "var(--accent)" : "var(--neg)"} ${Math.round(Math.min(1, Math.abs(x)) * 55)}%, transparent)"><b>${fix(x, 2)}</b></td>`)).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="small muted">Correlation of daily returns over the last ${corr.n} shared trading days. An equal mix would have had ${pct(corr.mixVol, false, 1)} volatility against ${pct(corr.avgVol, false, 1)} for the average one alone${corr.avgVol > 0 ? ` (${pct(1 - corr.mixVol / corr.avgVol, false, 0)} less)` : ""}.</div>` : "";
+    const ovN = ovl.length ? `<div class="cx-ovl">${ovl.map((o) => `<div class="box small"><span>${o.kind === "funds" ? `${cmpTick(o.a)} and ${cmpTick(o.b)} share <b>${pct(o.shared, false, 1)}</b> of their holdings by weight (${o.n} names${o.top.length ? `, biggest ${esc(o.top.map((x) => x.ticker).join(", "))}` : ""})` : `${cmpTick(o.a)} is <b>${pct(o.shared, false, 2)}</b> of ${cmpTick(o.b)}${o.shared > 0 ? ": owning both doubles up on it" : " (not held)"}`}</span></div>`).join("")}</div>` : "";
+    const riskRows = ["vol_1y", "max_dd_1y", "beta", "down_capture", "sharpe_1y", "sortino_1y", "alpha_1y"].map((k) => Compare.MBY[k]);
+    const risk = sec("cmp-risk", "Risk & diversification", "last year, against the S&P 500", `<div class="two"><div>${cmpScatter(subs)}<div class="small muted">Up and to the left is better: more return for less volatility.</div></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Measure</th>${syms.map((s) => `<th class="n">${cmpTick(s)}</th>`).join("")}</tr></thead><tbody>${riskRows.map((d) => { const r = h2h.rows.find((x) => x.key === d.key); return `<tr><td>${esc(d.label)}</td>${subs.map((s) => `<td class="n${r?.leader === s.sym ? " cx-best" : ""}">${cmpVal(d.kind, num(s.m[d.key]))}</td>`).join("")}</tr>`; }).join("")}</tbody></table></div></div>
+      ${cm}${ovN}`);
+
+    // ---- every metric
+    const groupsH = Compare.GROUP_KEYS.map((g) => { const rows = h2h.rows.filter((r) => r.group === g); if (!rows.length) return "";
+      return `<tr class="cx-grp"><td colspan="${syms.length + 1}">${Compare.GROUPS[g].icon} ${esc(Compare.GROUPS[g].label)}</td></tr>${rows.map((r) => `<tr><td>${esc(r.label)}${r.up ? "" : ` <span class="muted small">lower is better</span>`}</td>${r.vals.map((x) => `<td class="n${r.leader === x.sym ? " cx-best" : ""}"><div class="cx-cell"><span>${cmpVal(r.kind, x.v)}</span>${isNum(x.s) ? `<i style="width:${Math.max(4, x.s)}%;background:${cmpColor(x.sym)}"></i>` : ""}</div></td>`).join("")}</tr>`).join("")}`; }).join("");
+    const metrics = sec("cmp-h2h", "Every metric, head to head", "the leader on each is highlighted; the bar is its 0-100 score on the fixed scale", `<div class="tbl-wrap"><table class="cx-h2h"><thead><tr><th>Metric</th>${syms.map((s) => `<th class="n">${cmpTick(s)}</th>`).join("")}</tr></thead><tbody>${groupsH}</tbody></table></div>`);
+
+    // ---- outlook
+    const outl = sec("cmp-outlook", "Where each is going", "1M-12M calls, and the verdict's pick for each window", `<div class="tbl-wrap"><table><thead><tr><th>Window</th>${syms.map((s) => `<th>${cmpTick(s)}</th>`).join("")}${v?.horizons && Object.keys(v.horizons).length ? "<th>Pick</th>" : ""}</tr></thead><tbody>${Outlook.HZ.map((h) => `<tr><td><b>${esc(Outlook.HZ_LABEL[h])}</b></td>${subs.map((s) => { const x = s.outlook?.calls?.[h]?.call; return `<td>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</td>`; }).join("")}${v?.horizons && Object.keys(v.horizons).length ? `<td class="wr small">${v.horizons[h] ? `${cmpTick(v.horizons[h].pick)} ${esc(v.horizons[h].why)}` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div>
+      <div class="small muted">${subs.map((s) => `${esc(s.sym)}: ${esc(s.outlook?.source || "no calls")}`).join(" · ")}</div>`);
+
+    // ---- the cases
+    const cases = sec("cmp-cases", "The case for each", "strengths, weaknesses, bull and bear", `<div class="cx-cases">${subs.map((s) => { const n0 = v?.names?.[s.sym], sv = s.saved;
+      const scen = sv?.scenarios?.length ? `<div class="cx-scen">${sv.scenarios.map((x) => `<div class="${x.k}"><span class="eyebrow">${esc(x.k)} ${x.probability ?? ""}%</span><b class="mono">${isNum(x.target) ? fix(x.target, 0) : "—"}</b><span class="small ${cls(x.move)}">${pct(x.move, true, 0)}</span></div>`).join("")}${isNum(sv.expected) ? `<div><span class="eyebrow">weighted</span><b class="mono ${cls(sv.expected)}">${pct(sv.expected, true, 1)}</b><span class="small muted">12 months</span></div>` : ""}</div>` : "";
+      return `<div class="cx-case" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym, true)}<div><div class="cx-name">${esc(s.name)}</div>${n0?.edge ? `<div class="small"><b>Edge:</b> ${esc(n0.edge)}</div>` : ""}</div></div>
+        ${scen}
+        ${n0 ? `<div class="two"><div><span class="eyebrow pos-t">Strengths</span><ul class="memo-pts">${n0.strengths.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div><div><span class="eyebrow neg-t">Weaknesses</span><ul class="memo-pts cx-neg">${n0.weaknesses.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>
+        <div class="two"><div class="memo-side bull"><span class="eyebrow">Bull</span><p class="small">${esc(n0.bull)}</p></div><div class="memo-side bear"><span class="eyebrow">Bear</span><p class="small">${esc(n0.bear)}</p></div></div>
+        ${n0.watch.length ? `<div class="small"><b>Watch:</b> ${n0.watch.map(esc).join(" · ")}</div>` : ""}${n0.changes_mind ? `<div class="small muted"><b>Changes the verdict:</b> ${esc(n0.changes_mind)}</div>` : ""}`
+        : `<div class="small muted">${busy ? "Being written…" : "Comes with the verdict."}</div>`}
+        ${sv?.verdict?.summary ? `<details class="memo-more"><summary>From its ${s.kind === "fund" ? "fund" : "company"} analysis</summary><p class="small">${esc(stripCites(sv.verdict.summary))}</p>${sv.risks.length ? `<p class="small"><b>Risks:</b> ${esc(sv.risks.slice(0, 4).map((x) => stripCites(x)).join(" · "))}</p>` : ""}</details>` : ""}</div>`; }).join("")}</div>`);
+
+    // ---- industry backdrop
+    const seenInd = {};
+    const indS = sec("cmp-industry", "Industry backdrop", "from your industry reports", `<div class="cx-cards">${subs.map((s) => { const I = s.ind || {}, dup = s.kind === "stock" && I.name && seenInd[I.name]; if (s.kind === "stock" && I.name && !dup) seenInd[I.name] = s.sym;
+      if (dup) return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name)}</b></div><div class="small muted">Same industry report as ${cmpTick(dup)}: the comparison between them comes down to the company numbers and written analyses.</div></div>`;
+      return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name || s.sub || "—")}</b></div>
+        ${I.outlook?.calls ? `<div class="cx-calls">${Outlook.HZ.map((h) => { const x = I.outlook.calls[h]?.call; return `<span><span class="eyebrow">${h}</span>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</span>`; }).join("")}</div>` : ""}
+        ${I.headline ? `<p class="small">${esc(trimC(stripCites(I.headline), 320))}</p>` : ""}
+        ${I.opportunity?.verdict ? `<div class="small"><span class="pill ${/yes|strong|attract/i.test(I.opportunity.verdict) ? "pos" : /no|avoid|unattract/i.test(I.opportunity.verdict) ? "neg" : "neu"}">opportunity: ${esc(I.opportunity.verdict)}</span> ${esc(trimC(stripCites(I.opportunity.headline || ""), 260))}</div>` : ""}
+        ${(I.mix || []).length ? `<div class="cx-mix">${I.mix.slice(0, 6).map((x) => `<div class="cx-brow"><span class="small ellip">${esc(x.industry)}</span><div class="cx-track"><i style="width:${Math.min(100, x.weight * 250)}%;background:${cmpColor(s.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span>${x.call ? `<span class="pill ${CALLC(x.call)}" style="font-size:10.5px">${esc(x.call)}</span>` : ""}</div>`).join("")}</div>` : ""}
+        ${I.risks?.length ? `<div class="small"><b>Risks:</b> ${esc(I.risks.slice(0, 2).map((x) => trimC(stripCites(x), 170)).join(" · "))}</div>` : ""}
+        ${I.catalysts?.length ? `<div class="small"><b>Catalysts:</b> ${esc(I.catalysts.slice(0, 2).map((x) => trimC(stripCites(x), 170)).join(" · "))}</div>` : ""}
+        ${!I.headline && !(I.mix || []).length ? `<div class="small muted">${s.kind === "stock" ? "Its industry hasn't been analyzed yet: the comparison uses its own numbers." : "None of its industries have been analyzed yet."}</div>` : ""}</div>`; }).join("")}</div>`);
+
+    // ---- owning them together
+    const mix = v?.together?.mix, mixItems = mix ? syms.filter((s) => mix[s] > 0).map((s) => ({ name: s, value: mix[s] })) : [];
+    const tog = v?.together?.pairing || mixItems.length || v?.risks?.length ? sec("cmp-together", "Owning them together", "", `<div class="two">${mixItems.length ? `<div class="box"><h3>A split for a balanced investor</h3><div class="cx-split">${mixItems.map((x) => `<i style="flex:${x.value};background:${cmpColor(x.name)}" title="${esc(x.name)} ${x.value}%"></i>`).join("")}</div><div class="legend">${mixItems.map((x) => `<span><i style="background:${cmpColor(x.name)}"></i>${esc(x.name)} ${x.value}%</span>`).join("")}</div>${v.together.pairing ? `<p class="small">${esc(v.together.pairing)}</p>` : ""}</div>` : v?.together?.pairing ? `<div class="box"><p class="small">${esc(v.together.pairing)}</p></div>` : ""}
+      ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
+
+    const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
+      { label: "Scores", items: [["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
+      { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
+      { label: "Analysis", items: [["cmp-cases", "The case for each"], ["cmp-industry", "Industry backdrop"], tog ? ["cmp-together", "Owning them together"] : null] }];
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
+      <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
+  }
+
   function renderTabs() {
     const el = $("tabs"); if (!el) return;
-    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["portfolios", "Portfolios"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
+    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["compare", "Compare"], ["portfolios", "Portfolios"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
     el.innerHTML = T.map(([k, l]) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}">${l}</button>`).join("");
-    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["pf", cur === "portfolios"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
+    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["cmp", cur === "compare"], ["pf", cur === "portfolios"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
   }
   function companySearch() {
     const ci = S.coIdx;
@@ -22171,6 +23024,10 @@ The calls are about this fund's total return (price plus income) against holding
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
+    if (t.dataset.cmpRun) { cmpRun(); return; }
+    if (t.dataset.cmpDel) { cmpDel(t.dataset.cmpDel); return; }
+    if (t.dataset.cmpQuick) { cmpAdd(t.dataset.cmpQuick); return; }
+    if (t.dataset.cmpPeriod) { if (S.cmp) { S.cmp.period = t.dataset.cmpPeriod; renderCompare(); } return; }
     if (t.dataset.tab) { S.tab = t.dataset.tab; renderAll(); if (S.tab === "companies" && !S.coIdx) coIndex().then(() => renderCompany()).catch(() => {}); return; }
     if (t.dataset.fund) { openFund(t.dataset.fund); return; }
     if (t.dataset.fundRefresh) { openFund(t.dataset.fundRefresh, { refresh: true }); return; }

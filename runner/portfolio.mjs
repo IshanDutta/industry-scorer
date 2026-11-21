@@ -13,6 +13,9 @@
 //   or, for one company's or one fund's analysis (the Companies and Funds tabs): { id, kind: "company" | "fund", symbol }.
 //   Those open the company (or fund) in the page the same way and write its analysis and 1M-12M calls; out/portfolio.json.gz
 //   is then { kind, sym, at, rec } with rec what the page saves for it (co:<SYM> or fundFull:<SYM>).
+//   Or, for the Compare tab: { id, kind: "compare", symbols: [2-4 tickers] }. The page reads each ticker the way the tab
+//   does, with any company or fund analysis already saved in the exports branch (portfolios/co-<SYM>.json.gz,
+//   fd-<SYM>.json.gz), and writes the verdict; rec is the verdict record the tab keeps (cmp:<SYMS>).
 // Environment: ANTHROPIC_API_KEY, FMP_MCP_URL, EODHD_MCP_URL (optional), *_MCP_HEADERS (optional),
 //   CLAUDE_MODEL_COMPLEX (default claude-opus-5-5), CLAUDE_MODEL_DEFAULT (claude-sonnet-5-5), CLAUDE_MODE (direct by
 //   default here: a handful of calls, wanted quickly), CLAUDE_BUDGET_USD (default 15), JOB_FMP_GAP_MS.
@@ -45,6 +48,9 @@ export function cleanRequest(r) {
     maxVol: pick("maxVol", (x) => x === "" || (Number(x) > 0 && Number(x) < 60)), minN: pick("minN", (x) => Number(x) >= 7 && Number(x) <= 15), maxN: pick("maxN", (x) => Number(x) >= 7 && Number(x) <= 15),
     maxCost: pick("maxCost", (x) => Number(x) > 0 && Number(x) <= 2), intl: pick("intl", (x) => typeof x === "boolean"), bonds: pick("bonds", (x) => typeof x === "boolean"),
     exclude: pick("exclude", (x) => typeof x === "string" && x.length < 300), amount: pick("amount", (x) => Number(x) > 0) }).filter(([, v]) => v !== undefined));
+  if (r.kind === "compare") { const symbols = [...new Set((Array.isArray(r.symbols) ? r.symbols : []).map((x) => String(x || "").toUpperCase()))].filter((x) => /^[A-Z0-9.\-]{1,12}$/.test(x)).slice(0, 4);
+    if (symbols.length < 2) throw new Error("a comparison needs two to four valid tickers");
+    return { id, kind: "compare", symbols, symbol: symbols.join(","), name: symbols.join(" vs "), holdings: [], goal: {} }; }
   if (r.kind === "company" || r.kind === "fund") { const symbol = String(r.symbol || "").toUpperCase();
     if (!/^[A-Z0-9.\-]{1,12}$/.test(symbol)) throw new Error("the request has no valid symbol");
     return { id, kind: r.kind, symbol, name: symbol, holdings: [], goal: {} }; }
@@ -57,7 +63,8 @@ async function main() {
   const outDir = resolve(args.out || "out"); mkdirSync(outDir, { recursive: true });
   const deadline = Date.now() + Number(args["deadline-min"] || 60) * 60000;
   const one = req.kind !== "portfolio";
-  log(one ? `${req.kind === "company" ? "Company" : "Fund"} ${req.symbol} (${req.id})` : `Portfolio "${req.name}" (${req.id}): ${req.holdings.length} holdings, goal ${req.goal.type || "growth"} ${req.goal.horizon || "12M"}`);
+  const label = req.kind === "compare" ? "Compare" : req.kind === "company" ? "Company" : "Fund";
+  log(one ? `${label} ${req.symbol} (${req.id})` : `Portfolio "${req.name}" (${req.id}): ${req.holdings.length} holdings, goal ${req.goal.type || "growth"} ${req.goal.horizon || "12M"}`);
 
   const mcp = new McpBridge({ FMP: { url: need("FMP_MCP_URL"), headers: json(env.FMP_MCP_HEADERS) }, ...(env.EODHD_MCP_URL ? { EODHD: { url: env.EODHD_MCP_URL, headers: json(env.EODHD_MCP_HEADERS) } } : {}) }, { log });
   await mcp.connectAll();
@@ -100,6 +107,14 @@ async function main() {
   log(`${industries} industry runs loaded from ${files.length} sectors`);
   if (industries < 8) { console.error("Too few industry runs in the exports branch to build a target distribution."); process.exit(1); }
 
+  // A comparison reads the analyses already written for its tickers (saved in the exports branch by earlier runs).
+  if (req.kind === "compare") {
+    const pdir = join(resolve(args.exports || "exports"), "portfolios"); req.saved = {};
+    for (const sym of req.symbols) { const tag = sym.replace(/[^A-Z0-9]/g, "_");
+      for (const [pre, kind] of [["co-", "company"], ["fd-", "fund"]]) { const f = join(pdir, `${pre}${tag}.json.gz`); if (!existsSync(f)) continue;
+        try { const j = readMaybeGz(f), rec = j?.rec; if (!rec || String(j.sym || "").toUpperCase() !== sym) continue;
+          req.saved[(kind === "company" ? "co:" : rec.bond ? "bondFull:" : "fundFull:") + sym] = rec; log(`${sym}: its ${kind} analysis from ${String(j.at || rec.at || "").slice(0, 10)}`); } catch (e) { log(`${f}: unreadable (${e.message})`); } } }
+  }
   await page.evaluate((r) => (r.kind === "portfolio" ? window.__industryScorer.portfolio(r) : window.__industryScorer.analyzeOne(r)), req);
   let last = "";
   for (;;) {
@@ -113,7 +128,7 @@ async function main() {
   if (!res) { console.error("No result came back."); process.exit(1); }
   res.job = { id: req.id, cost_usd: Math.round(sampler.usage.usd * 100) / 100, requests: sampler.usage.requests, mcp_calls: mcp.calls, minutes: Math.round((Date.now() - t0) / 60000), run: env.GITHUB_RUN_ID || null, industries };
   writeFileSync(join(outDir, "portfolio.json.gz"), gzipSync(Buffer.from(JSON.stringify(res)), { level: 9 }));
-  if (one) { summary(`### ${req.kind === "company" ? "Company" : "Fund"} ${req.symbol}: analysis written${res.warn ? ` (with a gap: ${res.warn})` : ""}\n\n- Claude $${res.job.cost_usd} (${res.job.requests} requests) · ${res.job.minutes} min`);
+  if (one) { summary(`### ${label} ${req.symbol}: ${req.kind === "compare" ? `verdict written (${res.rec?.v?.overall?.pick || "?"} overall)` : "analysis written"}${res.warn ? ` (with a gap: ${res.warn})` : ""}\n\n- Claude $${res.job.cost_usd} (${res.job.requests} requests) · ${res.job.minutes} min`);
     log(`Done: ${req.symbol}, Claude $${res.job.cost_usd}, ${res.job.minutes} min`); await browser.close(); await mcp.close(); process.exit(0); }
   const g = res.grades || {};
   summary([`### Portfolio ${req.name}: graded ${g.current?.letter || "—"}${g.current ? ` (${Math.round(g.current.score)}/100)` : ""}`, "",
