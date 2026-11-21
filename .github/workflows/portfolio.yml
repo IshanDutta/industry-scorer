@@ -6,6 +6,8 @@
 #   2. runs the page's portfolio analysis: the report card for today's holdings, the target industry distribution,
 #      the best companies, every ETF holding them, the ETF mixes, stress tests and the strategists' write-up,
 #   3. saves the result to the exports branch as portfolios/<id>.json.gz.
+# The same workflow writes one company's or fund's analysis (request kind "company" or "fund") and the Compare tab's
+# verdict for two to four tickers (kind "compare", id cmp-<SYMS>).
 # Claude: Opus for the write-up, standard price (a handful of calls, wanted quickly); about $1-3 a run.
 name: Portfolio analysis
 run-name: "Portfolio analysis ${{ inputs.id }}"
@@ -61,6 +63,8 @@ jobs:
           mkdir -p exports
           git fetch -q origin exports
           git archive FETCH_HEAD runs | tar -x -C exports
+          # The company and fund analyses already written (a comparison reads them); none yet is fine.
+          git archive FETCH_HEAD portfolios 2>/dev/null | tar -x -C exports 2>/dev/null || true
           ls exports/runs | head -40
       - name: Analyze the portfolio
         working-directory: runner

@@ -862,6 +862,10 @@ td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-we
 .cx-calls .pill { font-size: 10.5px; padding: 1px 6px; white-space: normal; }
 .cx-mix { display: grid; gap: 4px; }
 .cx-mix .cx-brow { grid-template-columns: minmax(0, 1.4fr) minmax(40px, 1fr) 44px auto; }
+.cx-cta { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; justify-content: space-between; padding: 16px 18px; border-radius: 14px; border: 1px dashed color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--sunk)); }
+.cx-cta > div { flex: 1 1 320px; display: grid; gap: 4px; }
+.cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
 .cx-split { display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px; margin: 6px 0; }
 .cx-split i { display: block; height: 100%; }
 
@@ -16492,6 +16496,18 @@ Return ONLY a JSON object:
           J.label = "writing the analysis and the calls"; fd.full = null; await fundWrite(fd, { force: true });
           const rec = await idbGet("fundFull:" + sym).catch(() => null); if (!rec?.parts) throw new Error(fd.fullErr || "no analysis came back");
           J.result = jsonSafe({ kind, sym, at: new Date().toISOString(), rec, warn: fd.fullErr || fd.leanErr || null }); }
+        else if (kind === "compare") {
+          // The Compare tab's verdict: read each ticker the way the tab does (with the analyses already written, which the
+          // runner passes in from the exports branch), then the one Claude call. The result is what the tab keeps.
+          const syms = [...new Set((Array.isArray(input?.symbols) ? input.symbols : []).map((x) => String(x || "").toUpperCase()).filter((x) => /^[A-Z0-9.\-]{1,12}$/.test(x)))].slice(0, CMP_MAX);
+          if (syms.length < 2) throw new Error("a comparison needs two to four tickers");
+          for (const [k, r] of Object.entries(input?.saved || {})) if (/^(co|fundFull|bondFull):[A-Z0-9.\-]{1,12}$/.test(k) && r && typeof r === "object") await idbPut(k, jsonSafe({ ...r, via: "github" })).catch(() => {});
+          S.cmp = { syms, subj: {}, vCache: {}, period: "1Y", q: "", note: "" };
+          J.label = "reading " + syms.join(", "); await Promise.all(syms.map((x) => cmpLoad(x))); await cmpRefresh();
+          const bad = syms.filter((x) => S.cmp.subj[x]?.stage !== "ready"); if (bad.length) throw new Error(bad.map((x) => `${x}: ${S.cmp.subj[x]?.err || "couldn't be read"}`).join("; "));
+          J.label = "writing the verdict"; await cmpVerdict();
+          const rec = S.cmp.vCache[cmpKey(syms)]; if (!rec?.v) throw new Error(S.cmp.err || "no verdict came back");
+          J.result = jsonSafe({ kind, sym: cmpSorted(syms).join(","), at: rec.at, rec, warn: null }); }
         else throw new Error("unknown kind " + kind);
       } catch (e) { J.error = e?.message || String(e); } finally { J.busy = false; } })(); return true; },
     oneStatus: () => ({ busy: !!S.oneJob?.busy, label: S.oneJob?.label || "", error: S.oneJob?.error || null, done: !!S.oneJob?.result }),
@@ -21040,7 +21056,7 @@ Return ONLY a JSON object:
       for (const [id, x] of Object.entries(S.ghJobs || {})) { if (x?.state !== "running") continue; const st = Date.parse(x.started_at || x.requested_at || 0);
         if (!(now - st > 12 * 60000) || now - st > 3 * 3600000) continue; const last = (S.ghAutoAt ||= {})[id] || 0; if (now - last < 10 * 60000) continue; S.ghAutoAt[id] = now;
         S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
-      if (S.co?.ghRun) renderCompany(); if (S.fund?.ghRun) renderFund(); }, 60000);
+      if (S.co?.ghRun) renderCompany(); if (S.fund?.ghRun) renderFund(); if (S.tab === "compare" && S.cmp?.an && cmpJob(S.cmp.an.subs.map((x) => x.sym))) renderCompare(); }, 60000);
   }
   async function ghFetchNow(kind, sym) { const id = ghId(kind, sym); if (!S.mcp || !PF_TRIGGER) return; (S.ghAutoAt ||= {})[id] = Date.now();
     await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "FETCH " + id }, { cache: false }).catch(() => {}); }
@@ -21478,7 +21494,7 @@ Return ONLY a JSON object:
       if (!x.s.ser?.dates?.length) throw new Error(`no price history for ${sym}`);
       x.stage = "ready";
     } catch (e) { x.stage = "error"; x.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
-    renderCompare(); cmpVerdict();
+    renderCompare(); cmpRefresh();
   }
   async function cmpAdd(q) {
     const c = S.cmp, raw = String(q || "").trim(); if (!raw) return;
@@ -21486,26 +21502,73 @@ Return ONLY a JSON object:
     for (const sym of syms) { if (c.syms.includes(sym)) continue; if (c.syms.length >= CMP_MAX) { c.note = `Up to ${CMP_MAX} tickers at a time: remove one to add ${sym}.`; break; } c.syms.push(sym); }
     c.q = ""; idbPut("cmpSyms", c.syms).catch(() => {}); renderCompare();
     for (const s of c.syms) cmpLoad(s);
-    cmpVerdict();
+    cmpRefresh();
   }
-  function cmpDel(sym) { const c = S.cmp; c.syms = c.syms.filter((s) => s !== sym); c.note = ""; idbPut("cmpSyms", c.syms).catch(() => {}); renderCompare(); cmpVerdict(); }
+  function cmpDel(sym) { const c = S.cmp; c.syms = c.syms.filter((s) => s !== sym); c.note = ""; idbPut("cmpSyms", c.syms).catch(() => {}); renderCompare(); cmpRefresh(); }
   /** Code's whole comparison for the tickers that are in (no Claude). */
   function cmpAnalysis(subs) {
     const sc = Compare.scoreAll(subs), fit = Compare.fits(subs, sc), h2h = Compare.headToHead(subs, sc);
     let corr = null; try { corr = Compare.correlation(subs); } catch {}
     return { subs, sc, fit, h2h, corr, ovl: Compare.overlap(subs), key: subs.map((s) => s.sym).join(",") };
   }
-  /** The verdict: kept per set of tickers for the day; made again by itself only when what it rests on changed. One Claude call. */
-  async function cmpVerdict() {
+  // The verdict is made when you press Compare: on GitHub (the same request document, Claude task and workflow as a
+  // company's or fund's analysis, request kind "compare"), or here when GitHub can't be used. The result is kept per set
+  // of tickers (IDB "cmp:<SYMS>") and shown whenever that set is on screen.
+  const cmpSorted = (syms) => [...syms].sort();
+  const cmpKey = (syms) => "cmp:" + cmpSorted(syms).join(",");
+  const cmpGhId = (syms) => "cmp-" + cmpSorted(syms).map((s) => s.toUpperCase().replace(/[^A-Z0-9]/g, "_")).join("-").slice(0, 60);
+  const cmpJob = (syms) => { const x = S.ghJobs?.[cmpGhId(syms)]; if (!x) return null; const age = Date.now() - Date.parse(x.started_at || x.requested_at || 0);
+    return (x.state === "queued" && age < 15 * 60000) || (x.state === "running" && age < 3 * 3600000) ? x : x.state === "failed" ? x : null; };
+  /** Code's comparison for the tickers on screen, the verdict kept for them, and a watch on their GitHub request. No Claude. */
+  async function cmpRefresh() {
     const c = S.cmp; if (!c) return;
     const ready = c.syms.map((s) => c.subj[s]).filter((x) => x?.stage === "ready").map((x) => x.s);
     if (ready.length < 2 || c.syms.some((s) => c.subj[s]?.stage === "loading")) { renderCompare(); return; }
-    const an = cmpAnalysis(ready), syms = ready.map((s) => s.sym), key = "cmp:" + [...syms].sort().join(","), fp = Compare.fingerprint([...ready].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
-    c.an = an; c.vKey = key;
-    const have = c.vCache[key] || (await idbGet(key).catch(() => null));
-    if (have) c.vCache[key] = have;
-    if (have?.fp === fp || c.busy === key) { renderCompare(); return; }
-    if (!S.sample) { renderCompare(); return; }
+    const syms = ready.map((s) => s.sym), key = cmpKey(syms);
+    c.an = cmpAnalysis(ready); c.vKey = key;
+    if (!c.vCache[key]) { const have = await idbGet(key).catch(() => null); if (have?.v) c.vCache[key] = have; }
+    renderCompare();
+    if (!JOB) cmpWatch(syms);
+  }
+  /** Watch this set's GitHub request; when it's done and newer than the verdict here, take it in. */
+  async function cmpWatch(syms) {
+    const id = cmpGhId(syms); if ((S.ghWatched ||= {})[id] || !(await ghCan())) return; S.ghWatched[id] = true;
+    const db = await outlookDb(); ghTimer();
+    try { db.doc("pfjobs/" + id).onSnapshot(async (d) => { const x = d.exists ? d.data() : null; (S.ghJobs ||= {})[id] = x;
+      if (x?.state === "done" && x.path && (S.ghApplied ||= {})[id] !== x.path + "@" + x.done_at) await cmpApply(syms, x);
+      if (S.tab === "compare") renderCompare(); }, () => {}); } catch {}
+  }
+  async function cmpApply(syms, x) {
+    const id = cmpGhId(syms), key = cmpKey(syms), c = S.cmp; (S.ghApplied ||= {})[id] = x.path + "@" + x.done_at;
+    try { const res = await jobRead(x, id), rec = res?.rec;
+      if (res?.kind !== "compare" || !rec?.v || cmpSorted(rec.syms || []).join(",") !== cmpSorted(syms).join(",")) throw new Error("the result is for something else");
+      const have = c?.vCache[key] || (await idbGet(key).catch(() => null)); if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer
+      rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
+      if (c) { c.vCache[key] = rec; if (c.vKey === key) c.err = null; }
+    } catch (e) { if (c && c.vKey === key) c.err = "GitHub's result couldn't be read: " + (e?.message || e); }
+  }
+  /** The Compare button: start the comparison on GitHub, or write it here when GitHub can't be used. */
+  async function cmpRun() {
+    const c = S.cmp; if (!c?.an || c.busy) return;
+    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null;
+    if (await ghCan()) {
+      const db = await outlookDb(), at = new Date().toISOString();
+      const req = { id, kind: "compare", symbols: syms, requested_at: at, holdings: [] };
+      const doc = { state: "queued", kind: "compare", symbol: syms.join(","), request: JSON.stringify(req), requested_at: at, started_at: null, done_at: null, result: null, path: null, run_url: null };
+      (S.ghJobs ||= {})[id] = doc; renderCompare();
+      try { await db.doc("pfjobs/" + id).set(doc); cmpWatch(syms);
+        await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "ANALYZE " + id }, { cache: false }); renderCompare(); return; }
+      catch (e) { const code = e?.code, why = code === "not_granted" || code === "declined" ? "this page isn't allowed to use Claude Code Remote" : e?.message || code || String(e);
+        S.ghJobs[id] = { ...doc, state: "failed", result: `couldn't start it on GitHub (${why})`, done_at: new Date().toISOString() }; await db.doc("pfjobs/" + id).set(S.ghJobs[id]).catch(() => {}); }
+    }
+    if (S.sample) return cmpVerdict();
+    c.err = "Open this page in Claude to run the comparison."; renderCompare();
+  }
+  /** The verdict written here: one Claude call (the Compare button without GitHub, and the GitHub job itself). */
+  async function cmpVerdict() {
+    const c = S.cmp; if (!c?.an || !S.sample) return;
+    const an = c.an, ready = an.subs, syms = ready.map((s) => s.sym), key = cmpKey(syms), fp = Compare.fingerprint([...ready].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
+    if (c.busy === key) return;
     c.ctl?.abort(); const ctl = new AbortController(); c.ctl = ctl; c.busy = key; c.err = null; c.partial = null; c.start = Date.now(); renderCompare();
     try {
       const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
@@ -21579,11 +21642,17 @@ Return ONLY a JSON object:
     const errNote = errs.length ? `<div class="notice err"><span>${errs.map((s) => `<b>${esc(s)}</b>: ${esc(c.subj[s].err)}`).join("<br>")}</span></div>` : "";
     const ld = loading.length ? `<div class="cx-loading">${c.syms.filter((s) => c.subj[s]?.stage === "loading").map((s) => `<div class="cx-lrow" style="--tc:${cmpColor(s)}"><span class="cx-spin"></span><b>${esc(s)}</b><span class="small muted">${esc(c.subj[s].step || "")}</span></div>`).join("")}</div>` : "";
     const an = c.an && c.an.key === c.syms.filter((s) => c.subj[s]?.stage === "ready").join(",") ? c.an : null;
-    if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then one Claude call writes the verdict.</p></div></div>` : "");
+    if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
     const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>: one Claude call on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
-    const noClaude = !v && !busy && !S.sample ? `<div class="notice info"><span>Open this page in Claude to have the verdict written; code's comparison is below.</span></div>` : "";
+    // The GitHub request for this set: queued, running (with a link to the run), or failed.
+    const J = cmpJob(syms), jRun = J && J.state !== "failed", jAge = J ? Math.round((Date.now() - Date.parse(J.started_at || J.requested_at || 0)) / 60000) : 0;
+    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `the run is reading ${subs.length} tickers and writing the verdict`} (${jAge} min so far; usually 5-10). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
+      : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
+    const canRun = !busy && !jRun && (S.sample || S.mcp);
+    const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
+    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "One Claude call on GitHub reads everything below, plus each name's written analysis and industry report, and writes the verdict: who wins overall, for each investor and each window." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
     // Your saved goals (Portfolios tab), when there are any: that investor type is marked.
     const userType = (() => { try { const g = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); return g?.primaryObjective ? EtfRec.UG.fromAnswers({ ...EtfRec.UG.DEFAULT, ...g })?.type || null : null; } catch { return null; } })();
 
@@ -21592,8 +21661,8 @@ Return ONLY a JSON object:
     const win = ov || codeBest, rank = v?.ranking?.length ? v.ranking : [...syms].sort((a, b) => (cmpMean(Compare.TYPES.map((t) => fit[t][b]?.total).filter(isNum)) || 0) - (cmpMean(Compare.TYPES.map((t) => fit[t][a]?.total).filter(isNum)) || 0));
     const podium = rank.map((s, i) => `<div class="cx-pod${i === 0 ? " first" : ""}" style="--tc:${cmpColor(s)}"><span class="cx-place">${i + 1}</span>${cmpTick(s)}${v?.names?.[s]?.verdict ? `<span class="pill ${CMP_VERD[v.names[s].verdict]}">${esc(v.names[s].verdict)}</span>` : ""}</div>`).join("");
     const checks = (V?.checks || []).length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${V.checks.map((x) => esc(x.text)).join("; ")}.</div>` : "";
-    const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.secs ? ` in ${V.secs}s` : ""} · kept for the day, made again by itself when an analysis or report changes` : "",
-      `${writing}${err}${noClaude}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
+    const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.via === "github" ? ` on GitHub${V.run_url ? ` · <a href="${esc(V.run_url)}" target="_blank" rel="noopener">run</a>` : ""}` : ""}${V.secs ? ` in ${V.secs}s` : ""}` : "",
+      `${writing}${ghNote}${err}${noClaude}${v || busy || jRun ? `<div class="cx-runrow">${runBtn}<span class="small muted">${V ? `Last compared ${esc(ago(V.at))}.` : ""}</span></div>` : ""}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
         <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}</div></div>
         ${v?.headline ? `<p class="cx-headline">${esc(v.headline)}</p>` : busy ? `<div class="skel" style="width:80%;height:18px"></div>` : ""}
         ${v?.overall?.why ? `<p class="prose">${esc(v.overall.why)}</p>` : ""}</div>
@@ -22953,6 +23022,7 @@ Return ONLY a JSON object:
     if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
+    if (t.dataset.cmpRun) { cmpRun(); return; }
     if (t.dataset.cmpDel) { cmpDel(t.dataset.cmpDel); return; }
     if (t.dataset.cmpQuick) { cmpAdd(t.dataset.cmpQuick); return; }
     if (t.dataset.cmpPeriod) { if (S.cmp) { S.cmp.period = t.dataset.cmpPeriod; renderCompare(); } return; }
