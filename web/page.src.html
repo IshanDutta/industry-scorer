@@ -8596,6 +8596,8 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   async function cmpApply(syms, x) {
     const id = cmpGhId(syms), key = cmpKey(syms), c = S.cmp; (S.ghApplied ||= {})[id] = x.path + "@" + x.done_at;
     try { const res = await jobRead(x, id), rec = res?.rec;
+      // A result without a verdict came from a workflow that doesn't know comparisons (main before the Compare tab was merged): it ran a portfolio analysis instead.
+      if (res?.kind !== "compare" && (res?.sleeves || res?.sels)) throw new Error("GitHub ran an older version of the workflow that doesn't do comparisons yet, so it wrote a portfolio analysis instead. Merge the Compare pull request into main, then press Compare again");
       if (res?.kind !== "compare" || !rec?.v || cmpSorted(rec.syms || []).join(",") !== cmpSorted(syms).join(",")) throw new Error("the result is for something else");
       const have = c?.vCache[key] || (await idbGet(key).catch(() => null)); if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer
       rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
