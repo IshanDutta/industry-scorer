@@ -278,6 +278,7 @@ Rules:
 - Compare like with like: a fund against a stock is a choice between owning a basket and owning one company; say what that trade means (diversification, concentration, cost).
 - You may depart from code's scores and rankings, but when you do, say why in that field.
 - Investor types: income (dependable cash income, capital preservation second), conservative (low drawdowns, steady compounding), growth (above-market growth over 1-3 years, accepts swings), aggressive (maximum upside, accepts big drawdowns).
+- "Overall" means the best single choice for a balanced investor who weighs all four types equally. It must be consistent with your investor picks: the overall pick must also be your pick for at least one investor type, and normally the one that wins the most types or is first or second for all of them. If the name you'd call best overall wins none of the four, either it should win one of them (change that pick and say why) or it isn't the best overall. "ranking" starts with the overall pick.
 - Plain English, no hedging boilerplate, no invented facts: use only what is in the dossier.
 
 ${text}
@@ -433,6 +434,7 @@ Return ONLY a JSON object:
     o.ranking = [...new Set((Array.isArray(raw.ranking) ? raw.ranking : []).map(pick).filter(Boolean))]; for (const s of syms) if (!o.ranking.includes(s)) o.ranking.push(s);
     if (!o.overall.pick) o.overall.pick = o.ranking[0];
     o.investors = {}; for (const t of TYPES) { const x = raw.investors?.[t]; if (x && pick(x.pick)) o.investors[t] = { pick: pick(x.pick), runner_up: pick(x.runner_up), why: str(x.why, 900), avoid: str(x.avoid, 400) }; }
+    reconcile(o, syms);
     o.horizons = {}; for (const h of HZ) { const x = raw.horizons?.[h]; if (x && pick(x.pick)) o.horizons[h] = { pick: pick(x.pick), why: str(x.why, 500) }; }
     o.dimensions = (Array.isArray(raw.dimensions) ? raw.dimensions : []).filter((d) => (GROUPS[d?.key] || d?.key === "events" || d?.key === "macro") && pick(d.pick)).map((d) => ({ key: d.key, pick: pick(d.pick), why: str(d.why, 600) }));
     o.names = {};
@@ -445,10 +447,27 @@ Return ONLY a JSON object:
     return o.headline || o.overall.why ? o : null;
   }
 
+  /**
+   * The overall pick has to win something: a name picked for no investor type can't be the best overall. If the answer
+   * does that anyway, code moves "overall" to the name that wins the most types (ties: the answer's own ranking) and says
+   * so. Also used on verdicts saved before this check existed. Mutates and returns v.
+   */
+  function reconcile(o, syms) {
+    if (!o?.overall) return o;
+    const wins = Object.fromEntries(syms.map((k) => [k, TYPES.filter((t) => o.investors?.[t]?.pick === k)]));
+    o.ranking = (o.ranking || []).filter((k) => syms.includes(k)); for (const k of syms) if (!o.ranking.includes(k)) o.ranking.push(k);
+    if (Object.keys(o.investors || {}).length && !o.overall.adjusted && !(wins[o.overall.pick] || []).length) {
+      const was = o.overall.pick, best = [...syms].sort((a, b) => wins[b].length - wins[a].length || o.ranking.indexOf(a) - o.ranking.indexOf(b))[0];
+      o.overall = { ...o.overall, pick: best, adjusted: `The verdict named ${was} best overall without picking it for any investor type, so the overall pick is ${best}, which wins ${wins[best].length} of 4 (${wins[best].map((t) => TYPE_LABEL[t]).join(", ")}). The reasoning below is the verdict's case for ${was}.` };
+    }
+    if (o.ranking[0] !== o.overall.pick) o.ranking = [o.overall.pick, ...o.ranking.filter((k) => k !== o.overall.pick)];
+    o.wins = wins; return o;
+  }
   /** Where the verdict and code disagree by a wide margin: shown next to the verdict, not hidden. */
   function checks(v, h2h, fit) {
     const out = [];
     if (!v) return out;
+    if (v.overall?.adjusted) out.push({ where: "overall", text: v.overall.adjusted });
     for (const d of v.dimensions) { const g = h2h.groups[d.key]; if (!g?.leader || g.leader === d.pick || g.margin < 15) continue;
       const a = g.vals.find((x) => x.sym === g.leader)?.score, b = g.vals.find((x) => x.sym === d.pick)?.score;
       out.push({ where: d.key, text: `${GROUPS[d.key].label}: the verdict picks ${d.pick}, but code's numbers favor ${g.leader} (${Math.round(a)} vs ${Math.round(b)})` }); }
@@ -462,6 +481,6 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

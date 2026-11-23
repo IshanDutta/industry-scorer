@@ -72,4 +72,10 @@ assert(dm.pick === "AAA" && dm.events.length === 1 && dm.events[0].impact.BBB ==
 const ds = C.cleanDesk("street", { names: { AAA: { crowding: "huge", signal: "positive" } } }, ["AAA", "BBB"]); assert(ds.names.AAA.crowding === null && ds.names.AAA.signal === "positive" && ds.names.BBB);
 assert(/MACRO & EVENTS DESK/.test(C.desksText({ macro: dm, street: ds }, ["AAA", "BBB", "FFF"].slice(0, 2).concat(["FFF"]))) );
 assert(/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23", "DESKS")) && !/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23")));
+// Overall must win at least one investor type.
+const vx = C.clean({ headline: "h", overall: { pick: "BBB", why: "w" }, ranking: ["BBB", "AAA", "FFF"], investors: { income: { pick: "AAA" }, conservative: { pick: "AAA" }, growth: { pick: "FFF" }, aggressive: { pick: "FFF" } } }, ["AAA", "BBB", "FFF"]);
+assert.equal(vx.overall.pick, "AAA", "ties broken by the answer's ranking"); assert(/without picking it/.test(vx.overall.adjusted) && vx.ranking[0] === "AAA");
+assert(C.checks(vx, h, fit).some((x) => x.where === "overall"));
+const vy = C.clean({ headline: "h", overall: { pick: "FFF", why: "w" }, ranking: ["AAA", "FFF"], investors: { growth: { pick: "FFF" } } }, ["AAA", "FFF"]);
+assert(vy.overall.pick === "FFF" && !vy.overall.adjusted && vy.ranking[0] === "FFF");
 console.log("compare ok");
