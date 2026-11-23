@@ -46,6 +46,10 @@ const brainSrc = `window.COS = ${JSON.stringify(cos)};
     if (tool === "economics") return { payload: [{ date: "2026-11-17", month1: 4.05, month3: 4.3, month6: 4.38, year1: 4.56, year2: 4.73, year3: 4.74, year5: 4.81, year7: 4.89, year10: 4.98, year20: 5.39, year30: 5.35 }] };
     return { payload: [] }; } };
   const json = async (p) => {
+    const dsyms = [...p.matchAll(/^=== ([A-Z.]+):/gm)].map((m) => m[1]), per = (o) => Object.fromEntries(dsyms.map((k) => [k, o]));
+    if (/macro and events strategist/.test(p)) return { regime: "r", pick: dsyms[0], why: "w", events: [{ date: "2026-12-09", event: "FOMC", kind: "fed", impact: per("negative"), why: "rates" }], scenarios: [{ name: "Base", probability: 60, what: "x", impact: per({ move: "+3%", why: "y" }) }], sensitivities: per("rates"), names: per({ read: "m", tailwinds: ["t"], headwinds: ["h"] }), horizons: {} };
+    if (/Wall Street and sentiment analyst/.test(p)) return { pick: dsyms[1], why: "w", contrarian: "c", names: per({ street: "s", sentiment: "t", positioning: "p", crowding: "low", signal: "positive", surprise_risk: "r" }) };
+    if (/fundamentals analyst/.test(p)) return { pick: dsyms[0], why: "w", names: per({ quality: "q", growth: "g", valuation: "fair: 20x", balance_sheet: "b", income: "i", expected_12m: { bull: "+10%", base: "+3%", bear: "-8%" }, read: "r" }) };
     if (/comparison desk/.test(p)) { const syms = [...p.matchAll(/^=== ([A-Z.]+):/gm)].map((m) => m[1]);
       return { headline: syms[0] + " wins.", overall: { pick: syms[0], confidence: "medium", why: "Numbers." }, ranking: syms,
         investors: { income: { pick: syms[1], why: "Yield." }, conservative: { pick: syms[1], why: "Vol." }, growth: { pick: syms[0], why: "Growth." }, aggressive: { pick: syms[0], why: "Momentum." } },
@@ -79,7 +83,9 @@ if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString()
   ok(r.rec?.v?.overall?.pick && SYMS.includes(r.rec.v.overall.pick), "the verdict picks one of them: " + r.rec?.v?.overall?.pick);
   ok([...(r.rec?.syms || [])].sort().join(",") === SYM && !!r.rec?.fp, "the record is for this set, with its fingerprint");
   ok(Object.keys(r.rec?.v?.investors || {}).length === 4 && Object.keys(r.rec?.v?.names || {}).length === SYMS.length, "every investor type and every name is covered");
+  ok(["macro", "street", "fundamentals"].every((d) => r.rec?.desks?.[d]?.names && Object.keys(r.rec.desks[d].names).length === SYMS.length), "all three desks came back, each covering every ticker");
   ok(r.job?.id === id, "the job's facts are attached");
+  if (process.env.PROMPTS) writeFileSync(process.env.PROMPTS, JSON.stringify(fa.stats.prompts || []));
   console.log(readFileSync(join(tmp, "summary.md"), "utf8")); }
 else ok(false, "no result file");
 console.log(`Claude requests: ${fa.stats.requests}`);

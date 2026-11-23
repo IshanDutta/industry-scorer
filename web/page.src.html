@@ -866,6 +866,24 @@ td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-we
 .cx-cta > div { flex: 1 1 320px; display: grid; gap: 4px; }
 .cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.cx-desk { justify-self: end; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
+.cx-tl { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
+.cx-ev { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 10px 0 10px 14px; position: relative; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.cx-ev::before { content: ""; position: absolute; left: -7px; top: 15px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.cx-evd { display: grid; align-content: start; font-family: var(--mono); font-size: 13px; }
+.cx-evb { display: grid; gap: 5px; min-width: 0; }
+.cx-evh { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: baseline; }
+.cx-imp { display: flex; flex-wrap: wrap; gap: 5px; }
+.cx-imp .pill { font-family: var(--mono); }
+.cx-regimes { display: grid; gap: 6px; padding: 10px 12px; border-radius: 10px; background: var(--sunk); }
+.cx-rate { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; }
+.cx-rate i { display: block; } .cx-rate .b { background: var(--pos); } .cx-rate .h { background: var(--bench); } .cx-rate .s { background: var(--neg); }
+.cx-sent { display: grid; grid-template-columns: minmax(0, 1fr) 52px; gap: 10px; align-items: center; }
+.cx-sent-t { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--neg) 60%, transparent), var(--line) 50%, color-mix(in srgb, var(--pos) 60%, transparent)); }
+.cx-sent-t i { position: absolute; top: -4px; width: 4px; height: 16px; margin-left: -2px; border-radius: 2px; background: var(--ink); }
+.cx-heads { margin: 0; padding-left: 16px; display: grid; gap: 3px; }
+.cx-dread { display: grid; gap: 4px; border-top: 1px dashed var(--line); padding-top: 8px; } .cx-dread p { margin: 0; }
+.cx-fund { display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: var(--sunk); }
 .cx-split { display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px; margin: 6px 0; }
 .cx-split i { display: block; height: 100%; }
 
@@ -5624,6 +5642,15 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
    * fit), each streaming into the page as it comes, then merge, check and save. Two calls in parallel take about half
    * the time of one.
    */
+  /** Everything the company's write-up reads (also the Compare tab's dossier for a stock with an industry run). */
+  function coCtx(co) {
+    const run = co.run, f = co.data || {};
+    return { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
+      peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
+      quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
+      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend, indPanels: coIndPanels(co), windows: coWindowsText(co),
+      times: co.times ? Regimes.companyText(co.sym, co.times) + (run.reports.history?.read ? `\nThe industry historian's read of these episodes: ${run.reports.history.read}` : "") : "" };
+  }
   async function writeThesis(co) {
     if (co.writing) return;
     co.writing = true; co.partial = null; co.thesisErr = null; co.writeStart = Date.now(); renderCompany();
@@ -5631,11 +5658,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const run = co.run, f = co.data || {};
     // The company's 1M-12M calls start now, alongside the write-up (they don't need it).
     const callsP = coLean(co, { signal: ctl.signal });
-    const ctx = { today: today(), sym: co.sym, name: co.name, industry: run.name, inTop50: !!run.industry.constituents.find((c) => c.symbol === co.sym), rank: co.row?.rank, px: co.px, profile: f.profile, row: co.row,
-      peers: co.peers, closest: co.closest, quality: co.quality, implied: co.implied, estimates: f.estimates, consensus: f.consensus, insider: f.insider, geo: co.geo, seg: co.seg, segments: f.segments,
-      quarters: f.c?.q, mentions: co.mentions, news: co.news, transcript: co.transcript, risk: { beta: co.g1?.beta ?? co.risk?.beta ?? co.row?.beta, alpha: co.g1?.alpha ?? co.risk?.alpha, vol: co.g1?.vol ?? co.risk?.vol_1y ?? co.row?.vol_1y },
-      facts: coFactsText(co), industryDigest: coDigest(run), lens: co.lensIn, sigmas: coSigmas(co), ptrend: f.ptrend, indPanels: coIndPanels(co), windows: coWindowsText(co),
-      times: co.times ? Regimes.companyText(co.sym, co.times) + (run.reports.history?.read ? `\nThe industry historian's read of these episodes: ${run.reports.history.read}` : "") : "" };
+    const ctx = coCtx(co);
     const raw = { core: null, calls: null, context: null, exposures: null }; let last = 0;
     const merged = (a, c, b, x) => { const t = Company.cleanThesis({ ...(b || {}), ...(a || {}), ...(c || {}) }, co.idx); t.lens = Company.cleanLens({ ...(a || {}), ...(b || {}), ...(c || {}), ...(x || {}) }, co.lensIn, co.idx); return t; };
     const show = () => { if (S.co !== co || Date.now() - last < 600) return; last = Date.now(); co.partial = merged(raw.core, raw.calls, raw.context, raw.exposures); renderCoWriting(); };
@@ -8478,8 +8501,13 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (!co.row) co.row = coRowFromFmp(sym, f, co.risk);
     co.name = co.row?.name || f.profile?.companyName || info?.name || sym;
     co.quality = Company.quality({ scores: f.scores, ratios: f.ratios, metrics: f.metrics, ttm: f.ttm });
-    if (co.run) try { co.peers = Company.peerTable(co.row, co.run.industry.constituents); } catch {}
+    // With an industry run, everything the company page builds from it (peers, the report's rows, the dated calendar,
+    // macro indicators, world situations, debates, trade and regulation); without one, its own news and calendar.
+    if (co.run) { step("its industry report's rows and calendar"); try { coAnalyze(co); } catch (e) { console.warn("compare analyze", e); } }
+    else { let k = 0, j = 0; co.news = (f.news || []).map((x) => ({ ...x, id: x.kind === "P" ? "P" + ++j : "N" + ++k })); }
     try { coFacts(co); } catch (e) { console.warn("compare facts", e); }
+    if (!co.run) try { co.lensIn = { calendar: Company.calendarYear([], coCalendarExtra(co), today()) }; } catch {}
+    const dz = cmpStockDossier(co);
     step("any written analysis");
     const raw = await cmpSaved("company", sym), sv = cmpSavedView("company", raw);
     const row = co.row || {}, g1 = co.g1 || {}, q = co.quality || {}, P = co.perf || {}, cons = f.consensus || {}, tt = f.ttm || {};
@@ -8494,7 +8522,17 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       div_yield: row.div_yield, payout: q.payout, div_growth: co.div?.cagr5,
       upside_target: num(cons.target) > 0 && co.px > 0 ? cons.target / co.px - 1 : NaN, buy_share: tot > 0 ? cons.buy / tot : NaN, rev30: row.rev30,
       mcap: Number(f.profile?.marketCap) || row.market_cap, px: co.px };
+    // Wall Street, news sentiment and positioning (code, for the table and the sentiment dimension).
+    const acts = (f.actions || []).filter((a) => a.date >= Horizon.addDays(today(), -120)), up = acts.filter((a) => /up/i.test(a.action || "")).length, dn = acts.filter((a) => /down/i.test(a.action || "")).length;
+    const sentR = f.sentiment || [], sw = (d) => { const r = sentR.filter((x) => x.date >= Horizon.addDays(today(), -d)), w = r.reduce((a, x) => a + (num(x.count) || 0), 0); return w ? { s: r.reduce((a, x) => a + num(x.score) * (num(x.count) || 0), 0) / w, n: w } : null; };
+    const s30 = sw(30), s90 = sw(90), pt = f.ptrend || {};
+    Object.assign(m, { news_sent: s30?.s, short_pct: row.short_pct, rating_net: acts.length ? up - dn : null, target_trend: num(pt.m) > 0 && num(pt.y) > 0 ? pt.m / pt.y - 1 : null });
     for (const k of Object.keys(m)) { const v = num(m[k]); m[k] = isNum(v) ? v : null; }
+    const street = { buy: cons.buy || 0, hold: cons.hold || 0, sell: cons.sell || 0, consensus: cons.consensus || "", target: num(cons.target), high: num(cons.high), low: num(cons.low), median: num(cons.median), px: co.px,
+      up, dn, acts: acts.slice(0, 6).map((a) => ({ date: a.date, firm: a.firm, action: a.action, to: a.to || "" })), ptrend: pt.m ? { m: num(pt.m), q: num(pt.q), y: num(pt.y) } : null, n: tot };
+    const sent = { s30: s30?.s ?? null, n30: s30?.n || 0, s90: s90?.s ?? null, heads: (co.news || []).filter((x) => x.kind !== "P").slice(0, 5).map((x) => ({ date: x.date, title: x.title, source: x.source || "", url: x.url || "" })) };
+    const events = ((co.lensIn?.calendar) || []).filter((e) => e.date >= today() && e.date <= Horizon.addDays(today(), 200)).map((e) => ({ date: e.date, title: e.title, kind: e.kind || e.source || "", importance: e.importance || "", est: !!e.estimated, tickers: e.tickers || [] })).slice(0, 40);
+    const sens = (co.sens?.factors || []).map((x) => ({ key: x.key, label: x.shock_label || x.key, effect: num(x.total?.effect), t: num(x.total?.t) })).filter((x) => isNum(x.effect));
     const pillars = Object.fromEntries(Object.entries(co.scores?.pillars || {}).map(([k, x]) => [k, x.score]));
     const profiles = Object.fromEntries(Object.entries(co.scores?.profiles || {}).map(([k, x]) => [k, { total: x.total }]));
     const so = S.savedCoOutlooks?.[sym];
@@ -8503,7 +8541,31 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const cl = f.ser?.closes || [];
     return { sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
       px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
-      m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run };
+      m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens,
+      regime: co.lensIn?.macroInd ? { regime: co.lensIn.macroInd.regime, headline: co.lensIn.macroInd.headline } : null };
+  }
+  /**
+   * A stock's dossier for the comparison desks: what its own write-up reads (numbers, peers, Wall Street, sentiment,
+   * technicals, ownership, news) and its industry report's rows (dated calendar, KPIs, threats, the industry's 1M-12M cards,
+   * macro indicators and call, world situations, scenarios, debates, trade and regulation), as text blocks.
+   */
+  function cmpStockDossier(co) {
+    const f = co.data || {}, L = co.lensIn, out = {}, tryT = (fn) => { try { return fn() || ""; } catch (e) { console.warn("compare dossier", e); return ""; } };
+    out.numbers = tryT(() => Company.companyBlock(co.run ? coCtx(co) : { today: today(), sym: co.sym, name: co.name, px: co.px, profile: f.profile, row: co.row, quality: co.quality, estimates: f.estimates, consensus: f.consensus, segments: f.segments,
+      quarters: f.c?.q, risk: { beta: co.g1?.beta, alpha: co.g1?.alpha, vol: co.g1?.vol }, facts: coFactsText(co), ptrend: f.ptrend, peers: [], closest: [] }));
+    const cons = f.consensus || {};
+    out.street = `WALL STREET ON ${co.sym}: consensus ${cons.consensus || "n/a"} (${cons.buy || 0} buy, ${cons.hold || 0} hold, ${cons.sell || 0} sell); target ${fix(num(cons.target), 2)} (low ${fix(num(cons.low), 2)}, median ${fix(num(cons.median), 2)}, high ${fix(num(cons.high), 2)}) against ${fix(co.px, 2)}.`
+      + ((f.actions || []).length ? `\nRating changes (newest first): ${(f.actions || []).slice(0, 12).map((a) => `${a.date} ${a.firm} ${a.action} ${a.from || ""}→${a.to || ""}`).join("; ")}` : "")
+      + (f.insider ? `\nInsiders: ${JSON.stringify(f.insider).slice(0, 600)}` : "");
+    out.news = (co.news || []).slice(0, 30).map((x) => `[${x.id}] ${x.date} · ${x.source || ""} — ${x.title}${x.summary ? `. ${trimC(x.summary, 220)}` : ""}`).join("\n");
+    if (co.transcript?.text) out.news += `\nLATEST EARNINGS CALL (${co.transcript.period || ""}, ${co.transcript.date || ""}), excerpt: ${trimC(co.transcript.text, 3500)}`;
+    if (L) { out.calls = tryT(() => Company.lensBlock(L, co.sym, "calls")); out.context = L.indicators ? tryT(() => Company.lensBlock(L, co.sym, "context")) : ""; out.exposures = L.countries ? tryT(() => Company.lensBlock(L, co.sym, "exposures")) : "";
+      if (!L.indicators && L.calendar?.length) out.calls = `Dated calendar for the next 12 months:\n${L.calendar.map((e) => `${e.date}${e.estimated ? " (est.)" : ""} ${e.title}${e.detail ? `: ${e.detail}` : ""}`).join("\n")}`; }
+    if (co.times && co.run) out.times = tryT(() => Regimes.companyText(co.sym, co.times));
+    out.windows = co.run ? tryT(() => coWindowsText(co)) : "";
+    // Its measured factor sensitivities, stress tests, technicals and levels (the macro desk reads these with the calendar).
+    out.facts = tryT(() => `${co.sym}'S OWN NUMBERS (performance, risk, factor sensitivities, stress tests, technicals)\n${coFactsText(co)}`);
+    return out;
   }
   /** A fund, read the way its page reads it (look-through, prices, Wall Street on its holdings), without writing an analysis. */
   async function cmpFund(sym, step) {
@@ -8527,13 +8589,20 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const profiles = Object.fromEntries(Object.entries(fd.card?.profiles || {}).map(([k, x]) => [k, { total: x.total, fit: x.fit }]));
     let prior = null; try { prior = fd.bond ? null : FundAn.prior(fd); } catch {}
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || cmpOut(prior, "from its industries");
+    let dz = {}; try { dz = { ...FundAn.dossier(fd, today()).blocks }; } catch (e) { console.warn("compare fund dossier", e); }
+    const st = fd.street || {}, se = fd.sent || {};
+    m.news_sent = isNum(num(se.s30)) ? num(se.s30) : null;
+    const street = { buy_share: num(st.buy_share), upside: num(st.upside), n: st.n || 0, on: num(st.on), rows: (st.rows || []).slice(0, 8).map((r) => ({ ticker: r.ticker, weight: r.weight, consensus: r.consensus, upside: num(r.upside), buy_share: num(r.buy_share) })), px: m.px };
+    const sent = { s30: num(se.s30), s90: num(se.s90), n30: 0, heads: (fd.news || []).slice(0, 5).map((x) => ({ date: x.date, title: x.title, source: (x.symbol ? x.symbol + " · " : "") + (x.source || ""), url: x.url || "" })) };
+    const events = (fd.cal || []).filter((e) => e.date >= today()).map((e) => ({ date: e.date, title: e.title, kind: e.kind || "", importance: e.importance || (e.w >= 0.05 ? "high" : ""), est: false, tickers: [] })).slice(0, 40);
+    const sens = (fd.sens?.factors || []).map((x) => ({ key: x.key, label: x.shock_label || x.key, effect: num(x.total?.effect), t: num(x.total?.t) })).filter((x) => isNum(x.effect));
     const mix = (fd.cov?.industries || []).slice(0, 10).map((g) => { const d = fd.digests?.[lc(g.industry)]; return { industry: g.industry, weight: g.weight, call: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "" }; });
     const lookCalls = fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]?.call).map((h) => [h, { call: fd.look.calls[h].call }])) : null;
     return { sym, kind: "fund", name: f.name || sym, sub: [f.type, f.category].filter(Boolean).join(" · ") || (fd.bond ? "bond fund" : "fund"), sector: "",
       px: m.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: "", bond: !!fd.bond, bench: fd.bench?.symbol || "",
       m, pillars, profiles, outlook, saved: sv, best: fd.card?.best || null,
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
-      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })) };
+      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null };
   }
   /** Load one ticker into the comparison (once; kept while the tab is open). */
   async function cmpLoad(sym) {
@@ -8628,15 +8697,28 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (c.busy === key) return;
     c.ctl?.abort(); const ctl = new AbortController(); c.ctl = ctl; c.busy = key; c.err = null; c.partial = null; c.start = Date.now(); renderCompare();
     try {
+      // The three desks at once (macro and events, street and sentiment, fundamentals), each on the full dossiers.
+      const L0 = S.sample.limits ? await S.sample.limits().catch(() => null) : null, lim = JOB ? 340000 : Math.min(250000, (L0?.maxPromptBytes || 262144) - 12000);
+      const fitB = (p) => { const b = new TextEncoder().encode(p); return b.length <= lim ? p : new TextDecoder().decode(b.slice(0, lim - 2000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
+      c.stage = "three desks are reading the full dossiers"; renderCompare();
+      const desks = {}, failed = [];
+      await Promise.all(Compare.DESK_KEYS.map(async (d) => {
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
+          desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
+        catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
+        c.stage = `${Object.keys(desks).length} of 3 desks done`; renderCompare(); }));
+      if (!Object.keys(desks).length) throw new Error("none of the three desks finished");
+      // Then the head of research: code's comparison and the desks' findings.
+      c.stage = "the head of research is weighing it all"; renderCompare();
       const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
       let last = 0;
-      const out = await sampleJson(Compare.prompt(text.slice(0, 200000), syms, today()), { modelTier: "complex", cache: false, signal: ctl.signal,
+      const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal,
         onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
       const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
-      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
+      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
       c.vCache[key] = rec; await idbPut(key, rec).catch(() => {});
     } catch (e) { if (!ctl.signal.aborted) c.err = FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
-    finally { if (c.busy === key) { c.busy = null; c.partial = null; } c.ctl = null; renderCompare(); }
+    finally { if (c.busy === key) { c.busy = null; c.partial = null; c.stage = null; } c.ctl = null; renderCompare(); }
   }
 
   // ------------------------------------------------------------- render: Compare tab
@@ -8701,15 +8783,15 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const an = c.an && c.an.key === c.syms.filter((s) => c.subj[s]?.stage === "ready").join(",") ? c.an : null;
     if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
-    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>: one Claude call on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
+    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: three desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
     // The GitHub request for this set: queued, running (with a link to the run), or failed.
     const J = cmpJob(syms), jRun = J && J.state !== "failed", jAge = J ? Math.round((Date.now() - Date.parse(J.started_at || J.requested_at || 0)) / 60000) : 0;
-    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `the run is reading ${subs.length} tickers and writing the verdict`} (${jAge} min so far; usually 5-10). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
+    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `three desks are reading ${subs.length} tickers' full dossiers, then the head of research writes the verdict`} (${jAge} min so far; usually 6-12). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
       : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
     const canRun = !busy && !jRun && (S.sample || S.mcp);
     const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
-    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "One Claude call on GitHub reads everything below, plus each name's written analysis and industry report, and writes the verdict: who wins overall, for each investor and each window." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
+    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "On GitHub, three desks read every ticker's full dossier at once (what's ahead and the macro backdrop; Wall Street and sentiment; the fundamentals), then a head of research weighs their findings and code's numbers and writes the verdict." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
     // Your saved goals (Portfolios tab), when there are any: that investor type is marked.
     const userType = (() => { try { const g = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); return g?.primaryObjective ? EtfRec.UG.fromAnswers({ ...EtfRec.UG.DEFAULT, ...g })?.type || null : null; } catch { return null; } })();
 
@@ -8785,11 +8867,64 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const outl = sec("cmp-outlook", "Where each is going", "1M-12M calls, and the verdict's pick for each window", `<div class="tbl-wrap"><table><thead><tr><th>Window</th>${syms.map((s) => `<th>${cmpTick(s)}</th>`).join("")}${v?.horizons && Object.keys(v.horizons).length ? "<th>Pick</th>" : ""}</tr></thead><tbody>${Outlook.HZ.map((h) => `<tr><td><b>${esc(Outlook.HZ_LABEL[h])}</b></td>${subs.map((s) => { const x = s.outlook?.calls?.[h]?.call; return `<td>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</td>`; }).join("")}${v?.horizons && Object.keys(v.horizons).length ? `<td class="wr small">${v.horizons[h] ? `${cmpTick(v.horizons[h].pick)} ${esc(v.horizons[h].why)}` : ""}</td>` : ""}</tr>`).join("")}</tbody></table></div>
       <div class="small muted">${subs.map((s) => `${esc(s.sym)}: ${esc(s.outlook?.source || "no calls")}`).join(" · ")}</div>`);
 
+
+    // ---- the desks (from the verdict record)
+    const DK = V?.desks || {}, MD = DK.macro, SD = DK.street, FD = DK.fundamentals;
+    const IMPC = { "strong positive": "pos2", positive: "pos", neutral: "neu", negative: "neg", "strong negative": "neg2" }, IMPA = { "strong positive": "▲▲", positive: "▲", neutral: "–", negative: "▼", "strong negative": "▼▼" };
+    const deskBy = (d) => `<span class="cx-desk">${esc(Compare.DESKS[d].label)}</span>`;
+
+    // ---- what's ahead: the macro desk's dated events with their impact on each; before a verdict, the calendars (code)
+    const codeEv = (() => { const m = new Map(); for (const s0 of subs) for (const e of s0.events || []) { if (e.date > Horizon.addDays(today(), 120) || (e.importance && e.importance !== "high" && !(e.tickers || []).includes(s0.sym))) continue;
+      const k = e.date + "|" + e.title.toLowerCase().slice(0, 40); const x = m.get(k) || { ...e, who: [] }; if (!x.who.includes(s0.sym)) x.who.push(s0.sym); m.set(k, x); }
+      return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 24); })();
+    const ahead = sec("cmp-ahead", "What's ahead", MD ? "the next 12 months: dated events and what each does to each ticker" : "the next four months from each one's calendar (its industry's events, its own reports, macro releases)",
+      MD?.events?.length ? `<div class="cx-tl">${MD.events.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b><span class="small muted">${esc(e.date.slice(0, 4))}</span></div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.event)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div>
+        <div class="cx-imp">${syms.map((k) => `<span class="pill ${IMPC[e.impact[k]] || "neu"}" title="${esc(e.impact[k])}">${esc(k)} ${IMPA[e.impact[k]] || "–"}</span>`).join("")}</div>${e.why ? `<div class="small muted">${esc(e.why)}</div>` : ""}</div></div>`).join("")}</div>${deskBy("macro")}`
+      : codeEv.length ? `<div class="cx-tl">${codeEv.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b>${e.est ? `<span class="small muted">est.</span>` : ""}</div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.title)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div><div class="cx-imp">${e.who.map((k) => cmpTick(k)).join("")}</div></div></div>`).join("")}</div>
+        <div class="small muted">Press Compare and the macro and events desk says what each of these does to each ticker.</div>` : `<div class="small muted">No dated events found for these tickers.</div>`);
+
+    // ---- macro & world: the desk's backdrop and scenarios; code's measured sensitivities; each industry's macro call
+    const facs = [...new Set(subs.flatMap((s0) => (s0.sens || []).map((x) => x.label)))];
+    const sensT = facs.length ? `<div class="tbl-wrap"><table><thead><tr><th>A one-sigma move in…</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${facs.map((f0) => `<tr><td>${esc(f0)}</td>${subs.map((s0) => { const x = (s0.sens || []).find((y) => y.label === f0); return `<td class="n ${cls(x?.effect)}" title="${x && isNum(x.t) ? "t " + fix(x.t, 1) : ""}">${x ? pct(x.effect, true, 2) : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="small muted">Measured on the last year of daily returns: what each moved on a typical one-sigma day in each factor, holding the market fixed.</div>` : "";
+    const regimes = subs.filter((s0) => s0.regime?.regime).map((s0) => `<div class="small">${cmpTick(s0.sym)} <b>${esc(s0.ind?.name || "")}</b>: ${esc(s0.regime.regime)}${s0.regime.headline ? ` — ${esc(trimC(stripCites(s0.regime.headline), 220))}` : ""}</div>`).join("");
+    const scenT = MD?.scenarios?.length ? `<h3>Macro and world scenarios</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Odds</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MD.scenarios.map((x) => `<tr><td class="wr"><b>${esc(x.name)}</b><div class="small muted">${esc(x.what)}</div></td><td class="n">${x.probability ?? "—"}%</td>${syms.map((k) => { const m0 = x.impact[k] || {}, neg = /^-|−/.test(m0.move || ""); return `<td class="wr small"><b class="${neg ? "neg-t" : /^\+?\d/.test(m0.move || "") ? "pos-t" : ""}">${esc(m0.move || "—")}</b> ${esc(m0.why || "")}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+    const macroS = sec("cmp-macro", "Macro & world", "the backdrop, what moves each one, and the scenarios", `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop</span><p>${esc(MD.regime)}</p></div>` : ""}
+      ${regimes ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call (its report)</span>${regimes}</div>` : ""}
+      ${scenT}${sensT ? `<h3>Measured macro sensitivity</h3>${sensT}` : ""}
+      ${MD ? `<div class="cx-cards">${syms.map((k) => `<div class="cx-card" style="--tc:${cmpColor(k)}"><div class="cx-card-top">${cmpTick(k)}</div><p class="small" style="margin:0">${esc(MD.names[k]?.read || "")}</p>
+        ${MD.names[k]?.tailwinds?.length ? `<div class="small"><span class="eyebrow pos-t">Tailwinds</span><ul class="memo-pts">${MD.names[k].tailwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${MD.names[k]?.headwinds?.length ? `<div class="small"><span class="eyebrow neg-t">Headwinds</span><ul class="memo-pts cx-neg">${MD.names[k].headwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${MD.sensitivities?.[k] ? `<div class="small muted"><b>Sensitive to:</b> ${esc(MD.sensitivities[k])}</div>` : ""}</div>`).join("")}</div>${deskBy("macro")}` : `<div class="small muted">The macro and events desk's read comes with the verdict.</div>`}`);
+
+    // ---- Wall Street & sentiment: code's numbers (ratings, targets, revisions, news sentiment, short interest) and the desk's read
+    const sentBar = (v0) => isNum(v0) ? `<div class="cx-sent"><div class="cx-sent-t"><i style="left:${Math.max(0, Math.min(100, 50 + v0 * 50))}%"></i></div><b class="mono ${v0 > 0.05 ? "pos-t" : v0 < -0.05 ? "neg-t" : ""}">${v0 > 0 ? "+" : ""}${fix(v0, 2)}</b></div>` : `<span class="small muted">—</span>`;
+    const streetS = sec("cmp-street", "Wall Street & sentiment", "analysts' ratings, targets and revisions; news sentiment; positioning", `<div class="cx-cards">${subs.map((s0) => { const st = s0.street || {}, se = s0.sent || {}, d0 = SD?.names?.[s0.sym];
+      const tot = (st.buy || 0) + (st.hold || 0) + (st.sell || 0);
+      const ratings = s0.kind === "stock" ? (tot ? `<div class="cx-rate"><i class="b" style="flex:${st.buy}"></i><i class="h" style="flex:${st.hold}"></i><i class="s" style="flex:${st.sell}"></i></div><div class="small"><b>${esc(st.consensus || "")}</b> · ${st.buy} buy · ${st.hold} hold · ${st.sell} sell</div>` : `<div class="small muted">No analyst ratings.</div>`)
+        : `<div class="small">${isNum(st.buy_share) ? `<b>${pct(st.buy_share, false, 0)}</b> of ratings on its ${st.n} biggest holdings are buy` : "No ratings on its holdings."}</div>`;
+      const tgt = s0.kind === "stock" && isNum(st.target) && st.px > 0 ? `${rangeBar(isNum(st.low) ? st.low : st.target, isNum(st.high) ? st.high : st.target, [{ v: st.px, label: `Price ${fix(st.px, 0)}`, cls: "px", top: true }, { v: st.target, label: `Target ${fix(st.target, 0)}` }])}<div class="small">Target ${fix(st.target, 2)}: <b class="${cls(st.target / st.px - 1)}">${pct(st.target / st.px - 1)}</b>${st.ptrend?.y ? ` · a year ago ${fix(st.ptrend.y, 0)}, last month ${fix(st.ptrend.m, 0)}` : ""}</div>`
+        : s0.kind === "fund" && isNum(st.upside) ? `<div class="small">Upside to the targets on its holdings, weighted: <b class="${cls(st.upside)}">${pct(st.upside)}</b></div>` : "";
+      const moves = s0.kind === "stock" && (st.up || st.dn) ? `<div class="small">Last 4 months: <b class="pos-t">${st.up} upgrade${st.up === 1 ? "" : "s"}</b>, <b class="neg-t">${st.dn} downgrade${st.dn === 1 ? "" : "s"}</b>${st.acts?.length ? `<div class="muted">${st.acts.slice(0, 3).map((a) => `${esc(fmtShort(a.date))} ${esc(a.firm || "")} ${esc(a.action || "")}${a.to ? " → " + esc(a.to) : ""}`).join(" · ")}</div>` : ""}</div>` : "";
+      return `<div class="cx-card" style="--tc:${cmpColor(s0.sym)}"><div class="cx-card-top">${cmpTick(s0.sym, true)}${d0?.signal ? `<span class="pill ${d0.signal === "positive" ? "pos" : d0.signal === "negative" ? "neg" : "neu"}">${esc(d0.signal)}</span>` : ""}${d0?.crowding ? `<span class="pill ${d0.crowding === "high" ? "warn" : "neu"}">crowding ${esc(d0.crowding)}</span>` : ""}</div>
+        <span class="eyebrow">Wall Street</span>${ratings}${tgt}${moves}
+        <span class="eyebrow">News sentiment, 30 days</span>${sentBar(se.s30)}${isNum(se.s90) ? `<div class="small muted">90 days ${se.s90 > 0 ? "+" : ""}${fix(se.s90, 2)}${se.n30 ? ` · ${se.n30} articles in 30 days` : ""}</div>` : ""}
+        ${isNum(s0.m.short_pct) ? `<div class="small">Short interest <b>${pct(s0.m.short_pct, false, 1)}</b></div>` : ""}
+        ${(se.heads || []).length ? `<ul class="cx-heads small">${se.heads.slice(0, 3).map((h) => `<li>${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(trimC(h.title, 110))}</a>` : esc(trimC(h.title, 110))} <span class="muted">${esc(fmtShort(h.date))}</span></li>`).join("")}</ul>` : ""}
+        ${d0 ? `<div class="cx-dread small"><p><b>Street:</b> ${esc(d0.street)}</p><p><b>Sentiment:</b> ${esc(d0.sentiment)}</p><p><b>Positioning:</b> ${esc(d0.positioning)}</p>${d0.surprise_risk ? `<p class="muted">${esc(d0.surprise_risk)}</p>` : ""}</div>` : ""}</div>`; }).join("")}</div>
+      ${SD ? `${SD.pick ? `<div class="small"><b>The desk's pick:</b> ${cmpTick(SD.pick)} ${esc(SD.why)}</div>` : ""}${SD.contrarian ? `<div class="cx-checks small"><b>Where the crowd may be wrong:</b> ${esc(SD.contrarian)}</div>` : ""}${deskBy("street")}` : `<div class="small muted">The street and sentiment desk's read comes with the verdict.</div>`}`);
+
     // ---- the cases
     const cases = sec("cmp-cases", "The case for each", "strengths, weaknesses, bull and bear", `<div class="cx-cases">${subs.map((s) => { const n0 = v?.names?.[s.sym], sv = s.saved;
       const scen = sv?.scenarios?.length ? `<div class="cx-scen">${sv.scenarios.map((x) => `<div class="${x.k}"><span class="eyebrow">${esc(x.k)} ${x.probability ?? ""}%</span><b class="mono">${isNum(x.target) ? fix(x.target, 0) : "—"}</b><span class="small ${cls(x.move)}">${pct(x.move, true, 0)}</span></div>`).join("")}${isNum(sv.expected) ? `<div><span class="eyebrow">weighted</span><b class="mono ${cls(sv.expected)}">${pct(sv.expected, true, 1)}</b><span class="small muted">12 months</span></div>` : ""}</div>` : "";
+      const fd0 = FD?.names?.[s.sym], e12 = fd0?.expected_12m;
+      const fund = fd0 ? `<div class="cx-fund">${fd0.valuation ? `<div class="small"><span class="pill ${/^cheap/i.test(fd0.valuation) ? "pos" : /^rich/i.test(fd0.valuation) ? "neg" : "neu"}">${esc((fd0.valuation.match(/^(cheap|fair|rich)/i) || ["valuation"])[0].toLowerCase())}</span> ${esc(fd0.valuation.replace(/^(cheap|fair|rich)\s*[:\-–]?\s*/i, ""))}</div>` : ""}
+        ${e12 && (e12.bull || e12.base || e12.bear) ? `<div class="cx-scen"><div class="bull"><span class="eyebrow">bull</span><b class="mono pos-t">${esc(e12.bull || "—")}</b></div><div class="base"><span class="eyebrow">base</span><b class="mono">${esc(e12.base || "—")}</b></div><div class="bear"><span class="eyebrow">bear</span><b class="mono neg-t">${esc(e12.bear || "—")}</b></div><div><span class="eyebrow">desk's 12M</span><span class="small muted">fundamentals</span></div></div>` : ""}
+        ${fd0.read ? `<p class="small" style="margin:0">${esc(fd0.read)}</p>` : ""}
+        <details class="memo-more"><summary>Quality, growth, balance sheet, income</summary>${[["Quality", fd0.quality], ["Growth", fd0.growth], ["Balance sheet", fd0.balance_sheet], ["Income", fd0.income]].filter(([, x]) => x).map(([l, x]) => `<p class="small"><b>${l}:</b> ${esc(x)}</p>`).join("")}</details></div>` : "";
       return `<div class="cx-case" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym, true)}<div><div class="cx-name">${esc(s.name)}</div>${n0?.edge ? `<div class="small"><b>Edge:</b> ${esc(n0.edge)}</div>` : ""}</div></div>
-        ${scen}
+        ${n0?.entry ? `<div class="small cx-quote"><b>Entry:</b> ${esc(n0.entry)}</div>` : ""}
+        ${scen}${fund}
         ${n0 ? `<div class="two"><div><span class="eyebrow pos-t">Strengths</span><ul class="memo-pts">${n0.strengths.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div><div><span class="eyebrow neg-t">Weaknesses</span><ul class="memo-pts cx-neg">${n0.weaknesses.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>
         <div class="two"><div class="memo-side bull"><span class="eyebrow">Bull</span><p class="small">${esc(n0.bull)}</p></div><div class="memo-side bear"><span class="eyebrow">Bear</span><p class="small">${esc(n0.bear)}</p></div></div>
         ${n0.watch.length ? `<div class="small"><b>Watch:</b> ${n0.watch.map(esc).join(" · ")}</div>` : ""}${n0.changes_mind ? `<div class="small muted"><b>Changes the verdict:</b> ${esc(n0.changes_mind)}</div>` : ""}`
@@ -8815,10 +8950,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
 
     const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
+      { label: "Ahead", items: [["cmp-ahead", "What's ahead"], ["cmp-macro", "Macro & world"], ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
       { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
       { label: "Analysis", items: [["cmp-cases", "The case for each"], ["cmp-industry", "Industry backdrop"], tog ? ["cmp-together", "Owning them together"] : null] }];
-    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroS}${streetS}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 

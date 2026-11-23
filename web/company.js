@@ -704,7 +704,7 @@ ${schemaFor(part)}`;
     return { issues, scenarios: rows, expected_return: exp, upside: up, downside: down };
   }
 
-  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, PANELS_FOR, DIG_FOR, panelsFor, lensInputs, cleanLens, READS, SECS, calendarYear };
+  const Company = { METRICS, pctRank, peerTable, closestPeers, nameCore, mentions, geoMap, segMap, quality, impliedGrowth, lean, thesisPrompt, companyBlock, cleanThesis, checks, fitRanges, holdCalls, SECTION, PART, PANELS_FOR, DIG_FOR, panelsFor, lensInputs, lensBlock, cleanLens, READS, SECS, calendarYear };
   if (typeof module !== "undefined" && module.exports) module.exports = Company;
   else root.Company = Company;
 })(typeof window !== "undefined" ? window : globalThis);
