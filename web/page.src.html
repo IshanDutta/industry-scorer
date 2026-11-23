@@ -866,6 +866,7 @@ td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-we
 .cx-cta > div { flex: 1 1 320px; display: grid; gap: 4px; }
 .cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.cx-bestfor { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 4px; }
 .cx-desk { justify-self: end; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
 .cx-tl { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
 .cx-ev { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 10px 0 10px 14px; position: relative; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
@@ -1387,7 +1388,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   /** Daily prices, fetched once per symbol per day and shared by every industry's track record. */
   async function trackSeries(sym, from) {
     const c = S.px[sym]; if (c && c.from <= from && c.day === today()) return c.ser;
-    const ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
+    let ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
+    // FMP doesn't carry every fund (many mutual funds, some ETFs): EODHD's adjusted closes instead.
+    if (ser.dates.length < 20 && /^[A-Z0-9.\-]{1,12}$/.test(sym)) { if (S.eod === undefined) await detectEod();
+      if (S.eod) { const r = await optionalEod(() => eodCall("get_historical_stock_prices", { ticker: sym.replace(/\./g, "-") + ".US", start_date: E.addDays(from, -5), end_date: today() }));
+        const s2 = toSeries((Array.isArray(r) ? r : []).map((x) => ({ date: x.date, adjClose: x.adjusted_close ?? x.close }))); if (s2.dates.length > ser.dates.length) ser = s2; } }
     S.px[sym] = { from, day: today(), ser }; return ser;
   }
   /**
@@ -8604,6 +8609,14 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
       ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null };
   }
+  /** EODHD's asset type for a ticker ("fund" for an ETF or mutual fund, "stock", or null), kept a week. */
+  async function cmpEodKind(sym) {
+    const k = "eodType:" + sym, x = await idbGet(k).catch(() => null); if (x && Date.now() - Date.parse(x.at || 0) < 7 * 864e5) return x.kind;
+    if (S.eod === undefined) await detectEod(); if (!S.eod) return null;
+    const r = await optionalEod(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", sections: ["General"], include_financials: false }));
+    const t = String(r?.General?.Type || ""), kind = /etf|fund/i.test(t) ? "fund" : /stock|share|adr|reit/i.test(t) ? "stock" : null;
+    await idbPut(k, { at: new Date().toISOString(), kind, type: t, name: r?.General?.Name || "" }).catch(() => {}); return kind;
+  }
   /** Load one ticker into the comparison (once; kept while the tab is open). */
   async function cmpLoad(sym) {
     const c = S.cmp; if (c.subj[sym]?.stage === "ready" || c.subj[sym]?.stage === "loading") return;
@@ -8612,8 +8625,10 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     try {
       if (!S.mcp) throw new Error("open this page in Claude to look tickers up");
       const ci = await coIndex(); let info = null, kind = ci.cos[sym] ? "stock" : null;
-      if (!kind) { info = await pfInfo(sym); kind = info.type === "etf" || info.type === "fund" ? "fund" : info.type === "stock" ? "stock" : null; }
-      if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`FMP doesn't know ${sym}`); } }
+      if (!kind) { info = await pfInfo(sym); const fmpK = info.type === "etf" || info.type === "fund" ? "fund" : info.type === "stock" ? "stock" : null, eodK = await cmpEodKind(sym);
+        // EODHD's asset type settles it when FMP is unsure or calls a fund a stock (it knows mutual funds FMP doesn't).
+        kind = eodK === "fund" || fmpK === "fund" ? "fund" : fmpK || eodK; }
+      if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`neither FMP nor EODHD knows ${sym}`); } }
       x.s = kind === "fund" ? await cmpFund(sym, step) : await cmpStock(sym, ci, info, step);
       if (!x.s.ser?.dates?.length) throw new Error(`no price history for ${sym}`);
       x.stage = "ready";
@@ -8783,6 +8798,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const an = c.an && c.an.key === c.syms.filter((s) => c.subj[s]?.stage === "ready").join(",") ? c.an : null;
     if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
+    if (v && !busy) Compare.reconcile(v, syms); // older verdicts: the overall pick must win at least one investor type
     const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: three desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
     // The GitHub request for this set: queued, running (with a link to the run), or failed.
@@ -8799,10 +8815,12 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const ov = v?.overall?.pick, codeBest = (() => { const avg = (s) => cmpMean(Compare.TYPES.map((t) => fit[t][s]?.total).filter(isNum)); return [...syms].sort((a, b) => (avg(b) || 0) - (avg(a) || 0))[0]; })();
     const win = ov || codeBest, rank = v?.ranking?.length ? v.ranking : [...syms].sort((a, b) => (cmpMean(Compare.TYPES.map((t) => fit[t][b]?.total).filter(isNum)) || 0) - (cmpMean(Compare.TYPES.map((t) => fit[t][a]?.total).filter(isNum)) || 0));
     const podium = rank.map((s, i) => `<div class="cx-pod${i === 0 ? " first" : ""}" style="--tc:${cmpColor(s)}"><span class="cx-place">${i + 1}</span>${cmpTick(s)}${v?.names?.[s]?.verdict ? `<span class="pill ${CMP_VERD[v.names[s].verdict]}">${esc(v.names[s].verdict)}</span>` : ""}</div>`).join("");
-    const checks = (V?.checks || []).length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${V.checks.map((x) => esc(x.text)).join("; ")}.</div>` : "";
+    const ck0 = (V?.checks || []).filter((x) => x.where !== "overall");
+    const checks = ck0.length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${ck0.map((x) => esc(x.text)).join("; ")}.</div>` : "";
     const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.via === "github" ? ` on GitHub${V.run_url ? ` · <a href="${esc(V.run_url)}" target="_blank" rel="noopener">run</a>` : ""}` : ""}${V.secs ? ` in ${V.secs}s` : ""}` : "",
       `${writing}${ghNote}${err}${noClaude}${v || busy || jRun ? `<div class="cx-runrow">${runBtn}<span class="small muted">${V ? `Last compared ${esc(ago(V.at))}.` : ""}</span></div>` : ""}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
-        <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}</div></div>
+        <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}${(() => { const w0 = v?.wins?.[win] || (v ? [] : Compare.TYPES.filter((t) => fit[t].ranked[0] === win)); return w0.length ? `<div class="cx-bestfor"><span class="small muted">Best for</span>${w0.map((t) => `<span class="pill pos">${esc(Compare.TYPE_LABEL[t])}</span>`).join("")}</div>` : ""; })()}</div></div>
+        ${v?.overall?.adjusted ? `<div class="cx-checks small"><b>Overall pick corrected:</b> ${esc(v.overall.adjusted)}</div>` : ""}
         ${v?.headline ? `<p class="cx-headline">${esc(v.headline)}</p>` : busy ? `<div class="skel" style="width:80%;height:18px"></div>` : ""}
         ${v?.overall?.why ? `<p class="prose">${esc(v.overall.why)}</p>` : ""}</div>
         <div class="cx-podium">${podium}</div></div>

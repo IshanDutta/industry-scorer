@@ -866,6 +866,7 @@ td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-we
 .cx-cta > div { flex: 1 1 320px; display: grid; gap: 4px; }
 .cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
+.cx-bestfor { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 4px; }
 .cx-desk { justify-self: end; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
 .cx-tl { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
 .cx-ev { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 10px 0 10px 14px; position: relative; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
@@ -13813,6 +13814,7 @@ Rules:
 - Compare like with like: a fund against a stock is a choice between owning a basket and owning one company; say what that trade means (diversification, concentration, cost).
 - You may depart from code's scores and rankings, but when you do, say why in that field.
 - Investor types: income (dependable cash income, capital preservation second), conservative (low drawdowns, steady compounding), growth (above-market growth over 1-3 years, accepts swings), aggressive (maximum upside, accepts big drawdowns).
+- "Overall" means the best single choice for a balanced investor who weighs all four types equally. It must be consistent with your investor picks: the overall pick must also be your pick for at least one investor type, and normally the one that wins the most types or is first or second for all of them. If the name you'd call best overall wins none of the four, either it should win one of them (change that pick and say why) or it isn't the best overall. "ranking" starts with the overall pick.
 - Plain English, no hedging boilerplate, no invented facts: use only what is in the dossier.
 
 ${text}
@@ -13968,6 +13970,7 @@ Return ONLY a JSON object:
     o.ranking = [...new Set((Array.isArray(raw.ranking) ? raw.ranking : []).map(pick).filter(Boolean))]; for (const s of syms) if (!o.ranking.includes(s)) o.ranking.push(s);
     if (!o.overall.pick) o.overall.pick = o.ranking[0];
     o.investors = {}; for (const t of TYPES) { const x = raw.investors?.[t]; if (x && pick(x.pick)) o.investors[t] = { pick: pick(x.pick), runner_up: pick(x.runner_up), why: str(x.why, 900), avoid: str(x.avoid, 400) }; }
+    reconcile(o, syms);
     o.horizons = {}; for (const h of HZ) { const x = raw.horizons?.[h]; if (x && pick(x.pick)) o.horizons[h] = { pick: pick(x.pick), why: str(x.why, 500) }; }
     o.dimensions = (Array.isArray(raw.dimensions) ? raw.dimensions : []).filter((d) => (GROUPS[d?.key] || d?.key === "events" || d?.key === "macro") && pick(d.pick)).map((d) => ({ key: d.key, pick: pick(d.pick), why: str(d.why, 600) }));
     o.names = {};
@@ -13980,10 +13983,27 @@ Return ONLY a JSON object:
     return o.headline || o.overall.why ? o : null;
   }
 
+  /**
+   * The overall pick has to win something: a name picked for no investor type can't be the best overall. If the answer
+   * does that anyway, code moves "overall" to the name that wins the most types (ties: the answer's own ranking) and says
+   * so. Also used on verdicts saved before this check existed. Mutates and returns v.
+   */
+  function reconcile(o, syms) {
+    if (!o?.overall) return o;
+    const wins = Object.fromEntries(syms.map((k) => [k, TYPES.filter((t) => o.investors?.[t]?.pick === k)]));
+    o.ranking = (o.ranking || []).filter((k) => syms.includes(k)); for (const k of syms) if (!o.ranking.includes(k)) o.ranking.push(k);
+    if (Object.keys(o.investors || {}).length && !o.overall.adjusted && !(wins[o.overall.pick] || []).length) {
+      const was = o.overall.pick, best = [...syms].sort((a, b) => wins[b].length - wins[a].length || o.ranking.indexOf(a) - o.ranking.indexOf(b))[0];
+      o.overall = { ...o.overall, pick: best, adjusted: `The verdict named ${was} best overall without picking it for any investor type, so the overall pick is ${best}, which wins ${wins[best].length} of 4 (${wins[best].map((t) => TYPE_LABEL[t]).join(", ")}). The reasoning below is the verdict's case for ${was}.` };
+    }
+    if (o.ranking[0] !== o.overall.pick) o.ranking = [o.overall.pick, ...o.ranking.filter((k) => k !== o.overall.pick)];
+    o.wins = wins; return o;
+  }
   /** Where the verdict and code disagree by a wide margin: shown next to the verdict, not hidden. */
   function checks(v, h2h, fit) {
     const out = [];
     if (!v) return out;
+    if (v.overall?.adjusted) out.push({ where: "overall", text: v.overall.adjusted });
     for (const d of v.dimensions) { const g = h2h.groups[d.key]; if (!g?.leader || g.leader === d.pick || g.margin < 15) continue;
       const a = g.vals.find((x) => x.sym === g.leader)?.score, b = g.vals.find((x) => x.sym === d.pick)?.score;
       out.push({ where: d.key, text: `${GROUPS[d.key].label}: the verdict picks ${d.pick}, but code's numbers favor ${g.leader} (${Math.round(a)} vs ${Math.round(b)})` }); }
@@ -13997,7 +14017,7 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
@@ -14462,7 +14482,11 @@ Return ONLY a JSON object:
   /** Daily prices, fetched once per symbol per day and shared by every industry's track record. */
   async function trackSeries(sym, from) {
     const c = S.px[sym]; if (c && c.from <= from && c.day === today()) return c.ser;
-    const ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
+    let ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: sym, from_date: E.addDays(from, -5), to_date: today() }), [])) || []);
+    // FMP doesn't carry every fund (many mutual funds, some ETFs): EODHD's adjusted closes instead.
+    if (ser.dates.length < 20 && /^[A-Z0-9.\-]{1,12}$/.test(sym)) { if (S.eod === undefined) await detectEod();
+      if (S.eod) { const r = await optionalEod(() => eodCall("get_historical_stock_prices", { ticker: sym.replace(/\./g, "-") + ".US", start_date: E.addDays(from, -5), end_date: today() }));
+        const s2 = toSeries((Array.isArray(r) ? r : []).map((x) => ({ date: x.date, adjClose: x.adjusted_close ?? x.close }))); if (s2.dates.length > ser.dates.length) ser = s2; } }
     S.px[sym] = { from, day: today(), ser }; return ser;
   }
   /**
@@ -21679,6 +21703,14 @@ Return ONLY a JSON object:
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
       ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null };
   }
+  /** EODHD's asset type for a ticker ("fund" for an ETF or mutual fund, "stock", or null), kept a week. */
+  async function cmpEodKind(sym) {
+    const k = "eodType:" + sym, x = await idbGet(k).catch(() => null); if (x && Date.now() - Date.parse(x.at || 0) < 7 * 864e5) return x.kind;
+    if (S.eod === undefined) await detectEod(); if (!S.eod) return null;
+    const r = await optionalEod(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", sections: ["General"], include_financials: false }));
+    const t = String(r?.General?.Type || ""), kind = /etf|fund/i.test(t) ? "fund" : /stock|share|adr|reit/i.test(t) ? "stock" : null;
+    await idbPut(k, { at: new Date().toISOString(), kind, type: t, name: r?.General?.Name || "" }).catch(() => {}); return kind;
+  }
   /** Load one ticker into the comparison (once; kept while the tab is open). */
   async function cmpLoad(sym) {
     const c = S.cmp; if (c.subj[sym]?.stage === "ready" || c.subj[sym]?.stage === "loading") return;
@@ -21687,8 +21719,10 @@ Return ONLY a JSON object:
     try {
       if (!S.mcp) throw new Error("open this page in Claude to look tickers up");
       const ci = await coIndex(); let info = null, kind = ci.cos[sym] ? "stock" : null;
-      if (!kind) { info = await pfInfo(sym); kind = info.type === "etf" || info.type === "fund" ? "fund" : info.type === "stock" ? "stock" : null; }
-      if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`FMP doesn't know ${sym}`); } }
+      if (!kind) { info = await pfInfo(sym); const fmpK = info.type === "etf" || info.type === "fund" ? "fund" : info.type === "stock" ? "stock" : null, eodK = await cmpEodKind(sym);
+        // EODHD's asset type settles it when FMP is unsure or calls a fund a stock (it knows mutual funds FMP doesn't).
+        kind = eodK === "fund" || fmpK === "fund" ? "fund" : fmpK || eodK; }
+      if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`neither FMP nor EODHD knows ${sym}`); } }
       x.s = kind === "fund" ? await cmpFund(sym, step) : await cmpStock(sym, ci, info, step);
       if (!x.s.ser?.dates?.length) throw new Error(`no price history for ${sym}`);
       x.stage = "ready";
@@ -21858,6 +21892,7 @@ Return ONLY a JSON object:
     const an = c.an && c.an.key === c.syms.filter((s) => c.subj[s]?.stage === "ready").join(",") ? c.an : null;
     if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
+    if (v && !busy) Compare.reconcile(v, syms); // older verdicts: the overall pick must win at least one investor type
     const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: three desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
     // The GitHub request for this set: queued, running (with a link to the run), or failed.
@@ -21874,10 +21909,12 @@ Return ONLY a JSON object:
     const ov = v?.overall?.pick, codeBest = (() => { const avg = (s) => cmpMean(Compare.TYPES.map((t) => fit[t][s]?.total).filter(isNum)); return [...syms].sort((a, b) => (avg(b) || 0) - (avg(a) || 0))[0]; })();
     const win = ov || codeBest, rank = v?.ranking?.length ? v.ranking : [...syms].sort((a, b) => (cmpMean(Compare.TYPES.map((t) => fit[t][b]?.total).filter(isNum)) || 0) - (cmpMean(Compare.TYPES.map((t) => fit[t][a]?.total).filter(isNum)) || 0));
     const podium = rank.map((s, i) => `<div class="cx-pod${i === 0 ? " first" : ""}" style="--tc:${cmpColor(s)}"><span class="cx-place">${i + 1}</span>${cmpTick(s)}${v?.names?.[s]?.verdict ? `<span class="pill ${CMP_VERD[v.names[s].verdict]}">${esc(v.names[s].verdict)}</span>` : ""}</div>`).join("");
-    const checks = (V?.checks || []).length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${V.checks.map((x) => esc(x.text)).join("; ")}.</div>` : "";
+    const ck0 = (V?.checks || []).filter((x) => x.where !== "overall");
+    const checks = ck0.length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${ck0.map((x) => esc(x.text)).join("; ")}.</div>` : "";
     const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.via === "github" ? ` on GitHub${V.run_url ? ` · <a href="${esc(V.run_url)}" target="_blank" rel="noopener">run</a>` : ""}` : ""}${V.secs ? ` in ${V.secs}s` : ""}` : "",
       `${writing}${ghNote}${err}${noClaude}${v || busy || jRun ? `<div class="cx-runrow">${runBtn}<span class="small muted">${V ? `Last compared ${esc(ago(V.at))}.` : ""}</span></div>` : ""}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
-        <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}</div></div>
+        <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}${(() => { const w0 = v?.wins?.[win] || (v ? [] : Compare.TYPES.filter((t) => fit[t].ranked[0] === win)); return w0.length ? `<div class="cx-bestfor"><span class="small muted">Best for</span>${w0.map((t) => `<span class="pill pos">${esc(Compare.TYPE_LABEL[t])}</span>`).join("")}</div>` : ""; })()}</div></div>
+        ${v?.overall?.adjusted ? `<div class="cx-checks small"><b>Overall pick corrected:</b> ${esc(v.overall.adjusted)}</div>` : ""}
         ${v?.headline ? `<p class="cx-headline">${esc(v.headline)}</p>` : busy ? `<div class="skel" style="width:80%;height:18px"></div>` : ""}
         ${v?.overall?.why ? `<p class="prose">${esc(v.overall.why)}</p>` : ""}</div>
         <div class="cx-podium">${podium}</div></div>
