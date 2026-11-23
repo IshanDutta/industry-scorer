@@ -43,7 +43,7 @@ export function fakeAnthropic(brain, { port, failAfter = Infinity, batchDelayMs 
     const c0 = msgs[0].content, marked = Array.isArray(c0) && c0.some((b) => b.cache_control) && c0.length > 1;
     const prompt = marked ? textOf(c0.filter((b) => !b.cache_control)) + "\n\n" + textOf(c0.filter((b) => b.cache_control)) : textOf(c0);
     if (marked) stats.marked = (stats.marked || 0) + 1;
-    stats.prompts.push(prompt.slice(0, 70));
+    stats.prompts.push(process.env.FULL_PROMPTS ? prompt : prompt.slice(0, 70));
     const hadTools = msgs.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result"));
     const usage = { input_tokens: Math.round(JSON.stringify(msgs).length / 4), output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
     if (params.tools?.length && !hadTools && params.tool_choice?.type !== "none") {

@@ -57,4 +57,19 @@ assert.equal(v.overall.pick, "AAA"); assert.deepEqual(v.ranking, ["AAA", "BBB", 
 assert(v.names.FFF && v.names.BBB.verdict === null); assert.equal(v.together.mix.AAA + v.together.mix.BBB + v.together.mix.FFF, 100);
 const ck = C.checks(v, h, fit); assert(ck.some((x) => x.where === "income"), "flags the income pick against code's numbers");
 assert(C.fingerprint(subs, "2026-11-21").includes("AAA:2026-11-18"));
+// The desks: each ticker's blocks for the desk, shared industry blocks once, every ticker covered in the answer.
+A.dz = { calls: "CAL-A", context: "MACRO-SOFTWARE", exposures: "TRADE-SOFTWARE", facts: "SENS-A", numbers: "NUM-A", street: "ST-A", news: "[N1] news" };
+B.dz = { calls: "CAL-B", context: "MACRO-UTIL", numbers: "NUM-B", street: "ST-B" }; B.ind = { name: "Software" };
+F.dz = { cal: "FCAL", aff_macro: "FMACRO", base: "FBASE", tech: "FTECH" };
+const md = C.deskDossier("macro", subs);
+assert(/CAL-A/.test(md) && /SENS-A/.test(md) && /FCAL/.test(md) && /FMACRO/.test(md) && !/NUM-A/.test(md), "the macro desk gets the calendar, macro and sensitivities, not the street block");
+assert(/same Software industry report as AAA/.test(md) && !/MACRO-UTIL/.test(md), "a shared industry's macro block is given once");
+const sd = C.deskDossier("street", subs); assert(/ST-A/.test(sd) && /\[N1\]/.test(sd) && /FTECH/.test(sd) && !/CAL-A/.test(sd));
+assert(/WRITTEN ANALYSIS/.test(C.deskDossier("fundamentals", subs)));
+assert(/macro and events strategist/.test(C.deskPrompt("macro", md, ["AAA", "BBB", "FFF"], "2026-11-23")));
+const dm = C.cleanDesk("macro", { regime: "r", pick: "aaa", events: [{ date: "2026-12-09", event: "FOMC", impact: { AAA: "negative", BBB: "bogus" } }, { date: "soon", event: "x" }], scenarios: [{ name: "Base", probability: 60, impact: { AAA: { move: "+3%" } } }], names: { AAA: { read: "m" } } }, ["AAA", "BBB", "FFF"]);
+assert(dm.pick === "AAA" && dm.events.length === 1 && dm.events[0].impact.BBB === "neutral" && dm.events[0].impact.FFF === "neutral" && dm.names.FFF && dm.scenarios[0].impact.BBB.move === "");
+const ds = C.cleanDesk("street", { names: { AAA: { crowding: "huge", signal: "positive" } } }, ["AAA", "BBB"]); assert(ds.names.AAA.crowding === null && ds.names.AAA.signal === "positive" && ds.names.BBB);
+assert(/MACRO & EVENTS DESK/.test(C.desksText({ macro: dm, street: ds }, ["AAA", "BBB", "FFF"].slice(0, 2).concat(["FFF"]))) );
+assert(/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23", "DESKS")) && !/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23")));
 console.log("compare ok");
