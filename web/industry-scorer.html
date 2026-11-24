@@ -10815,7 +10815,7 @@ Reply with JSON only, in this shape:
   }
   const SEVR = { critical: 0, high: 1, medium: 2, low: 3 }, THR = { none: 0, low: 1, moderate: 2, medium: 2, elevated: 3, high: 3, severe: 4, critical: 4 }, IMP = { existential: 3, high: 2, medium: 1, low: 0 };
   const tk = (t) => lc(t).replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 7).join(" ");
-  function affairs(cov, digests, hold = [], { nI = 40, nW = 16, nC = 16, nR = 18, nL = 14 } = {}) {
+  function affairs(cov, digests, hold = [], { nI = 40, nW = 16, nC = 16, nR = 18, nL = 14, nF = 8 } = {}) {
     const L = inds(cov, digests).filter((x) => x.d.lens); if (!L.length) return null;
     const on = L.reduce((a, x) => a + x.g.weight, 0);
     const held = new Map((hold || []).filter((h) => h.ticker).map((h) => [h.ticker, h.weight]));
@@ -10841,7 +10841,7 @@ Reply with JSON only, in this shape:
     const byInd = new Map(indicators.map((x) => [x.key, x]));
     const moves = merge((d) => d.lens.macro?.moves, (x) => x.key || lc(x.label)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight); return { ...rs[0].x, reach: e.w, id: byInd.get(rs[0].x.key || lc(rs[0].x.label))?.id || "", so_whats: rs.map((r) => ({ industry: r.industry, weight: r.weight, so_what: r.x.so_what })) }; }).sort((a, b) => b.reach - a.reach).slice(0, 10);
     const channels = Object.fromEntries(["demand", "cost", "capital", "regulatory"].map((k) => [k, L.filter((x) => x.d.lens.macro?.channels?.[k]).slice(0, 3).map(({ g, d }) => ({ industry: g.industry, weight: g.weight, text: d.lens.macro.channels[k] }))]));
-    const flips = L.flatMap(({ g, d }) => (d.lens.macro?.flip || []).map((f) => ({ ...f, industry: g.industry, weight: g.weight }))).sort((a, b) => b.weight - a.weight).slice(0, 8);
+    const flips = L.flatMap(({ g, d }) => (d.lens.macro?.flip || []).map((f) => ({ ...f, industry: g.industry, weight: g.weight }))).sort((a, b) => b.weight - a.weight).slice(0, nF);
     const watchNext = merge((d) => d.lens.macro?.watch_next, (x) => x.date + "|" + tk(x.event).split(" ").slice(0, 3).join(" ")).map((e) => ({ ...e.rows[0].x, reach: e.w, industries: e.rows.map((r) => r.industry) })).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 12);
     // World: every situation, matched by title; the fullest deep dive from the biggest industry that has one.
     const world = merge((d) => d.lens.world, (x) => tk(x.title)).map((e) => { const rs = e.rows.sort((a, b) => b.weight - a.weight), dv = (rs.find((r) => r.x.deep) || rs[0]).x;
@@ -10869,23 +10869,23 @@ Reply with JSON only, in this shape:
     return { on, n: L.length, regimes, regime_mix: tally(regimes, (r) => r.regime), indicators, groups, moves, channels, flips, watchNext, world, trade, tradeVerdicts, trade_mix: tally(tradeVerdicts, (r) => r.rating), rules, items, regVerdicts, reg_mix: tally(regVerdicts, (r) => r.stance) };
   }
   /** The tables as the analysts' dossier blocks (each row with its ID). */
-  function affairsText(A) {
+  function affairsText(A, { reads: nRd = 2, inds: nInd = 6 } = {}) {
     if (!A) return { macro: "", world: "", trade: "", reg: "" };
     const w = (x) => pc(x, 0), mix = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${w(v / (Object.values(o).reduce((p, q) => p + q, 0) || 1))}`).join(", ") || "n/a";
     const val = (r) => `${r.value ?? "n/a"}${r.unit === "%" ? "%" : r.unit ? " " + r.unit : ""}${r.prior !== undefined && r.prior !== null ? ` (${r.prior_label || "prior"} ${r.prior}${r.unit === "%" ? "%" : ""})` : ""}${r.date ? `, ${r.date}` : ""}`;
     const cut = (t, k) => { t = String(t || ""); return t.length > k ? t.slice(0, t.lastIndexOf(" ", k)) + "…" : t; };
     const ch = (x) => [isNum(n(x.chg_1m)) ? `1M ${x.chg_1m > 0 ? "+" : ""}${x.chg_1m}%` : "", isNum(n(x.chg_3m)) ? `3M ${x.chg_3m > 0 ? "+" : ""}${x.chg_3m}%` : "", isNum(n(x.chg_1y)) ? `1Y ${x.chg_1y > 0 ? "+" : ""}${x.chg_1y}%` : ""].filter(Boolean).join(", ");
     const macro = [`## THE MACRO TABLE, FROM ITS INDUSTRIES' MACRO REPORTS (${A.n} industries, ${w(A.on)} of the fund; every indicator their macro planners chose, with each strategist's read)`,
-      ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}${ch(x) ? `; ${ch(x)}` : ""}${x.estimate !== null && x.estimate !== undefined ? `; consensus ${x.estimate}` : ""}. In the macro tables of industries worth ${w(x.reach)} of the fund; relevant to ${w(x.read_by)}: ${mix(x.effects)}.${x.driver ? ` Driving it: ${cut(x.driver, 200)}` : ""}${x.next ? ` Next: ${cut(x.next, 120)}` : ""} Reads: ${x.reads.slice(0, 2).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${cut(r.why, 170)}`).join(" | ")}${x.reads.length > 2 ? ` (+${x.reads.length - 2} more industries: ${mix(Object.fromEntries(Object.entries(x.reads.slice(2).reduce((o, r) => ((o[r.effect] = (o[r.effect] || 0) + r.weight), o), {}))))})` : ""}`),
+      ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}${ch(x) ? `; ${ch(x)}` : ""}${x.estimate !== null && x.estimate !== undefined ? `; consensus ${x.estimate}` : ""}. In the macro tables of industries worth ${w(x.reach)} of the fund; relevant to ${w(x.read_by)}: ${mix(x.effects)}.${x.driver ? ` Driving it: ${cut(x.driver, 200)}` : ""}${x.next ? ` Next: ${cut(x.next, 120)}` : ""} Reads: ${x.reads.slice(0, nRd).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${cut(r.why, 170)}`).join(" | ")}${x.reads.length > nRd ? ` (+${x.reads.length - nRd} more industries: ${mix(Object.fromEntries(Object.entries(x.reads.slice(nRd).reduce((o, r) => ((o[r.effect] = (o[r.effect] || 0) + r.weight), o), {}))))})` : ""}`),
       A.moves.length ? `What's moving and why: ${A.moves.map((x) => `${x.label}${x.id ? ` [${x.id}]` : ""}: ${x.move} Driver: ${x.driver} So what (${x.so_whats[0].industry}): ${x.so_whats[0].so_what}`).join(" || ")}` : "",
       A.flips.length ? `What would flip its industries' macro calls: ${A.flips.map((f) => `${f.industry}: ${f.trigger} (${f.mechanism})`).join("; ")}.` : "",
       A.watchNext.length ? `Releases ahead: ${A.watchNext.map((x) => `${x.date} ${x.event}: ${x.why}`).join("; ")}.` : ""].filter(Boolean).join("\n");
     const world = [`## WORLD EVENTS, FROM ITS INDUSTRIES' WORLD-EVENTS REPORTS`,
-      ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, 6).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${x.summary || ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
-    const trade = [`## TRADE, FROM ITS INDUSTRIES' TRADE MAPS AND COUNTRY DOSSIERS`, `Trade verdicts by fund weight: ${mix(A.trade_mix)}. ${A.tradeVerdicts.slice(0, 6).map((v) => `${v.industry} (${pc(v.weight)}): ${v.rating || "n/a"}${v.health !== null && v.health !== undefined ? `, health ${v.health}/100` : ""}. ${v.headline || ""}`).join(" | ")}`,
+      ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, nInd).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${x.summary || ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
+    const trade = [`## TRADE, FROM ITS INDUSTRIES' TRADE MAPS AND COUNTRY DOSSIERS`, `Trade verdicts by fund weight: ${mix(A.trade_mix)}. ${A.tradeVerdicts.slice(0, nInd).map((v) => `${v.industry} (${pc(v.weight)}): ${v.rating || "n/a"}${v.health !== null && v.health !== undefined ? `, health ${v.health}/100` : ""}. ${v.headline || ""}`).join(" | ")}`,
       ...A.trade.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}, threat ${c.threat || "n/a"}; its industries' revenue there about ${pc(c.rev)}${c.rev_est ? " (partly estimates)" : ""}, named by industries worth ${w(c.reach)} of the fund. ${c.headline || c.why || ""}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${r.risk} (${[r.likelihood, r.impact].filter(Boolean).join("/")})`).join("; ")}.` : ""}${c.deps?.length ? ` Depends on: ${c.deps.map((d) => `${d.input} (${d.criticality})`).join("; ")}.` : ""}${c.freeze ? ` If trade froze: ${c.freeze}` : ""}${c.exposed_held.length ? ` Holdings named most exposed: ${c.exposed_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
-    const reg = [`## REGULATION, FROM ITS INDUSTRIES' RULE BOOKS AND LEGAL REPORTS`, `Regulatory verdicts by fund weight: ${mix(A.reg_mix)}. ${A.regVerdicts.slice(0, 6).map((v) => `${v.industry} (${pc(v.weight)}): ${v.stance}${v.intensity ? `, ${v.intensity}` : ""}. ${v.headline || ""}`).join(" | ")}`,
-      ...A.rules.map((r) => `[${r.id}] ${r.name} (${r.body}; ${r.severity}, ${String(r.status).replace(/_/g, " ")}${r.effective ? `, effective ${r.effective}` : ""}): reaches ${w(r.reach)} of the fund (${r.industries.slice(0, 5).map((x) => x.industry).join(", ")}). ${r.bottom_line || r.impact || ""}${r.numeric ? ` Numbers: ${r.numeric}` : ""}${r.next12 ? ` Next 12 months: ${r.next12}` : ""}${r.named_held.length ? ` Names holdings: ${r.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`),
+    const reg = [`## REGULATION, FROM ITS INDUSTRIES' RULE BOOKS AND LEGAL REPORTS`, `Regulatory verdicts by fund weight: ${mix(A.reg_mix)}. ${A.regVerdicts.slice(0, nInd).map((v) => `${v.industry} (${pc(v.weight)}): ${v.stance}${v.intensity ? `, ${v.intensity}` : ""}. ${v.headline || ""}`).join(" | ")}`,
+      ...A.rules.map((r) => `[${r.id}] ${r.name} (${r.body}; ${r.severity}, ${String(r.status).replace(/_/g, " ")}${r.effective ? `, effective ${r.effective}` : ""}): reaches ${w(r.reach)} of the fund (${r.industries.slice(0, Math.max(5, nInd)).map((x) => x.industry).join(", ")}). ${r.bottom_line || r.impact || ""}${r.numeric ? ` Numbers: ${r.numeric}` : ""}${r.next12 ? ` Next 12 months: ${r.next12}` : ""}${r.named_held.length ? ` Names holdings: ${r.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`),
       ...A.items.map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status}${x.date ? `, ${x.date}` : ""}${x.direction ? `, ${x.direction}` : ""}): reaches ${w(x.reach)} of the fund. ${x.text || ""}${x.next ? ` Next: ${x.next}` : ""}${x.named_held.length ? ` Names holdings: ${x.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
     return { macro, world, trade, reg };
   }
@@ -13950,9 +13950,17 @@ Return ONLY a JSON object:
     return L.join("\n");
   }
   /** One desk's dossier: each ticker's blocks for that desk; an industry's shared blocks once for all the tickers in it. */
-  function deskDossier(desk, subjects, { total = 300000, extra = "" } = {}) {
+  const AFF_KEYS = ["aff_macro", "aff_world", "aff_trade", "aff_reg"];
+  /**
+   * One desk's dossier. combined: the macro table, world situations, trade map and regulation of every industry behind
+   * every ticker as one text (each indicator, situation, country and rule once, with every industry's read of it); when
+   * given, the macro desk reads it instead of each ticker's own copy, so a shared indicator or situation isn't sent twice.
+   */
+  function deskDossier(desk, subjects, { total = 300000, extra = "", combined = "" } = {}) {
     if (extra) total -= Math.min(extra.length, 30000);
-    const D = DESKS[desk], out = extra ? [capT(extra, 30000)] : [], sharedDone = {}, CAP = { bond: 20000, hold: 14000, ind: 20000, calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
+    const useComb = !!combined && desk === "macro"; if (useComb) total -= Math.min(combined.length, 200000);
+    const D0 = DESKS[desk], D = useComb ? { ...D0, stock: D0.stock.filter((k) => !AFF_KEYS.includes(k)), fund: D0.fund.filter((k) => !AFF_KEYS.includes(k)), shared: D0.shared.filter((k) => !AFF_KEYS.includes(k)) } : D0;
+    const out = [...(extra ? [capT(extra, 30000)] : []), ...(useComb ? [capT(combined, 200000)] : [])], sharedDone = {}, CAP = { bond: 20000, hold: 14000, ind: 20000, calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
     // Each ticker gets an even share of the room; a ticker whose industry blocks were already given (a shared industry) leaves its unused room to the rest.
     const need = subjects.map((s) => (s.kind === "fund" ? D.fund : D.stock).reduce((a, k) => a + Math.min(String(s.dz?.[k] || "").length, CAP[k] || 1e9), 0));
     let room = total; const budgets = need.map(() => 0); const order = need.map((x, i) => i).sort((a, b) => need[a] - need[b]);
@@ -21798,7 +21806,7 @@ Return ONLY a JSON object:
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || (so?.outlook?.calls && (!co.run || so.industry === co.run.name) && cmpOut(so.outlook.calls, "saved calls", so.outlook.date))
       || (co.run && cmpOut(coPrior(co), "from its industry"));
     const cl = f.ser?.closes || [];
-    return { sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
+    return { affIn: co.run ? { industries: [{ industry: co.run.name, weight: 1 }], hold: [{ ticker: sym, weight: 1 }] } : null, sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
       px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
       m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens, aff,
       regime: co.lensIn?.macroInd ? { regime: co.lensIn.macroInd.regime, headline: co.lensIn.macroInd.headline } : null };
@@ -21869,6 +21877,7 @@ Return ONLY a JSON object:
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
       ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null, bond,
       topShare: fd.raw?.holdFrom === "EODHD top holdings" ? (fd.raw.holdings || []).reduce((a, h) => a + (isNum(h.weight) ? h.weight : 0), 0) : null,
+      affIn: (fd.cov?.industries || []).length ? { industries: fd.cov.industries.map((g) => ({ industry: g.industry, weight: g.weight })), hold: (fd.hold || []).filter((h) => h.ticker).slice(0, 80).map((h) => ({ ticker: h.ticker, weight: h.weight })) } : null,
       holdTop: (fd.hold || []).slice(0, 15).map((h) => ({ ticker: h.ticker, name: h.name, weight: fd.raw?.holdFrom === "EODHD top holdings" ? ((fd.raw.holdings || []).find((r) => r.ticker && r.ticker === h.ticker)?.weight ?? h.weight) : h.weight, industry: h.industry || "", call12: h.call12 || "", pe: num(h.pe), r1y: num(h.r1y), inTop50: !!h.inTop50 })),
       sectors: Object.entries(f.sectors || {}).filter(([, w]) => isNum(w) && w > 0.003).sort((a, b) => b[1] - a[1]).slice(0, 11).map(([k, w]) => ({ sector: k, weight: w })), holdFrom: fd.raw?.holdFrom || "",
       buckets: fd.cov?.buckets || null, covered: num(fd.cov?.covered), nInd: (fd.cov?.industries || []).length, look: fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]).map((h) => [h, { call: fd.look.calls[h].call, dist: fd.look.calls[h].dist || null }])) : null };
@@ -22032,7 +22041,11 @@ Return ONLY a JSON object:
   /** The Compare button: start the comparison on GitHub, or write it here when GitHub can't be used. */
   async function cmpRun() {
     const c = S.cmp; if (!c?.an || c.busy) return;
-    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null;
+    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null; c.note = "";
+    // Nothing to redo: the saved verdict was written today from the same industry runs and analyses, and no price has moved 2%.
+    const have = c.vCache?.[cmpKey(syms)], fpNow = Compare.fingerprint([...c.an.subs].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
+    if (have?.v && have.fp === fpNow && have.px && c.an.subs.every((s) => isNum(have.px[s.sym]) && isNum(s.px) && Math.abs(s.px / have.px[s.sym] - 1) < 0.02)) {
+      c.note = `Nothing has changed since this verdict was written ${ago(have.at)}: same industry reports and analyses, and no price has moved 2%. It's kept as is.`; renderCompare(); return; }
     if (await ghCan()) {
       const db = await outlookDb(), at = new Date().toISOString();
       const req = { id, kind: "compare", symbols: syms, requested_at: at, holdings: [] };
@@ -22047,6 +22060,26 @@ Return ONLY a JSON object:
     c.err = "Open this page in Claude to run the comparison."; renderCompare();
   }
   /** The verdict written here: one Claude call (the Compare button without GitHub, and the GitHub job itself). */
+  /**
+   * Every ticker's industries' macro tables, world situations, trade maps and regulation as one text for the macro desk:
+   * each indicator, situation, country and rule once, with every industry's read of it, instead of one copy per ticker
+   * (three staples names read the same 10-year yield and the same Iran situation three times otherwise). Room for as
+   * many rows and reads as the tickers' own copies had together.
+   */
+  async function cmpCombinedAffairs(subs) {
+    const n = subs.length, W = {}, hold = {}, legend = []; let reads = 0;
+    for (const s of subs) { const ins = s.affIn?.industries || []; if (!ins.length) continue; reads += s.kind === "fund" ? 2 : 1;
+      for (const g of ins) if (g.industry && isNum(num(g.weight))) W[g.industry] = (W[g.industry] || 0) + num(g.weight) / n;
+      for (const h of s.affIn.hold || []) if (h.ticker && isNum(num(h.weight))) hold[h.ticker] = (hold[h.ticker] || 0) + num(h.weight) / n;
+      legend.push(`${s.sym} → ${ins.slice(0, 15).map((g) => `${g.industry} ${pct(g.weight, false, 0)}`).join(", ")}${ins.length > 15 ? ` (+${ins.length - 15} more)` : ""}`); }
+    const names = Object.keys(W); if (names.length < 2) return "";
+    const ci = await coIndex(), dg = await fundDigests(names, ci);
+    const A = FundMore.affairs({ industries: names.map((nm) => ({ industry: nm, weight: W[nm], status: "analyzed" })) }, dg, Object.entries(hold).map(([ticker, weight]) => ({ ticker, weight })),
+      { nI: 40 * n, nW: 16 * n, nC: 16 * n, nR: 18 * n, nL: 14 * n, nF: 8 * n });
+    if (!A) return "";
+    const k = Math.min(8, Math.max(2, reads)), T = FundMore.affairsText(A, { reads: k, inds: Math.max(6, k) });
+    return `THE INDUSTRIES BEHIND THESE TICKERS, COMBINED (each ticker's industry reports merged: every indicator, world situation, country and rule appears once with each industry's read of it; "of the fund" here means of this comparison, each ticker counted equally)\n${legend.join("\n")}\n\n${[T.macro, T.world, T.trade, T.reg].filter(Boolean).join("\n\n")}`;
+  }
   async function cmpVerdict() {
     const c = S.cmp; if (!c?.an || !S.sample) return;
     const an = c.an, ready = an.subs, syms = ready.map((s) => s.sym), key = cmpKey(syms), fp = Compare.fingerprint([...ready].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
@@ -22058,8 +22091,9 @@ Return ONLY a JSON object:
       const fitB = (p) => { const b = new TextEncoder().encode(p); return b.length <= lim ? p : new TextDecoder().decode(b.slice(0, lim - 2000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
       c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
       const desks = {}, failed = [], econ = cmpEconText(await cmpEcon().catch(() => []));
+      let combined = ""; try { combined = await cmpCombinedAffairs(ready); } catch (e) { console.warn("compare combined affairs", e); }
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
-        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "", combined: d === "macro" ? combined : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
         c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
@@ -22071,7 +22105,7 @@ Return ONLY a JSON object:
       const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: "Compare head of research",
         onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
       const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
-      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
+      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, px: Object.fromEntries(ready.filter((s) => isNum(s.px)).map((s) => [s.sym, s.px])), checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
       c.vCache[key] = rec; await idbPut(key, rec).catch(() => {});
     } catch (e) { if (!ctl.signal.aborted) c.err = FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { if (c.busy === key) { c.busy = null; c.partial = null; c.stage = null; } c.ctl = null; renderCompare(); }

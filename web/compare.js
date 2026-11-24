@@ -387,9 +387,17 @@ Return ONLY a JSON object:
     return L.join("\n");
   }
   /** One desk's dossier: each ticker's blocks for that desk; an industry's shared blocks once for all the tickers in it. */
-  function deskDossier(desk, subjects, { total = 300000, extra = "" } = {}) {
+  const AFF_KEYS = ["aff_macro", "aff_world", "aff_trade", "aff_reg"];
+  /**
+   * One desk's dossier. combined: the macro table, world situations, trade map and regulation of every industry behind
+   * every ticker as one text (each indicator, situation, country and rule once, with every industry's read of it); when
+   * given, the macro desk reads it instead of each ticker's own copy, so a shared indicator or situation isn't sent twice.
+   */
+  function deskDossier(desk, subjects, { total = 300000, extra = "", combined = "" } = {}) {
     if (extra) total -= Math.min(extra.length, 30000);
-    const D = DESKS[desk], out = extra ? [capT(extra, 30000)] : [], sharedDone = {}, CAP = { bond: 20000, hold: 14000, ind: 20000, calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
+    const useComb = !!combined && desk === "macro"; if (useComb) total -= Math.min(combined.length, 200000);
+    const D0 = DESKS[desk], D = useComb ? { ...D0, stock: D0.stock.filter((k) => !AFF_KEYS.includes(k)), fund: D0.fund.filter((k) => !AFF_KEYS.includes(k)), shared: D0.shared.filter((k) => !AFF_KEYS.includes(k)) } : D0;
+    const out = [...(extra ? [capT(extra, 30000)] : []), ...(useComb ? [capT(combined, 200000)] : [])], sharedDone = {}, CAP = { bond: 20000, hold: 14000, ind: 20000, calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
     // Each ticker gets an even share of the room; a ticker whose industry blocks were already given (a shared industry) leaves its unused room to the rest.
     const need = subjects.map((s) => (s.kind === "fund" ? D.fund : D.stock).reduce((a, k) => a + Math.min(String(s.dz?.[k] || "").length, CAP[k] || 1e9), 0));
     let room = total; const budgets = need.map(() => 0); const order = need.map((x, i) => i).sort((a, b) => need[a] - need[b]);
