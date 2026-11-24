@@ -47,6 +47,8 @@ const brainSrc = `window.COS = ${JSON.stringify(cos)};
     return { payload: [] }; } };
   const json = async (p) => {
     const dsyms = [...p.matchAll(/^=== ([A-Z.]+):/gm)].map((m) => m[1]), per = (o) => Object.fromEntries(dsyms.map((k) => [k, o]));
+    if (/event strategist/.test(p)) return { pick: dsyms[0], why: "w", events: [{ date: "2026-12-09", event: "FOMC", kind: "fed", importance: "high", watch: "hike", impact: per("negative"), outcomes: [{ if: "hike", odds: 70, moves: per("-2%") }], why: "rates", play: "wait" }], months: [{ month: "2026-12", theme: "Fed", risk: "high", read: "r" }], paths: per({ path: "p", biggest: "b", skew: "balanced" }), horizons: {} };
+    if (/foreign-affairs strategist/.test(p)) return { regime: "r", pick: dsyms[0], why: "w", indicators: [{ label: "CPI", now: "3.7%", read: "x", impact: per("negative") }], world: [{ situation: "Iran", status: "s", outlook: "o", impact: per({ direction: "negative", why: "y" }) }], trade: [], regulation: [], scenarios: [{ name: "Base", probability: 60, what: "x", impact: per({ move: "+3%", why: "y" }) }], sensitivities: per("rates"), names: per({ read: "m", tailwinds: ["t"], headwinds: ["h"] }) };
     if (/macro and events strategist/.test(p)) return { regime: "r", pick: dsyms[0], why: "w", events: [{ date: "2026-12-09", event: "FOMC", kind: "fed", impact: per("negative"), why: "rates" }], scenarios: [{ name: "Base", probability: 60, what: "x", impact: per({ move: "+3%", why: "y" }) }], sensitivities: per("rates"), names: per({ read: "m", tailwinds: ["t"], headwinds: ["h"] }), horizons: {} };
     if (/Wall Street and sentiment analyst/.test(p)) return { pick: dsyms[1], why: "w", contrarian: "c", names: per({ street: "s", sentiment: "t", positioning: "p", crowding: "low", signal: "positive", surprise_risk: "r" }) };
     if (/fundamentals analyst/.test(p)) return { pick: dsyms[0], why: "w", names: per({ quality: "q", growth: "g", valuation: "fair: 20x", balance_sheet: "b", income: "i", expected_12m: { bull: "+10%", base: "+3%", bear: "-8%" }, read: "r" }) };
@@ -83,7 +85,7 @@ if (existsSync(f)) { const r = JSON.parse(gunzipSync(readFileSync(f)).toString()
   ok(r.rec?.v?.overall?.pick && SYMS.includes(r.rec.v.overall.pick), "the verdict picks one of them: " + r.rec?.v?.overall?.pick);
   ok([...(r.rec?.syms || [])].sort().join(",") === SYM && !!r.rec?.fp, "the record is for this set, with its fingerprint");
   ok(Object.keys(r.rec?.v?.investors || {}).length === 4 && Object.keys(r.rec?.v?.names || {}).length === SYMS.length, "every investor type and every name is covered");
-  ok(["macro", "street", "fundamentals"].every((d) => r.rec?.desks?.[d]?.names && Object.keys(r.rec.desks[d].names).length === SYMS.length), "all three desks came back, each covering every ticker");
+  ok(["events", "macro", "street", "fundamentals"].every((d) => { const x = r.rec?.desks?.[d]; return x && Object.keys(d === "events" ? x.paths || {} : x.names || {}).length === SYMS.length; }), "all four desks came back, each covering every ticker");
   ok(r.job?.id === id, "the job's facts are attached");
   if (process.env.PROMPTS) writeFileSync(process.env.PROMPTS, JSON.stringify(fa.stats.prompts || []));
   console.log(readFileSync(join(tmp, "summary.md"), "utf8")); }

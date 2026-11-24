@@ -867,6 +867,20 @@ td.cx-best { background: color-mix(in srgb, var(--gA) 12%, transparent); font-we
 .cx-runrow { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
 button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10px color-mix(in srgb, var(--accent) 80%, transparent); }
 .cx-bestfor { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 4px; }
+.cx-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-bottom: 12px; }
+.cx-month { display: grid; gap: 2px; align-content: start; padding: 8px 10px; border-radius: 10px; background: var(--sunk); border-top: 3px solid var(--line); }
+.cx-month.high { border-top-color: var(--neg); } .cx-month.medium { border-top-color: var(--c3); } .cx-month.low { border-top-color: var(--pos); }
+.cx-month b { font-size: 12.5px; line-height: 1.3; } .cx-month .small { font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cx-ev.hi::before { border-color: var(--c3); background: color-mix(in srgb, var(--c3) 35%, var(--surface)); }
+.cx-outc td, .cx-outc th { padding: 4px 8px; font-size: 12.5px; }
+.cx-play { border-left: 2px solid var(--accent); padding-left: 8px; }
+.cx-dline { border-left: 2px solid var(--c4); padding-left: 6px; margin-top: 3px; }
+.cx-soft { opacity: .65; }
+.cx-mi td { vertical-align: top; white-space: normal; } .cx-mi td.n { white-space: nowrap; }
+.cx-mi .cx-mi-l { min-width: 260px; max-width: 420px; }
+.cx-moves { display: grid; gap: 6px; }
+.cx-sits { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 10px; }
+.cx-sit { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 6px; align-content: start; }
 .cx-desk { justify-self: end; font-size: 11px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase; }
 .cx-tl { display: grid; gap: 0; border-left: 2px solid var(--line); margin-left: 6px; }
 .cx-ev { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; padding: 10px 0 10px 14px; position: relative; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
@@ -8512,7 +8526,14 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     else { let k = 0, j = 0; co.news = (f.news || []).map((x) => ({ ...x, id: x.kind === "P" ? "P" + ++j : "N" + ++k })); }
     try { coFacts(co); } catch (e) { console.warn("compare facts", e); }
     if (!co.run) try { co.lensIn = { calendar: Company.calendarYear([], coCalendarExtra(co), today()) }; } catch {}
+    // The industry report's full macro table, world situations, trade map and regulation, built the way the Funds tab
+    // builds them (one industry at full weight), so a stock and a fund line up row for row.
+    let aff = null;
+    if (co.run) try { step("its industry's macro table and foreign affairs"); const dg = await fundDigests([co.run.name], ci);
+      aff = FundMore.affairs({ industries: [{ industry: co.run.name, weight: 1, status: "analyzed" }] }, dg, [{ ticker: sym, weight: 1 }]); } catch (e) { console.warn("compare affairs", e); }
     const dz = cmpStockDossier(co);
+    if (aff) try { const T = FundMore.affairsText(aff); Object.assign(dz, { aff_macro: T.macro || "", aff_world: T.world || "", aff_trade: T.trade || "", aff_reg: T.reg || "" }); } catch (e) { console.warn("compare affairs text", e); }
+    dz.watch = cmpWatchText(aff);
     step("any written analysis");
     const raw = await cmpSaved("company", sym), sv = cmpSavedView("company", raw);
     const row = co.row || {}, g1 = co.g1 || {}, q = co.quality || {}, P = co.perf || {}, cons = f.consensus || {}, tt = f.ttm || {};
@@ -8546,7 +8567,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const cl = f.ser?.closes || [];
     return { sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
       px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
-      m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens,
+      m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens, aff,
       regime: co.lensIn?.macroInd ? { regime: co.lensIn.macroInd.regime, headline: co.lensIn.macroInd.headline } : null };
   }
   /**
@@ -8595,6 +8616,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     let prior = null; try { prior = fd.bond ? null : FundAn.prior(fd); } catch {}
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || cmpOut(prior, "from its industries");
     let dz = {}; try { dz = { ...FundAn.dossier(fd, today()).blocks }; } catch (e) { console.warn("compare fund dossier", e); }
+    dz.watch = cmpWatchText(fd.aff);
     const st = fd.street || {}, se = fd.sent || {};
     m.news_sent = isNum(num(se.s30)) ? num(se.s30) : null;
     const street = { buy_share: num(st.buy_share), upside: num(st.upside), n: st.n || 0, on: num(st.on), rows: (st.rows || []).slice(0, 8).map((r) => ({ ticker: r.ticker, weight: r.weight, consensus: r.consensus, upside: num(r.upside), buy_share: num(r.buy_share) })), px: m.px };
@@ -8607,7 +8629,12 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       px: m.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: "", bond: !!fd.bond, bench: fd.bench?.symbol || "",
       m, pillars, profiles, outlook, saved: sv, best: fd.card?.best || null,
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
-      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null };
+      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null };
+  }
+  /** The macro releases its industries are watching, with what they expect (the events desk reads these). */
+  function cmpWatchText(A) {
+    const w = A?.watchNext || []; if (!w.length) return "";
+    return `MACRO RELEASES ITS INDUSTRIES ARE WATCHING (date · event · what they expect · why it matters)\n${w.map((x) => `${x.date || "n/a"} · ${x.event || ""}${x.expect ? ` · expect: ${x.expect}` : ""}${x.why ? ` · ${x.why}` : ""}${x.industries?.length ? ` (${x.industries.join(", ")})` : ""}`).join("\n")}`;
   }
   /** EODHD's asset type for a ticker ("fund" for an ETF or mutual fund, "stock", or null), kept a week. */
   async function cmpEodKind(sym) {
@@ -8715,14 +8742,14 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       // The three desks at once (macro and events, street and sentiment, fundamentals), each on the full dossiers.
       const L0 = S.sample.limits ? await S.sample.limits().catch(() => null) : null, lim = JOB ? 340000 : Math.min(250000, (L0?.maxPromptBytes || 262144) - 12000);
       const fitB = (p) => { const b = new TextEncoder().encode(p); return b.length <= lim ? p : new TextDecoder().decode(b.slice(0, lim - 2000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
-      c.stage = "three desks are reading the full dossiers"; renderCompare();
+      c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
       const desks = {}, failed = [];
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
         try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
-        c.stage = `${Object.keys(desks).length} of 3 desks done`; renderCompare(); }));
-      if (!Object.keys(desks).length) throw new Error("none of the three desks finished");
+        c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
+      if (!Object.keys(desks).length) throw new Error("none of the desks finished");
       // Then the head of research: code's comparison and the desks' findings.
       c.stage = "the head of research is weighing it all"; renderCompare();
       const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
@@ -8799,15 +8826,15 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
     if (v && !busy) Compare.reconcile(v, syms); // older verdicts: the overall pick must win at least one investor type
-    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: three desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
+    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: four desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
     // The GitHub request for this set: queued, running (with a link to the run), or failed.
     const J = cmpJob(syms), jRun = J && J.state !== "failed", jAge = J ? Math.round((Date.now() - Date.parse(J.started_at || J.requested_at || 0)) / 60000) : 0;
-    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `three desks are reading ${subs.length} tickers' full dossiers, then the head of research writes the verdict`} (${jAge} min so far; usually 6-12). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
+    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `four desks are reading ${subs.length} tickers' full dossiers, then the head of research writes the verdict`} (${jAge} min so far; usually 6-12). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
       : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
     const canRun = !busy && !jRun && (S.sample || S.mcp);
     const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
-    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "On GitHub, three desks read every ticker's full dossier at once (what's ahead and the macro backdrop; Wall Street and sentiment; the fundamentals), then a head of research weighs their findings and code's numbers and writes the verdict." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
+    const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "On GitHub, four desks read every ticker's full dossier at once (what's ahead, event by event; the macro tables and foreign affairs; Wall Street and sentiment; the fundamentals), then a head of research weighs their findings and code's numbers and writes the verdict." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
     // Your saved goals (Portfolios tab), when there are any: that investor type is marked.
     const userType = (() => { try { const g = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); return g?.primaryObjective ? EtfRec.UG.fromAnswers({ ...EtfRec.UG.DEFAULT, ...g })?.type || null : null; } catch { return null; } })();
 
@@ -8891,29 +8918,77 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const IMPC = { "strong positive": "pos2", positive: "pos", neutral: "neu", negative: "neg", "strong negative": "neg2" }, IMPA = { "strong positive": "▲▲", positive: "▲", neutral: "–", negative: "▼", "strong negative": "▼▼" };
     const deskBy = (d) => `<span class="cx-desk">${esc(Compare.DESKS[d].label)}</span>`;
 
-    // ---- what's ahead: the macro desk's dated events with their impact on each; before a verdict, the calendars (code)
+    // ---- what's ahead: the events desk (or, on older verdicts, the macro desk); before a verdict, the calendars (code)
+    const EV = DK.events || (MD?.events?.length ? { events: MD.events, months: [], paths: null, horizons: MD.horizons || {} } : null);
     const codeEv = (() => { const m = new Map(); for (const s0 of subs) for (const e of s0.events || []) { if (e.date > Horizon.addDays(today(), 120) || (e.importance && e.importance !== "high" && !(e.tickers || []).includes(s0.sym))) continue;
       const k = e.date + "|" + e.title.toLowerCase().slice(0, 40); const x = m.get(k) || { ...e, who: [] }; if (!x.who.includes(s0.sym)) x.who.push(s0.sym); m.set(k, x); }
       return [...m.values()].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 24); })();
-    const ahead = sec("cmp-ahead", "What's ahead", MD ? "the next 12 months: dated events and what each does to each ticker" : "the next four months from each one's calendar (its industry's events, its own reports, macro releases)",
-      MD?.events?.length ? `<div class="cx-tl">${MD.events.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b><span class="small muted">${esc(e.date.slice(0, 4))}</span></div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.event)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div>
-        <div class="cx-imp">${syms.map((k) => `<span class="pill ${IMPC[e.impact[k]] || "neu"}" title="${esc(e.impact[k])}">${esc(k)} ${IMPA[e.impact[k]] || "–"}</span>`).join("")}</div>${e.why ? `<div class="small muted">${esc(e.why)}</div>` : ""}</div></div>`).join("")}</div>${deskBy("macro")}`
+    const chips = (imp) => `<div class="cx-imp">${syms.map((k) => `<span class="pill ${IMPC[imp?.[k]] || "neu"}" title="${esc(imp?.[k] || "")}">${esc(k)} ${IMPA[imp?.[k]] || "–"}</span>`).join("")}</div>`;
+    const mvCls = (x) => (/^\s*[-−]/.test(x || "") ? "neg-t" : /^\s*\+?\d/.test(x || "") && !/^\s*0%?\s*$/.test(x || "") ? "pos-t" : "");
+    const monthStrip = EV?.months?.length ? `<div class="cx-months">${EV.months.map((m0) => `<div class="cx-month ${esc(m0.risk)}" title="${esc(m0.read)}"><span class="eyebrow">${esc(new Date(m0.month + "-15T00:00:00Z").toLocaleDateString(undefined, { month: "short", year: "2-digit", timeZone: "UTC" }))}</span><b>${esc(m0.theme)}</b><span class="small muted">${esc(m0.read)}</span></div>`).join("")}</div>` : "";
+    const paths = EV?.paths ? `<div class="cx-cards">${syms.map((k) => { const x = EV.paths[k] || {}; return `<div class="cx-card" style="--tc:${cmpColor(k)}"><div class="cx-card-top">${cmpTick(k)}${x.skew ? `<span class="pill ${x.skew === "upside" ? "pos" : x.skew === "downside" ? "neg" : "neu"}">${esc(x.skew)} skew</span>` : ""}</div>${x.biggest ? `<div class="small"><b>Biggest event:</b> ${esc(x.biggest)}</div>` : ""}<p class="small" style="margin:0">${esc(x.path || "")}</p></div>`; }).join("")}</div>` : "";
+    const evRow = (e) => `<div class="cx-ev${e.importance === "high" ? " hi" : ""}"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b><span class="small muted">${esc(e.date.slice(0, 4))}</span></div><div class="cx-evb">
+        <div class="cx-evh"><b>${esc(e.event)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}${e.importance === "high" ? `<span class="pill warn">high impact</span>` : ""}</div>
+        ${e.watch ? `<div class="small"><span class="muted">Watch:</span> ${esc(e.watch)}</div>` : ""}${chips(e.impact)}
+        ${e.outcomes?.length ? `<div class="tbl-wrap"><table class="cx-outc"><thead><tr><th>If</th><th class="n">Odds</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${e.outcomes.map((y) => `<tr><td class="wr">${esc(y.if)}</td><td class="n">${y.odds ?? "—"}%</td>${syms.map((k) => `<td class="n mono ${mvCls(y.moves[k])}">${esc(y.moves[k] || "—")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+        ${e.why ? `<div class="small muted">${esc(e.why)}</div>` : ""}${e.play ? `<div class="small cx-play"><b>Play:</b> ${esc(e.play)}</div>` : ""}</div></div>`;
+    const ahead = sec("cmp-ahead", "What's ahead", EV ? "the next 12 months, event by event: what could happen, the odds, and what each outcome does to each" : "the next four months from each one's calendar (its industry's events, its own reports, macro releases)",
+      EV?.events?.length ? `${monthStrip}<div class="cx-tl">${EV.events.map(evRow).join("")}</div>${paths ? `<h3>Each one's path through the year</h3>${paths}` : ""}${deskBy(DK.events ? "events" : "macro")}`
       : codeEv.length ? `<div class="cx-tl">${codeEv.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b>${e.est ? `<span class="small muted">est.</span>` : ""}</div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.title)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div><div class="cx-imp">${e.who.map((k) => cmpTick(k)).join("")}</div></div></div>`).join("")}</div>
-        <div class="small muted">Press Compare and the macro and events desk says what each of these does to each ticker.</div>` : `<div class="small muted">No dated events found for these tickers.</div>`);
+        <div class="small muted">Press Compare and the events desk walks each of these: the outcomes, their odds and what each does to each ticker.</div>` : `<div class="small muted">No dated events found for these tickers.</div>`);
 
-    // ---- macro & world: the desk's backdrop and scenarios; code's measured sensitivities; each industry's macro call
+    // ---- the full macro indicator table: every indicator its industries read, with each ticker's read (code), and the desk's
+    const MA = Compare.mergeAffairs(subs), EFFC = { tailwind: "pos", headwind: "neg", neutral: "neu" }, STC = (x) => (/advers|hostile|strain|negative|head/i.test(x || "") ? "neg" : /support|favor|friend|ally|positive|tail/i.test(x || "") ? "pos" : /mixed/i.test(x || "") ? "warn" : "neu");
+    const fv = (v, u) => (v === null || v === undefined || v === "" ? "—" : `${typeof v === "number" ? fix(v, Math.abs(v) >= 100 ? 0 : 2) : esc(String(v))}${u && u !== "index" && u !== "$" ? esc(u) : ""}`);
+    const fc = (v) => (isNum(num(v)) ? `<span class="${num(v) > 0 ? "up" : num(v) < 0 ? "down" : ""}">${num(v) > 0 ? "+" : ""}${fix(num(v), Math.abs(num(v)) >= 10 ? 1 : 2)}</span>` : "—");
+    const dInd = new Map((MD?.indicators || []).map((x) => [x.label.toLowerCase().slice(0, 24), x]));
+    const dFor = (lab) => { const k = String(lab || "").toLowerCase(); for (const [kk, x] of dInd) if (k.startsWith(kk.slice(0, 14)) || kk.startsWith(k.slice(0, 14))) return x; return null; };
+    let lastG = "";
+    const indRows = MA.indicators.map((x) => { const d0 = dFor(x.label), g = x.group !== lastG ? `<tr class="cx-grp"><td colspan="${7 + syms.length}">${esc(x.group || "Other")}</td></tr>` : ""; lastG = x.group;
+      return `${g}<tr><td class="wr cx-mi-l"><b>${esc(x.label)}</b>${x.driver ? `<div class="small muted">${esc(trimC(stripCites(x.driver), 150))}</div>` : ""}${x.next ? `<div class="small"><span class="muted">Next:</span> ${esc(trimC(stripCites(x.next), 120))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
+        <td class="n mono"><b>${fv(x.value, x.unit)}</b>${isNum(num(x.estimate)) ? `<div class="small muted">est ${fv(x.estimate, x.unit)}</div>` : ""}</td><td class="n mono small">${fv(x.prior, x.unit)}${x.prior_label ? `<div class="muted">${esc(x.prior_label)}</div>` : ""}</td>
+        <td class="n mono small">${fc(x.chg_1m)}</td><td class="n mono small">${fc(x.chg_3m)}</td><td class="n mono small">${fc(x.chg_1y)}</td><td class="mono small">${esc(x.date || x.period || "")}</td>
+        ${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<td>${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}" title="${esc(`${p0.relevance || ""} relevance${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "—")}</span>${p0.relevance ? `<div class="small muted">${esc(p0.relevance)}</div>` : ""}` : `<span class="small muted">not read</span>`}${dd && dd !== "neutral" ? `<div class="small"><span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("");
+    const macroInd = MA.indicators.length ? sec("cmp-macroind", "Macro indicators", `the full macro tables of their industry reports: ${MA.indicators.length} indicators, each ticker's industry read (headwind or tailwind, and how much it matters)`,
+      `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
+      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 240))}</div>`).join("")}</div>` : ""}
+      <div class="tbl-wrap cx-mi"><table class="wrap-table"><thead><tr><th>Indicator</th><th class="n">Latest</th><th class="n">Prior</th><th class="n">1M</th><th class="n">3M</th><th class="n">1Y</th><th>As of</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>
+      ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(trimC(stripCites(m0.move), 160))}${m0.driver ? ` <span class="muted">Driver: ${esc(trimC(stripCites(m0.driver), 160))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(trimC(stripCites(m0.so_what), 160))}</span>` : ""}</div>`).join("")}</div>` : ""}
+      ${MA.flips.length ? `<h3>What would flip their macro calls</h3><ul class="memo-pts">${MA.flips.map((f0) => `<li class="small">${cmpTick(f0.sym)} <b>${esc(trimC(stripCites(f0.trigger), 140))}</b> — ${esc(trimC(stripCites(f0.mechanism), 180))}</li>`).join("")}</ul>` : ""}
+      <div class="small muted">From the macro tables of the industry reports behind each ticker (a fund's industries at its weights). A headwind or tailwind is that industry's own read of the indicator; "desk" is the macro desk's call on what it does to the ticker.</div>`) : "";
+
+    // ---- foreign affairs: world situations, the trade map and regulation (code), with the desk's reads
+    const dW = (t) => (MD?.world || []).find((x) => { const a1 = x.situation.toLowerCase().slice(0, 20), b1 = String(t).toLowerCase().slice(0, 20); return a1.includes(b1.slice(0, 12)) || b1.includes(a1.slice(0, 12)); });
+    const worldC = MA.world.map((w) => { const d0 = dW(w.title);
+      return `<div class="cx-sit"><div class="cx-evh"><b>${esc(w.title)}</b>${w.category ? `<span class="pill neu">${esc(w.category)}</span>` : ""}${w.region ? `<span class="small muted">${esc(w.region)}</span>` : ""}${w.deep ? `<span class="pill warn">deep dive</span>` : ""}</div>
+        <div class="cx-imp">${syms.map((k) => { const p0 = w.per[k], dd = d0?.impact?.[k]; return `<span class="pill ${p0 ? STC(p0.stance) : "neu"}" title="${esc(dd?.why || "")}">${esc(k)} ${esc(p0?.stance || "—")}${dd && dd.direction !== "neutral" ? ` · ${IMPA[dd.direction]}` : ""}</span>`; }).join("")}</div>
+        ${w.status ? `<div class="small"><span class="muted">Status:</span> ${esc(trimC(stripCites(w.status), 200))}</div>` : ""}
+        ${d0?.outlook ? `<div class="small cx-dline"><b>Outlook:</b> ${esc(d0.outlook)}</div>` : w.near_term ? `<div class="small"><b>Near term:</b> ${esc(trimC(stripCites(w.near_term), 220))}</div>` : ""}
+        <details class="memo-more"><summary>Details, scenarios and what to watch</summary>${[["Now", w.now], ["Summary", w.summary], ["Trigger", w.trigger], ["First order", w.first_order]].filter(([, x]) => x).map(([l, x]) => `<p class="small"><b>${l}:</b> ${esc(stripCites(x))}</p>`).join("")}
+          ${w.scenarios?.length ? `<div class="small"><b>Scenarios:</b><ul class="memo-pts">${w.scenarios.map((c0) => `<li>${esc(c0.name || "")}${isNum(num(c0.probability)) ? ` <b>${c0.probability}%</b>` : ""}${c0.outcome ? `: ${esc(stripCites(c0.outcome))}` : ""}</li>`).join("")}</ul></div>` : ""}
+          ${w.watch?.length ? `<div class="small"><b>Watch:</b> ${esc(w.watch.map((x) => typeof x === "string" ? x : `${x.indicator || ""}${x.signal ? ": " + x.signal : ""}`).join(" · "))}</div>` : ""}
+          ${w.developments?.length ? `<div class="small"><b>Latest:</b> ${esc(w.developments.map((x) => `${x.date || ""} ${stripCites(x.text || "")}`).join(" · "))}</div>` : ""}
+          ${syms.filter((k) => d0?.impact?.[k]?.why).map((k) => `<div class="small">${cmpTick(k)} ${esc(d0.impact[k].why)}</div>`).join("")}</details></div>`; }).join("");
+    const dT = (c) => (MD?.trade || []).find((x) => x.country.toLowerCase() === String(c).toLowerCase());
+    const tradeT = MA.trade.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th>Importance</th><th>Threat</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.trade.map((c0) => { const d0 = dT(c0.country);
+        return `<tr><td class="wr"><b>${esc(c0.country)}</b>${c0.alliance ? ` <span class="small muted">${esc(c0.alliance)}</span>` : ""}${d0?.read ? `<div class="small cx-dline">${esc(d0.read)}</div>` : c0.headline ? `<div class="small muted">${esc(trimC(stripCites(c0.headline), 200))}</div>` : ""}</td><td class="small">${esc(c0.importance || "—")}</td><td><span class="pill ${/high|severe|critical/i.test(c0.threat) ? "neg" : /medium|moderate/i.test(c0.threat) ? "warn" : "neu"}">${esc(c0.threat || "—")}</span></td>
+          ${syms.map((k) => { const p0 = c0.per[k], dd = d0?.impact?.[k]; return `<td class="small">${p0 ? `${isNum(p0.rev) ? `<b>${pct(p0.rev, false, 1)}</b>${p0.est ? " est." : ""} of revenue` : "—"}<div><span class="pill ${STC(p0.stance)}">${esc(p0.stance || "—")}</span></div>` : `<span class="muted">—</span>`}${dd && dd.direction !== "neutral" ? `<div title="${esc(dd.why)}"><span class="pill ${IMPC[dd.direction]}">desk ${IMPA[dd.direction]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("")}</tbody></table></div>` : "";
+    const regL = MA.rules.length || MA.items.length || MD?.regulation?.length ? `${MD?.regulation?.length ? `<div class="cx-cards">${MD.regulation.map((r0) => `<div class="box small"><b>${esc(r0.item)}</b>${r0.status ? ` <span class="muted">${esc(r0.status)}</span>` : ""}${chips(Object.fromEntries(syms.map((k) => [k, r0.impact[k]?.direction])))}${syms.filter((k) => r0.impact[k]?.why).map((k) => `<div>${cmpTick(k)} ${esc(r0.impact[k].why)}</div>`).join("")}</div>`).join("")}</div>` : ""}
+      ${MA.rules.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Rule</th><th>Status</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.rules.map((r0) => `<tr><td class="wr"><b>${esc(r0.body ? r0.body + ": " : "")}${esc(r0.name)}</b>${r0.bottom_line ? `<div class="small muted">${esc(trimC(stripCites(r0.bottom_line), 220))}</div>` : ""}</td><td class="small">${esc(r0.status || "")}${r0.effective ? ` · ${esc(r0.effective)}` : ""}</td>${syms.map((k) => `<td>${r0.per[k] ? `<span class="pill ${/crit|high/i.test(r0.per[k].severity) ? "neg" : /med/i.test(r0.per[k].severity) ? "warn" : "neu"}">${esc(r0.per[k].severity || "applies")}</span>` : `<span class="small muted">—</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+      ${MA.items.length ? `<ul class="memo-pts">${MA.items.map((x) => `<li class="small"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.status ? ` (${esc(x.status)}${x.date ? ", " + esc(x.date) : ""})` : ""} ${syms.filter((k) => x.per[k]).map((k) => `${cmpTick(k)}${x.per[k].direction ? ` <span class="${/pos|favor|tail/i.test(x.per[k].direction) ? "pos-t" : /neg|advers|head/i.test(x.per[k].direction) ? "neg-t" : "muted"}">${esc(x.per[k].direction)}</span>` : ""}`).join(" ")}${x.next ? `<div class="muted">Next: ${esc(trimC(stripCites(x.next), 160))}</div>` : ""}</li>`).join("")}</ul>` : ""}` : "";
+    const affairs = worldC || tradeT || regL ? sec("cmp-affairs", "Foreign affairs", "world situations, the trade map and regulation, from their industry reports, with each ticker's exposure",
+      `${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT ? `<h3>The trade map</h3>${tradeT}` : ""}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
+
+    // ---- macro scenarios and measured sensitivity, with the desk's case for each
     const facs = [...new Set(subs.flatMap((s0) => (s0.sens || []).map((x) => x.label)))];
     const sensT = facs.length ? `<div class="tbl-wrap"><table><thead><tr><th>A one-sigma move in…</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${facs.map((f0) => `<tr><td>${esc(f0)}</td>${subs.map((s0) => { const x = (s0.sens || []).find((y) => y.label === f0); return `<td class="n ${cls(x?.effect)}" title="${x && isNum(x.t) ? "t " + fix(x.t, 1) : ""}">${x ? pct(x.effect, true, 2) : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
       <div class="small muted">Measured on the last year of daily returns: what each moved on a typical one-sigma day in each factor, holding the market fixed.</div>` : "";
-    const regimes = subs.filter((s0) => s0.regime?.regime).map((s0) => `<div class="small">${cmpTick(s0.sym)} <b>${esc(s0.ind?.name || "")}</b>: ${esc(s0.regime.regime)}${s0.regime.headline ? ` — ${esc(trimC(stripCites(s0.regime.headline), 220))}` : ""}</div>`).join("");
-    const scenT = MD?.scenarios?.length ? `<h3>Macro and world scenarios</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Odds</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MD.scenarios.map((x) => `<tr><td class="wr"><b>${esc(x.name)}</b><div class="small muted">${esc(x.what)}</div></td><td class="n">${x.probability ?? "—"}%</td>${syms.map((k) => { const m0 = x.impact[k] || {}, neg = /^-|−/.test(m0.move || ""); return `<td class="wr small"><b class="${neg ? "neg-t" : /^\+?\d/.test(m0.move || "") ? "pos-t" : ""}">${esc(m0.move || "—")}</b> ${esc(m0.why || "")}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>` : "";
-    const macroS = sec("cmp-macro", "Macro & world", "the backdrop, what moves each one, and the scenarios", `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop</span><p>${esc(MD.regime)}</p></div>` : ""}
-      ${regimes ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call (its report)</span>${regimes}</div>` : ""}
-      ${scenT}${sensT ? `<h3>Measured macro sensitivity</h3>${sensT}` : ""}
+    const scenT = MD?.scenarios?.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Odds</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MD.scenarios.map((x) => `<tr><td class="wr"><b>${esc(x.name)}</b><div class="small muted">${esc(x.what)}</div></td><td class="n">${x.probability ?? "—"}%</td>${syms.map((k) => { const m0 = x.impact[k] || {}; return `<td class="wr small"><b class="${mvCls(m0.move)}">${esc(m0.move || "—")}</b> ${esc(m0.why || "")}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>` : "";
+    const macroS = scenT || sensT || MD ? sec("cmp-macro", "Macro scenarios & sensitivity", "what the big macro and world outcomes do to each, and what each has measurably moved with", `${scenT}${sensT ? `<h3>Measured macro sensitivity</h3>${sensT}` : ""}
       ${MD ? `<div class="cx-cards">${syms.map((k) => `<div class="cx-card" style="--tc:${cmpColor(k)}"><div class="cx-card-top">${cmpTick(k)}</div><p class="small" style="margin:0">${esc(MD.names[k]?.read || "")}</p>
         ${MD.names[k]?.tailwinds?.length ? `<div class="small"><span class="eyebrow pos-t">Tailwinds</span><ul class="memo-pts">${MD.names[k].tailwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
         ${MD.names[k]?.headwinds?.length ? `<div class="small"><span class="eyebrow neg-t">Headwinds</span><ul class="memo-pts cx-neg">${MD.names[k].headwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
-        ${MD.sensitivities?.[k] ? `<div class="small muted"><b>Sensitive to:</b> ${esc(MD.sensitivities[k])}</div>` : ""}</div>`).join("")}</div>${deskBy("macro")}` : `<div class="small muted">The macro and events desk's read comes with the verdict.</div>`}`);
+        ${MD.sensitivities?.[k] ? `<div class="small muted"><b>Sensitive to:</b> ${esc(MD.sensitivities[k])}</div>` : ""}</div>`).join("")}</div>${deskBy("macro")}` : `<div class="small muted">The macro desk's scenarios and reads come with the verdict.</div>`}`) : "";
 
     // ---- Wall Street & sentiment: code's numbers (ratings, targets, revisions, news sentiment, short interest) and the desk's read
     const sentBar = (v0) => isNum(v0) ? `<div class="cx-sent"><div class="cx-sent-t"><i style="left:${Math.max(0, Math.min(100, 50 + v0 * 50))}%"></i></div><b class="mono ${v0 > 0.05 ? "pos-t" : v0 < -0.05 ? "neg-t" : ""}">${v0 > 0 ? "+" : ""}${fix(v0, 2)}</b></div>` : `<span class="small muted">—</span>`;
@@ -8968,11 +9043,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
 
     const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
-      { label: "Ahead", items: [["cmp-ahead", "What's ahead"], ["cmp-macro", "Macro & world"], ["cmp-street", "Wall Street & sentiment"]] },
+      { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
       { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
       { label: "Analysis", items: [["cmp-cases", "The case for each"], ["cmp-industry", "Industry backdrop"], tog ? ["cmp-together", "Owning them together"] : null] }];
-    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroS}${streetS}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 
