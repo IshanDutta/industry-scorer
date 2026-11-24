@@ -58,20 +58,36 @@ assert(v.names.FFF && v.names.BBB.verdict === null); assert.equal(v.together.mix
 const ck = C.checks(v, h, fit); assert(ck.some((x) => x.where === "income"), "flags the income pick against code's numbers");
 assert(C.fingerprint(subs, "2026-11-21").includes("AAA:2026-11-18"));
 // The desks: each ticker's blocks for the desk, shared industry blocks once, every ticker covered in the answer.
-A.dz = { calls: "CAL-A", context: "MACRO-SOFTWARE", exposures: "TRADE-SOFTWARE", facts: "SENS-A", numbers: "NUM-A", street: "ST-A", news: "[N1] news" };
-B.dz = { calls: "CAL-B", context: "MACRO-UTIL", numbers: "NUM-B", street: "ST-B" }; B.ind = { name: "Software" };
-F.dz = { cal: "FCAL", aff_macro: "FMACRO", base: "FBASE", tech: "FTECH" };
+A.dz = { calls: "CAL-A", watch: "WATCH-A", aff_macro: "MI-SOFTWARE", aff_world: "WS-SOFTWARE", aff_trade: "TC-SOFTWARE", facts: "SENS-A", numbers: "NUM-A", street: "ST-A", news: "[N1] news" };
+B.dz = { calls: "CAL-B", aff_macro: "MI-UTIL", numbers: "NUM-B", street: "ST-B" }; B.ind = { name: "Software" };
+F.dz = { cal: "FCAL", aff_macro: "FMACRO", aff_world: "FWORLD", base: "FBASE", tech: "FTECH" };
+const ed = C.deskDossier("events", subs);
+assert(/CAL-A/.test(ed) && /WATCH-A/.test(ed) && /SENS-A/.test(ed) && /FCAL/.test(ed) && !/NUM-A/.test(ed) && !/MI-SOFTWARE/.test(ed), "the events desk gets calendars, watched releases and sensitivities");
 const md = C.deskDossier("macro", subs);
-assert(/CAL-A/.test(md) && /SENS-A/.test(md) && /FCAL/.test(md) && /FMACRO/.test(md) && !/NUM-A/.test(md), "the macro desk gets the calendar, macro and sensitivities, not the street block");
-assert(/same Software industry report as AAA/.test(md) && !/MACRO-UTIL/.test(md), "a shared industry's macro block is given once");
+assert(/MI-SOFTWARE/.test(md) && /WS-SOFTWARE/.test(md) && /TC-SOFTWARE/.test(md) && /FMACRO/.test(md) && /FWORLD/.test(md) && !/CAL-A/.test(md), "the macro desk gets the macro tables and foreign affairs");
+assert(/same Software industry report as AAA/.test(md) && !/MI-UTIL/.test(md), "a shared industry's tables are given once");
 const sd = C.deskDossier("street", subs); assert(/ST-A/.test(sd) && /\[N1\]/.test(sd) && /FTECH/.test(sd) && !/CAL-A/.test(sd));
 assert(/WRITTEN ANALYSIS/.test(C.deskDossier("fundamentals", subs)));
-assert(/macro and events strategist/.test(C.deskPrompt("macro", md, ["AAA", "BBB", "FFF"], "2026-11-23")));
-const dm = C.cleanDesk("macro", { regime: "r", pick: "aaa", events: [{ date: "2026-12-09", event: "FOMC", impact: { AAA: "negative", BBB: "bogus" } }, { date: "soon", event: "x" }], scenarios: [{ name: "Base", probability: 60, impact: { AAA: { move: "+3%" } } }], names: { AAA: { read: "m" } } }, ["AAA", "BBB", "FFF"]);
-assert(dm.pick === "AAA" && dm.events.length === 1 && dm.events[0].impact.BBB === "neutral" && dm.events[0].impact.FFF === "neutral" && dm.names.FFF && dm.scenarios[0].impact.BBB.move === "");
+assert(/event strategist/.test(C.deskPrompt("events", ed, ["AAA", "BBB", "FFF"], "2026-11-23")) && /foreign-affairs strategist/.test(C.deskPrompt("macro", md, ["AAA", "BBB", "FFF"], "2026-11-23")));
+const de = C.cleanDesk("events", { pick: "aaa", events: [{ date: "2026-12-09", event: "FOMC", importance: "high", watch: "a hike", impact: { AAA: "negative", BBB: "bogus" }, outcomes: [{ if: "hike", odds: 70, moves: { AAA: "-3%" } }, { if: "" }] }, { date: "soon", event: "x" }],
+  months: [{ month: "2026-12", theme: "Fed", risk: "huge" }], paths: { AAA: { path: "p", skew: "upside" } } }, ["AAA", "BBB", "FFF"]);
+assert(de.pick === "AAA" && de.events.length === 1 && de.events[0].impact.BBB === "neutral" && de.events[0].outcomes.length === 1 && de.events[0].outcomes[0].moves.FFF === "" && de.months[0].risk === "medium" && de.paths.FFF && de.paths.AAA.skew === "upside");
+const dm = C.cleanDesk("macro", { regime: "r", indicators: [{ label: "CPI", impact: { AAA: "negative" } }], world: [{ situation: "Iran", impact: { AAA: { direction: "positive", why: "oil" } } }], trade: [{ country: "China", impact: {} }],
+  scenarios: [{ name: "Base", probability: 60, impact: { AAA: { move: "+3%" } } }], names: { AAA: { read: "m" } } }, ["AAA", "BBB", "FFF"]);
+assert(dm.indicators[0].impact.BBB === "neutral" && dm.world[0].impact.AAA.direction === "positive" && dm.trade[0].impact.FFF.direction === "neutral" && dm.scenarios[0].impact.BBB.move === "" && dm.names.FFF);
+const dOld = C.cleanDesk("macro", { regime: "r", events: [{ date: "2026-12-09", event: "FOMC" }] }, ["AAA", "BBB"]); assert(dOld.events.length === 1, "older verdicts kept their events on the macro desk");
 const ds = C.cleanDesk("street", { names: { AAA: { crowding: "huge", signal: "positive" } } }, ["AAA", "BBB"]); assert(ds.names.AAA.crowding === null && ds.names.AAA.signal === "positive" && ds.names.BBB);
-assert(/MACRO & EVENTS DESK/.test(C.desksText({ macro: dm, street: ds }, ["AAA", "BBB", "FFF"].slice(0, 2).concat(["FFF"]))) );
-assert(/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23", "DESKS")) && !/Three desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23")));
+const dt = C.desksText({ events: de, macro: dm, street: ds }, ["AAA", "BBB", "FFF"]); assert(/EVENTS DESK/.test(dt) && /MACRO & FOREIGN AFFAIRS DESK/.test(dt) && /Outcomes: hike 70%/.test(dt));
+assert(/Four desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23", "DESKS")) && !/Four desks/.test(C.prompt("x", ["AAA", "BBB"], "2026-11-23")));
+// The macro table and foreign affairs merge row by row, each ticker with its own read.
+A.aff = { regimes: [{ industry: "Software", regime: "late cycle", headline: "h" }], indicators: [{ key: "cpi", label: "CPI", group: "Inflation", value: 3.7, unit: "%", chg_1m: 0.2, effects: { headwind: 1 }, reads: [{ relevance: "high", effect: "headwind", why: "costs", weight: 1 }] }],
+  world: [{ title: "Iran conflict", deep: true, stances: { adverse: 1 }, summary: "s", scenarios: [{ name: "ceasefire", probability: 30 }] }], trade: [{ country: "China", rev: 0.2, stances: { strained: 1 } }], rules: [{ name: "Rule X", severity: "high" }], items: [] };
+F.aff = { indicators: [{ key: "cpi", label: "CPI", group: "Inflation", effects: { tailwind: 0.6, headwind: 0.2 }, reads: [{ relevance: "medium", effect: "tailwind", weight: 0.6 }] }, { key: "oil", label: "Brent", group: "Energy", effects: {}, reads: [] }],
+  world: [{ title: "Iran Conflict!", stances: { supportive: 0.4 }, winners_held: [{ symbol: "AAA" }] }], trade: [{ country: "china", rev: 0.05, rev_est: true }], rules: [], items: [] };
+const MA = C.mergeAffairs(subs);
+assert(MA.indicators[0].key === "cpi" && MA.indicators[0].per.AAA.effect === "headwind" && MA.indicators[0].per.FFF.effect === "tailwind" && MA.indicators.length === 2);
+assert(MA.world.length === 1 && MA.world[0].per.AAA.stance === "adverse" && MA.world[0].per.FFF.stance === "supportive" && MA.world[0].per.FFF.named[0] === "+AAA" && MA.world[0].scenarios.length === 1);
+assert(MA.trade.length === 1 && MA.trade[0].per.AAA.rev === 0.2 && MA.trade[0].per.FFF.est === true && MA.regimes.length === 1 && MA.rules[0].per.AAA.severity === "high");
 // Overall must win at least one investor type.
 const vx = C.clean({ headline: "h", overall: { pick: "BBB", why: "w" }, ranking: ["BBB", "AAA", "FFF"], investors: { income: { pick: "AAA" }, conservative: { pick: "AAA" }, growth: { pick: "FFF" }, aggressive: { pick: "FFF" } } }, ["AAA", "BBB", "FFF"]);
 assert.equal(vx.overall.pick, "AAA", "ties broken by the answer's ranking"); assert(/without picking it/.test(vx.overall.adjusted) && vx.ranking[0] === "AAA");

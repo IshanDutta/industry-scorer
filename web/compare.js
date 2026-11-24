@@ -270,7 +270,7 @@
 
   function prompt(text, syms, today, desks = "") {
     const S = syms.join(" | ");
-    return `You are the head of research at an investment firm, writing the comparison desk's verdict on ${syms.join(", ")} for ${today}. Your colleagues have already done the work: the numbers, each name's industry report and, where they exist, full written analyses of the company or fund. Code has scored every dimension on fixed scales and ranked them for four investor types.${desks ? " Three desks have each read the full dossiers on their own question: the macro and events desk (what's coming over the next 12 months and what the macro backdrop does to each), the street and sentiment desk (Wall Street, news sentiment, positioning) and the fundamentals desk (business, valuation, balance sheet). Their findings are at the end." : ""} Read all of it and decide. Weigh the future most: a cheap stock walking into a bad year is not the better buy; say which dated events and macro scenarios decide the call.
+    return `You are the head of research at an investment firm, writing the comparison desk's verdict on ${syms.join(", ")} for ${today}. Your colleagues have already done the work: the numbers, each name's industry report and, where they exist, full written analyses of the company or fund. Code has scored every dimension on fixed scales and ranked them for four investor types.${desks ? " Four desks have each read the full dossiers on their own question: the events desk (the next 12 months event by event, with outcomes and odds), the macro and foreign affairs desk (the full macro indicator tables, world situations, trade and regulation), the street and sentiment desk (Wall Street, news sentiment, positioning) and the fundamentals desk (business, valuation, balance sheet). Their findings are at the end." : ""} Read all of it and decide. Weigh the future most: a cheap stock walking into a bad year is not the better buy; say which dated events and macro scenarios decide the call.
 
 Rules:
 - Decide. Every "pick" is exactly one of: ${S}. No ties, no "it depends" without saying on what.
@@ -299,23 +299,79 @@ Return ONLY a JSON object:
   }
 
 
-  // ----------------------------------------------------------------- the three desks and the head of research
+
+  // ----------------------------------------------------------------- the macro table and foreign affairs, side by side
+  const EFF_RANK = { tailwind: 1, neutral: 0, headwind: -1 }, REL_RANK = { high: 3, medium: 2, low: 1 };
+  const topKey = (t) => Object.entries(t || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+  const tkey = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim().slice(0, 48);
   /**
-   * The verdict is made the way the industry runs are: specialists first, then one head of research. Three desks read
-   * the full dossiers in parallel (each ticker's industry report rows, its own numbers, Wall Street, sentiment and news),
-   * each on its own question; the head of research reads code's comparison and the three desks' findings and decides.
-   *   macro: what's ahead (the dated calendar, macro indicators and the industries' macro calls, world situations,
-   *          trade and regulation, the industries' scenarios and 1M-12M cards, factor sensitivities, times like this)
+   * Every ticker's affairs (FundMore.affairs: its industries' full macro tables, world situations, trade maps and
+   * regulation, at its weights) merged into one row per indicator, situation, country and rule, with each ticker's read.
+   */
+  function mergeAffairs(subjects) {
+    const I = new Map(), W = new Map(), T = new Map(), R = new Map(), P = new Map(), regimes = [], moves = [], flips = [];
+    for (const s of subjects) {
+      const A = s.aff; if (!A) continue;
+      for (const r of A.regimes || []) regimes.push({ sym: s.sym, industry: r.industry, weight: r.weight, regime: r.regime || "", headline: r.headline || "", summary: r.summary || "" });
+      for (const m of (A.moves || []).slice(0, 6)) moves.push({ sym: s.sym, label: m.label, move: m.move, driver: m.driver, so_what: m.so_whats?.[0]?.so_what || m.so_what || "" });
+      for (const f of (A.flips || []).slice(0, 4)) flips.push({ sym: s.sym, industry: f.industry, trigger: f.trigger, mechanism: f.mechanism, watch: f.watch || "" });
+      for (const x of A.indicators || []) {
+        const k = x.key || tkey(x.label), e = I.get(k) || { key: k, label: x.label, group: x.group || "", value: x.value, unit: x.unit || "", prior: x.prior, prior_label: x.prior_label || "", estimate: x.estimate,
+          chg_1m: x.chg_1m, chg_3m: x.chg_3m, chg_1y: x.chg_1y, period: x.period || "", date: x.date || "", driver: x.driver || "", next: x.next || "", per: {} };
+        const reads = [...(x.reads || [])].sort((a, b) => (REL_RANK[b.relevance] || 0) - (REL_RANK[a.relevance] || 0) || b.weight - a.weight), r0 = reads[0];
+        e.per[s.sym] = { effect: topKey(x.effects) || r0?.effect || "", relevance: r0?.relevance || "", why: r0?.why || "", read_by: x.read_by || 0 };
+        if (!e.driver && x.driver) e.driver = x.driver; if (!e.next && x.next) e.next = x.next; I.set(k, e);
+      }
+      for (const x of A.world || []) {
+        const k = tkey(x.title), e = W.get(k) || { title: x.title, category: x.category || "", region: x.region || "", status: x.status || "", deep: !!x.deep, summary: x.summary || "", now: x.now || "", near_term: x.near_term || "",
+          trigger: x.trigger || "", first_order: x.first_order || "", scenarios: x.scenarios || [], watch: x.watch || [], developments: x.developments || [], per: {} };
+        if (!e.deep && x.deep) Object.assign(e, { deep: true, summary: x.summary || e.summary, now: x.now || e.now, near_term: x.near_term || e.near_term, scenarios: x.scenarios || e.scenarios, watch: x.watch || e.watch, developments: x.developments || e.developments });
+        e.per[s.sym] = { stance: topKey(x.stances) || x.stance || "", named: s.kind === "fund" ? [...(x.winners_held || []).map((y) => "+" + y.symbol), ...(x.losers_held || []).map((y) => "-" + y.symbol)].slice(0, 4) : [] };
+        W.set(k, e);
+      }
+      for (const x of A.trade || []) {
+        const k = tkey(x.country), e = T.get(k) || { country: x.country, importance: x.importance || "", threat: x.threat || "", trajectory: x.trajectory || "", alliance: x.alliance || "", headline: x.headline || "", outlook: x.outlook || "", risks: x.risks || [], per: {} };
+        e.per[s.sym] = { rev: isNum(n(x.rev)) ? n(x.rev) : null, est: !!x.rev_est, stance: topKey(x.stances) || x.stance || "", threat: x.threat || "" }; T.set(k, e);
+      }
+      for (const x of A.rules || []) { const k = tkey(x.name), e = R.get(k) || { body: x.body || "", name: x.name, status: x.status || "", effective: x.effective || "", severity: x.severity || "", bottom_line: x.bottom_line || "", next12: x.next12 || "", per: {} };
+        e.per[s.sym] = { severity: x.severity || "" }; R.set(k, e); }
+      for (const x of A.items || []) { const k = tkey(x.title), e = P.get(k) || { kind: x.kind || "", title: x.title, status: x.status || "", date: x.date || "", text: x.text || "", next: x.next || "", per: {} };
+        e.per[s.sym] = { direction: x.direction || "" }; P.set(k, e); }
+    }
+    const n0 = (e) => Object.keys(e.per).length;
+    const GORD = {}; [...I.values()].forEach((e) => { GORD[e.group] = Math.max(GORD[e.group] || 0, n0(e)); });
+    const sev = { critical: 0, high: 1, medium: 2, low: 3 };
+    return {
+      regimes, moves: moves.slice(0, 16), flips: flips.slice(0, 10),
+      indicators: [...I.values()].sort((a, b) => (GORD[b.group] || 0) - (GORD[a.group] || 0) || String(a.group).localeCompare(String(b.group)) || n0(b) - n0(a)),
+      world: [...W.values()].sort((a, b) => (b.deep - a.deep) || n0(b) - n0(a)).slice(0, 18),
+      trade: [...T.values()].sort((a, b) => Math.max(0, ...Object.values(b.per).map((x) => x.rev || 0)) - Math.max(0, ...Object.values(a.per).map((x) => x.rev || 0)) || n0(b) - n0(a)).slice(0, 16),
+      rules: [...R.values()].sort((a, b) => (sev[a.severity] ?? 4) - (sev[b.severity] ?? 4) || n0(b) - n0(a)).slice(0, 14),
+      items: [...P.values()].sort((a, b) => n0(b) - n0(a) || String(b.date).localeCompare(String(a.date))).slice(0, 12),
+    };
+  }
+
+  // ----------------------------------------------------------------- the four desks and the head of research
+  /**
+   * The verdict is made the way the industry runs are: specialists first, then one head of research. Four desks read
+   * the full dossiers in parallel, each on its own question; the head of research reads code's comparison and the
+   * desks' findings and decides.
+   *   events: what's ahead, event by event (the dated 12-month calendar, the macro releases the industries watch, the
+   *           industries' 1M-12M cards and windows, earnings and their history, factor sensitivities, times like this)
+   *   macro: the full macro indicator tables and each industry's read of every indicator, the macro calls, and foreign
+   *          affairs (world situations and threats, the trade map country by country, regulation and policy)
    *   street: Wall Street (ratings, targets, revisions, rating changes), news sentiment and headlines, positioning
    *          (short interest, insiders, institutions), technicals and earnings reactions
    *   fundamentals: the business, growth, quality, valuation, balance sheet, income and what the price assumes
    */
   const DESKS = {
-    macro: { label: "Macro & events desk", stock: ["calls", "context", "facts", "times", "windows", "exposures"], fund: ["cal", "aff_macro", "aff_world", "aff_trade", "aff_reg", "cyc", "deb", "ind"], shared: ["context", "exposures"] },
+    events: { label: "Events desk", stock: ["calls", "watch", "windows", "facts", "times"], fund: ["cal", "watch", "cyc", "deb", "tech"], shared: [] },
+    macro: { label: "Macro & foreign affairs desk", stock: ["aff_macro", "aff_world", "aff_trade", "aff_reg", "context", "facts"], fund: ["aff_macro", "aff_world", "aff_trade", "aff_reg", "ind"], shared: ["aff_macro", "aff_world", "aff_trade", "aff_reg", "context"] },
     street: { label: "Street & sentiment desk", stock: ["street", "numbers", "news"], fund: ["base", "tech", "hold", "perf"], shared: [] },
     fundamentals: { label: "Fundamentals desk", stock: ["numbers", "written"], fund: ["base", "hold", "val", "ind", "score", "perf"], shared: [] },
   };
   const DESK_KEYS = Object.keys(DESKS);
+  const SHARED_LABEL = { aff_macro: "Macro indicators and the macro call", aff_world: "World situations", aff_trade: "The trade map", aff_reg: "Regulation", context: "The industry report's macro, world, scenario and debate rows" };
   const capT = (s, k) => { s = String(s || ""); return s.length > k ? s.slice(0, k) + "\n(…cut to fit)" : s; };
   function writtenText(v) {
     if (!v) return "";
@@ -332,7 +388,7 @@ Return ONLY a JSON object:
   }
   /** One desk's dossier: each ticker's blocks for that desk; an industry's shared blocks once for all the tickers in it. */
   function deskDossier(desk, subjects, { total = 300000 } = {}) {
-    const D = DESKS[desk], out = [], sharedDone = {}, CAP = { calls: 40000, context: 40000, exposures: 22000, facts: 12000, times: 8000, windows: 4000, news: 15000 };
+    const D = DESKS[desk], out = [], sharedDone = {}, CAP = { calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
     // Each ticker gets an even share of the room; a ticker whose industry blocks were already given (a shared industry) leaves its unused room to the rest.
     const need = subjects.map((s) => (s.kind === "fund" ? D.fund : D.stock).reduce((a, k) => a + Math.min(String(s.dz?.[k] || "").length, CAP[k] || 1e9), 0));
     let room = total; const budgets = need.map(() => 0); const order = need.map((x, i) => i).sort((a, b) => need[a] - need[b]);
@@ -340,9 +396,10 @@ Return ONLY a JSON object:
     for (const s of subjects) {
       const z = { ...(s.dz || {}), written: writtenText(s.saved) }, keys = s.kind === "fund" ? D.fund : D.stock, parts = [];
       const o = s.outlook; if (o?.calls) parts.push(`ITS 1M-12M CALLS (${o.source}${o.date ? `, ${o.date}` : ""}): ${HZ.map((h) => `${h} ${o.calls[h]?.call || "n/a"}${o.calls[h]?.why ? ` (${cut(o.calls[h].why, 200)})` : ""}`).join("; ")}`);
-      if (desk !== "fundamentals" && s.saved) parts.push(writtenText(s.saved));
+      if (desk === "street" && s.saved) parts.push(writtenText(s.saved));
+      if (desk === "events" && s.saved?.catalysts?.length) parts.push(`ITS WRITTEN ANALYSIS'S CATALYSTS: ${s.saved.catalysts.slice(0, 8).map((x) => cut(x, 200)).join(" | ")}`);
       for (const k of keys) { if (!z[k]) continue;
-        if (s.kind === "stock" && D.shared.includes(k) && s.ind?.name) { const key = s.ind.name + "|" + k; if (sharedDone[key]) { parts.push(`(${k === "context" ? "Macro indicators, world situations, scenarios and debates" : "Trade and regulation"}: the same ${s.ind.name} industry report as ${sharedDone[key]}, above.)`); continue; } sharedDone[key] = s.sym; }
+        if (s.kind === "stock" && D.shared.includes(k) && s.ind?.name) { const key = s.ind.name + "|" + k; if (sharedDone[key]) { parts.push(`(${SHARED_LABEL[k] || k}: the same ${s.ind.name} industry report as ${sharedDone[key]}, above.)`); continue; } sharedDone[key] = s.sym; }
         parts.push(capT(z[k], CAP[k] || 1e9)); }
       out.push(`=== ${s.sym}: ${s.name || ""} (${s.kind === "fund" ? "fund/ETF" : "stock"}${s.sub ? `, ${s.sub}` : ""}) ===\n` + capT(parts.join("\n\n"), budgets[subjects.indexOf(s)]));
     }
@@ -351,20 +408,38 @@ Return ONLY a JSON object:
   const IMPACT = ["strong positive", "positive", "neutral", "negative", "strong negative"];
   function deskPrompt(desk, text, syms, today) {
     const S = syms.join(" | "), per = (o) => `{${syms.map((x) => `"${x}": ${o}`).join(", ")}}`;
-    const common = `Rules: be specific and analytical; every claim names its numbers, dates and the source rows it rests on (the bracketed IDs in the dossier, e.g. [E3], [Q2], [N4], are welcome). Use only what is in the dossier; never invent a fact, date or figure. Compare the tickers with each other, not in isolation. Every "pick" is exactly one of: ${S}.`;
-    if (desk === "macro") return `You are the macro and events strategist on a comparison desk, today ${today}. Your colleagues' full industry reports and each ticker's dated calendar are below. Your job: think about the FUTURE. What is coming over the next 12 months (dated events, macro releases and the Fed, earnings, policy and regulation, trade, wars and world situations, the industries' scenarios), how the macro backdrop is moving (the macro indicators and each industry's macro call), and what each of these does to ${syms.join(", ")} specifically, through their exposures and measured factor sensitivities.
+    const common = `Rules: be specific and analytical; every claim names its numbers, dates and the source rows it rests on (the bracketed IDs in the dossier, e.g. [E3], [Q2], [MI4], [WS2], [N4], are welcome). Use only what is in the dossier; never invent a fact, date or figure. Compare the tickers with each other, not in isolation. Every "pick" is exactly one of: ${S}.`;
+    if (desk === "events") return `You are the event strategist on a comparison desk, today ${today}. Below is each ticker's dated 12-month calendar (its industry's events, its own reports and ex-dividend dates, its peers' reports, the macro releases), the releases its industries are watching, its industry's 1M-12M cards (decisions, conflicts and what to do in each window), its windows, its earnings history and price reactions, its measured factor sensitivities and what it did in past setups like today. Your job: walk the next 12 months event by event and say, for each, what could happen, how likely each outcome is, and what each outcome does to ${syms.join(", ")}, with sizes. Then say what that means month by month and for each ticker's path.
 ${common}
 
 ${text}
 
 Return ONLY a JSON object:
-{"regime": "3-4 sentences: the macro backdrop today, which way it is moving, and what that means for these tickers, with the indicators' numbers",
- "events": [{"date": "YYYY-MM-DD", "event": "what happens", "kind": "macro | fed | earnings | policy | trade | world | industry", "impact": ${per(`"${IMPACT.join(" | ")}"`)}, "why": "1-2 sentences: the mechanism and rough size for each ticker"}] (10-16 events in the next 12 months, soonest first; the ones that matter most for this comparison),
- "scenarios": [{"name": "a macro or world scenario", "probability": 30, "what": "1-2 sentences: what happens, with triggers", "impact": ${per(`{"move": "-8% to -12%", "why": "one sentence"}`)}}] (4 scenarios whose probabilities sum to 100: a base case, a bull, a bear, and the biggest tail risk you see),
- "sensitivities": ${per(`"which macro factors move it most and which way (rates, oil, the dollar, credit, growth, consumer), with numbers"`)},
- "names": ${per(`{"read": "3-4 sentences: the future and macro case for it", "tailwinds": ["2-4 dated or specific tailwinds"], "headwinds": ["2-4 dated or specific headwinds"]}`)},
+{"events": [{"date": "YYYY-MM-DD", "event": "what happens", "kind": "macro | fed | earnings | policy | trade | world | industry | dividend", "importance": "high | medium",
+   "watch": "the number or threshold that decides it (consensus, prior, the line in the sand)",
+   "impact": ${per(`"${IMPACT.join(" | ")}"`)},
+   "outcomes": [{"if": "one outcome, e.g. a hot print at or above 0.4%", "odds": 30, "moves": ${per(`"-2% to -4%"`)}}] (2-3 outcomes whose odds sum to 100),
+   "why": "2-3 sentences: the mechanism for each ticker and its rough size, with the numbers",
+   "play": "one sentence: what to do before or after it (add, trim, wait, hedge) and in which ticker"}] (14-20 events over the next 12 months, soonest first; every event that could move any of them by 2% or more, plus each one's earnings),
+ "months": [{"month": "YYYY-MM", "theme": "what this month is about", "risk": "high | medium | low", "read": "1-2 sentences: who it favors and why"}] (the next 12 months),
+ "paths": ${per(`{"path": "3-4 sentences: its catalyst path over the year, the biggest single event and what has to go right", "biggest": "its biggest single event and date", "skew": "upside | balanced | downside"}`)},
  "horizons": {"1M": {"pick": "...", "why": "the events in this window that decide it"}, "3M": {...}, "6M": {...}, "12M": {...}},
- "pick": "best positioned for what's ahead", "why": "2-3 sentences"}`;
+ "pick": "the best positioned for what's coming", "why": "2-3 sentences"}`;
+    if (desk === "macro") return `You are the macro and foreign-affairs strategist on a comparison desk, today ${today}. Below, for each ticker's industries: the full macro indicator table (latest, prior, 1M/3M/1Y changes, what drives each and what's next, and each industry's read: relevance, headwind or tailwind, and why), each industry's macro call and how macro reaches it, the world situations and threats (deep dives with scenarios and what to watch), the trade map country by country (revenue there, stance, threats, risks, dependencies), and regulation and policy. Your job: read the macro backdrop and the world, and say what each piece does to ${syms.join(", ")}, with numbers.
+${common}
+
+${text}
+
+Return ONLY a JSON object:
+{"regime": "4-5 sentences: the macro backdrop today, which way it is moving, and what that means for these tickers, with the indicators' numbers",
+ "indicators": [{"label": "the indicator as named in the table", "now": "its latest value and trend", "read": "1-2 sentences: what it says and where it is heading", "impact": ${per(`"${IMPACT.join(" | ")}"`)}}] (the 10-16 indicators that matter most for this comparison),
+ "world": [{"situation": "as named in the dossier", "status": "where it stands now", "outlook": "2 sentences: what happens next over 3-12 months, with odds where the dossier gives them", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence with the channel (revenue, costs, supply, demand, rates)"}`)}}] (6-10 situations, the most material first),
+ "trade": [{"country": "...", "read": "1-2 sentences: the relationship, tariffs, threats and where it is heading", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence: its exposure there"}`)}}] (4-8 countries),
+ "regulation": [{"item": "a rule, policy, case or deal", "status": "...", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence"}`)}}] (3-6 items),
+ "scenarios": [{"name": "a macro or world scenario", "probability": 30, "what": "1-2 sentences: what happens, with triggers", "impact": ${per(`{"move": "-8% to -12%", "why": "one sentence"}`)}}] (4 scenarios whose probabilities sum to 100: a base case, a bull, a bear, and the biggest tail risk),
+ "sensitivities": ${per(`"which macro factors move it most and which way (rates, oil, the dollar, credit, growth, consumer), with numbers"`)},
+ "names": ${per(`{"read": "3-4 sentences: its macro and foreign-affairs case", "tailwinds": ["2-4 specific tailwinds"], "headwinds": ["2-4 specific headwinds"]}`)},
+ "pick": "best positioned for the macro and the world", "why": "2-3 sentences"}`;
     if (desk === "street") return `You are the Wall Street and sentiment analyst on a comparison desk, today ${today}. Below is each ticker's analyst consensus, price targets and their trend, rating changes, estimate revisions, earnings history and reactions, news sentiment and headlines, ownership, short interest, insiders and technicals. Your job: what the street and the crowd think of ${syms.join(", ")}, which way that is moving, where it is already priced in, and where they are likely wrong.
 ${common}
 
@@ -384,19 +459,35 @@ Return ONLY a JSON object:
  "pick": "the better business at the better price", "why": "2-3 sentences"}`;
   }
   const IMPV = (x) => (IMPACT.includes(x) ? x : "neutral");
+  const dirOf = (syms, o, k = 300) => Object.fromEntries(syms.map((x) => [x, { direction: IMPV(o?.[x]?.direction), why: str(o?.[x]?.why, k) }]));
   /** A desk's answer, checked: picks are tickers, every ticker has an entry, text trimmed. */
   function cleanDesk(desk, raw, syms) {
     if (!raw || typeof raw !== "object") return null;
     const up = (x) => String(x || "").toUpperCase().trim(), pick = (x) => (syms.includes(up(x)) ? up(x) : null), N = raw.names || {};
     const o = { pick: pick(raw.pick), why: str(raw.why, 700), names: {} };
-    if (desk === "macro") {
-      o.regime = str(raw.regime, 900);
-      o.events = (Array.isArray(raw.events) ? raw.events : []).filter((e) => e && /^\d{4}-\d{2}(-\d{2})?$/.test(String(e.date || ""))).map((e) => ({ date: String(e.date), event: str(e.event, 200), kind: str(e.kind, 20), why: str(e.why, 500),
-        impact: Object.fromEntries(syms.map((x) => [x, IMPV(e.impact?.[x])])) })).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 18);
-      o.scenarios = (Array.isArray(raw.scenarios) ? raw.scenarios : []).map((x) => ({ name: str(x?.name, 120), probability: isNum(n(x?.probability)) ? Math.round(n(x.probability)) : null, what: str(x?.what, 400),
-        impact: Object.fromEntries(syms.map((k) => [k, { move: str(x?.impact?.[k]?.move, 40), why: str(x?.impact?.[k]?.why, 300) }])) })).filter((x) => x.name).slice(0, 5);
+    const hz = () => { const h0 = {}; for (const h of HZ) { const x = raw.horizons?.[h]; if (x && pick(x.pick)) h0[h] = { pick: pick(x.pick), why: str(x.why, 400) }; } return h0; };
+    const events = () => (Array.isArray(raw.events) ? raw.events : []).filter((e) => e && /^\d{4}-\d{2}(-\d{2})?$/.test(String(e.date || ""))).map((e) => ({ date: String(e.date), event: str(e.event, 200), kind: str(e.kind, 20),
+      importance: e.importance === "high" ? "high" : "medium", watch: str(e.watch, 240), why: str(e.why, 700), play: str(e.play, 300),
+      impact: Object.fromEntries(syms.map((x) => [x, IMPV(e.impact?.[x])])),
+      outcomes: (Array.isArray(e.outcomes) ? e.outcomes : []).map((y) => ({ if: str(y?.if, 200), odds: isNum(n(y?.odds)) ? Math.round(n(y.odds)) : null, moves: Object.fromEntries(syms.map((x) => [x, str(y?.moves?.[x], 24)])) })).filter((y) => y.if).slice(0, 3) }))
+      .sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 22);
+    const scen = () => (Array.isArray(raw.scenarios) ? raw.scenarios : []).map((x) => ({ name: str(x?.name, 120), probability: isNum(n(x?.probability)) ? Math.round(n(x.probability)) : null, what: str(x?.what, 400),
+      impact: Object.fromEntries(syms.map((k) => [k, { move: str(x?.impact?.[k]?.move, 40), why: str(x?.impact?.[k]?.why, 300) }])) })).filter((x) => x.name).slice(0, 5);
+    if (desk === "events") {
+      o.events = events();
+      o.months = (Array.isArray(raw.months) ? raw.months : []).filter((m) => /^\d{4}-\d{2}/.test(String(m?.month || ""))).map((m) => ({ month: String(m.month).slice(0, 7), theme: str(m.theme, 160), risk: ["high", "medium", "low"].includes(m.risk) ? m.risk : "medium", read: str(m.read, 400) })).slice(0, 13);
+      o.paths = Object.fromEntries(syms.map((k) => { const x = raw.paths?.[k] || {}; return [k, { path: str(x.path, 700), biggest: str(x.biggest, 200), skew: ["upside", "balanced", "downside"].includes(x.skew) ? x.skew : null }]; }));
+      o.horizons = hz();
+    } else if (desk === "macro") {
+      o.regime = str(raw.regime, 1100);
+      o.indicators = (Array.isArray(raw.indicators) ? raw.indicators : []).map((x) => ({ label: str(x?.label, 100), now: str(x?.now, 160), read: str(x?.read, 400), impact: Object.fromEntries(syms.map((k) => [k, IMPV(x?.impact?.[k])])) })).filter((x) => x.label).slice(0, 18);
+      o.world = (Array.isArray(raw.world) ? raw.world : []).map((x) => ({ situation: str(x?.situation, 160), status: str(x?.status, 240), outlook: str(x?.outlook, 500), impact: dirOf(syms, x?.impact) })).filter((x) => x.situation).slice(0, 12);
+      o.trade = (Array.isArray(raw.trade) ? raw.trade : []).map((x) => ({ country: str(x?.country, 60), read: str(x?.read, 400), impact: dirOf(syms, x?.impact) })).filter((x) => x.country).slice(0, 10);
+      o.regulation = (Array.isArray(raw.regulation) ? raw.regulation : []).map((x) => ({ item: str(x?.item, 160), status: str(x?.status, 160), impact: dirOf(syms, x?.impact) })).filter((x) => x.item).slice(0, 8);
+      o.scenarios = scen();
       o.sensitivities = Object.fromEntries(syms.map((k) => [k, str(raw.sensitivities?.[k], 400)]));
-      o.horizons = {}; for (const h of HZ) { const x = raw.horizons?.[h]; if (x && pick(x.pick)) o.horizons[h] = { pick: pick(x.pick), why: str(x.why, 400) }; }
+      // A verdict made before the events desk existed kept its dated events here.
+      if (Array.isArray(raw.events)) { o.events = events(); o.horizons = hz(); }
       for (const k of syms) { const x = N[k] || {}; o.names[k] = { read: str(x.read, 700), tailwinds: arr(x.tailwinds, 4, 200), headwinds: arr(x.headwinds, 4, 200) }; }
     } else if (desk === "street") {
       o.contrarian = str(raw.contrarian, 500);
@@ -410,13 +501,21 @@ Return ONLY a JSON object:
   }
   /** The desks' findings as text for the head of research. */
   function desksText(desks, syms) {
-    const L = [];
-    const m = desks.macro, st = desks.street, f = desks.fundamentals;
-    if (m) { L.push("=== MACRO & EVENTS DESK ===", `Backdrop: ${m.regime}`, `Pick: ${m.pick || "n/a"} — ${m.why}`);
-      L.push("What's ahead: " + m.events.map((e) => `${e.date} ${e.event} [${syms.map((k) => `${k} ${e.impact[k] || "n/a"}`).join(", ")}]: ${e.why}`).join(" | "));
-      L.push("Scenarios: " + m.scenarios.map((x) => `${x.name} (${x.probability ?? "?"}%): ${x.what} → ${syms.map((k) => `${k} ${x.impact[k]?.move || "n/a"}`).join(", ")}`).join(" | "));
-      for (const k of syms) { const x = m.names[k] || { tailwinds: [], headwinds: [] }; L.push(`${k}: ${x.read || ""} Tailwinds: ${x.tailwinds.join("; ")}. Headwinds: ${x.headwinds.join("; ")}. Sensitivities: ${m.sensitivities?.[k] || ""}`); }
-      L.push("Windows: " + HZ.filter((h) => m.horizons[h]).map((h) => `${h} ${m.horizons[h].pick}: ${m.horizons[h].why}`).join(" | ")); }
+    const L = [], ev = desks.events, m = desks.macro, st = desks.street, f = desks.fundamentals;
+    const imp = (o) => syms.map((k) => `${k} ${o?.[k] || "n/a"}`).join(", "), dir = (o) => syms.map((k) => `${k} ${o?.[k]?.direction || "n/a"}`).join(", ");
+    if (ev) { L.push("=== EVENTS DESK ===", `Pick: ${ev.pick || "n/a"} — ${ev.why}`);
+      L.push("What's ahead: " + (ev.events || []).map((e) => `${e.date} ${e.event} (${e.importance}; watch: ${e.watch}) [${imp(e.impact)}]: ${e.why} Outcomes: ${e.outcomes.map((y) => `${y.if} ${y.odds ?? "?"}% → ${imp(y.moves)}`).join("; ")}. Play: ${e.play}`).join(" | "));
+      L.push("Month by month: " + (ev.months || []).map((x) => `${x.month} (${x.risk}) ${x.theme}: ${x.read}`).join(" | "));
+      for (const k of syms) { const x = ev.paths?.[k] || {}; L.push(`${k} path (${x.skew || "n/a"}): ${x.path || ""} Biggest: ${x.biggest || ""}`); }
+      L.push("Windows: " + HZ.filter((h) => ev.horizons?.[h]).map((h) => `${h} ${ev.horizons[h].pick}: ${ev.horizons[h].why}`).join(" | ")); }
+    if (m) { L.push("", "=== MACRO & FOREIGN AFFAIRS DESK ===", `Backdrop: ${m.regime}`, `Pick: ${m.pick || "n/a"} — ${m.why}`);
+      if (m.indicators?.length) L.push("Indicators: " + m.indicators.map((x) => `${x.label} (${x.now}): ${x.read} [${imp(x.impact)}]`).join(" | "));
+      if (m.world?.length) L.push("World: " + m.world.map((x) => `${x.situation} (${x.status}): ${x.outlook} [${dir(x.impact)}]`).join(" | "));
+      if (m.trade?.length) L.push("Trade: " + m.trade.map((x) => `${x.country}: ${x.read} [${dir(x.impact)}]`).join(" | "));
+      if (m.regulation?.length) L.push("Regulation: " + m.regulation.map((x) => `${x.item} (${x.status}) [${dir(x.impact)}]`).join(" | "));
+      if (!ev && m.events?.length) L.push("What's ahead: " + m.events.map((e) => `${e.date} ${e.event} [${imp(e.impact)}]: ${e.why}`).join(" | "));
+      L.push("Scenarios: " + (m.scenarios || []).map((x) => `${x.name} (${x.probability ?? "?"}%): ${x.what} → ${syms.map((k) => `${k} ${x.impact[k]?.move || "n/a"}`).join(", ")}`).join(" | "));
+      for (const k of syms) { const x = m.names?.[k] || { tailwinds: [], headwinds: [] }; L.push(`${k}: ${x.read || ""} Tailwinds: ${x.tailwinds.join("; ")}. Headwinds: ${x.headwinds.join("; ")}. Sensitivities: ${m.sensitivities?.[k] || ""}`); } }
     if (st) { L.push("", "=== STREET & SENTIMENT DESK ===", `Pick: ${st.pick || "n/a"} — ${st.why}`, `Contrarian: ${st.contrarian}`);
       for (const k of syms) { const x = st.names[k] || {}; L.push(`${k} (signal ${x.signal || "n/a"}, crowding ${x.crowding || "n/a"}): ${x.street} ${x.sentiment} ${x.positioning} ${x.surprise_risk}`); } }
     if (f) { L.push("", "=== FUNDAMENTALS DESK ===", `Pick: ${f.pick || "n/a"} — ${f.why}`);
@@ -481,6 +580,6 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { mergeAffairs, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
