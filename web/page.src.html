@@ -2453,7 +2453,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   async function loadStore(sector, n) { const items = []; for (let c = 0; c * STORE_CHUNK < n; c++) items.push(...((await secGet(sector, "store:" + c)) || [])); return items; }
   /** Put one industry's saved run back in memory without touching what's shared. */
   async function loadInto(name) {
-    const snap = await idbGet("run:" + slug(name)); if (!snap?.industry?.summary) return false;
+    const snap = await runGet(slug(name)); if (!snap?.industry?.summary) return false;
     const sl = slug(name);
     S.industries[sl] = snap.industry; S.research[sl] = snap.research || { items: [] }; S.tx[sl] = snap.tx || { items: [] }; if (snap.agent) S.agents[sl] = snap.agent;
     Object.assign(S.reports, snap.reports || {}); Object.assign(S.regbooks, snap.regbooks || {});
@@ -3380,6 +3380,13 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   const idbPut = (k, v) => idbDo("readwrite", (st) => st.put(v, k));
   const idbDel = (k) => idbDo("readwrite", (st) => st.delete(k));
   const idbKeys = () => idbDo("readonly", (st) => st.getAllKeys());
+  /** One saved industry run, whole: a GitHub comparison imports every run lite and opens the ones it reads from the job. */
+  const _runOpen = new Map();
+  async function runGet(sl) {
+    const v = await idbGet("run:" + sl); if (!(JOB && v?.__lite && typeof window.__job_run === "function")) return v;
+    if (!_runOpen.has(sl)) _runOpen.set(sl, (async () => { const f = await window.__job_run(sl).catch(() => null); if (f) await idbPut("run:" + sl, f).catch(() => {}); return f; })().finally(() => _runOpen.delete(sl)));
+    return (await _runOpen.get(sl)) || v;
+  }
 
   // ------------------------------------------------------------- results files (the overnight job)
   /**
@@ -3415,8 +3422,8 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       if (k.startsWith("calls:") && Array.isArray(v)) v = mergeCalls((await idbGet(k).catch(() => null)) || [], v);
       if (!(await idbPut(k, v))) throw new Error("This browser couldn't store the results (it may be out of space).");
       if (k.startsWith("run:") && v?.industry?.summary) { const sl = k.slice(4); const i = idx.findIndex((x) => x.slug === sl); // Sector runs before Nov 2026 saved "macro" as missing even when the macro report was there (it checked the page's macro, not the industry's own).
-        const macroOk = !!v.reports?.[`${sl}--macro`]?.result && !v.reports[`${sl}--macro`].result.partial && v.macro?.rows?.length;
-        const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: (v.missing || []).filter((m) => !(m === "macro" && macroOk)), running: false };
+        const macroOk = v.__lite ? v.__lite.macro : !!v.reports?.[`${sl}--macro`]?.result && !v.reports[`${sl}--macro`].result.partial && v.macro?.rows?.length;
+        const e = { slug: sl, name: v.name, saved_at: v.saved_at, missing: (v.missing || []).filter((m) => !(m === "macro" && macroOk) && !(m === "research" && v.__lite?.research)), running: false };
         if (i >= 0) idx[i] = e; else idx.unshift(e); n++; S.savedAt[sl] = v.saved_at; }
     }
     // A sector too big for one file comes in parts; only the part with the sector record sets it.
@@ -3712,7 +3719,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   }
   /** Put a saved run back on screen (no new calls). Returns true if one was found. */
   async function restore(name) {
-    const snap = await idbGet("run:" + slug(name));
+    const snap = await runGet(slug(name));
     if (!snap?.industry?.summary) return false;
     const sl = slug(name);
     S.industries[sl] = snap.industry; if (snap.research) S.research[sl] = snap.research; if (snap.tx) S.tx[sl] = snap.tx; if (snap.agent) S.agents[sl] = snap.agent;
@@ -5543,7 +5550,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
         industry = prof.industry;
       }
       co.industry = industry;
-      const rec = industry ? await idbGet("run:" + slug(industry)).catch(() => null) : null;
+      const rec = industry ? await runGet(slug(industry)).catch(() => null) : null;
       if (S.co !== co) return;
       if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null;
         }
@@ -5910,7 +5917,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
         const r = ci.runs[sl], c = cache.runs[sl];
         if (c && c.saved_at === r.saved_at && c.dg?.v === 7) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
-        const rec = await idbGet("run:" + sl).catch(() => null); if (!rec?.industry?.summary) continue;
+        const rec = await runGet(sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
         let row = secRows[sec]?.[rec.name] || null, secs = {};
         try { secs = Sections.pillars(Portfolio.sectionCtx(rec)); } catch (e) { console.warn("fund pillars", name, e); }
@@ -7449,7 +7456,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   });
   /** A run's companies: its ranking (scored for every investor type), constituents, the lead strategist's best expressions and avoids, thin names. */
   async function recCompanies(dg) {
-    const rec = dg.kind === "full" && dg.slug ? await idbGet("run:" + dg.slug).catch(() => null) : null, d = rec?.industry;
+    const rec = dg.kind === "full" && dg.slug ? await runGet(dg.slug).catch(() => null) : null, d = rec?.industry;
     if (d?.constituents?.length) { const rank = d.ranking?.rows?.length ? d.ranking.rows : Plan.rankCompanies(d.constituents).rows, o = rec.agent?.result?.opportunity || {};
       return { rank, cons: Object.fromEntries(d.constituents.map((c) => [c.symbol, c])), best: o.best_expressions || [], avoid: o.avoid || [], thin: d.plan?.liquidity?.thin || [] }; }
     const cs = (dg.cos || []).map((c) => ({ symbol: c.symbol, name: c.name, weight: c.w, market_cap: c.w, pe: c.pe, op_margin: c.opm, rev_growth: c.g, excess_1Y: c.r1y, div_yield: c.div, ret_1Y: c.r1y, beta: c.beta }));
@@ -8541,7 +8548,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const hit = ci.cos[sym]; let industry = hit?.industry || info?.industry || "";
     const co = { sym, idx: {}, data: null, run: null, row: null };
     step("its industry report");
-    const rec = industry ? await idbGet("run:" + slug(industry)).catch(() => null) : null;
+    const rec = industry ? await runGet(slug(industry)).catch(() => null) : null;
     if (rec?.industry?.summary) { co.run = coRun(rec); co.row = co.run.industry.constituents.find((c) => c.symbol === sym) || null; }
     step("its numbers (FMP)");
     const from5 = Horizon.addDays(today(), -1900), etfSym = Universe.ETF[co.run?.industry?.sector || hit?.sector || info?.sector] || null;
@@ -8858,7 +8865,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
       const desks = {}, failed = [], econ = cmpEconText(await cmpEcon().catch(() => []));
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
-        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
         c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
@@ -8867,7 +8874,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       c.stage = "the head of research is weighing it all"; renderCompare();
       const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
       let last = 0;
-      const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal,
+      const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: "Compare head of research",
         onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
       const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
       const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
