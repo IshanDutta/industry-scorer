@@ -105,8 +105,8 @@ export class Sampler {
   // balanced everyday model, "quick" = the fast one. Each at its own default thinking effort (effort = {} leaves the
   // model's default; pass e.g. {complex: "high"} to override).
   constructor({ apiKey, baseUrl = "https://api.anthropic.com", models = { complex: "claude-opus-5-5", default: "claude-sonnet-5-5", quick: "claude-sonnet-5-5" }, mode = "batch", effort = {}, budgetUsd = 0,
-    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, directAfterMin = 0, execTool, log = console.log }) {
-    Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), models, model: models.complex, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log });
+    maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, directAfterMin = 0, execTool, log = console.log, logCalls = false }) {
+    Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), models, model: models.complex, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log, logCalls });
     // A batch still running after this long has its requests re-sent at the standard price (0 = never).
     this.stragglerMs = Math.max(0, Number(stragglerMin) || 0) * 60000;
     this.batchAt = new Map();   // batch id -> when it was sent (Infinity once its requests were re-sent)
@@ -241,7 +241,7 @@ export class Sampler {
     });
   }
   settle(key, fn) { const ws = this.waiters.get(key) || []; this.waiters.delete(key); for (const w of ws) fn(w); }
-  record(key, msg, direct = this.mode !== "batch") {
+  record(key, msg, direct = this.mode !== "batch", ms = null) {
     this.done.set(key, msg); this.pending.delete(key); this.params.delete(key);
     const u = msg.usage || {}, p = PRICES[msg.model] || PRICES[String(msg.model || "").replace(/-\d{8}$/, "")] || PRICES[this.model] || PRICES["claude-opus-5-5"], f = direct ? 1 : 0.5;
     this.usage.requests++; if (direct) this.usage.direct_requests++;
@@ -252,7 +252,9 @@ export class Sampler {
     const usd = f * ((u.input_tokens || 0) * p.input + (u.output_tokens || 0) * p.output + w5m * p.cacheWrite + w1h * p.input * 2 + (u.cache_read_input_tokens || 0) * p.cacheRead) / 1e6;
     this.usage.saved = (this.usage.saved || 0) + f * ((u.cache_read_input_tokens || 0) * (p.input - p.cacheRead)) / 1e6;
     this.usage.usd += usd;
-    const s = (this.byStep[this.stepOf.get(key) || "Other"] ||= { usd: 0, requests: 0, reused: 0 }); s.usd += usd; s.requests++; this.stepOf.delete(key);
+    const s = (this.byStep[this.stepOf.get(key) || "Other"] ||= { usd: 0, requests: 0, reused: 0 }); s.usd += usd; s.requests++;
+    if (this.logCalls) this.log(`[claude] ${this.stepOf.get(key) || "Other"}: in ${u.input_tokens || 0}, cache read ${u.cache_read_input_tokens || 0}, cache write ${u.cache_creation_input_tokens || 0}, out ${u.output_tokens || 0} (thinking included) · $${usd.toFixed(3)}${ms ? ` · ${Math.round(ms / 1000)}s` : ""}`);
+    this.stepOf.delete(key);
   }
   headers() { return { "x-api-key": this.apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" }; }
 
@@ -281,7 +283,8 @@ export class Sampler {
   async direct(key, params) {
     while (this.inflight >= this.directConcurrency) await sleep(200);
     this.inflight++;
-    try { const msg = await this.stream(params); this.record(key, msg, true); return msg; }
+    const t = Date.now();
+    try { const msg = await this.stream(params); this.record(key, msg, true, Date.now() - t); return msg; }
     finally { this.inflight--; }
   }
   /** One request at the standard price, streamed (so a long answer never hits an idle-connection timeout). */

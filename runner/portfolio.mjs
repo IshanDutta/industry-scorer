@@ -82,7 +82,7 @@ async function main() {
   const sampler = new Sampler({ apiKey: need("ANTHROPIC_API_KEY"), baseUrl: env.ANTHROPIC_BASE_URL || undefined,
     models: { complex: env.CLAUDE_MODEL_COMPLEX || "claude-opus-5-5", default: env.CLAUDE_MODEL_DEFAULT || "claude-sonnet-5-5", quick: env.CLAUDE_MODEL_QUICK || "claude-sonnet-5-5", lead: env.CLAUDE_MODEL_COMPLEX || "claude-opus-5-5" },
     effort: {}, budgetUsd: env.CLAUDE_BUDGET_USD || 15, directConcurrency: 8, mode: env.CLAUDE_MODE === "batch" ? "batch" : "direct", log,
-    flushMs: 2000, pollMs: 15000, stragglerMin: 10, directAfterMin: 0, execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]) });
+    logCalls: true, flushMs: 2000, pollMs: 15000, stragglerMin: 10, directAfterMin: 0, execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]) });
 
   // GitHub's runners come with Google Chrome; the workflow sets PW_CHANNEL=chrome then, so no browser download is needed.
   const browser = await (env.PW_CHANNEL ? chromium.launch({ channel: env.PW_CHANNEL }).catch((e) => { log(`[browser] ${env.PW_CHANNEL} didn't start (${String(e.message || e).slice(0, 120)}); using Playwright's Chromium`); return chromium.launch(); }) : chromium.launch());

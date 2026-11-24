@@ -22059,7 +22059,7 @@ Return ONLY a JSON object:
       c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
       const desks = {}, failed = [], econ = cmpEconText(await cmpEcon().catch(() => []));
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
-        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
         c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
@@ -22068,7 +22068,7 @@ Return ONLY a JSON object:
       c.stage = "the head of research is weighing it all"; renderCompare();
       const text = Compare.dossier({ subjects: ready, sc: an.sc, fit: an.fit, h2h: an.h2h, corr: an.corr, ovl: an.ovl, today: today() });
       let last = 0;
-      const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal,
+      const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: "Compare head of research",
         onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
       const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
       const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
