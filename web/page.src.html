@@ -876,8 +876,21 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
 .cx-play { border-left: 2px solid var(--accent); padding-left: 8px; }
 .cx-dline { border-left: 2px solid var(--c4); padding-left: 6px; margin-top: 3px; }
 .cx-soft { opacity: .65; }
-.cx-mi td { vertical-align: top; white-space: normal; } .cx-mi td.n { white-space: nowrap; }
-.cx-mi .cx-mi-l { min-width: 260px; max-width: 420px; }
+.cx-mi td { vertical-align: top; white-space: normal; }
+.cx-mi .cx-mi-l { min-width: 220px; max-width: 520px; display: grid; gap: 4px; }
+.cx-mi .cx-mi-t { min-width: 78px; }
+.cx-mi-h { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; justify-content: space-between; }
+.cx-mi-n { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.cx-chg { font: 500 11.5px var(--mono); padding: 0 5px; border-radius: 4px; background: var(--sunk); }
+.cx-eod { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; }
+.cx-mi-inl { display: none; }
+@media (max-width: 640px) {
+  .cx-mi .cx-mi-t, .cx-mi thead th:not(:first-child) { display: none; }
+  .cx-mi .cx-mi-l { min-width: 0; max-width: none; }
+  .cx-mi-inl { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .cx-mi-d { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+}
+.cx-econ td { white-space: normal; } .cx-hold td { white-space: normal; }
 .cx-moves { display: grid; gap: 6px; }
 .cx-sits { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); gap: 10px; }
 .cx-sit { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: grid; gap: 6px; align-content: start; }
@@ -5842,11 +5855,30 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       S.eod ? optional(() => eodCall("get_fundamentals_data", { ticker: sym.replace(/\./g, "-") + ".US", include_financials: false }), null) : Promise.resolve(null)]);
     const eodOk = eod && (eod.ETF_Data || eod.General?.Type === "FUND" || eod.Asset_Allocation) ? eod : null;
     if (!info?.length && !hold?.length && !eodOk) throw new Error(`neither FMP nor EODHD knows ${sym} as an ETF or mutual fund`);
-    raw = { sym, fetched_at: new Date().toISOString(), info, holdings: Portfolio.fromFmp(hold), eod: eodOk ? { General: eodOk.General, Technicals: eodOk.Technicals, ETF_Data: eodOk.ETF_Data,
+    let holdings = Portfolio.fromFmp(hold), holdFrom = holdings.length ? "FMP" : "";
+    // A mutual fund FMP has no holdings for: EODHD's filed top holdings (names only), each name matched to a ticker so its industries can be read.
+    if (!holdings.length && eodOk && !eodOk.ETF_Data) { holdings = await fundNameTickers(Portfolio.eodTop(eodOk)); if (holdings.length) holdFrom = "EODHD top holdings"; }
+    raw = { sym, fetched_at: new Date().toISOString(), info, holdings, holdFrom, eod: eodOk ? { General: eodOk.General, Technicals: eodOk.Technicals, ETF_Data: eodOk.ETF_Data,
       ...(eodOk.ETF_Data ? {} : { Asset_Allocation: eodOk.Asset_Allocation, Sector_Weights: eodOk.Sector_Weights, Top_Holdings: eodOk.Top_Holdings, Expense_Ratio: eodOk.Expense_Ratio, Portfolio_Net_Assets: eodOk.Portfolio_Net_Assets,
         Nav: eodOk.Nav, Update_Date: eodOk.Update_Date, Inception_Date: eodOk.Inception_Date, Yield: eodOk.Yield, Yield_YTD: eodOk.Yield_YTD, Yield_1Year_YTD: eodOk.Yield_1Year_YTD, Yield_3Year_YTD: eodOk.Yield_3Year_YTD, Yield_5Year_YTD: eodOk.Yield_5Year_YTD }) } : null };
     await idbPut("fund:" + sym, raw).catch(() => {});
     return raw;
+  }
+  /** Names from a fund filing ("APPLE INC", "ALPHABET INC CL A") -> tickers: your analyzed companies first, then FMP's name search (each name looked up once, ever). */
+  async function fundNameTickers(rows) {
+    rows = (rows || []).filter((r) => r?.name && isNum(r.weight)).slice(0, 40); if (!rows.length) return [];
+    const memo = (await idbGet("nameTick").catch(() => null)) || {}, clean = (x) => lc(x).replace(/\b(inc|corp|corporation|co|company|plc|ltd|limited|holdings?|group|the|class|cl|[abc]|n\.?v|s\.?a|ag|se|adr|ord|com|new|del)\b\.?/g, " ").replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
+    const known = new Map(Object.values(S.coIdx?.cos || {}).map((c) => [clean(c.name), c.symbol]));
+    let asked = 0;
+    for (const r of rows) { if (r.ticker) continue; const k = clean(r.name); if (!k) continue;
+      if (known.has(k)) { r.ticker = known.get(k); continue; } if (k in memo) { r.ticker = memo[k]; continue; }
+      if (!S.mcp || asked >= 30) continue; asked++;
+      const hits = await optional(() => fmp("search", { endpoint: "search-name", query: k.split(" ").slice(0, 3).join(" "), limit: 10 }), []);
+      const us = (hits || []).filter((h) => h?.symbol && /NASDAQ|NYSE|AMEX/i.test(h.exchangeShortName || h.exchange || "") && !/\./.test(h.symbol.replace(/\.[AB]$/, "")));
+      const best = us.find((h) => clean(h.name) === k) || us.find((h) => clean(h.name).startsWith(k) || k.startsWith(clean(h.name))) || null;
+      memo[k] = best ? best.symbol : ""; r.ticker = memo[k]; }
+    await idbPut("nameTick", memo).catch(() => {});
+    return rows.map((r) => ({ ticker: r.ticker || "", name: String(r.name).trim(), isin: "", cusip: "", weight: r.weight, value: NaN, shares: NaN, date: "" }));
   }
   /** Every holding matched to an industry; FMP profiles only for US stocks nothing else places (each ticker once, ever). */
   async function fundMap(raw, ci, onStep = () => {}, { maxProfiles = 25 } = {}) {
@@ -8617,19 +8649,99 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || cmpOut(prior, "from its industries");
     let dz = {}; try { dz = { ...FundAn.dossier(fd, today()).blocks }; } catch (e) { console.warn("compare fund dossier", e); }
     dz.watch = cmpWatchText(fd.aff);
+    // A bond fund: its yield, duration, carry, spread, the curve and the runs' rate views (what the Funds tab's bond analysis reads).
+    let bond = null;
+    if (fd.bond && fd.bondM) { try { dz.bond = BondAn.dossier(fd.bond, fd.bondM, fd.bondRuns || {}, today()).text; } catch (e) { console.warn("compare bond dossier", e); }
+      const p0 = fd.bond, b0 = fd.bondM; bond = { kind: BondAn.KINDS[p0.kind] || p0.kind || "bonds", ytm: num(p0.ytm), dist: num(p0.distYield), duration: num(p0.duration), maturity: num(p0.maturity), carry: num(b0.carry), spread: num(b0.spread), credit: !!b0.credit,
+        tsy: num(b0.tsy), breakeven: num(b0.breakeven), y10: num(b0.curve?.y10), y3m: num(b0.curve?.y3m), shocks: (b0.shocks || []).map((x) => ({ bp: x.bp, ret: num(x.ret), ret12: num(x.ret12) })) }; }
     const st = fd.street || {}, se = fd.sent || {};
     m.news_sent = isNum(num(se.s30)) ? num(se.s30) : null;
     const street = { buy_share: num(st.buy_share), upside: num(st.upside), n: st.n || 0, on: num(st.on), rows: (st.rows || []).slice(0, 8).map((r) => ({ ticker: r.ticker, weight: r.weight, consensus: r.consensus, upside: num(r.upside), buy_share: num(r.buy_share) })), px: m.px };
     const sent = { s30: num(se.s30), s90: num(se.s90), n30: 0, heads: (fd.news || []).slice(0, 5).map((x) => ({ date: x.date, title: x.title, source: (x.symbol ? x.symbol + " · " : "") + (x.source || ""), url: x.url || "" })) };
     const events = (fd.cal || []).filter((e) => e.date >= today()).map((e) => ({ date: e.date, title: e.title, kind: e.kind || "", importance: e.importance || (e.w >= 0.05 ? "high" : ""), est: false, tickers: [] })).slice(0, 40);
     const sens = (fd.sens?.factors || []).map((x) => ({ key: x.key, label: x.shock_label || x.key, effect: num(x.total?.effect), t: num(x.total?.t) })).filter((x) => isNum(x.effect));
-    const mix = (fd.cov?.industries || []).slice(0, 10).map((g) => { const d = fd.digests?.[lc(g.industry)]; return { industry: g.industry, weight: g.weight, call: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "" }; });
+    const mix = (fd.cov?.industries || []).slice(0, 15).map((g) => { const d = fd.digests?.[lc(g.industry)]; return { industry: g.industry, weight: g.weight, call: d ? d.lean?.["12M"] || d.calls?.["12M"]?.call || "" : "" }; });
     const lookCalls = fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]?.call).map((h) => [h, { call: fd.look.calls[h].call }])) : null;
     return { sym, kind: "fund", name: f.name || sym, sub: [f.type, f.category].filter(Boolean).join(" · ") || (fd.bond ? "bond fund" : "fund"), sector: "",
       px: m.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: "", bond: !!fd.bond, bench: fd.bench?.symbol || "",
       m, pillars, profiles, outlook, saved: sv, best: fd.card?.best || null,
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
-      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null };
+      ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null, bond,
+      topShare: fd.raw?.holdFrom === "EODHD top holdings" ? (fd.raw.holdings || []).reduce((a, h) => a + (isNum(h.weight) ? h.weight : 0), 0) : null,
+      holdTop: (fd.hold || []).slice(0, 15).map((h) => ({ ticker: h.ticker, name: h.name, weight: fd.raw?.holdFrom === "EODHD top holdings" ? ((fd.raw.holdings || []).find((r) => r.ticker && r.ticker === h.ticker)?.weight ?? h.weight) : h.weight, industry: h.industry || "", call12: h.call12 || "", pe: num(h.pe), r1y: num(h.r1y), inTop50: !!h.inTop50 })),
+      sectors: Object.entries(f.sectors || {}).filter(([, w]) => isNum(w) && w > 0.003).sort((a, b) => b[1] - a[1]).slice(0, 11).map(([k, w]) => ({ sector: k, weight: w })), holdFrom: fd.raw?.holdFrom || "",
+      buckets: fd.cov?.buckets || null, covered: num(fd.cov?.covered), nInd: (fd.cov?.industries || []).length, look: fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]).map((h) => [h, { call: fd.look.calls[h].call, dist: fd.look.calls[h].dist || null }])) : null };
+  }
+  /** EODHD's US economic calendar: the last five weeks' releases (actual vs estimate) and the next three months', kept for the day. */
+  async function cmpEcon() {
+    const c = await idbGet("econCal").catch(() => null); if (c?.day === today() && Array.isArray(c.rows)) return c.rows;
+    if (!S.mcp) return c?.rows || [];
+    if (S.eod === undefined) await detectEod(); if (!S.eod) return c?.rows || [];
+    const r = await optionalEod(() => eodCall("get_economic_events", { country: "US", start_date: Horizon.addDays(today(), -35), end_date: Horizon.addDays(today(), 92), limit: 1000 }));
+    const seen = new Set(), rows = (Array.isArray(r) ? r : []).filter((x) => x && x.type && (x.importance === "high" || x.importance === "medium") && x.category !== "auction" && !/auction|bill|speech|balance sheet|cattle|baker hughes|eia|api /i.test(x.type))
+      .map((x) => ({ date: String(x.date || "").slice(0, 10), time: String(x.date || "").slice(11, 16), type: String(x.type), period: x.period || "", actual: num(x.actual), estimate: num(x.estimate), previous: num(x.previous), unit: x.unit || "", scale: x.scale || "", importance: x.importance, comparison: x.comparison || "" }))
+      .filter((x) => { const k = x.type + "|" + x.period + "|" + x.comparison; if (seen.has(k)) return false; seen.add(k); return true; }).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+    await idbPut("econCal", { day: today(), rows }).catch(() => {}); return rows;
+  }
+  /** The economic calendar as text for the events and macro desks. */
+  function cmpEconText(rows) {
+    if (!rows?.length) return "";
+    const v = (x, k) => (isNum(x[k]) ? `${x[k]}${x.unit === "%" ? "%" : x.scale ? x.scale : ""}` : "n/a");
+    const past = rows.filter((x) => x.date < today() && isNum(x.actual)), next = rows.filter((x) => x.date >= today());
+    return `US ECONOMIC CALENDAR (EODHD; importance medium or high)\nReleased in the last five weeks (actual vs consensus, previous):\n${past.map((x) => `${x.date} ${x.type}${x.comparison ? ` (${x.comparison})` : ""} ${x.period}: ${v(x, "actual")} vs est ${v(x, "estimate")}, prev ${v(x, "previous")}${x.importance === "high" ? " [high]" : ""}`).join("\n") || "(none)"}\nScheduled next three months (consensus where set, previous):\n${next.map((x) => `${x.date} ${x.type}${x.comparison ? ` (${x.comparison})` : ""} ${x.period}: est ${v(x, "estimate")}, prev ${v(x, "previous")}${x.importance === "high" ? " [high]" : ""}`).join("\n") || "(none)"}`;
+  }
+  // ------------------------------------------------------------- Compare: suggestions as you type (stocks and funds)
+  const _cmpLive = new Map(); let _cmpLiveT = null;
+  /** FMP's symbol and name search and EODHD's (it knows mutual funds and ETFs FMP doesn't), once per query. */
+  function cmpLive(q) {
+    const k = q.trim().toLowerCase(); if (k.length < 1 || !S.mcp || _cmpLive.has(k)) return;
+    clearTimeout(_cmpLiveT);
+    _cmpLiveT = setTimeout(async () => {
+      _cmpLive.set(k, []);
+      if (S.eod === undefined) await detectEod();
+      const [a, b, e] = await Promise.all([optional(() => fmp("search", { endpoint: "search-symbol", query: q.trim(), limit: 20 }), []), k.length >= 2 ? optional(() => fmp("search", { endpoint: "search-name", query: q.trim(), limit: 20 }), []) : Promise.resolve([]),
+        S.eod && k.length >= 2 ? optionalEod(() => eodCall("get_stocks_from_search", { query: q.trim(), limit: 20, exchange: "US" }), []) : Promise.resolve([])]);
+      const eo = (Array.isArray(e) ? e : []).filter((x) => x?.Code).map((x) => ({ symbol: String(x.Code).replace(/-/g, "."), name: x.Name || "", type: /etf/i.test(x.Type) ? "ETF" : /fund/i.test(x.Type) ? "Mutual fund" : /stock/i.test(x.Type) ? "Stock" : x.Type || "" }));
+      const fm = [...(a || []), ...(b || [])].filter((x) => x?.symbol && !/\./.test(x.symbol.replace(/\.[AB]$/, "")) && (!x.exchangeShortName || /NASDAQ|NYSE|AMEX|ETF|OTC|MUTUAL|CBOE/i.test(x.exchangeShortName)));
+      _cmpLive.set(k, [...fm.map((x) => ({ symbol: x.symbol, name: x.name || "", type: /MUTUAL/i.test(x.exchangeShortName || "") ? "Mutual fund" : /ETF/i.test(x.exchangeShortName || "") ? "ETF" : "" })), ...eo]);
+      if (lc(($("cmp-q")?.value || "").split(/[,;]/).pop().trim()) === k) cmpSug(true);
+    }, 220);
+  }
+  /** Ranked suggestions: your funds, your analyzed companies, the ETF directory, then the live searches. */
+  function cmpSuggest(q, k = 9) {
+    const t = String(q || "").trim(), T = t.toUpperCase().replace(/\s+/g, ""), words = lc(t).split(/\s+/).filter(Boolean), seen = new Map(), inSet = new Set(S.cmp?.syms || []);
+    const add = (sym, name, type, src) => { sym = String(sym || "").toUpperCase(); if (!sym || seen.has(sym) || inSet.has(sym)) return; seen.set(sym, { symbol: sym, name: String(name || "").trim(), type, src }); };
+    for (const x of S.fundList || []) add(x.sym, x.name, x.type || "Fund", "yours");
+    for (const x of Object.values(S.coIdx?.cos || {})) add(x.symbol, x.name, `Stock · ${x.industry || ""}`, "runs");
+    if (t) { for (const x of S.etfDir || []) add(x.symbol, x.name, "ETF", "etf"); for (const x of _cmpLive.get(lc(t)) || []) add(x.symbol, x.name, x.type || "", "live"); }
+    if (!t) return [...seen.values()].filter((x) => x.src === "yours").slice(0, k);
+    const score = (x) => { const nm = lc(x.name), b = (x.src === "runs" ? 3 : x.src === "yours" ? 4 : 0);
+      if (x.symbol === T) return 100 + b; if (x.symbol.startsWith(T)) return 80 - (x.symbol.length - T.length) + b;
+      if (words.length && words.every((w) => nm.split(/[^a-z0-9&]+/).some((nw) => nw.startsWith(w)))) return 50 + b - nm.length / 200;
+      if (nm.includes(lc(t))) return 30 + b; return -1; };
+    return [...seen.values()].map((x) => ({ ...x, score: score(x) })).filter((x) => x.score >= 0).sort((a, b) => b.score - a.score || a.symbol.localeCompare(b.symbol)).slice(0, k);
+  }
+  function cmpSug(open = true) {
+    const box = $("cmp-sug"), inp = $("cmp-q"); if (!box || !inp) return;
+    const q = inp.value.split(/[,;]/).pop(), items = open ? cmpSuggest(q) : [];
+    S.cmpSugItems = items; if (!(S.cmpSugI < items.length)) S.cmpSugI = -1;
+    if (!items.length) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
+    const pending = q.trim().length >= 1 && S.mcp && !_cmpLive.has(q.trim().toLowerCase());
+    box.innerHTML = items.map((x, i) => `<div class="sug-item${i === S.cmpSugI ? " on" : ""}" role="option" id="cmp-sug-${i}" aria-selected="${i === S.cmpSugI}" data-csug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span><span class="small muted">${esc(x.src === "yours" ? "your fund" : x.type || "")}</span></div>`).join("")
+      + (pending ? `<div class="sug-foot small muted">Searching FMP and EODHD…</div>` : "");
+    box.hidden = false; inp.setAttribute("aria-expanded", "true");
+  }
+  function bindCmpSearch() {
+    const inp = $("cmp-q"), box = $("cmp-sug"); if (!inp || !box) return;
+    const pick = (sym) => { const parts = inp.value.split(/[,;]/); parts.pop(); const v = [...parts.map((x) => x.trim()).filter(Boolean), sym].join(", "); inp.value = ""; box.hidden = true; S.cmp.q = ""; cmpAdd(v); };
+    inp.addEventListener("input", () => { S.cmp.q = inp.value; S.cmpSugI = -1; cmpSug(true); cmpLive(inp.value.split(/[,;]/).pop()); });
+    inp.addEventListener("focus", () => { fundEtfs().then(() => { if (document.activeElement === inp) cmpSug(true); }).catch(() => {}); cmpSug(true); });
+    inp.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== inp) box.hidden = true; }, 150));
+    inp.addEventListener("keydown", (ev) => { const items = S.cmpSugItems || [];
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { if (!items.length) return; ev.preventDefault(); S.cmpSugI = ((S.cmpSugI ?? -1) + (ev.key === "ArrowDown" ? 1 : -1) + items.length + 1) % (items.length + 1); if (S.cmpSugI === items.length) S.cmpSugI = -1; cmpSug(true); }
+      else if (ev.key === "Enter" && !box.hidden && S.cmpSugI >= 0 && items[S.cmpSugI]) { ev.preventDefault(); pick(items[S.cmpSugI].symbol); }
+      else if (ev.key === "Escape") { box.hidden = true; S.cmpSugI = -1; } });
+    box.addEventListener("mousedown", (ev) => { const it = ev.target.closest("[data-csug]"); if (it) { ev.preventDefault(); pick(it.dataset.csug); } });
   }
   /** The macro releases its industries are watching, with what they expect (the events desk reads these). */
   function cmpWatchText(A) {
@@ -8692,6 +8804,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (ready.length < 2 || c.syms.some((s) => c.subj[s]?.stage === "loading")) { renderCompare(); return; }
     const syms = ready.map((s) => s.sym), key = cmpKey(syms);
     c.an = cmpAnalysis(ready); c.vKey = key;
+    if (!c.econ && !JOB) cmpEcon().then((r) => { c.econ = r || []; renderCompare(); }).catch(() => {});
     if (!c.vCache[key]) { const have = await idbGet(key).catch(() => null); if (have?.v) c.vCache[key] = have; }
     renderCompare();
     if (!JOB) cmpWatch(syms);
@@ -8743,9 +8856,9 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       const L0 = S.sample.limits ? await S.sample.limits().catch(() => null) : null, lim = JOB ? 340000 : Math.min(250000, (L0?.maxPromptBytes || 262144) - 12000);
       const fitB = (p) => { const b = new TextEncoder().encode(p); return b.length <= lim ? p : new TextDecoder().decode(b.slice(0, lim - 2000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
       c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
-      const desks = {}, failed = [];
+      const desks = {}, failed = [], econ = cmpEconText(await cmpEcon().catch(() => []));
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
-        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
         c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
@@ -8773,20 +8886,22 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const had = document.activeElement?.id === "cmp-q" ? { v: document.activeElement.value, a: document.activeElement.selectionStart } : null;
     el.innerHTML = cmpBar() + cmpView();
     wireCharts(el); wireSpy(el);
-    $("cmp-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); cmpAdd($("cmp-q").value); });
-    if (had) { const q = $("cmp-q"); if (q) { q.value = had.v; q.focus(); try { q.setSelectionRange(had.a, had.a); } catch {} } }
+    // A name typed and submitted takes the best suggestion; tickers go in as typed.
+    $("cmp-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("cmp-q").value.trim(), top = (S.cmpSugItems || [])[0];
+      cmpAdd(/^[A-Za-z0-9.\-]{1,7}(\s*[,;\s]\s*[A-Za-z0-9.\-]{1,7})*$/.test(v) || !top ? v : top.symbol); });
+    bindCmpSearch();
+    if (had) { const q = $("cmp-q"); if (q) { q.value = had.v; q.focus(); try { q.setSelectionRange(had.a, had.a); } catch {} cmpSug(true); } }
   }
   /** The ticker bar: up to four chips, an input with suggestions from your saved companies and funds. */
   function cmpBar() {
-    const c = S.cmp, cos = Object.values(S.coIdx?.cos || {}).sort((a, b) => (num(b.market_cap) || 0) - (num(a.market_cap) || 0)).slice(0, 1500), funds = S.fundList || [];
+    const c = S.cmp;
     const chips = c.syms.map((s) => { const x = c.subj[s], st = x?.stage;
       return `<span class="cx-chip" style="--tc:${cmpColor(s)}"><i></i><b>${esc(s)}</b>${st === "loading" ? `<span class="cx-spin"></span>` : st === "error" ? `<span class="pill neg">!</span>` : `<span class="muted small">${esc(trimC(x?.s?.name || "", 22))}</span>`}<button class="cx-x" data-cmp-del="${esc(s)}" aria-label="Remove ${esc(s)}">×</button></span>`; }).join("");
     const empty = Array.from({ length: Math.max(0, CMP_MAX - c.syms.length) }, (_, i) => `<span class="cx-chip cx-empty">${i === 0 && c.syms.length < 2 ? "add a ticker" : "+"}</span>`).join("");
     const quick = !c.syms.length ? `<div class="cx-quick small muted">Try: ${[["AAPL,MSFT", "AAPL vs MSFT"], ["XOM,CVX", "XOM vs CVX"], ["SPY,QQQ", "SPY vs QQQ"], ["KO,PEP,MDLZ", "KO, PEP, MDLZ"]].map(([v, l]) => `<button class="chip" data-cmp-quick="${v}">${l}</button>`).join(" ")}</div>` : "";
     return `<section class="cx-bar"><div class="cx-bar-head"><div><span class="eyebrow">Compare</span><h2>Head to head, up to ${CMP_MAX} tickers</h2></div><span class="small muted">Stocks or funds · built on your industry reports and any analysis already written · one Claude call for the verdict</span></div>
       <div class="cx-chips">${chips}${empty}</div>
-      ${c.syms.length < CMP_MAX ? `<form id="cmp-form" class="co-form"><input type="search" id="cmp-q" list="cmp-list" placeholder="Ticker(s), e.g. NVDA or NVDA, AMD" aria-label="Add a ticker" autocomplete="off" value="${esc(c.q || "")}"><button class="primary" type="submit">Add</button></form>
-      <datalist id="cmp-list">${funds.map((x) => `<option value="${esc(x.sym)}">${esc(x.name || "")} · fund</option>`).join("")}${cos.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")} · ${esc(x.industry || "")}</option>`).join("")}</datalist>` : ""}
+      ${c.syms.length < CMP_MAX ? `<form id="cmp-form" class="co-form"><div class="sug-wrap"><input type="search" id="cmp-q" placeholder="Ticker or name: NVDA, Apple, Vanguard Growth, FXAIX…" aria-label="Add a ticker" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="cmp-sug" aria-expanded="false" value="${esc(c.q || "")}"><div id="cmp-sug" class="sug" role="listbox" hidden></div></div><button class="primary" type="submit">Add</button></form>` : ""}
       ${c.note ? `<div class="small warn-t">${esc(c.note)}</div>` : ""}${quick}</section>`;
   }
   const cmpTick = (s, big = false) => `<span class="cx-tk${big ? " big" : ""}" style="--tc:${cmpColor(s)}">${esc(s)}</span>`;
@@ -8943,19 +9058,54 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const fc = (v) => (isNum(num(v)) ? `<span class="${num(v) > 0 ? "up" : num(v) < 0 ? "down" : ""}">${num(v) > 0 ? "+" : ""}${fix(num(v), Math.abs(num(v)) >= 10 ? 1 : 2)}</span>` : "—");
     const dInd = new Map((MD?.indicators || []).map((x) => [x.label.toLowerCase().slice(0, 24), x]));
     const dFor = (lab) => { const k = String(lab || "").toLowerCase(); for (const [kk, x] of dInd) if (k.startsWith(kk.slice(0, 14)) || kk.startsWith(k.slice(0, 14))) return x; return null; };
+    // EODHD's US calendar, matched to the indicators by name: the latest print against consensus, and the next release.
+    const ECON = c.econ || [], EMAP = [[/core pce/, /core pce price index/], [/\bpce\b|personal consumption expenditures? price/, /^pce price index/], [/core cpi|core inflation/, /core inflation rate|core cpi/], [/\bcpi\b|consumer price|inflation rate/, /^inflation rate|^cpi\b/],
+      [/payroll/, /non farm payrolls/], [/unemployment/, /unemployment rate/], [/\bgdp\b/, /gdp growth rate/], [/retail (sales|control)/, /retail sales/], [/michigan.*(sentiment|confidence)/, /michigan consumer sentiment/], [/michigan.*inflation/, /michigan inflation expectations/],
+      [/conference board|consumer confidence/, /cb consumer confidence/], [/ism manufacturing|manufacturing pmi/, /ism manufacturing pmi/], [/ism services|non-?manufacturing|services pmi/, /ism services pmi/], [/\bppi\b|producer price/, /^ppi\b/], [/personal spending/, /personal spending/],
+      [/personal income/, /personal income/], [/housing starts/, /housing starts/], [/building permits/, /building permits/], [/durable goods/, /durable goods orders/], [/jolts|job openings/, /jolts job openings/], [/jobless claims|initial claims/, /initial jobless claims/],
+      [/fed funds|policy rate|fomc/, /fed interest rate decision/], [/industrial production/, /industrial production/], [/existing home/, /existing home sales/], [/new home/, /new home sales/], [/trade balance/, /balance of trade/], [/average hourly earnings|wage/, /average hourly earnings/]];
+    const econFor = (label) => { const l = lc(label), m0 = EMAP.find(([re]) => re.test(l)); if (!m0) return null; const rows = ECON.filter((x) => m0[1].test(lc(x.type)));
+      const past = rows.filter((x) => x.date < today() && isNum(x.actual)).pop() || null, next = rows.find((x) => x.date >= today()) || null; return past || next ? { past, next } : null; };
+    const ev0 = (x, k) => (isNum(x?.[k]) ? `${fix(x[k], Math.abs(x[k]) >= 100 ? 0 : 2)}${x.unit === "%" ? "%" : x.scale ? esc(x.scale) : ""}` : "—");
+    const surpr = (x) => (isNum(x?.actual) && isNum(x?.estimate) ? (x.actual > x.estimate ? `<span class="up">above est.</span>` : x.actual < x.estimate ? `<span class="down">below est.</span>` : "in line") : "");
+    const chgChip = (l, v) => (isNum(num(v)) ? `<span class="cx-chg ${num(v) > 0 ? "up" : num(v) < 0 ? "down" : ""}">${l} ${num(v) > 0 ? "+" : ""}${fix(num(v), Math.abs(num(v)) >= 10 ? 1 : 2)}</span>` : "");
     let lastG = "";
-    const indRows = MA.indicators.map((x) => { const d0 = dFor(x.label), g = x.group !== lastG ? `<tr class="cx-grp"><td colspan="${7 + syms.length}">${esc(x.group || "Other")}</td></tr>` : ""; lastG = x.group;
-      return `${g}<tr><td class="wr cx-mi-l"><b>${esc(x.label)}</b>${x.driver ? `<div class="small muted">${esc(trimC(stripCites(x.driver), 150))}</div>` : ""}${x.next ? `<div class="small"><span class="muted">Next:</span> ${esc(trimC(stripCites(x.next), 120))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
-        <td class="n mono"><b>${fv(x.value, x.unit)}</b>${isNum(num(x.estimate)) ? `<div class="small muted">est ${fv(x.estimate, x.unit)}</div>` : ""}</td><td class="n mono small">${fv(x.prior, x.unit)}${x.prior_label ? `<div class="muted">${esc(x.prior_label)}</div>` : ""}</td>
-        <td class="n mono small">${fc(x.chg_1m)}</td><td class="n mono small">${fc(x.chg_3m)}</td><td class="n mono small">${fc(x.chg_1y)}</td><td class="mono small">${esc(x.date || x.period || "")}</td>
-        ${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<td>${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}" title="${esc(`${p0.relevance || ""} relevance${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "—")}</span>${p0.relevance ? `<div class="small muted">${esc(p0.relevance)}</div>` : ""}` : `<span class="small muted">not read</span>`}${dd && dd !== "neutral" ? `<div class="small"><span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("");
-    const macroInd = MA.indicators.length ? sec("cmp-macroind", "Macro indicators", `the full macro tables of their industry reports: ${MA.indicators.length} indicators, each ticker's industry read (headwind or tailwind, and how much it matters)`,
+    const indRows = MA.indicators.map((x) => { const d0 = dFor(x.label), e0 = econFor(x.label), g = x.group !== lastG ? `<tr class="cx-grp"><td colspan="${1 + syms.length}">${esc(x.group || "Other")}</td></tr>` : ""; lastG = x.group;
+      return `${g}<tr><td class="cx-mi-l"><div class="cx-mi-h"><b>${esc(x.label)}</b><span class="mono"><b>${fv(x.value, x.unit)}</b>${x.prior !== null && x.prior !== undefined && x.prior !== "" ? ` <span class="muted">from ${fv(x.prior, x.unit)}${x.prior_label ? " " + esc(x.prior_label) : ""}</span>` : ""}${isNum(num(x.estimate)) ? ` <span class="muted">· est ${fv(x.estimate, x.unit)}</span>` : ""}</span></div>
+        <div class="cx-mi-n">${chgChip("1M", x.chg_1m)}${chgChip("3M", x.chg_3m)}${chgChip("1Y", x.chg_1y)}${x.date || x.period ? `<span class="small muted mono">${esc(x.date || x.period)}</span>` : ""}</div>
+        ${e0 ? `<div class="small cx-eod"><span class="pill neu">EODHD</span> ${e0.past ? `${esc(e0.past.type)} ${esc(e0.past.period)}: <b>${ev0(e0.past, "actual")}</b> vs est ${ev0(e0.past, "estimate")}, prev ${ev0(e0.past, "previous")} ${surpr(e0.past)}` : ""}${e0.next ? `${e0.past ? " · " : ""}next ${esc(fmtShort(e0.next.date))}${isNum(e0.next.estimate) ? ` (est ${ev0(e0.next, "estimate")})` : ""}` : ""}</div>` : ""}
+        <div class="cx-mi-inl">${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return p0 || (dd && dd !== "neutral") ? `<span>${cmpTick(k)} ${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}">${esc(p0.effect || "—")}</span>` : ""}${dd && dd !== "neutral" ? ` <span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span>` : ""}</span>` : ""; }).join("")}</div>
+        ${x.driver ? `<div class="small muted cx-mi-d">${esc(trimC(stripCites(x.driver), 170))}</div>` : ""}${x.next ? `<div class="small cx-mi-d"><span class="muted">Next:</span> ${esc(trimC(stripCites(x.next), 130))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
+        ${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<td class="cx-mi-t">${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}" title="${esc(`${p0.relevance || ""} relevance${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "—")}</span>${p0.relevance ? `<div class="small muted">${esc(p0.relevance)}</div>` : ""}` : `<span class="small muted">—</span>`}${dd && dd !== "neutral" ? `<div class="small"><span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("");
+    // The calendar itself: what's been released lately against consensus, and what's scheduled next.
+    const ePast = ECON.filter((x) => x.date < today() && isNum(x.actual)).slice(-18).reverse(), eNext = ECON.filter((x) => x.date >= today()).slice(0, 18);
+    const econT = ePast.length || eNext.length ? `<h3>US economic calendar <span class="small muted">EODHD · medium and high importance</span></h3><div class="two">
+      ${ePast.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Released</th><th class="n">Actual</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${ePast.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono ${isNum(x.estimate) ? (x.actual > x.estimate ? "up" : x.actual < x.estimate ? "down" : "") : ""}"><b>${ev0(x, "actual")}</b></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>` : "";
+    const macroInd = MA.indicators.length || econT ? sec("cmp-macroind", "Macro indicators", `${MA.indicators.length ? `the full macro tables of their industry reports (${MA.indicators.length} indicators) with each ticker's read, ` : ""}live US releases from EODHD`,
       `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
-      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 240))}</div>`).join("")}</div>` : ""}
-      <div class="tbl-wrap cx-mi"><table class="wrap-table"><thead><tr><th>Indicator</th><th class="n">Latest</th><th class="n">Prior</th><th class="n">1M</th><th class="n">3M</th><th class="n">1Y</th><th>As of</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>
+      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 260))}</div>`).join("")}</div>` : ""}
+      ${MA.indicators.length ? `<div class="tbl-wrap cx-mi"><table><thead><tr><th>Indicator · latest · change</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>` : `<div class="small muted">None of these tickers has an analyzed industry with a macro table yet.</div>`}
+      ${econT}
       ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(trimC(stripCites(m0.move), 160))}${m0.driver ? ` <span class="muted">Driver: ${esc(trimC(stripCites(m0.driver), 160))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(trimC(stripCites(m0.so_what), 160))}</span>` : ""}</div>`).join("")}</div>` : ""}
       ${MA.flips.length ? `<h3>What would flip their macro calls</h3><ul class="memo-pts">${MA.flips.map((f0) => `<li class="small">${cmpTick(f0.sym)} <b>${esc(trimC(stripCites(f0.trigger), 140))}</b> — ${esc(trimC(stripCites(f0.mechanism), 180))}</li>`).join("")}</ul>` : ""}
-      <div class="small muted">From the macro tables of the industry reports behind each ticker (a fund's industries at its weights). A headwind or tailwind is that industry's own read of the indicator; "desk" is the macro desk's call on what it does to the ticker.</div>`) : "";
+      <div class="small muted">Rows come from the macro tables of the industry reports behind each ticker (a fund's industries at its weights); a headwind or tailwind is that industry's own read of the indicator, faded when it matters less; "desk" is the macro desk's call on the ticker. The EODHD line is the latest official print against consensus.</div>`) : "";
+
+    // ---- inside the funds: what each fund holds, the industries it's made of and their calls, and a bond fund's numbers
+    const fundsIn = subs.filter((s0) => s0.kind === "fund");
+    const insideF = fundsIn.length ? sec("cmp-funds", "Inside the funds", "their industries (with each industry's 12-month call from your reports), their biggest holdings, and for a bond fund its yield and rate risk",
+      `<div class="cx-cases">${fundsIn.map((s0) => { const B0 = s0.buckets || {}, mix = s0.ind?.mix || [], maxW = Math.max(0.0001, ...mix.map((x) => x.weight)), bd = s0.bond;
+        const bucketBar = Object.keys(B0).length ? `<div class="cx-split" title="what the fund holds">${[["analyzed", "var(--pos)", "your industry reports"], ["stale", "var(--c3)", "older reports"], ["quant", "var(--gB)", "code-only"], ["not_analyzed", "var(--c4)", "not analyzed"], ["foreign", "var(--accent)", "outside the US"], ["bond", "var(--muted)", "bonds"], ["cash", "var(--faint)", "cash"], ["other", "var(--line)", "other"]].filter(([k]) => B0[k] > 0.003).map(([k, col, l]) => `<i style="flex:${B0[k]};background:${col}" title="${esc(l)} ${pct(B0[k], false, 1)}"></i>`).join("")}</div>
+          <div class="legend">${[["analyzed", "var(--pos)", "your reports"], ["quant", "var(--gB)", "code-only"], ["not_analyzed", "var(--c4)", "not analyzed"], ["foreign", "var(--accent)", "outside US"], ["bond", "var(--muted)", "bonds"], ["cash", "var(--faint)", "cash"]].filter(([k]) => B0[k] > 0.003).map(([k, col, l]) => `<span><i style="background:${col}"></i>${l} ${pct(B0[k], false, 0)}</span>`).join("")}</div>` : "";
+        const look = s0.look && Object.values(s0.look).some((x) => x?.call) ? `<div class="cx-calls">${Outlook.HZ.map((h) => { const x = s0.look[h]?.call; return `<span><span class="eyebrow">${h}</span>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</span>`; }).join("")}</div>` : "";
+        return `<div class="cx-case" style="--tc:${cmpColor(s0.sym)}"><div class="cx-card-top">${cmpTick(s0.sym, true)}<div><div class="cx-name">${esc(s0.name)}</div><div class="small muted">${esc(s0.sub)}${s0.m.holdings_n ? ` · ${s0.m.holdings_n} holdings` : ""}${isNum(s0.covered) ? ` · ${pct(s0.covered, false, 0)} covered by your reports` : ""}${isNum(s0.topShare) ? ` · read through its filed top holdings (${pct(s0.topShare, false, 0)} of the fund), industry weights scaled to them` : ""}</div></div></div>
+          ${bucketBar}
+          ${bd ? `<div class="kpis">${kpi("Yield to maturity", pct(bd.ytm / 100, false, 2), isNum(bd.dist) ? `distribution ${pct(bd.dist / 100, false, 2)}` : "")}${kpi("Duration", isNum(bd.duration) ? fix(bd.duration, 1) + " yrs" : "—", isNum(bd.maturity) ? `maturity ${fix(bd.maturity, 1)} yrs` : "")}${kpi("Carry after costs", pct(bd.carry / 100, false, 2), isNum(bd.tsy) ? `Treasury at its duration ${pct(bd.tsy / 100, false, 2)}` : "")}${bd.credit && isNum(bd.spread) ? kpi("Spread", Math.round(bd.spread) + "bp", "over Treasuries") : ""}${kpi("Breakeven", isNum(bd.breakeven) ? Math.round(bd.breakeven) + "bp" : "—", "yield rise a year's carry absorbs")}</div>
+            ${bd.shocks?.length ? `<div class="small">If Treasury yields move: ${bd.shocks.map((x) => `${x.bp > 0 ? "+" : ""}${x.bp}bp → <b class="${cls(x.ret12 / 100)}">${isNum(x.ret12) ? (x.ret12 > 0 ? "+" : "") + fix(x.ret12, 1) + "%" : "—"}</b>`).join(" · ")} <span class="muted">(12 months with carry)</span></div>` : ""}` : ""}
+          ${look ? `<span class="eyebrow">Its industries' 1M-12M calls, weighted</span>${look}` : ""}
+          ${mix.length ? `<span class="eyebrow">Its industries</span><div class="cx-mix">${mix.slice(0, 12).map((x) => `<div class="cx-brow"><span class="small ellip" title="${esc(x.industry)}">${esc(x.industry)}</span><div class="cx-track"><i style="width:${(100 * x.weight / maxW).toFixed(1)}%;background:${cmpColor(s0.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span>${x.call ? `<span class="pill ${CALLC(x.call)}" style="font-size:10.5px">${esc(x.call)}</span>` : `<span class="small muted">no report</span>`}</div>`).join("")}</div>` : ""}
+          ${!mix.length && s0.sectors?.length ? `<span class="eyebrow">Its sectors (EODHD)</span><div class="cx-mix">${s0.sectors.map((x) => `<div class="cx-brow"><span class="small ellip">${esc(x.sector)}</span><div class="cx-track"><i style="width:${(100 * x.weight / Math.max(0.0001, s0.sectors[0].weight)).toFixed(1)}%;background:${cmpColor(s0.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span><span></span></div>`).join("")}</div>` : ""}
+          ${(s0.holdTop || []).length ? `<span class="eyebrow">Biggest holdings${s0.holdFrom && s0.holdFrom !== "FMP" ? ` <span class="muted" style="text-transform:none;letter-spacing:0">· from ${esc(s0.holdFrom)}</span>` : ""}</span><div class="tbl-wrap"><table class="cx-hold"><thead><tr><th>Holding</th><th class="n">Weight</th><th>Industry · its 12M call</th></tr></thead><tbody>${s0.holdTop.slice(0, 12).map((h) => `<tr><td><b class="tick">${esc(h.ticker)}</b> <span class="small muted ellip">${esc(trimC(h.name || "", 26))}</span></td><td class="n mono">${pct(h.weight, false, 1)}</td><td class="small">${esc(h.industry || "—")}${h.call12 ? ` <span class="pill ${CALLC(h.call12)}" style="font-size:10.5px">${esc(h.call12)}</span>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">${bd ? "A bond fund: its holdings are bonds, read through the yield, duration and spread above." : "Holdings not available for this fund."}</div>`}</div>`; }).join("")}</div>`) : "";
 
     // ---- foreign affairs: world situations, the trade map and regulation (code), with the desk's reads
     const dW = (t) => (MD?.world || []).find((x) => { const a1 = x.situation.toLowerCase().slice(0, 20), b1 = String(t).toLowerCase().slice(0, 20); return a1.includes(b1.slice(0, 12)) || b1.includes(a1.slice(0, 12)); });
@@ -9044,10 +9194,10 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
 
     const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
       { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
-      { label: "Scores", items: [["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
+      { label: "Scores", items: [insideF ? ["cmp-funds", "Inside the funds"] : null, ["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
       { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
       { label: "Analysis", items: [["cmp-cases", "The case for each"], ["cmp-industry", "Industry backdrop"], tog ? ["cmp-together", "Owning them together"] : null] }];
-    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 
