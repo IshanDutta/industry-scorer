@@ -95,3 +95,26 @@ assert(C.checks(vx, h, fit).some((x) => x.where === "overall"));
 const vy = C.clean({ headline: "h", overall: { pick: "FFF", why: "w" }, ranking: ["AAA", "FFF"], investors: { growth: { pick: "FFF" } } }, ["AAA", "FFF"]);
 assert(vy.overall.pick === "FFF" && !vy.overall.adjusted && vy.ranking[0] === "FFF");
 console.log("compare ok");
+
+// A bond fund with no industries gets a code read of every indicator through its duration, and a row in the macro calls.
+{
+  const C2 = require("./compare.js");
+  const stock = { sym: "PEP", kind: "stock", aff: { regimes: [{ industry: "Beverages", weight: 1, regime: "mixed", headline: "h" }], indicators: [
+    { key: "cpi", label: "US CPI y/y", group: "Inflation", value: 3.7, prior: 3.4, effects: { headwind: 1 }, reads: [{ effect: "headwind", relevance: "high", weight: 1 }] },
+    { key: "unemp", label: "Unemployment rate", group: "Labor", value: 4.1, prior: 4.3, effects: { neutral: 1 }, reads: [] },
+    { key: "dxy", label: "Dollar index", group: "FX", value: 99, prior: 98, effects: {}, reads: [] }] } };
+  const shy = { sym: "SHY", kind: "fund", bond: { kind: "short-term Treasuries", duration: 1.9, ytm: 3.9, carry: 3.75, credit: false, breakeven: 190, shocks: [{ bp: 100, ret: -1.9, ret12: 1.9 }] }, aff: null,
+    bondInd: [{ label: "Fed funds rate", value: 4.5, prior: 4.25, unit: "%" }, { label: "US CPI y/y", value: 3.7, prior: 3.4 }] };
+  const M2 = C2.mergeAffairs([stock, shy]);
+  const row = (k) => M2.indicators.find((e) => e.key === k || e.label === k);
+  assert.equal(row("cpi").per.SHY.effect, "headwind");
+  assert.equal(row("cpi").per.SHY.relevance, "medium");
+  assert.equal(row("unemp").per.SHY.effect, "headwind", "falling unemployment hurts Treasuries");
+  assert.ok(!row("dxy").per.SHY, "no rule for the dollar");
+  assert.equal(row("Fed funds rate").per.SHY.relevance, "high");
+  assert.ok(!M2.indicators.some((e) => e.label === "US CPI y/y" && e.key !== "cpi"), "no duplicate CPI row");
+  const rg = M2.regimes.find((r) => r.sym === "SHY"); assert.ok(rg && rg.bond && /1\.9y duration/.test(rg.industry) && rg.regime === "restrictive", JSON.stringify(rg));
+  const hyg = C2.bondRead({ kind: "high-yield (junk) corporate bonds", duration: 3, credit: true }, { label: "Unemployment rate", value: 4.4, prior: 4.1 });
+  assert.equal(hyg.effect, "headwind");
+  console.log("bond macro ok");
+}

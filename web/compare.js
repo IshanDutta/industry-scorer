@@ -308,6 +308,39 @@ Return ONLY a JSON object:
    * Every ticker's affairs (FundMore.affairs: its industries' full macro tables, world situations, trade maps and
    * regulation, at its weights) merged into one row per indicator, situation, country and rule, with each ticker's read.
    */
+  // ---- a bond fund has no industries: code reads each macro indicator through its duration and what it holds
+  const BOND_RULES = [
+    // [test on the label, category, what a rise does to Treasuries, to credit, relevance by duration (short, long)]
+    [/fed funds|policy rate|interest rate decision|fomc|\b2[- ]?y(ear)?\b|\b3[- ]?m(onth)?\b|t-?bill/i, "the Fed and the short end", "headwind", "headwind", ["high", "high"]],
+    [/10[- ]?y|30[- ]?y|treasury|yield|mortgage rate|term premium/i, "long yields", "headwind", "headwind", ["low", "high"]],
+    [/cpi|pce|ppi|inflation|price index|wage|earnings growth|hourly earnings|import prices|breakeven/i, "inflation", "headwind", "headwind", ["medium", "high"]],
+    [/unemployment|jobless|claims|layoff|challenger/i, "labor slack", "tailwind", "headwind", ["medium", "medium"]],
+    [/vix|volatility|move index|credit spread|hy spread|ig spread|oas/i, "risk aversion", "tailwind", "headwind", ["low", "medium"]],
+    [/brent|wti|oil|gasoline|rbob|energy/i, "energy prices (inflation)", "headwind", "neutral", ["low", "medium"]],
+    [/gdp|payroll|nonfarm|jobs|retail|spending|pmi|ism|industrial production|durable|housing starts|sentiment|confidence|income|consumer|capex|orders/i, "growth", "headwind", "tailwind", ["low", "medium"]],
+  ];
+  const nn = (v) => (typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[,%$]/g, "")));
+  /** How one macro indicator moves a bond fund: its direction (from the 1M change or the prior), what that does to the fund, how much its duration makes it matter. */
+  function bondRead(bond, x) {
+    const lab = `${x.label || ""} ${x.key || ""}`, rule = BOND_RULES.find((r) => r[0].test(lab)); if (!rule) return null;
+    const dur = nn(bond.duration), long = isNum(dur) && dur >= 5, credit = !!bond.credit, tips = /tips|inflation/i.test(bond.kind || "");
+    const ch = isNum(nn(x.chg_1m)) ? nn(x.chg_1m) : isNum(nn(x.value)) && isNum(nn(x.prior)) ? nn(x.value) - nn(x.prior) : NaN;
+    let up = credit && !/treasur/i.test(bond.kind || "") ? rule[3] : rule[2];
+    if (tips && /inflation|energy/.test(rule[1])) up = "tailwind";
+    const flip = (e) => (e === "headwind" ? "tailwind" : e === "tailwind" ? "headwind" : "neutral");
+    const effect = !isNum(ch) || Math.abs(ch) < 1e-9 ? "neutral" : ch > 0 ? up : flip(up);
+    const relevance = rule[4][long ? 1 : 0];
+    const why = `${isNum(dur) ? `${dur.toFixed(1)}-year duration` : "a bond fund"}: ${rule[1]} ${isNum(ch) ? (ch > 0 ? "rising" : ch < 0 ? "falling" : "flat") : "unchanged"} is a ${effect === "neutral" ? "wash" : effect} for ${credit ? "credit" : "Treasuries"}${rule[1] === "long yields" && !long ? " (it holds little of the long end)" : ""}.`;
+    return { effect, relevance, why, read_by: 0, rule: rule[1] };
+  }
+  /** A bond fund's row in "each industry's macro call": its stance from the high- and medium-relevance reads, and its carry and breakeven. */
+  function bondRegime(s, reads) {
+    const b = s.bond || {}, sc = reads.reduce((a, r) => a + (EFF_RANK[r.effect] || 0) * (r.relevance === "high" ? 2 : r.relevance === "medium" ? 1 : 0.3), 0);
+    const regime = sc >= 1.5 ? "supportive" : sc <= -1.5 ? "restrictive" : "mixed", pc = (v) => (isNum(nn(v)) ? nn(v).toFixed(2) + "%" : "n/a");
+    const sh = (b.shocks || []).find((x) => x.bp === 100), shd = (b.shocks || []).find((x) => x.bp === -100);
+    const headline = s.bondHeadline || `Yield to maturity ${pc(b.ytm)}, carry after costs ${pc(b.carry)} a year${isNum(nn(b.breakeven)) ? `; yields can rise about ${Math.round(nn(b.breakeven))}bp over 12 months before the price loss eats a year's carry` : ""}${sh && isNum(nn(sh.ret12)) ? `; +100bp → ${nn(sh.ret12) > 0 ? "+" : ""}${nn(sh.ret12).toFixed(1)}% over 12 months` : ""}${shd && isNum(nn(shd.ret12)) ? `, -100bp → ${nn(shd.ret12) > 0 ? "+" : ""}${nn(shd.ret12).toFixed(1)}%` : ""}.`;
+    return { sym: s.sym, industry: `${b.kind ? b.kind[0].toUpperCase() + b.kind.slice(1) : "Bonds"}${isNum(nn(b.duration)) ? ` · ${nn(b.duration).toFixed(1)}y duration` : ""}`, weight: 1, regime, headline, summary: "", bond: true };
+  }
   function mergeAffairs(subjects) {
     const I = new Map(), W = new Map(), T = new Map(), R = new Map(), P = new Map(), regimes = [], moves = [], flips = [];
     for (const s of subjects) {
@@ -337,6 +370,15 @@ Return ONLY a JSON object:
         e.per[s.sym] = { severity: x.severity || "" }; R.set(k, e); }
       for (const x of A.items || []) { const k = tkey(x.title), e = P.get(k) || { kind: x.kind || "", title: x.title, status: x.status || "", date: x.date || "", text: x.text || "", next: x.next || "", per: {} };
         e.per[s.sym] = { direction: x.direction || "" }; P.set(k, e); }
+    }
+    // Bond funds: their industries' tables don't exist, so read every indicator (and the runs' rate and inflation rows) through the fund's duration.
+    for (const s of subjects) {
+      if (!s.bond || (s.aff?.indicators || []).length) continue;
+      for (const x of s.bondInd || []) { const k = x.key || tkey(x.label); if (!I.has(k) && ![...I.values()].some((e) => tkey(e.label) === tkey(x.label)))
+        I.set(k, { key: k, label: x.label, group: x.group || "Rates & inflation (from your industry runs)", value: x.value, unit: x.unit || "", prior: x.prior, prior_label: x.prior_label || "", estimate: x.estimate, chg_1m: x.chg_1m, chg_3m: x.chg_3m, chg_1y: x.chg_1y, period: x.period || "", date: x.date || "", driver: x.driver || "", next: x.next || "", per: {} }); }
+      const reads = [];
+      for (const e of I.values()) { const r = bondRead(s.bond, e); if (r) { e.per[s.sym] = r; reads.push(r); } }
+      regimes.push(bondRegime(s, reads));
     }
     const n0 = (e) => Object.keys(e.per).length;
     const GORD = {}; [...I.values()].forEach((e) => { GORD[e.group] = Math.max(GORD[e.group] || 0, n0(e)); });
@@ -581,6 +623,6 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { mergeAffairs, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
