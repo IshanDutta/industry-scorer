@@ -95,3 +95,15 @@ assert(C.checks(vx, h, fit).some((x) => x.where === "overall"));
 const vy = C.clean({ headline: "h", overall: { pick: "FFF", why: "w" }, ranking: ["AAA", "FFF"], investors: { growth: { pick: "FFF" } } }, ["AAA", "FFF"]);
 assert(vy.overall.pick === "FFF" && !vy.overall.adjusted && vy.ranking[0] === "FFF");
 console.log("compare ok");
+
+// The macro desk reads one combined affairs text; a ticker outside it (no industries) keeps its own.
+{
+  const C3 = require("./compare.js");
+  const subs = [{ sym: "KO", kind: "stock", affIn: { industries: [{ industry: "Bev", weight: 1 }] }, dz: { aff_macro: "KO-MACRO", context: "KO-CTX" } },
+    { sym: "SHY", kind: "fund", affIn: null, dz: { aff_macro: "SHY-BOND-READ", bond: "SHY-BOND" } }];
+  const t = C3.deskDossier("macro", subs, { combined: "COMBINED-TEXT" });
+  assert.ok(t.includes("COMBINED-TEXT") && !t.includes("KO-MACRO") && t.includes("KO-CTX") && t.includes("SHY-BOND-READ"), t);
+  const t2 = C3.deskDossier("macro", subs, {}); assert.ok(t2.includes("KO-MACRO") && !t2.includes("COMBINED-TEXT"));
+  const t3 = C3.deskDossier("events", subs, { combined: "COMBINED-TEXT" }); assert.ok(!t3.includes("COMBINED-TEXT"));
+  console.log("combined affairs ok");
+}

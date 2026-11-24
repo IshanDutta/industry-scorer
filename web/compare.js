@@ -396,14 +396,15 @@ Return ONLY a JSON object:
   function deskDossier(desk, subjects, { total = 300000, extra = "", combined = "" } = {}) {
     if (extra) total -= Math.min(extra.length, 30000);
     const useComb = !!combined && desk === "macro"; if (useComb) total -= Math.min(combined.length, 200000);
-    const D0 = DESKS[desk], D = useComb ? { ...D0, stock: D0.stock.filter((k) => !AFF_KEYS.includes(k)), fund: D0.fund.filter((k) => !AFF_KEYS.includes(k)), shared: D0.shared.filter((k) => !AFF_KEYS.includes(k)) } : D0;
+    // A ticker with no industries in the combined text (a bond fund, a stock no run covers) keeps its own copy.
+    const D = DESKS[desk], inComb = (s) => useComb && !!s.affIn?.industries?.length, keysOf = (s) => (s.kind === "fund" ? D.fund : D.stock).filter((k) => !(inComb(s) && AFF_KEYS.includes(k)));
     const out = [...(extra ? [capT(extra, 30000)] : []), ...(useComb ? [capT(combined, 200000)] : [])], sharedDone = {}, CAP = { bond: 20000, hold: 14000, ind: 20000, calls: 45000, context: 22000, aff_macro: 40000, aff_world: 40000, aff_trade: 22000, aff_reg: 16000, exposures: 22000, facts: 12000, times: 8000, windows: 5000, watch: 6000, news: 15000 };
     // Each ticker gets an even share of the room; a ticker whose industry blocks were already given (a shared industry) leaves its unused room to the rest.
-    const need = subjects.map((s) => (s.kind === "fund" ? D.fund : D.stock).reduce((a, k) => a + Math.min(String(s.dz?.[k] || "").length, CAP[k] || 1e9), 0));
+    const need = subjects.map((s) => keysOf(s).reduce((a, k) => a + Math.min(String(s.dz?.[k] || "").length, CAP[k] || 1e9), 0));
     let room = total; const budgets = need.map(() => 0); const order = need.map((x, i) => i).sort((a, b) => need[a] - need[b]);
     order.forEach((i, j) => { const share = Math.floor(room / (order.length - j)); budgets[i] = Math.max(15000, Math.min(need[i] + 4000, share)); room -= budgets[i]; });
     for (const s of subjects) {
-      const z = { ...(s.dz || {}), written: writtenText(s.saved) }, keys = s.kind === "fund" ? D.fund : D.stock, parts = [];
+      const z = { ...(s.dz || {}), written: writtenText(s.saved) }, keys = keysOf(s), parts = [];
       const o = s.outlook; if (o?.calls) parts.push(`ITS 1M-12M CALLS (${o.source}${o.date ? `, ${o.date}` : ""}): ${HZ.map((h) => `${h} ${o.calls[h]?.call || "n/a"}${o.calls[h]?.why ? ` (${cut(o.calls[h].why, 200)})` : ""}`).join("; ")}`);
       if (desk === "street" && s.saved) parts.push(writtenText(s.saved));
       if (desk === "events" && s.saved?.catalysts?.length) parts.push(`ITS WRITTEN ANALYSIS'S CATALYSTS: ${s.saved.catalysts.slice(0, 8).map((x) => cut(x, 200)).join(" | ")}`);
