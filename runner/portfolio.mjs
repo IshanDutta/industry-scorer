@@ -38,6 +38,14 @@ const readMaybeGz = (p) => { const b = readFileSync(p); return JSON.parse((b[0] 
 const summary = (md) => { if (env.GITHUB_STEP_SUMMARY) writeFileSync(env.GITHUB_STEP_SUMMARY, md + "\n", { flag: "a" }); };
 
 /** The request, checked: an id, holdings with tickers and weights, a goal. Anything else in it is dropped. */
+/** What a comparison reads from every industry run without opening it: its name, date, constituents, macro table, lead
+ * strategist and macro report (the company index, the rate rows and the saved-run list), and whether its macro and
+ * research are there (so the list shows no false gaps). The rest (sections, rule books, research, wire) comes on demand. */
+export function liteRun(sl, v) {
+  const mr = v.reports?.[`${sl}--macro`];
+  return { name: v.name, saved_at: v.saved_at, v: v.v, industry: v.industry, macro: v.macro, agent: v.agent, missing: v.missing, running: v.running, usOnly: v.usOnly,
+    reports: mr ? { [`${sl}--macro`]: mr } : {}, __lite: { macro: !!mr?.result && !mr.result.partial && !!v.macro?.rows?.length, research: !!v.research } };
+}
 export function cleanRequest(r) {
   if (!r || typeof r !== "object") throw new Error("the request isn't JSON");
   const id = String(r.id || ""); if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("the request has no valid id");
@@ -59,7 +67,8 @@ export function cleanRequest(r) {
 
 async function main() {
   if (!args.request || !existsSync(args.request)) { console.error("Usage: node portfolio.mjs --request request.json --exports <dir> [--out out]"); process.exit(2); }
-  const req = cleanRequest(JSON.parse(readFileSync(args.request, "utf8")));
+  const rawReq = JSON.parse(readFileSync(args.request, "utf8")), req = cleanRequest(rawReq);
+  const pressed = Date.parse(rawReq.requested_at || ""); if (pressed) log(`asked for at ${new Date(pressed).toISOString().slice(11, 19)} UTC; the analysis started ${((t0 - pressed) / 60000).toFixed(1)} min later (GitHub start-up included)`);
   const outDir = resolve(args.out || "out"); mkdirSync(outDir, { recursive: true });
   const deadline = Date.now() + Number(args["deadline-min"] || 60) * 60000;
   const one = req.kind !== "portfolio";
@@ -75,7 +84,8 @@ async function main() {
     effort: {}, budgetUsd: env.CLAUDE_BUDGET_USD || 15, directConcurrency: 8, mode: env.CLAUDE_MODE === "batch" ? "batch" : "direct", log,
     flushMs: 2000, pollMs: 15000, stragglerMin: 10, directAfterMin: 0, execTool: (id, name, input) => page.evaluate(([a, b, c]) => window.__job_tool(a, b, c), [id, name, input]) });
 
-  const browser = await chromium.launch();
+  // GitHub's runners come with Google Chrome; the workflow sets PW_CHANNEL=chrome then, so no browser download is needed.
+  const browser = await (env.PW_CHANNEL ? chromium.launch({ channel: env.PW_CHANNEL }).catch((e) => { log(`[browser] ${env.PW_CHANNEL} didn't start (${String(e.message || e).slice(0, 120)}); using Playwright's Chromium`); return chromium.launch(); }) : chromium.launch());
   page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   page.on("pageerror", (e) => log("[page error]", String(e).slice(0, 300)));
   await page.exposeFunction("__job_sample", (id, payload) => sampler.ask(id, payload));
@@ -90,8 +100,14 @@ async function main() {
   await page.goto("file://" + pagePath);
   await page.waitForFunction(() => window.__industryScorer?.ready(), null, { timeout: 120000 });
 
-  // Every sector's saved industry runs, in pieces of about 8 MB.
+  // Every sector's saved industry runs, in pieces of about 8 MB. A comparison reads only a few industries in full, so it
+  // gets every run "lite" (what the indexes, the company map and the rate rows read) and the page asks for a whole run
+  // when it opens one (window.__job_run); that's about a seventh of the data to move into the page.
   const runsDir = join(resolve(args.exports || "exports"), "runs");
+  const lite = req.kind === "compare" && env.JOB_LITE_RUNS !== "0", fullAt = new Map(), fileCache = new Map();
+  if (lite) await page.exposeFunction("__job_run", async (sl) => { const f = fullAt.get(sl); if (!f) return null;
+    let j = fileCache.get(f); if (!j) { j = readMaybeGz(join(runsDir, f)); fileCache.clear(); fileCache.set(f, j); }
+    log(`${j.records["run:" + sl]?.name || sl}: opened in full`); return j.records["run:" + sl] || null; });
   const files = existsSync(runsDir) ? readdirSync(runsDir).filter((f) => /\.json\.gz$/.test(f) && !/-\d{6,}\.json\.gz$/.test(f)).sort() : [];
   let industries = 0;
   for (const f of files) {
@@ -100,11 +116,13 @@ async function main() {
     const { records, sampler: _s, library: _l, ...head } = j; head.format ||= "industry-scorer/results";
     let chunk = {}, size = 0;
     const flush = async () => { if (!Object.keys(chunk).length) return; industries += await page.evaluate((x) => window.__industryScorer.importRecords(x), { ...head, records: chunk }); chunk = {}; size = 0; };
-    for (const [k, v] of Object.entries(records)) { if (!/^(run|sector):/.test(k)) continue; const z = JSON.stringify(v).length; if (size && size + z > 8e6) await flush(); chunk[k] = v; size += z; }
+    for (let [k, v] of Object.entries(records)) { if (!/^(run|sector):/.test(k)) continue;
+      if (lite && k.startsWith("run:") && v) { fullAt.set(k.slice(4), f); v = liteRun(k.slice(4), v); }
+      const z = JSON.stringify(v).length; if (size && size + z > 8e6) await flush(); chunk[k] = v; size += z; }
     await flush();
     log(`${j.sector || f}: loaded`);
   }
-  log(`${industries} industry runs loaded from ${files.length} sectors`);
+  log(`${industries} industry runs loaded from ${files.length} sectors${lite ? " (lite; opened in full when read)" : ""}`);
   if (industries < 8) { console.error("Too few industry runs in the exports branch to build a target distribution."); process.exit(1); }
 
   // A comparison reads the analyses already written for its tickers (saved in the exports branch by earlier runs).
