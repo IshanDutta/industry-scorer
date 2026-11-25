@@ -9,12 +9,12 @@
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
-  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
   /** For the write-up itself: generous room (2.5x), and when something is still too long, end at a sentence, never mid-word. */
   // Saved analysis is kept whole (the page lets the reader expand long text); k stays for the call sites.
   const keepT = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); const K = Infinity; if (s.length <= K) return s;
     const cut = s.slice(0, K), m = [...cut.matchAll(/[.!?](?=\s|$)/g)].pop(); if (m && m.index > K * 0.4) return cut.slice(0, m.index + 1);
-    const w = cut.lastIndexOf(" "); return (w > K * 0.6 ? cut.slice(0, w) : cut).replace(/[,;:\s]+$/, "") + "…"; };
+    const w = cut.lastIndexOf(" "); return (w > K * 0.6 ? cut.slice(0, w) : cut).replace(/[,;:\s]+$/, ""); };
   const median = (a) => { const v = a.filter(isNum).sort((x, y) => x - y); if (!v.length) return NaN; const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
   const lc = (s) => String(s || "").toLowerCase();
   const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;

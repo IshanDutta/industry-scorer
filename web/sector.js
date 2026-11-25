@@ -21,7 +21,7 @@
   const req = (f, g) => (typeof module !== "undefined" && module.exports ? require(f) : root[g]);
   const Team = req("./team.js", "Team"), Trade = req("./trade.js", "Trade"), RegBook = req("./regbook.js", "RegBook");
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const SLOTS = "ABCDEFGHJKLMNPRSTUVWXYZ";
   const BATCH = 3; // industries per impact call: enough room for each one's full section
 

@@ -12,7 +12,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
   const lc = (s) => String(s ?? "").toLowerCase().trim();
   const pc = (x, d = 1) => (isNum(x) ? `${x > 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");
   const p0 = (x, d = 0) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a");
@@ -115,9 +115,11 @@
   }
 
   const CALL = `{"call": "${LEVELS.join(" | ")}", "why": "3-4 sentences: where it goes over this window and the two or three things that decide it, with the specific numbers", "for": ["2-3 short reasons on the call's side"], "against": ["the case against: 1-2 short reasons, and why they lose"], "flips_it": "one measurable, dated condition that would flip this call"}`;
-  const schemaFor = (inputs) => `{"headline": "one sentence: where it's going and why",
+  // An industry's calls are written out in full: the reasoning, every reason on each side, and what to watch, with numbers and dates.
+  const CALL_FULL = `{"call": "${LEVELS.join(" | ")}", "why": "a full paragraph of 6-9 sentences: where it goes over this window and roughly how far (the range), the three to five things that decide it, each with its number, date and source ID, how they interact, and what the history and the statistical model say for this window", "for": ["4-6 reasons on the call's side, each a full sentence with its number, date or source ID"], "against": ["2-4 reasons against, each a full sentence, and why each loses (or what would make it win)"], "watch": ["3-5 dated things to watch in this window, each: the date, what to look for, and what it would mean for this call"], "flips_it": "one or two measurable, dated conditions that would flip this call"}`;
+  const schemaFor = (inputs, call = CALL) => `{"headline": "one sentence: where it's going and why",
  "evidence": [{"input": "${inputs.map(([k]) => k).join(" | ")}", "points": "up | down | mixed", "weight": 1, "why": "one sentence with the number that matters"}],
- "calls": {"1M": ${CALL}, "3M": {...}, "6M": {...}, "12M": {...}},
+ "calls": {"1M": ${call}, "3M": {...}, "6M": {...}, "12M": {...}},
  "verdict": {"agrees": true, "why": "one sentence: do you agree with the lead's verdict, and if not, why"}}`;
   const SCHEMA = schemaFor(INPUTS);
   const RULES = (who, inputs) => `HOW TO MAKE THE CALLS
@@ -135,9 +137,10 @@
 ${dig}
 
 ${RULES("THE INDUSTRY", INPUTS)}
+- Write each window's call out in full, as the schema asks: the reader wants the whole reasoning for 1M, 3M, 6M and 12M separately, not a summary. Each window stands on its own: don't say "as above".
 
 Reply with ONLY this JSON (all four windows):
-${SCHEMA}`;
+${schemaFor(INPUTS, CALL_FULL)}`;
   }
 
   /** A company's prompt: its finished write-up, its industry's outlook, its numbers. One call. */
@@ -200,7 +203,7 @@ ${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdic
     const list = (a, n, k) => (Array.isArray(a) ? a : a ? [a] : []).slice(0, n).map((x) => trim(x, k)).filter(Boolean);
     const calls = {};
     for (const h of HZ) { const c = raw.calls?.[h] || raw.calls?.[h.toLowerCase()]; const l = level(c?.call); if (!l) continue;
-      calls[h] = { call: l, why: trim(c.why, 1000), for: list(c.for, 3, 240), against: list(c.against, 2, 280), flips_it: trim(c.flips_it, 260) }; }
+      calls[h] = { call: l, why: trim(c.why, 1000), for: list(c.for, 6, 240), against: list(c.against, 4, 280), ...(c.watch ? { watch: list(c.watch, 5, 300) } : {}), flips_it: trim(c.flips_it, 260) }; }
     if (!Object.keys(calls).length) return null;
     const seen = new Set(), evidence = [];
     for (const e of Array.isArray(raw.evidence) ? raw.evidence : []) {
@@ -218,15 +221,15 @@ ${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdic
   }
 
   /** Only when code finds a contradiction: one small fix (the answer and the findings; no digest). */
-  function repairPrompt(who, today, o, issues, inputs = INPUTS) {
+  function repairPrompt(who, today, o, issues, inputs = INPUTS, { full = false } = {}) {
     return `You made the calls below on where ${who} is going (its own direction over each window). Today is ${today}. Code found problems:
 ${issues.map((i) => "- " + i).join("\n")}
 
 YOUR ANSWER
 ${JSON.stringify({ headline: o.headline, evidence: o.evidence.map(({ input, points, weight, why }) => ({ input, points, weight, why })), calls: o.calls, verdict: o.verdict })}
 
-Fix them: correct the evidence if it's wrong, or the calls (and their "why") if they are. A call that flips direction between windows must say what changes in between. Reply with ONLY the complete corrected answer in the same JSON shape:
-${schemaFor(inputs)}`;
+Fix them: correct the evidence if it's wrong, or the calls (and their "why") if they are. A call that flips direction between windows must say what changes in between.${full ? " Keep every call written out in full (the whole reasoning, every reason, what to watch); change only what the problems need." : ""} Reply with ONLY the complete corrected answer in the same JSON shape:
+${schemaFor(inputs, full ? CALL_FULL : CALL)}`;
   }
 
   /** Until it has been made: provisional, read off the earlier calls (no Claude). */

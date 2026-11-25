@@ -11,7 +11,7 @@
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const num = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
-  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
   const lc = (s) => String(s ?? "").toLowerCase().trim();
   const p0 = (x, d = 0) => (isNum(x) ? `${(x * 100).toFixed(d)}%` : "n/a");
   const pc = (x, d = 1) => (isNum(x) ? `${x > 0 ? "+" : ""}${(x * 100).toFixed(d)}%` : "n/a");

@@ -242,7 +242,7 @@
    */
   const noCite = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s*\(\s*[,;][^)]*\)/g, "").replace(/\(\s*\)/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
   /** Text without citations, cut at a word end. */
-  const cutW = (x, k) => { const t = noCite(x); return t.length <= k ? t : t.slice(0, t.slice(0, k).lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
+  const cutW = (x, k) => { const t = noCite(x); return t.length <= k ? t : t.slice(0, t.slice(0, k).lastIndexOf(" ")).replace(/[,;:]$/, ""); };
   /** The inputs Sections.pillars scores a saved run's report sections from (the industry page's own, read off the saved record). */
   function sectionCtx(rec) {
     const rep = (k) => { for (const [key, v] of Object.entries(rec?.reports || {})) if (key.endsWith("--" + k)) return v?.result || null; return null; };
@@ -321,7 +321,7 @@
       reads: (() => { const sx = a.sections || {}, H = d.history || {}, Pz = d.positioning || {}, pxi = Pz.price || {}, kp = rep("kpi"), cl = rep("calls"), an = rec?.research?.analyst || [], se = rec?.research?.sentiment;
         const cut0 = (x) => String(x || "").replace(/\s*\[[A-Z]{1,3}\d{1,5}(?:,\s*[A-Z]{1,3}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1").replace(/\s+/g, " ").trim();
         // Cut at a sentence end where one is near, else at a word, so a read never stops mid-word.
-        const cutAt = (t, k) => { if (t.length <= k) return t; const h = t.slice(0, k), e = Math.max(h.lastIndexOf(". "), h.lastIndexOf("; ")); return e > k * 0.55 ? h.slice(0, e + 1) : h.slice(0, h.lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
+        const cutAt = (t, k) => { if (t.length <= k) return t; const h = t.slice(0, k), e = Math.max(h.lastIndexOf(". "), h.lastIndexOf("; ")); return e > k * 0.55 ? h.slice(0, e + 1) : h.slice(0, h.lastIndexOf(" ")).replace(/[,;:]$/, ""); };
         const cut = (x, k = 300) => cutAt(cut0(x), k);
         const pcx = (x, k = 0) => (isNum(n(x)) ? (n(x) * 100).toFixed(k) + "%" : "n/a"), up = an.map((x) => n(x.upside)).filter(isNum).sort((x, y) => x - y);
         const o = { perf: cut(sx.performance), risk: cut(sx.risk), fund: cut(sx.fundamentals), health: cut(sx.health), val: cut(sx.valuation), earn: cut(sx.earnings),

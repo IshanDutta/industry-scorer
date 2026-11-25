@@ -14,7 +14,7 @@
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
   const lc = (s) => String(s || "").toLowerCase();
-  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
   const f1 = (v, d = 1) => (isNum(v) ? Number(v).toFixed(d) : "n/a");
   const pp = (v, d = 2) => (isNum(v) ? Number(v).toFixed(d) + "%" : "n/a");
   const sgn = (v, d = 1) => (isNum(v) ? (v > 0 ? "+" : "") + Number(v).toFixed(d) + "%" : "n/a");

@@ -14,7 +14,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const day = (s) => String(s ?? "").slice(0, 10);
   function addDays(d, k) { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
@@ -59,7 +59,7 @@
     pick.sort((a, b) => a.ti - b.ti || a.si - b.si);
     const out = []; let prev = null;
     for (const x of pick) {
-      if (prev && prev.ti === x.ti) out[out.length - 1] += (x.si === prev.si + 1 ? " " : " … ") + x.t;
+      if (prev && prev.ti === x.ti) out[out.length - 1] += " " + x.t;
       else out.push(`${x.who ? x.who + ": " : ""}${x.t}`);
       prev = x;
     }

@@ -218,7 +218,7 @@
 
   // ----------------------------------------------------------------- the dossier and the one Claude call
   const fmtV = (kind, v) => !isNum(v) ? "n/a" : kind === "pct" ? (v * 100).toFixed(1) + "%" : kind === "chg" ? (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%" : kind === "x" ? v.toFixed(2) + "x" : kind === "usd" ? (Math.abs(v) >= 1e12 ? "$" + (v / 1e12).toFixed(2) + "T" : Math.abs(v) >= 1e9 ? "$" + (v / 1e9).toFixed(1) + "B" : Math.abs(v) >= 1e6 ? "$" + (v / 1e6).toFixed(0) + "M" : "$" + v.toFixed(2)) : String(Math.round(v * 100) / 100);
-  const cut = (s, k) => { s = String(s ?? "").replace(/\[[A-Z]{1,3}\d+\]/g, "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const cut = (s, k) => { s = String(s ?? "").replace(/\[[A-Z]{1,3}\d+\]/g, "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
 
   /** Everything the call reads, as compact text: per ticker (its numbers, written analysis, industry report), then code's comparison. */
   function dossier({ subjects, sc, fit, h2h, corr, ovl, today }) {
@@ -480,7 +480,7 @@ Return ONLY a JSON object:
   };
   const DESK_KEYS = Object.keys(DESKS);
   const SHARED_LABEL = { aff_macro: "Macro indicators and the macro call", aff_world: "World situations", aff_trade: "The trade map", aff_reg: "Regulation", context: "The industry report's macro, world, scenario and debate rows" };
-  const capT = (s, k) => { s = String(s || ""); return s.length > k ? s.slice(0, k) + "\n(…cut to fit)" : s; };
+  const capT = (s, k) => { s = String(s || ""); return s.length > k ? s.slice(0, k) + "\n(cut to fit)" : s; };
   function writtenText(v) {
     if (!v) return "";
     const L = [`WRITTEN ANALYSIS (${v.via === "github" ? "made on GitHub" : "made here"}, ${String(v.at || "").slice(0, 10)})`];

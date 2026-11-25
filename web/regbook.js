@@ -28,7 +28,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const day = (s) => String(s ?? "").slice(0, 10);
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   function addDays(d, k) { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
@@ -264,7 +264,7 @@ JSON shape:
   }
 
   function verdictPrompt(doc, bodies, books, ctx, T) {
-    const cut = (x, n) => { const t = String(x || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+    const cut = (x, n) => { const t = String(x || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") : t; };
     const ev = (a) => (a?.length ? ` [${a.join(", ")}]` : "");
     const lines = bodies.map((b, i) => {
       const bk = books[i];
@@ -304,7 +304,7 @@ Sizes: 3-5 most_material, up to 10 timeline events (chronological), 2-5 winners 
 
   // ------------------------------------------------------------------ critics
   const EN = (x, list, d) => { const s = String(x ?? "").toLowerCase().trim().replace(/[\s-]+/g, "_"); return list.find((l) => l === s) || list.find((l) => s.startsWith(l.split("_")[0])) || d; };
-  const words = (s, n) => { const w = String(s || "").split(/\s+/).filter(Boolean); return w.length > n ? w.slice(0, n).join(" ") + "…" : w.join(" "); };
+  const words = (s, n) => { const w = String(s || "").split(/\s+/).filter(Boolean); return w.length > n ? w.slice(0, n).join(" ") : w.join(" "); };
 
   /** Normalize a rule book. idx: citable items by ID (pack + this body's sources). */
   function cleanBook(raw, idx, doc, ctx, T) {
