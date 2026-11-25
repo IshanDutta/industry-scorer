@@ -3353,7 +3353,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     return { spy1d, vix1d };
   }
 
-  async function runDaily(sector, { names = null, concurrency = 4, backfill = false } = {}) {
+  async function runDaily(sector, { names = null, concurrency = 4, backfill = false, refresh = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     const dr = S.dailyRun = { sector, phase: "data", label: "Starting the daily update", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set() };
     try {
@@ -3365,7 +3365,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       // Each gets its fresh data, the
       // past months most like today and the historian's read, then the strategist checks the whole analysis and the
       // calls against those base rates. No triage, no section rewrites.
-      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r?.agent?.result && !(backfill && r.industry.history?.times?.episodes?.length && !oldScale(r.agent.result))) have.push(n); }
+      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r?.agent?.result && !(backfill && r.industry.history?.times?.episodes?.length && !oldScale(r.agent.result)) && !(refresh && r.agent.result.repaired?.updated)) have.push(n); }
       dr.of = have.length; dr.backfill = backfill;
       if (!have.length) { S.notices = [{ kind: backfill ? "info" : "warn", text: backfill ? `Every finished ${sector} industry already has Times like this.` : `No finished ${sector} analysis to update: run the full sector first.` }]; return; }
       dr.label = "Market data, the macro catalog and the news wire (no Claude)";
@@ -3406,7 +3406,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           const bodies = regBodies(name);
           const brief = Daily.sectionBrief({ kpi: rep(name, "kpi")?.result, world: rep(name, "world")?.result, trade: rep(name, "trade")?.result, reg: rep(name, "reg")?.result, chain: rep(name, "chain")?.result, bodies: bodies.map((b) => b.name) });
           const tp = Daily.triagePrompt(name, res, x, today(), brief);
-          let tri = backfill ? { material: true, why: "Times like this was added and the calls move to the five-level scale with a 1-10 conviction: the analysis and the calls are checked against what followed the past months most like today", backfill: true } : await call(tp, "quick", `Daily triage: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return { material: true, why: "triage failed; reviewed in full" }; });
+          if (refresh) await checkNewClaims(name, (p, step) => call(p, "default", step)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; });
+          let tri = refresh ? { material: true, why: "The reports this analysis rests on were repaired (passages that had been cut short finished, the reasoning the fact-check removed brought back, broken sections written again): the strategist checks the thesis, the scenarios and every call against the completed reports", refresh: true } : backfill ? { material: true, why: "Times like this was added and the calls move to the five-level scale with a 1-10 conviction: the analysis and the calls are checked against what followed the past months most like today", backfill: true } : await call(tp, "quick", `Daily triage: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return { material: true, why: "triage failed; reviewed in full" }; });
           // A second opinion: the industry moved well outside its normal range but the quick model saw nothing. Ask the stronger model.
           if (!backfill && isNum(x.z) && Math.abs(x.z) >= 1.5 && tri?.material !== true && !(tri?.sections || []).length) {
             const t2 = await call(tp, "default", `Daily triage, second opinion: ${name}`).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
@@ -3415,8 +3416,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           // The drift guard: how far the industry has gone since its last full rewrite, how many updates since, and the last rethink.
           const dft = Daily.drift(d, String(ag.run_at || "").slice(0, 10));
           const drift = dft ? { ...dft, updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null } : { updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null };
-          const cands = backfill ? [] : Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
-          const kpiRedo = !backfill && kpiCut(rep(name, "kpi")?.result), chainRedo = !backfill && chainBroken(rep(name, "chain")?.result);
+          const cands = backfill || refresh ? [] : Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
+          const kpiRedo = !backfill && !refresh && kpiCut(rep(name, "kpi")?.result), chainRedo = !backfill && !refresh && chainBroken(rep(name, "chain")?.result);
           const l0 = res.outlook, lAge = l0?.date ? (Date.parse(today()) - Date.parse(l0.date)) / 864e5 : Infinity;
           const st = backfill ? 2 : Daily.strength(x, tri, shock);
           day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length, strength: st, score: (isNum(x.z) ? Math.abs(x.z) * 10 : 0) + x.triggers.length + (tri?.material ? 5 : 0),
@@ -3434,7 +3435,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const all = Object.entries(day).flatMap(([n, v]) => v.cands.map((c) => ({ ...c, industry: n, bodies: v.bodies })));
       // The rolling rewrite: the industry whose whole analysis is oldest (30+ days) gets one, as low-priority work that waits longest (Mondays only).
       const dow = new Date(today() + "T00:00:00Z").getUTCDay(), weekend = !backfill && (dow === 6 || dow === 0);
-      const oldest = backfill || dow !== 1 ? null : Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
+      const oldest = backfill || refresh || dow !== 1 ? null : Object.entries(day).filter(([, v]) => v.runAt && Date.now() - Date.parse(v.runAt) > 30 * 864e5).sort((a, b) => (a[1].runAt < b[1].runAt ? -1 : 1))[0];
       if (oldest && !all.some((c) => c.industry === oldest[0] && c.key === "thesis")) all.push({ industry: oldest[0], key: "thesis", label: Daily.SECTIONS.thesis.label, why: `rolling refresh: the whole analysis is from ${oldest[1].runAt.slice(0, 10)}`, by: "rotation", importance: "low", waited: Math.min(5, Math.floor((Date.now() - Date.parse(oldest[1].runAt)) / (15 * 864e5))) });
       let budget = Infinity, stretch = 0;
       const vals = Object.values(day), highShare = vals.length ? vals.filter((v) => v.cands.some((c) => c.importance === "high")).length / vals.length : 0;
@@ -3450,7 +3451,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         dayMoney = Math.max(0, (big.big ? Math.max(share, cap) : share) - spentAtStart);
       }
       const al = Daily.allot(Object.entries(day).map(([n, v]) => ({ name: n, strength: v.strength, score: v.score, leanDue: v.leanDue })), dayMoney, { weekend: weekend && !big.big });
-      for (const [n, v] of Object.entries(day)) v.plan = al.plans[n] || null;
+      for (const [n, v] of Object.entries(day)) v.plan = refresh ? "complex" : al.plans[n] || null; // after a repair every repaired industry gets the balanced model's update
       dr.heldUpdates = al.held; dr.dayMoney = dayMoney === Infinity ? null : Math.round(dayMoney * 100) / 100; dr.quietDay = Object.values(day).filter((v) => !v.plan).length;
       if (dayMoney !== Infinity) { budget = weekend && !big.big ? 0 : Math.max(0, Math.min(al.left, big.big ? al.left : 0.2 * dayMoney)); stretch = 0; }
       const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch });
@@ -3489,7 +3490,10 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           } else {
             const rewritten = sections.filter((sct) => sct.ok && sct.key !== "thesis").map((sct) => { const k = sct.key === "rulebook" ? "regverdict" : sct.key; const r = rep(name, k)?.result;
               const txt = k === "regverdict" ? `${r?.summary || r?.verdict || ""}` : k === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : k === "trade" ? `${r?.verdict?.summary || r?.verdict?.headline || ""}` : Team.digest(k, r);
-              return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n");
+              return `${sct.label} (${sct.why}): ${String(txt || "").slice(0, 1500)}`; }).join("\n")
+              + (refresh ? "\n" + (res.repaired?.parts?.length ? res.repaired.parts : ["kpi", "chain", "calls", "macro", "world", "trade", "reg", "rulebook"]).filter((k) => k !== "lead" && k !== "trademap" && k !== "history").map((k) => { const kk = k === "rulebook" ? "regverdict" : k, r = rep(name, kk)?.result;
+                const txt = kk === "regverdict" ? `${r?.headline || ""} ${r?.summary || ""}` : kk === "chain" ? (r?.partners || []).slice(0, 8).map((p) => `${p.symbol} (${p.role}): ${p.why}`).join(" ") : kk === "trade" ? `${r?.verdict?.headline || ""} ${r?.verdict?.summary || ""}` : Team.digest(kk, r);
+                return `${({ kpi: "KPIs and the cycle", chain: "Customers and suppliers", calls: "Earnings calls", macro: "Macro", world: "World events", trade: "Trade relations", trademap: "Trade map", reg: "Regulation, legal and deals", regverdict: "Regulatory verdict", rulebook: "Rule books and the regulatory verdict", history: "The historian" })[k] || k} (repaired: completed or written again): ${String(txt || "").slice(0, 1500)}`; }).join("\n") : "");
             let upd = null;
             // The whole analysis brought up to date by the lead strategist: every part today's news changes, nothing else.
             // Only industries the day's plan picked (or whose sections were just rewritten): real events by the lead model,
@@ -3501,6 +3505,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
               ...(d.history?.times?.episodes || []).map((e, i) => "HE" + (i + 1)), ...(S.macroBy[sl]?.rows || []).map((r) => r.id)].filter(Boolean);
             const a = Daily.apply(res, upd, x, { today: today(), via, tri, sources: [...x.news, ...x.world, ...(x.outcome || []), ...(x.filings || [])], sections, known });
             r2 = a.result; changed = a.changed;
+            if (refresh) r2.repaired = { ...(r2.repaired || { date: today(), parts: [] }), updated: today() };
             if (a.refs?.length) ag.sources = [...(ag.sources || []).filter((s) => !/^DU\d+$/.test(s.id) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id}]`) || JSON.stringify(Daily.analysisOf(r2)).includes(`${s.id},`)), ...a.refs];
             r2.daily_pending = held; r2.daily.held = held.map((c) => ({ key: c.key, label: c.label, why: c.why }));
             r2.horizon_facts = Brain.horizonFacts(d, today());
@@ -3679,6 +3684,29 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     return m;
   }
 
+  /**
+   * Text in an industry's rule books and regulatory verdict that their fact-check has never seen (passages the repair
+   * finished): checked now under the same rules; what can't stand is removed, as the original check did. The log and
+   * the counts grow by these checks.
+   */
+  async function checkNewClaims(name, call) {
+    const sl = slug(name), pack = S.research[sl] || { items: [] }, tx = S.tx[sl] || { items: [] }, base = Team.index(pack, tx, macroOf(name));
+    const jobs = [];
+    for (const [k, d] of Object.entries(S.regbooks)) if (k.startsWith(sl + "--") && d?.book) { const u = Patch.unchecked(d, RegBook.bookSpec, RegBook); if (u) { const idx = { ...base }; for (const x of d.sources || []) idx[String(x.id).toUpperCase()] = x; jobs.push({ u, idx, save: (fc) => { S.regbooks[k] = jsonSafe({ ...d, checks: [...d.checks, ...fc.checks], fact_check: Object.fromEntries(Object.entries({ ...d.fact_check }).map(([a, b]) => [a, (b || 0) + (fc.summary[a] || 0)])), fill_checked: today() }); } }); } }
+    const rv = rep(name, "regverdict");
+    if (rv?.result) { const u = Patch.unchecked(rv, RegBook.verdictSpec, RegBook, "result"); if (u) { const idx = { ...base }; for (const [k, d] of Object.entries(S.regbooks)) if (k.startsWith(sl + "--")) for (const x of d?.sources || []) idx[String(x.id).toUpperCase()] = x; jobs.push({ u, idx, save: (fc) => { S.reports[`${sl}--regverdict`] = jsonSafe({ ...rv, checks: [...rv.checks, ...fc.checks], fact_check: Object.fromEntries(Object.entries({ ...rv.fact_check }).map(([a, b]) => [a, (b || 0) + (fc.summary[a] || 0)])) }); } }); } }
+    let checked = 0, removed = 0;
+    for (const jb of jobs) {
+      const claims = jb.u.claims.map((c, i) => Object.assign(c, { id: "C" + (i + 1) }));
+      let raw = null;
+      try { raw = await call(RegBook.factcheckPrompt(claims, jb.idx, `text added to the ${name} industry's rule books`), `Repair, new rule-book text fact-checked: ${name}`); }
+      catch (e) { if (FATAL.has(e?.code)) throw e; raw = { results: [] }; } // if the check can't run, nothing new stands (unlabeled counts as unsupported)
+      const fc = RegBook.applyFactcheck(null, { claims, finalize: jb.u.cs.finalize }, raw, jb.idx);
+      jb.save(fc); checked += claims.length; removed += fc.summary.removed;
+    }
+    return { checked, removed };
+  }
+
   async function runRepairPass(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     const dr = S.dailyRun = { sector, phase: "repair", label: "Finding what's missing", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), repair: true };
@@ -3751,16 +3779,21 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           // 3. Passages cut short by the old length limits: finished in place, everything around them as it was.
           const targets = fillTargets(name), chunks = Patch.plan(targets, { per: 40 }), src = srcMap(name);
           const ag = S.agents[sl]?.result, gist = ag ? `${ag.headline || ""} ${String(ag.thesis || "").slice(0, 1500)}` : "";
-          let filled = 0, of = 0;
+          let filled = 0, of = 0; const done = [];
           for (const [i, ch] of chunks.entries()) {
-            try { const raw = await call(Patch.fillPrompt(ch.items, { subject: `the ${name} industry`, gist, sources: src }), `Repair, cut passages finished (${i + 1}/${chunks.length}): ${name}`); const r = ch.apply(raw); filled += r.ok; of += r.of; }
+            try { const raw = await call(Patch.fillPrompt(ch.items, { subject: `the ${name} industry`, gist, sources: src }), `Repair, cut passages finished (${i + 1}/${chunks.length}): ${name}`); const r = ch.apply(raw); filled += r.ok; of += r.of; done.push(...r.done); }
             catch (e) { if (FATAL.has(e?.code)) throw e; dr.sectionsFailed.push(`${name}: finishing passages, part ${i + 1} (${sampleErr(e)})`); }
           }
+          // Rule books are fact-checked: what was just finished in them is too (text their check log has never seen).
+          { const r = await checkNewClaims(name, call); if (r.checked) { filled -= r.removed; dr.sections.push(`${name}: ${r.checked} new rule-book claims fact-checked, ${r.removed} removed`); } }
           if (chunks.length) {
             // The objects were changed in place: stamp the reports and rule books so they save.
             for (const t of targets) if (t.key === "lead") S.agents[sl] = jsonSafe({ ...S.agents[sl] }); else if (t.key.startsWith("book:")) S.regbooks[t.key.slice(5)] = jsonSafe({ ...S.regbooks[t.key.slice(5)] }); else S.reports[`${sl}--${t.key}`] = jsonSafe({ ...S.reports[`${sl}--${t.key}`] });
             dr.sections.push(`${name}: ${filled} of ${of} cut passages finished`);
           }
+          // What was repaired, for the strategist's update that follows (Daily update with refresh=true).
+          const parts = [...new Set([...Object.keys(p.full), ...(docs.some((x) => x.again) ? ["rulebook"] : []), ...done.map((x) => x.key.startsWith("book:") ? "rulebook" : x.key)])];
+          if (S.agents[sl]?.result && parts.length) S.agents[sl] = jsonSafe({ ...S.agents[sl], result: { ...S.agents[sl].result, repaired: { date: today(), parts, updated: null } } });
           dr.revised.push(name);
           await doFlush(name);
         } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
@@ -4555,7 +4588,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     // The daily update, then Times like this for every window (notes reused when the same stretches come back), unless
     // the job was stopped for time or it's the history pass.
     daily: (sector, opts) => { S.jobStopped = false; (async () => { const o = opts || {}; await runDaily(sector, o); const n0 = S.notices.slice();
-      if (!o.backfill && !S.jobStopped) { await runWindowsPass(sector, { names: o.names || null, concurrency: o.concurrency || 4 }); S.notices = [...n0, ...S.notices]; } })(); return true; },
+      if (!o.backfill && !o.refresh && !S.jobStopped) { await runWindowsPass(sector, { names: o.names || null, concurrency: o.concurrency || 4 }); S.notices = [...n0, ...S.notices]; } })(); return true; },
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
     windows: (sector, opts) => { S.jobStopped = false; runWindowsPass(sector, opts || {}); return true; },
     repair: (sector, opts) => { S.jobStopped = false; runRepairPass(sector, opts || {}); return true; },

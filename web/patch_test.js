@@ -19,7 +19,7 @@ const r2 = JSON.parse(JSON.stringify(rep));
 const ch = P.plan([{ key: "lead", label: "Lead analysis", obj: r2 }]);
 assert.strictEqual(ch.length, 1); assert.strictEqual(ch[0].items.length, 2);
 const res = ch[0].apply({ fills: [{ id: "F1", text: "Margins expand as AI orders lift the cycle into 2027." }, { id: "F2", text: "nope" }] });
-assert.deepStrictEqual(res, { ok: 1, of: 2 });
+assert.strictEqual(res.ok, 1); assert.strictEqual(res.of, 2); assert.strictEqual(res.done.length, 1);
 assert.strictEqual(r2.headline, "Margins expand as AI orders lift the cycle into 2027.");
 assert(r2.drivers[1].text.endsWith("…"), "refused fill leaves the passage as it was");
 assert(P.fillPrompt(ch[0].items, { subject: "x", sources: { N3: { title: "t", summary: "s" } } }).includes("PASSAGES TO FINISH"));
@@ -42,4 +42,27 @@ const back = P.rebuild(doc, RB.bookSpec, { results: [{ id: "C1", label: "analysi
 assert(back.work.rules[0].industry_impact.includes("The 2027 truce expiry"), "reasoning restored");
 assert(back.work.rules[0].industry_impact.includes("Vendors lost 10%"), "kept facts stay");
 assert.strictEqual(back.summary.analysis, 1); assert.strictEqual(back.summary.verified, 1);
+// fact-checking finished rule-book passages: supported ones stay, unsupported ones go back to the last full sentence
+const bk = { rules: [{ industry_impact: "Vendors lost sales [RA1]. The rule also hits distrib…", what_this_is: "Export rule under 15 CFR…" }] };
+const cbk = P.plan([{ key: "book:x", label: "rule book", obj: bk }]);
+const rbk = cbk[0].apply({ fills: [{ id: "F1", text: "Vendors lost sales [RA1]. The rule also hits distributors, who cut 20% of staff [RA1]." }, { id: "F2", text: "Export rule under 15 CFR 744 [RA1]." }] });
+assert.strictEqual(rbk.done.length, 2);
+const fcl = P.fillClaims(rbk.done);
+assert.strictEqual(fcl[0].kind, "analysis"); assert.strictEqual(fcl[1].kind, "law");
+const idx2 = { RA1: { id: "RA1", title: "Export rule", summary: "Vendors lost sales under 15 CFR 744." } };
+const out2 = RB.applyFactcheck(bk, { claims: fcl, finalize() {} }, { results: [{ id: "C1", label: "unsupported" }, { id: "C2", label: "verified", quote: "Vendors lost sales under 15 CFR 744", source: "RA1" }] }, idx2);
+assert.strictEqual(bk.rules[0].industry_impact, "Vendors lost sales [RA1].", "unsupported fill cut back to the last full sentence");
+assert.strictEqual(bk.rules[0].what_this_is, "Export rule under 15 CFR 744 [RA1].", "verified fill stays");
+assert.strictEqual(out2.summary.removed, 1);
+assert.strictEqual(P.fallback("Short cut…"), "Short cut…", "nothing to cut back to: left as it was");
+// unchecked: only text the log has never seen is checked; unsupported new sentences are removed, the rest stays
+const bk3 = { rules: [{ name: "R", citation: "", category: "rule", status: "in_force", effective: "", numeric_value: "", severity: "high", what_this_is: "A 2025 rule [RA1].", industry_impact: "Vendors lost 10% of sales [RA1]. Distributors cut 20% of staff [RA1].", today: "", bottom_line: "", next_12_months: { analysis: "", events: [] }, last_12_months: [], examples: [] }] };
+const doc3 = { book: bk3, checks: [{ text: "A 2025 rule [RA1].", label: "background" }, { text: "Vendors lost 10% of sales [RA1].", label: "verified" }] };
+const u = P.unchecked(doc3, RB.bookSpec, RB);
+assert.strictEqual(u.claims.length, 1); assert(u.claims[0].text.startsWith("Distributors"));
+const part3 = u.claims.map((c, i) => Object.assign(c, { id: "C" + (i + 1) }));
+const r3 = RB.applyFactcheck(null, { claims: part3, finalize: u.cs.finalize }, { results: [{ id: "C1", label: "unsupported" }] }, idx2);
+assert.strictEqual(bk3.rules[0].industry_impact, "Vendors lost 10% of sales [RA1].", "unsupported new sentence removed, checked text kept");
+assert.strictEqual(r3.summary.removed, 1);
+assert.strictEqual(P.unchecked({ book: bk3, checks: [...doc3.checks] }, RB.bookSpec, RB), null, "nothing new: nothing to check");
 console.log("patch tests passed");

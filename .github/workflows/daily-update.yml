@@ -22,7 +22,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
-run-name: ${{ inputs.repair && 'Repair (every missing or cut-short part)' || inputs.windows && 'Times like this (every industry, every window)' || inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
+run-name: ${{ inputs.repair && 'Repair (every missing or cut-short part)' || inputs.refresh && 'After the repair, the strategist checks every repaired industry' || inputs.windows && 'Times like this (every industry, every window)' || inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:
@@ -59,6 +59,10 @@ on:
         description: "The repair pass: every industry's missing or cut-short parts written again by the same analysts (KPI, value chain, earnings calls, macro, world, trade, regulation, rule books with the fact-check that keeps reasoning, the lead analysis, the historian); industries with nothing missing are left alone, so running it again continues (runs even while daily updates are paused)"
         type: boolean
         default: false
+      refresh:
+        description: "After a repair: the strategist's update of every repaired industry, from the completed reports (thesis, scenarios and every call checked again; the balanced model; once per repair)"
+        type: boolean
+        default: false
       lean_missing:
         description: "The calls pass: the 1M-12M calls (where each industry is going and why) for every industry that doesn't have them yet; industries that have them are left alone (runs even while daily updates are paused)"
         type: boolean
@@ -88,7 +92,7 @@ jobs:
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
           MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '500' }}
-          BACKFILL: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows || inputs.repair) && '1' || '' }}
+          BACKFILL: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows || inputs.repair || inputs.refresh) && '1' || '' }}
           LEAN: ${{ (inputs.lean || inputs.lean_missing) && '1' || '' }}
           LEAN_MISSING: ${{ inputs.lean_missing && '1' || '' }}
         run: |
@@ -164,7 +168,7 @@ jobs:
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
           # Bringing the whole analysis up to date, and rewriting it from scratch: the best model, where it matters most.
           CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
-          JOB_MONTH_BUDGET: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows || inputs.repair) && '' || matrix.budget }}
+          JOB_MONTH_BUDGET: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows || inputs.repair || inputs.refresh) && '' || matrix.budget }}
           JOB_SHOCK: ${{ inputs.shock }}
           JOB_BACKFILL: ${{ inputs.backfill && '1' || '' }}
           JOB_LEAN: ${{ (inputs.lean || inputs.lean_missing) && '1' || '' }}
@@ -172,6 +176,7 @@ jobs:
           # Times like this for every window: someone is watching the page, so no batch wait.
           JOB_WINDOWS: ${{ inputs.windows && '1' || '' }}
           JOB_REPAIR: ${{ inputs.repair && '1' || '' }}
+          JOB_REFRESH: ${{ inputs.refresh && '1' || '' }}
           JOB_DAILY_ONLY: ${{ inputs.industries }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}

@@ -90,9 +90,9 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
         items: part.map((x) => ({ id: x.id, where: `${x.r.label}: ${x.c.path.join(".")}`, text: x.c.text, context: context(x.r.obj, x.c.path) })),
         apply(raw) {
           const byId = Object.fromEntries((Array.isArray(raw?.fills) ? raw.fills : []).map((f) => [String(f?.id || "").toUpperCase(), f?.text]));
-          let ok = 0;
-          for (const x of part) { const v = acceptFill(x.c.text, byId[x.id]); if (v) { setAt(x.r.obj, x.c.path, v); ok++; } }
-          return { ok, of: part.length };
+          let ok = 0; const done = [];
+          for (const x of part) { const v = acceptFill(x.c.text, byId[x.id]); if (v) { setAt(x.r.obj, x.c.path, v); ok++; done.push({ key: x.r.key, obj: x.r.obj, path: x.c.path, before: x.c.text, after: v }); } }
+          return { ok, of: part.length, done };
         } });
     }
     return chunks;
@@ -126,7 +126,34 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
     return { work, checks: fc.checks, summary: fc.summary };
   }
 
-  const Patch = { cuts, getAt, setAt, context, idsIn, snippet, fillPrompt, acceptFill, plan, recheck, rebuild, SKIP };
+  /**
+   * Finished passages in a rule book, as fact-check claims: the whole finished passage, citing what it cites; a passage
+   * the check can't stand behind goes back to its saved start, cut at its last full sentence (or as it was).
+   */
+  function fillClaims(done) {
+    return done.map((d, i) => {
+      const f = d.path[d.path.length - 1], kind = f === "what_this_is" || f === "citation" || f === "effective" || f === "numeric_value" || f === "name" ? "law" : f === "event" || f === "what" ? "event" : "analysis";
+      return { id: "C" + (i + 1), text: d.after, ids: idsIn(d.after).filter((x) => /^[A-Z]{1,2}\d/.test(x)), kind,
+        apply: (st, fix) => { if (st === "corrected" && fix) setAt(d.obj, d.path, fix); else if (st === "unsupported") setAt(d.obj, d.path, fallback(d.before)); } };
+    });
+  }
+  function fallback(cut) {
+    const base = norm(String(cut).replace(CUT, "")), m = base.match(/^(.*[.!?])\s/);
+    return m && m[1].length >= 20 ? m[1] : cut;
+  }
+
+  /**
+   * Claims in a rule book or verdict that its fact-check log has never seen: text added after the check (passages
+   * finished by the repair). Returns the claim set (whose finalize rewrites the text) and just those claims, or null.
+   */
+  function unchecked(doc, specOf, RegBook, field = "book") {
+    const obj = doc?.[field]; if (!obj || !Array.isArray(doc.checks)) return null;
+    const seen = new Set(doc.checks.map((c) => ckey(c.text)));
+    const cs = RegBook.claimsFor(obj, specOf(obj)), fresh = cs.claims.filter((c) => !seen.has(ckey(c.text)));
+    return fresh.length ? { cs, claims: fresh } : null;
+  }
+
+  const Patch = { cuts, getAt, setAt, context, idsIn, snippet, fillPrompt, acceptFill, plan, recheck, rebuild, fillClaims, fallback, unchecked, SKIP };
   if (typeof module !== "undefined" && module.exports) module.exports = Patch;
   else root.Patch = Patch;
 })(typeof window !== "undefined" ? window : globalThis);
