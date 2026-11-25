@@ -24,14 +24,15 @@ sections become a card per row (`.cardtable`) and every table stacks into cards 
 sideways), long text gets light typography (`emphasize`: its first sentence leads, figures with units in bold, turns
 like "but" in italics; never a "Read all": the owner doesn't want text folded), key numbers count up, and only a tab's
 first section and its verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
-Every tab starts with the snapshot (the verdict) alone, then Performance, then the rest; the company and fund pages
-have no separate "Where it's going" section (the snapshot covers it). Performance holds Times like this by window
-(`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period buttons show (1M/3M/6M/1Y; the
-industry page has its own 1M-1Y buttons), with no buttons inside Times like this. It shows the 5 past stretches most like
-the last one, what followed 1, 3, 6 and 12 months later, an overlay chart (today's path with the tapped stretch laid over
-it, lined up at today), and per stretch "Then / What happened next / What's different now" (one historian call per
-window, `Regimes.windowHistorianPrompt`, kept in localStorage for the day; code writes the last two until it answers),
-with every measure then vs now. The older monthly view sits underneath. Wall Street sections show the last 12 months of ratings
+Every tab starts with the snapshot (the numbers, with no prediction card), then Performance, then "Where it's going,
+and why" (the full calls and reasons) on the company and fund pages, then the rest. Performance holds one chart (`ppBox`/`ppHTML`: company, fund and industry) with an S&P 500 toggle (`S.ppSpy`, remembered)
+and, right under it, Times like this by window (`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period
+buttons show (1M/3M/6M/1Y; the industry page has its own 1M-1Y buttons). The 5 past stretches most like the last one are a short
+list (start and end month and year, 3M and 1Y after); tapping one opens it and lays it over the Performance chart (`S.twOver`:
+the stretch from the same start, then what came after it, dashed, from today's level). Each opened stretch has "Then / What
+happened next / What's different now" (one historian call per window, `Regimes.windowHistorianPrompt`, kept in localStorage
+for the day; code writes the last two until it answers), every measure then vs now, and a chart with axes of the 12 months
+after (`twAfterChart`). The older monthly view sits underneath. Wall Street sections show the last 12 months of ratings
 (`Street` in `web/street.js`, `streetSlot`/`streetHTML`): monthly rating mix, upgrades and downgrades, target moves, and
 a code-written read of the trend. Model output is saved whole (the cleaners no longer cut text); prompts keep their caps.
 The sidebar order: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
@@ -55,6 +56,21 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
   own short lane in the FMP and EODHD queues, so suggestions show while a page is still loading its data.
 - **Rebalance** adds and removes holdings; a dot on Rebalance and Edit holdings marks changes not saved; leaving the
   editor with unsaved edits asks first.
+
+## Screener
+
+The Screener tab (`renderScreener`, `web/screener.js`) works like Kwanti's screener:
+- Pick asset types (ETFs, mutual funds, stocks, in any combination) and add criteria on the left; the results refresh as you go.
+- Criteria include asset class, equity style, equity sector and region (with a minimum %), fund category, provider, return over any period, yield, volatility, Sharpe, max drawdown, beta, expense ratio, net assets, holdings, sector, industry, stock style, region, exchange, market cap and P/E, P/B, P/S, EPS, margin, quick ratio and debt.
+- Every percentage criterion has a slider (`scrSlider`: 0-100%, returns and net margin −100% to +100%, drawdown −100% to 0, on a
+  square-root scale so small numbers get room; an end means no limit) alongside its Min and Max boxes.
+- You choose the columns, sort by several at once (shift-tap a header, or "Then by…"), tick 2-4 rows to compare (Compare tab), export to CSV, and save searches (page database `screens/<id>`).
+- Searching for one asset ranks the others by how alike they are (`Screener.similar`).
+
+Data:
+- The "Screener data" workflow (`runner/screener.mjs`, monthly and when the sync task finds it 25+ days old) builds every US stock, ETF and mutual fund above a size floor from FMP. It writes exports `screener/universe.json.gz`, which `pack-page.mjs` copies in as `screener.b64.txt` (index.screener).
+- Until the page has that, it builds the list live from FMP for the types picked and fills in risk, fund facts and valuation for the rows on screen (kept in IndexedDB for 30 days).
+- Fund category and style are our own grouping (Kwanti uses Morningstar's). Turnover, tax drag and bond duration and quality aren't available from FMP.
 
 ## Update everything from GitHub
 

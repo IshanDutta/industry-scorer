@@ -1,0 +1,65 @@
+# The Screener tab's data: every US-listed stock, ETF and mutual fund above a size floor, with returns, risk, fund
+# facts and valuation (runner/screener.mjs). No Claude: FMP only, on your key. Runs on the 2nd of every month (like
+# month-end data) and whenever "Update everything from GitHub" finds it more than 25 days old; you can also start it
+# from Actions. Saved to the exports branch as screener/universe.json.gz; the next "Update everything from GitHub"
+# copies it into the page.
+name: Screener data
+run-name: "Screener data"
+
+on:
+  schedule:
+    - cron: "17 9 2 * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Asset types to build (etf, fund, stock), comma-separated"
+        required: false
+        default: "etf,fund,stock"
+
+permissions:
+  contents: write # to save the data in the exports branch
+
+concurrency:
+  group: screener
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        working-directory: runner
+        run: npm install --no-audit --no-fund
+      - name: Build the screener data
+        working-directory: runner
+        env:
+          FMP_MCP_URL: ${{ secrets.FMP_MCP_URL }}
+          FMP_MCP_HEADERS: ${{ secrets.FMP_MCP_HEADERS }}
+          SCR_CONC: ${{ vars.SCREENER_CONCURRENCY || '8' }}
+          ONLY: ${{ inputs.only || 'etf,fund,stock' }}
+        run: node screener.mjs --out ../out --deadline-min 315 --only "$ONLY"
+      - name: Save it in the exports branch
+        run: |
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git worktree remove --force ex 2>/dev/null || true; rm -rf ex; git worktree prune
+            git fetch -q --depth=1 --filter=blob:none origin exports && git worktree add -q --no-checkout ex FETCH_HEAD && (cd ex && git sparse-checkout set --no-cone /screener/ && git checkout -q)
+            mkdir -p ex/screener && cp out/screener.json.gz ex/screener/universe.json.gz
+            (cd ex && git add screener && { git diff --cached --quiet || git commit -qm "Screener data"; } && git push -q origin HEAD:exports) && { echo "Saved screener/universe.json.gz"; break; }
+            sleep $((attempt * 7))
+          done
+      - name: Keep the data with the run too
+        if: always() && hashFiles('out/screener.json.gz') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: screener
+          path: out/screener.json.gz
+          retention-days: 14
+          compression-level: 0
