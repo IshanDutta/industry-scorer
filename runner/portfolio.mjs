@@ -22,6 +22,7 @@
 // Exit codes: 0 done · 1 failed.
 import { chromium } from "playwright";
 import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,7 @@ const summary = (md) => { if (env.GITHUB_STEP_SUMMARY) writeFileSync(env.GITHUB_
 /** What a comparison reads from every industry run without opening it: its name, date, constituents, macro table, lead
  * strategist and macro report (the company index, the rate rows and the saved-run list), and whether its macro and
  * research are there (so the list shows no false gaps). The rest (sections, rule books, research, wire) comes on demand. */
+export const LITE_V = 1;
 export function liteRun(sl, v) {
   const mr = v.reports?.[`${sl}--macro`];
   return { name: v.name, saved_at: v.saved_at, v: v.v, industry: v.industry, macro: v.macro, agent: v.agent, missing: v.missing, running: v.running, usOnly: v.usOnly,
@@ -93,7 +95,9 @@ async function main() {
   await page.exposeFunction("__job_spent", () => Math.round((sampler.usage.usd - sampler.usdAtStart) * 10000) / 10000);
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
   await page.exposeFunction("__job_mcp_call", async (server, tool, input) => { try { return { value: await mcp.callTool(server, tool, input) }; } catch (e) { return { error: e }; } });
-  const job = { industries: 4, pool: 4, bodies: 4, fmpGapMs: Number(env.JOB_FMP_GAP_MS || 230) };
+  // A comparison's data calls are few and wanted at once: FMP's pace there is 120 ms between calls (500 a minute), with
+  // retries on a rate limit; JOB_FMP_GAP_MS overrides it (raise it for a small FMP plan).
+  const job = { industries: 4, pool: 4, bodies: 4, fmpGapMs: Number(env.JOB_FMP_GAP_MS || (req.kind === "compare" ? 120 : 230)) };
   await page.addInitScript(`window.__JOB_CFG__ = ${JSON.stringify({ job })};\n` + readFileSync(join(here, "lib/shim.js"), "utf8"));
   const html = readFileSync(resolve(here, "../web/industry-scorer.html"), "utf8"), pagePath = join(outDir, "industry-scorer-job.html");
   writeFileSync(pagePath, "<!doctype html><html><head><meta charset=utf8><meta name=viewport content='width=device-width,initial-scale=1'></head><body>" + html + "</body></html>");
@@ -102,28 +106,50 @@ async function main() {
 
   // Every sector's saved industry runs, in pieces of about 8 MB. A comparison reads only a few industries in full, so it
   // gets every run "lite" (what the indexes, the company map and the rate rows read) and the page asks for a whole run
-  // when it opens one (window.__job_run); that's about a seventh of the data to move into the page.
-  const runsDir = join(resolve(args.exports || "exports"), "runs");
-  // Each whole run is kept here as JSON text from the one read of its sector file (a fund can open a hundred of them;
-  // re-reading a 30 MB sector file for each took a second apiece).
-  const lite = req.kind === "compare" && env.JOB_LITE_RUNS !== "0", fullText = new Map();
+  // when it opens one (window.__job_run). On GitHub (EXPORTS_REF set) the sector files aren't even downloaded up front:
+  // the lite runs come from cache/runs-lite.json.gz (rebuilt here for any sector file that changed since), and a sector
+  // file is read from git the first time one of its runs is opened.
+  const expDir = resolve(args.exports || "exports"), runsDir = join(expDir, "runs"), ref = env.EXPORTS_REF || "";
+  const lite = req.kind === "compare" && env.JOB_LITE_RUNS !== "0", fullText = new Map(), fileOf = new Map(), parsed = new Set();
+  const gitMode = lite && !!ref;
+  const listFiles = () => {
+    if (gitMode) return execFileSync("git", ["-C", expDir, "ls-tree", ref, "runs/"], { encoding: "utf8" }).split("\n").map((l) => l.match(/^\d+ blob ([0-9a-f]+)\truns\/(.+)$/)).filter(Boolean).map((m) => ({ file: m[2], sha: m[1] }));
+    return existsSync(runsDir) ? readdirSync(runsDir).map((file) => ({ file, sha: null })) : [];
+  };
+  const readFile = (f) => gitMode ? JSON.parse(gunzipSync(execFileSync("git", ["-C", expDir, "cat-file", "blob", f.sha], { maxBuffer: 2 ** 31 - 1 })).toString()) : readMaybeGz(join(runsDir, f.file));
+  const keepFull = (j) => { for (const [k, v] of Object.entries(j.records || {})) if (k.startsWith("run:") && v) fullText.set(k.slice(4), JSON.stringify(v)); };
   let opened = 0;
-  if (lite) await page.exposeFunction("__job_run", async (sl) => { const t = fullText.get(sl); if (!t) return null; opened++; return t; });
-  const files = existsSync(runsDir) ? readdirSync(runsDir).filter((f) => /\.json\.gz$/.test(f) && !/-\d{6,}\.json\.gz$/.test(f)).sort() : [];
-  let industries = 0;
+  if (lite) await page.exposeFunction("__job_run", async (sl) => {
+    if (!fullText.has(sl)) { const f = fileOf.get(sl); if (f && !parsed.has(f.file)) { parsed.add(f.file); try { keepFull(readFile(f)); } catch (e) { log(`${f.file}: unreadable (${e.message})`); } } }
+    const t = fullText.get(sl); if (t) opened++; return t || null; });
+  const files = listFiles().filter((f) => /\.json\.gz$/.test(f.file) && !/-\d{6,}\.json\.gz$/.test(f.file)).sort((x, y) => (x.file < y.file ? -1 : 1));
+  const bundleFile = join(expDir, "cache", "runs-lite.json.gz");
+  let bundle = null, bundleDirty = false;
+  if (gitMode && existsSync(bundleFile)) try { bundle = readMaybeGz(bundleFile); if (bundle?.v !== LITE_V) bundle = null; } catch (e) { log(`lite bundle unreadable (${e.message}); rebuilding it`); }
+  if (gitMode) { bundle ||= { v: LITE_V, files: {} }; for (const k of Object.keys(bundle.files)) if (!files.some((f) => f.file === k)) { delete bundle.files[k]; bundleDirty = true; } }
+  let industries = 0, fromBundle = 0;
   for (const f of files) {
-    let j; try { j = readMaybeGz(join(runsDir, f)); } catch (e) { log(`${f}: unreadable (${e.message}); skipped`); continue; }
-    if (!j?.records) continue;
-    const { records, sampler: _s, library: _l, ...head } = j; head.format ||= "industry-scorer/results";
+    let head, recs;
+    const B = bundle?.files[f.file];
+    if (B && B.sha === f.sha) { head = B.head; recs = B.records; fromBundle++; }
+    else {
+      let j; try { j = readFile(f); } catch (e) { log(`${f.file}: unreadable (${e.message}); skipped`); continue; }
+      if (!j?.records) continue;
+      const { records, sampler: _s, library: _l, ...h } = j; head = h; head.format ||= "industry-scorer/results";
+      if (lite) { parsed.add(f.file); keepFull(j); recs = {};
+        for (const [k, v] of Object.entries(records)) { if (!/^(run|sector):/.test(k) || /^sector:[^:]+:store:/.test(k)) continue; recs[k] = k.startsWith("run:") && v ? liteRun(k.slice(4), v) : v; }
+        if (bundle) { bundle.files[f.file] = { sha: f.sha, head, records: recs }; bundleDirty = true; } }
+      else recs = records;
+    }
+    if (lite) for (const k of Object.keys(recs)) if (k.startsWith("run:")) fileOf.set(k.slice(4), f);
     let chunk = {}, size = 0;
     const flush = async () => { if (!Object.keys(chunk).length) return; industries += await page.evaluate((x) => window.__industryScorer.importRecords(x), { ...head, records: chunk }); chunk = {}; size = 0; };
-    for (let [k, v] of Object.entries(records)) { if (!/^(run|sector):/.test(k)) continue;
-      if (lite && k.startsWith("run:") && v) { fullText.set(k.slice(4), JSON.stringify(v)); v = liteRun(k.slice(4), v); }
+    for (const [k, v] of Object.entries(recs)) { if (!/^(run|sector):/.test(k)) continue;
       const z = JSON.stringify(v).length; if (size && size + z > 8e6) await flush(); chunk[k] = v; size += z; }
     await flush();
-    log(`${j.sector || f}: loaded`);
   }
-  log(`${industries} industry runs loaded from ${files.length} sectors${lite ? " (lite; opened in full when read)" : ""}`);
+  log(`${industries} industry runs loaded from ${files.length} sectors${lite ? ` (lite${gitMode ? `; ${fromBundle} sectors from the saved bundle, ${files.length - fromBundle} rebuilt` : ""}; opened in full when read)` : ""}`);
+  if (bundleDirty) { writeFileSync(join(outDir, "runs-lite.json.gz"), gzipSync(Buffer.from(JSON.stringify(bundle)), { level: 6 })); log("lite bundle saved for later jobs"); }
   // The industry digests earlier jobs built (a fund's look-through reads one per industry it holds): kept in the exports
   // branch as cache/indDigest.json.gz, each tied to its run's save time, so a new save rebuilds only that one.
   const cacheFile = join(resolve(args.exports || "exports"), "cache", "indDigest.json.gz");

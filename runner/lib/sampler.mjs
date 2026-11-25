@@ -75,6 +75,12 @@ function withCacheMarks(messages) {
     return { ...m, content: blocks };
   });
 }
+/** The cached prefix of a request (its first message's blocks up to the last cache breakpoint), as a key; null when it has none. */
+export function cachedPrefixKey(params) {
+  const c = params?.messages?.[0]?.content; if (!Array.isArray(c)) return null;
+  let last = -1; c.forEach((b, i) => { if (b?.cache_control) last = i; }); if (last < 0) return null;
+  return hash({ model: params.model, system: params.system || "", blocks: c.slice(0, last + 1).map((b) => b.text || "") });
+}
 /** Strip any marks (for paths that send the prompt elsewhere, e.g. the fallback text). */
 export const unmark = (t) => String(t).split(CACHE_MARK).join("\n\n");
 
@@ -106,6 +112,7 @@ export class Sampler {
   // model's default; pass e.g. {complex: "high"} to override).
   constructor({ apiKey, baseUrl = "https://api.anthropic.com", models = { complex: "claude-opus-5-5", default: "claude-sonnet-5-5", quick: "claude-sonnet-5-5" }, mode = "batch", effort = {}, budgetUsd = 0,
     maxTokens = 64000, maxRounds = 8, flushMs = 4000, pollMs = 20000, directConcurrency = 6, stragglerMin = 20, directAfterMin = 0, execTool, log = console.log, logCalls = false }) {
+    this.prefixes = new Map();
     Object.assign(this, { apiKey, baseUrl: baseUrl.replace(/\/$/, ""), models, model: models.complex, mode, effort, maxTokens, maxRounds, flushMs, pollMs, directConcurrency, execTool, log, logCalls });
     // A batch still running after this long has its requests re-sent at the standard price (0 = never).
     this.stragglerMs = Math.max(0, Number(stragglerMin) || 0) * 60000;
@@ -281,14 +288,19 @@ export class Sampler {
     }
   }
   async direct(key, params) {
+    // Requests that share a cached prefix (two halves of one desk reading the same dossier): the second waits until the
+    // first has started answering, by when the prefix is in the cache, so it reads it at a tenth of the price instead
+    // of writing it again. At most 45 seconds; then it goes anyway.
+    const pk = cachedPrefixKey(params); let release = null;
+    if (pk) { const busy = this.prefixes.get(pk); if (busy) await Promise.race([busy, sleep(45000)]); else this.prefixes.set(pk, new Promise((r) => (release = r))); }
     while (this.inflight >= this.directConcurrency) await sleep(200);
     this.inflight++;
-    const t = Date.now();
-    try { const msg = await this.stream(params); this.record(key, msg, true, Date.now() - t); return msg; }
-    finally { this.inflight--; }
+    const t = Date.now(), started = () => { if (release) { release(); release = null; } };
+    try { const msg = await this.stream(params, started); this.record(key, msg, true, Date.now() - t); return msg; }
+    finally { this.inflight--; started(); if (pk) setTimeout(() => this.prefixes.delete(pk), 240000); }
   }
   /** One request at the standard price, streamed (so a long answer never hits an idle-connection timeout). */
-  async stream(params) {
+  async stream(params, onStart = null) {
     for (let attempt = 1; ; attempt++) {
       let res;
       try { res = await fetch(this.baseUrl + "/v1/messages", { method: "POST", headers: this.headers(), body: JSON.stringify({ ...params, stream: true }) }); }
@@ -298,7 +310,7 @@ export class Sampler {
         if ((res.status === 429 || res.status >= 500) && attempt < 10) { const ra = Number(res.headers.get("retry-after")); await sleep(ra > 0 ? ra * 1000 : Math.min(120000, 3000 * 2 ** Math.min(attempt, 5))); continue; }
         const err = this.apiError(res.status, j); if (err.fatal) this.fatal = err; throw err;
       }
-      try { return await readStream(res.body); }
+      try { return await readStream(res.body, onStart); }
       catch (e) { if (e?.retry && attempt < 8) { await sleep(Math.min(60000, 3000 * attempt)); continue; } throw e?.code ? e : { code: "upstream_error", message: String(e?.message || e) }; }
     }
   }
@@ -373,11 +385,11 @@ export class Sampler {
 }
 
 /** Rebuild a Messages API response from its server-sent events. */
-export async function readStream(body) {
+export async function readStream(body, onStart = null) {
   const dec = new TextDecoder(); let buf = "", msg = null, ended = false; const partial = new Map();
   const handle = (ev, data) => {
     if (ev === "error") { const t = data?.error?.type; throw { code: "upstream_error", message: data?.error?.message || "stream error", retry: t === "overloaded_error" || t === "api_error" }; }
-    if (ev === "message_start") { msg = { ...data.message, content: [] }; return; }
+    if (ev === "message_start") { msg = { ...data.message, content: [] }; if (onStart) try { onStart(); } catch {} return; }
     if (ev === "message_stop") { ended = true; return; }
     if (!msg) return;
     if (ev === "content_block_start") { msg.content[data.index] = { ...data.content_block }; if (data.content_block.type === "tool_use") partial.set(data.index, ""); return; }
