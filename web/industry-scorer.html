@@ -18593,10 +18593,16 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
             tot.frDocs += fr.length;
             const near = RbFix.related(news, removed, 16).filter((it) => !(doc.sources || []).some((x) => x.id === it.id));
             const items = [...data, ...fr, ...near];
-            const out = await RbFix.enrich(doc, items, {
-              check: (p) => call(p, `Rule books, checked again: ${name}`),
-              enrich: (p) => call(p, `Rule books, replaced and added: ${name}`),
-            }, { subject: `the ${name} industry`, body: doc.body });
+            // A reply with no JSON is asked once more (a changed prompt, so a saved answer isn't replayed); a rule book that
+            // still fails is skipped, not its whole industry.
+            const ask = async (p, step) => { try { return await call(p, step); } catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return await call(p + "\n\n(Second attempt: reply with the JSON object only.)", step); } };
+            let out = null;
+            try {
+              out = await RbFix.enrich(doc, items, {
+                check: (p) => ask(p, `Rule books, checked again: ${name}`),
+                enrich: (p) => ask(p, `Rule books, replaced and added: ${name}`),
+              }, { subject: `the ${name} industry`, body: doc.body });
+            } catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; dr.sectionsFailed.push(`${name}: ${doc.body} (${sampleErr(e)})`); }
             if (!out) { tot.removedAfter += removed.length; return; }
             tot.restored += out.restored; tot.replaced += out.replaced; tot.added += out.added; tot.removedAfter += out.doc.fact_check.removed || 0;
             if (out.restored || out.replaced || out.added || out.scrubbed) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
@@ -18605,7 +18611,7 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
         } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
         finally { dr.done.push(name); dr.working.delete(name); dr.label = `Rule books: ${dr.done.length} of ${dr.of} industries`; dropFromMemory(name); }
       }, null);
-      S.notices = [{ kind: "info", text: `Rule books of ${sector}: ${tot.books} rule books in ${dr.revised.length} industries made fuller. Claims the fact-check had removed: ${tot.removedBefore}; ${tot.restored} now checked against the wider sources and put back, ${tot.replaced} replaced by a sourced sentence on the same point, ${tot.removedAfter} still out. ${tot.added} new sourced facts added. ${tot.frDocs} Federal Register and eCFR documents read.${dr.failed.length ? ` Failed: ${dr.failed.join(" | ")}.` : ""}` }];
+      S.notices = [{ kind: "info", text: `Rule books of ${sector}: ${tot.books} rule books in ${dr.revised.length} industries made fuller. Claims the fact-check had removed: ${tot.removedBefore}; ${tot.restored} now checked against the wider sources and put back, ${tot.replaced} replaced by a sourced sentence on the same point, ${tot.removedAfter} still out. ${tot.added} new sourced facts added. ${tot.frDocs} Federal Register and eCFR documents read.${dr.sectionsFailed.length ? ` Rule books skipped: ${dr.sectionsFailed.join(" | ")}.` : ""}${dr.failed.length ? ` Failed: ${dr.failed.join(" | ")}.` : ""}` }];
     } catch (e) { S.notices = [...S.notices, { kind: "err", text: `The rule-book pass stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
