@@ -17828,6 +17828,9 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
           await doFlush(name);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
+          // The industry no longer has any company (FMP moved them to other industries): it's left out from now on,
+          // the way a full sector run leaves out an industry with no companies, instead of failing every day.
+          if (e?.code === "empty" && rec) { rec.skip ||= {}; rec.skip[name] = `${e.message} Left out of daily updates since ${today()}.`; await secPut(sector, "", rec).catch(() => {}); }
           if (FATAL.has(e?.code)) throw e;
         } finally { dr.working.delete(name); dr.label = `Read the day for ${Object.keys(day).length} of ${dr.of} industries`; dropFromMemory(name); }
       }, null);
@@ -17951,7 +17954,7 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, rows: { ...(r0.rows || {}), ...(dr.rows || {}) }, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
         daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
           analyses_updated: dr.updated || 0, quiet_day: dr.quietDay || 0, held_updates: dr.heldUpdates || [], day_money: dr.dayMoney ?? null, weekend: !!(new Date(today() + "T00:00:00Z").getUTCDay() % 6 === 0), leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
-      S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+      S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed (${dr.failed.join("; ")})` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
@@ -18002,7 +18005,7 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
       }, null);
       const r0 = await secGet(sector);
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, rows: { ...(r0.rows || {}), ...(dr.rows || {}) }, lean_run: { date: today(), at: new Date().toISOString(), made: dr.revised, failed: dr.failed, flips: dr.flips || [], missing_only: !!missing } }));
-      S.notices = [{ kind: "info", text: `The lean for ${sector}: ${dr.revised.length} made${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+      S.notices = [{ kind: "info", text: `The lean for ${sector}: ${dr.revised.length} made${dr.failed.length ? `, ${dr.failed.length} failed (${dr.failed.join("; ")})` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The lean pass stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
@@ -18052,9 +18055,14 @@ Reply with ONLY JSON: {"fills": [{"id": "F1", "text": "the whole passage, finish
   const LEAD_KEEP = ["outlook", "outlook_history", "daily_history", "daily", "daily_pending", "daily_refs", "landed", "rethink", "sections_rewritten"];
   function repairPlan(name) {
     const sl = slug(name), r = (k) => rep(name, k)?.result, full = {};
-    if (kpiCut(r("kpi"))) full.kpi = "the KPI analysis was cut short";
+    // A figure cut off mid-number (old 80-character limit on KPI values, 300 on guidance) can't be finished from the
+    // sources, so that analysis is written again whole from fresh data instead.
+    const kr = r("kpi"), cr = r("calls"), hasTx = (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt);
+    if (kpiCut(kr)) full.kpi = "the KPI analysis was cut short";
+    else if (kr && Patch.cuts({ d: kr.demand_metrics, p: kr.profitability_metrics }).length) full.kpi = "KPI figures were cut off mid-number";
     if (chainBroken(r("chain"))) full.chain = "no customers or suppliers came back from FMP";
-    if (!r("calls") && (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt)) full.calls = "the earnings-call read is missing";
+    if (!cr && hasTx) full.calls = "the earnings-call read is missing";
+    else if (cr && hasTx && Patch.cuts({ c: cr.companies }).length) full.calls = "earnings-call guidance was cut off mid-number";
     const bodies = regBodies(name), missingBooks = bodies.map((b) => RegBook.bodyKey(b.name)).filter((k) => !bookDoc(name, k));
     if (missingBooks.length) full.rulebook = `${missingBooks.length} rule book${missingBooks.length === 1 ? "" : "s"} missing`;
     const ag = S.agents[sl];
