@@ -40,6 +40,18 @@ Points after a label render with `ptList` (a list, never "a; b; c"), and on-scre
 prompts keep `trimC`. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the
 `--t1`..`--t4` tokens (100/150/200/300ms), transform and opacity only, and honors reduced motion.
 
+## Portfolios
+
+- **Analysis tab** = the portfolio run through the fund pipeline (`pfFundOpen`): `pfRaw` looks every fund through to its
+  holdings (FMP) and adds the stocks, `pfSeries` prices it daily at its weights, then `fundAnalyze`, `fundNet`, a small
+  code-only fill and `fundWrite` (written here on the viewer's Claude, never the GitHub fund job; `pfP` rewords the fund
+  prompts for a portfolio). It renders with `fundView` through `pfWords`. While it's on screen `S.fund` is the portfolio's
+  fd (`fd.pf`); `renderFund` sends redraws to the Portfolios tab and gives the Funds tab its own fund (`S.fundUser`) back.
+- **What to change** = the older analysis (grade, recommended mix, new ETFs). Only the first version is written (on
+  GitHub or here); the others are written when picked.
+- **Rebalance** adds and removes holdings; a dot on Rebalance and Edit holdings marks changes not saved; leaving the
+  editor with unsaved edits asks first.
+
 ## Layout
 
 - `web/page.src.html`: the page (HTML, CSS, and most of the app code; about 10,000 lines). Edit this, never
