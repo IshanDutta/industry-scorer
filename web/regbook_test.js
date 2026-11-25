@@ -78,6 +78,17 @@ const today = "2026-10-18";
   assert(res.summary.removed >= 3, JSON.stringify(res.summary));
   assert.strictEqual(res.checks.find((c) => c.label === "verified").source, "RA3");
 
+  // ---- the analyst's reasoning is kept as analysis; a fact or event labeled analysis is still removed
+  const work3 = JSON.parse(JSON.stringify(book)); const cs3 = RB.claimsFor(work3, RB.bookSpec(work3));
+  const by3 = (t) => cs3.claims.find((c) => c.text.startsWith(t));
+  const ev3 = cs3.claims.find((c) => c.kind === "event");
+  const res3 = RB.applyFactcheck(work3, cs3, { results: [{ id: by3("More rules likely").id, label: "analysis" }, ...(ev3 ? [{ id: ev3.id, label: "analysis" }] : [])] }, idx);
+  assert(work3.rules[0].next_12_months.analysis.includes("More rules likely in 2027"), "reasoning kept as analysis");
+  assert.strictEqual(res3.summary.analysis, 1, JSON.stringify(res3.summary));
+  assert.strictEqual(res3.checks.find((c) => c.id === by3("More rules likely").id).label, "analysis");
+  if (ev3) assert.strictEqual(res3.checks.find((c) => c.id === ev3.id).label, "unsupported", "an event can't be kept as analysis");
+  assert(RB.factcheckPrompt(cs3.claims, idx, "x").includes('"analysis"'), "the prompt offers the analysis label");
+
   // ---- hold back when the fact-check can't run
   const w2 = JSON.parse(JSON.stringify(book)); const cs2 = RB.claimsFor(w2, RB.bookSpec(w2));
   const hb = RB.holdBack(w2, cs2);

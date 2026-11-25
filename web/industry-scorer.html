@@ -5601,7 +5601,8 @@ Sizes: 4-8 regulators, 0-8 policy items, 0-8 litigation items, 0-8 deals. Empty 
  *     company appears in the cited article;
  *   - a fact-check call labels every sentence carrying a number or citation
  *     verified / corrected / background / unsupported against the retrieved
- *     text; corrected sentences are rewritten, unsupported ones removed. If
+ *     text (or analysis: the analyst's reasoning, kept and marked);
+ *     corrected sentences are rewritten, unsupported ones removed. If
  *     the fact-check can't run, numeric claims are held back, never shown as
  *     verified;
  *   - when a rule book can't be built, a clearly labelled notice is shown
@@ -5996,6 +5997,7 @@ For each claim return one label:
 - "verified": a cited source states it. Give "quote": a verbatim passage (<= 25 words) copied exactly from that source, and "source": its ID.
 - "corrected": a cited source supports a different figure, date or name. Give "fix": the corrected sentence (same style, keep its [ID] citations) and the supporting "quote" and "source".
 - "background": ONLY for claims of kind "law" that state the instrument's own legal parameters (its statute or CFR section, the agency's authority, thresholds written in the rule, its effective date) which you are highly confident are accurate legal fact even though no retrieved source states them.
+- "analysis": ONLY for claims of kind "analysis" that are the analyst's own reasoning: what something means for the industry, why it matters, what could happen, what to watch, or a judgment of size or likelihood. Use it only when the sentence asserts no specific figure, date, quote, ruling, deal or company action as fact beyond what the sources state or what is common knowledge. If it does assert such a fact and no source states it, it is "unsupported".
 - "unsupported": anything else, including every company action, fine, deal, quote, earnings figure or date that the cited text does not state.
 Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": "...", "source": "RA3", "fix": ""}]}`;
   }
@@ -6003,19 +6005,22 @@ Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": ".
   /** Apply fact-check results to a working copy. Unknown or unlabeled claims count as unsupported. */
   function applyFactcheck(work, claimSet, raw, idx) {
     const byId = Object.fromEntries((Array.isArray(raw?.results) ? raw.results : []).map((r) => [String(r?.id || "").toUpperCase(), r]));
-    const sum = { checked: claimSet.claims.length, verified: 0, corrected: 0, background: 0, removed: 0, pending: 0 };
+    const sum = { checked: claimSet.claims.length, verified: 0, corrected: 0, background: 0, analysis: 0, removed: 0, pending: 0 };
     const checks = [];
     for (const c of claimSet.claims) {
       const r = byId[c.id] || {};
-      let label = ["verified", "corrected", "background", "unsupported"].includes(r.label) ? r.label : "unsupported";
+      let label = ["verified", "corrected", "background", "analysis", "unsupported"].includes(r.label) ? r.label : "unsupported";
       const src = String(r.source || "").toUpperCase(); const quote = trim(r.quote, 240);
       // A quote must really appear in the source it names; otherwise the label can't stand.
       if ((label === "verified" || label === "corrected") && !(idx[src] && quote && norm(snippetOf(idx[src])).includes(norm(quote).slice(0, 80)))) label = "unsupported";
       if (label === "background" && c.kind !== "law") label = "unsupported";
+      // The analyst's reasoning stays (marked as analysis, never as verified); facts still need a source.
+      if (label === "analysis" && c.kind !== "analysis") label = "unsupported";
       if (label === "corrected" && !String(r.fix || "").trim()) label = "unsupported";
-      c.apply(label, label === "corrected" ? trim(r.fix, 400) : null);
+      const fix = String(r.fix || "").replace(/\s+/g, " ").trim(); // a corrected sentence is saved whole
+      c.apply(label, label === "corrected" ? fix : null);
       sum[label === "unsupported" ? "removed" : label]++;
-      checks.push({ id: c.id, text: trim(c.text, 300), label, quote: label === "verified" || label === "corrected" ? quote : "", source: label === "verified" || label === "corrected" ? src : "", fix: label === "corrected" ? trim(r.fix, 400) : "" });
+      checks.push({ id: c.id, text: c.text, label, quote: label === "verified" || label === "corrected" ? quote : "", source: label === "verified" || label === "corrected" ? src : "", fix: label === "corrected" ? fix : "" });
     }
     claimSet.finalize();
     return { summary: sum, checks };
@@ -6025,7 +6030,7 @@ Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": ".
     let pending = 0;
     for (const c of claimSet.claims) if (/\d/.test(c.text.replace(/\s\(\d{4}-\d{2}(-\d{2})?\)$/, "")) || c.kind === "event") { c.apply("unsupported"); pending++; }
     claimSet.finalize();
-    return { summary: { checked: 0, verified: 0, corrected: 0, background: 0, removed: 0, pending }, checks: [] };
+    return { summary: { checked: 0, verified: 0, corrected: 0, background: 0, analysis: 0, removed: 0, pending }, checks: [] };
   }
 
   // When a rule book can't be built, nothing hand-written stands in: a clearly labelled notice does, and it is never kept.
@@ -17362,7 +17367,9 @@ Return ONLY a JSON object:
         // One body at a time, most impactful first; each rule book shows as soon as it's fact-checked.
         const todo = bodies.filter((b) => !keys || keys.includes(RegBook.bodyKey(b.name)));
         Q.order = todo.map((b) => RegBook.bodyKey(b.name));
-        for (const b of todo) { if (R.cancel) break; await buildOne(b)(); }
+        // On GitHub three bodies are written at once (each has its own sources and prefix); here, one at a time.
+        if (JOB) await pool(todo, 3, async (b) => { if (!R.cancel) await buildOne(b)(); }, null);
+        else for (const b of todo) { if (R.cancel) break; await buildOne(b)(); }
         // Anything that failed gets one more try before the verdict is written.
         const failed = todo.filter((b) => !bookDoc(name, RegBook.bodyKey(b.name)));
         for (const b of failed) { if (R.cancel) break; await buildOne(b, 2)(); }
@@ -17521,7 +17528,7 @@ Return ONLY a JSON object:
    */
   async function dailySections(name, sections, dr) {
     const sl = slug(name), run = { name, cancel: false, ctls: new Set(), team: [], label: "" };
-    const TEAM = { kpi: ["kpi", "calls"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"] };
+    const TEAM = { kpi: ["kpi", "calls"], calls: ["calls"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"] };
     const only = [...new Set(sections.flatMap((sct) => TEAM[sct.key] || []))];
     const before = Object.fromEntries(["kpi", "calls", "macro", "world", "trade", "reg", "chain", "regverdict"].map((k) => [k, rep(name, k)?.run_at || null]));
     const fail = (sct, why) => { sct.ok = false; sct.error = why; };
@@ -17548,7 +17555,7 @@ Return ONLY a JSON object:
       catch (e) { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; fail(th, sampleErr(e)); }
       if (th.ok !== false) { if (S.agents[sl]?.run_at && S.agents[sl].run_at !== was) th.ok = true; else fail(th, "the lead strategist didn't finish; the calls were revised instead"); }
     }
-    const kindsOf = { kpi: ["kpi"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"], rulebook: ["regverdict"] };
+    const kindsOf = { kpi: ["kpi"], calls: ["calls"], macro: ["macro"], world: ["world"], trade: ["trade"], reg: ["reg"], chain: ["chain"], rulebook: ["regverdict"] };
     for (const sct of sections) {
       if (sct.ok === false || sct.key === "thesis") continue;
       const ks = kindsOf[sct.key] || [], fresh = ks.filter((k) => rep(name, k)?.run_at && rep(name, k).run_at !== before[k]);
@@ -17863,6 +17870,88 @@ Return ONLY a JSON object:
       }, null);
       S.notices = [{ kind: "info", text: `Times like this for ${sector}: ${dr.revised.length} industries${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `Times like this stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
+    finally { S.dailyRun = null; renderAll(); }
+  }
+
+  /**
+   * What an industry's saved analysis is missing, part by part: text that was cut short when it was saved (the old
+   * length limits ended it with "…"), a KPI analysis cut short, a value chain whose lookups all failed, a missing
+   * earnings-call read or historian's note, rule books written before the fact-check kept the analyst's reasoning (or
+   * missing, or cut), a regulatory verdict without a headline, and a lead analysis with cut text or that failed.
+   */
+  // Source titles and quotes can end in "…" on their own, and the daily updates' own history is kept as it is: neither counts.
+  const CUT_SKIP = new Set(["sources", "quotes", "daily_refs", "daily_history", "daily", "daily_pending", "outlook_history", "coverage", "excerpt"]);
+  const cutCount = (o) => (typeof o === "string" ? (/…\s*$/.test(o) ? 1 : 0) : Array.isArray(o) ? o.reduce((a, x) => a + cutCount(x), 0) : o && typeof o === "object" ? Object.entries(o).reduce((a, [k, x]) => a + (CUT_SKIP.has(k) ? 0 : cutCount(x)), 0) : 0);
+  function repairPlan(name) {
+    const sl = slug(name), why = {}, add = (k, w) => { (why[k] ||= []).push(w); };
+    const r = (k) => rep(name, k)?.result;
+    if (kpiCut(r("kpi"))) add("kpi", "the KPI analysis was cut short"); else if (cutCount(r("kpi"))) add("kpi", `${cutCount(r("kpi"))} passages cut short`);
+    if (chainBroken(r("chain"))) add("chain", "no customers or suppliers came back from FMP"); else if (cutCount(r("chain"))) add("chain", `${cutCount(r("chain"))} passages cut short`);
+    const hasPrev = (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt);
+    if (!r("calls") && hasPrev) add("calls", "the earnings-call read is missing"); else if (cutCount(r("calls"))) add("calls", `${cutCount(r("calls"))} passages cut short`);
+    for (const k of ["macro", "world", "trade", "reg"]) if (cutCount(r(k))) add(k, `${cutCount(r(k))} passages cut short`);
+    const bodies = regBodies(name), docs = bodies.map((b) => bookDoc(name, RegBook.bodyKey(b.name)));
+    if (bodies.length) {
+      const miss = docs.filter((x) => !x).length, old = docs.filter((x) => x && !("analysis" in (x.fact_check || {}))).length, cut = docs.filter((x) => x && cutCount(x.book)).length, rv = r("regverdict");
+      if (miss) add("rulebook", `${miss} rule book${miss === 1 ? "" : "s"} missing`);
+      if (old) add("rulebook", `${old} rule book${old === 1 ? "" : "s"} fact-checked before reasoning was kept`);
+      if (cut) add("rulebook", `${cut} rule book${cut === 1 ? "" : "s"} with text cut short`);
+      if (rv && (!String(rv.headline || "").trim() || cutCount(rv))) add("rulebook", "the regulatory verdict has no headline or was cut short");
+    }
+    const ag = S.agents[sl];
+    if (!ag?.result) add("thesis", "the lead analysis is missing"); else if (cutCount(ag.result)) add("thesis", `${cutCount(ag.result)} passages of the lead analysis cut short`);
+    if ((S.teamErrors[sl] || {}).lead) add("thesis", "the lead strategist failed last time");
+    const T = S.industries[sl]?.history?.times; if (T?.episodes?.length && !r("history")) add("history", "the historian's note is missing");
+    return why;
+  }
+  // What a full rewrite of the lead analysis must keep: its track record and the daily updates' history.
+  const LEAD_KEEP = ["outlook", "outlook_history", "daily_history", "daily", "daily_pending", "daily_refs", "landed", "rethink", "sections_rewritten"];
+
+  /**
+   * The repair pass (GitHub, Daily update with repair=true): every industry's missing or cut parts are written again
+   * by the same analysts, sections first, then the rule books and the regulatory verdict, then the lead strategist
+   * (keeping its track record), then the historian. Industries with nothing missing are left alone, so running it
+   * again continues where it stopped.
+   */
+  async function runRepairPass(sector, { names = null, concurrency = 4 } = {}) {
+    if (busy() || !S.mcp || !S.sample) return;
+    const dr = S.dailyRun = { sector, phase: "repair", label: "Finding what's missing", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), repair: true, found: {} };
+    try {
+      const rec = await secGet(sector);
+      const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
+      dr.label = "Market data, the macro catalog and the news wire (no Claude)";
+      await refreshBenchmark(); await detectEod(); await sharedResearch();
+      const plans = {};
+      for (const n of list) { if (!(await loadInto(n))) continue; const w = repairPlan(n); if (Object.keys(w).length) plans[n] = w; dropFromMemory(n); }
+      const todo = Object.keys(plans); dr.of = todo.length; dr.found = plans;
+      for (const [n, w] of Object.entries(plans)) for (const [k, ws] of Object.entries(w)) S.notices.push({ kind: "info", text: `${n}: ${k}: ${ws.join("; ")}` });
+      if (!todo.length) { S.notices = [{ kind: "info", text: `Nothing missing in ${sector}.` }]; return; }
+      const n0 = S.notices.slice();
+      await pool(todo, Math.max(1, concurrency), async (name) => {
+        if (JOB && S.jobStopped) return;
+        const sl = slug(name), w = plans[name]; dr.working.add(name);
+        try {
+          const snap = await idbGet("run:" + sl);
+          if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
+          if (snap?.macro?.rows?.length) S.macroBy[sl] = snap.macro; // the industry's own indicators, as the reports cite them
+          const label = (k) => k === "calls" ? "Earnings-call read" : k === "rulebook" ? "Rule books and the regulatory verdict" : Daily.SECTIONS[k]?.label || k;
+          const sections = Object.keys(w).filter((k) => !["thesis", "history"].includes(k)).map((k) => ({ key: k, label: label(k), why: "repair: " + w[k].join("; "), by: "code", importance: "high" }));
+          if (sections.length) { await dailySections(name, sections, dr); for (const sct of sections) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}${sct.ok ? "" : ` (${sct.error || "failed"})`}`); }
+          if (w.thesis) {
+            const before = S.agents[sl], keep = Object.fromEntries(LEAD_KEEP.filter((k) => before?.result?.[k] !== undefined).map((k) => [k, before.result[k]]));
+            await runLead(name, { run: { name, cancel: false, ctls: new Set(), team: [], label: "" } });
+            const after = S.agents[sl];
+            if (after?.result && after.run_at !== before?.run_at) { S.agents[sl] = jsonSafe({ ...after, result: { ...after.result, ...keep, rewrites_since_full: 0, repaired: { date: today(), why: w.thesis } } }); dr.sections.push(`${name}: the lead analysis`); }
+            else dr.sectionsFailed.push(`${name}: the lead analysis (${S.teamErrors[sl]?.lead || "didn't finish"})`);
+          }
+          if (w.history) { const h = await runHistorian(name, { force: true }); (h ? dr.sections : dr.sectionsFailed).push(`${name}: the historian's note`); }
+          dr.revised.push(name);
+          await doFlush(name);
+        } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
+        finally { dr.done.push(name); dr.working.delete(name); dr.label = `${dr.done.length} of ${dr.of} industries repaired`; dropFromMemory(name); }
+      }, null);
+      S.notices = [...n0, { kind: "info", text: `Repair of ${sector}: ${dr.revised.length} of ${dr.of} industries; ${dr.sections.length} parts rewritten${dr.sectionsFailed.length ? `, ${dr.sectionsFailed.length} failed: ${dr.sectionsFailed.join(" | ")}` : ""}${dr.failed.length ? `; industries failed: ${dr.failed.join(" | ")}` : ""}.` }];
+    } catch (e) { S.notices = [...S.notices, { kind: "err", text: `The repair stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
 
@@ -18652,6 +18741,8 @@ Return ONLY a JSON object:
       if (!o.backfill && !S.jobStopped) { await runWindowsPass(sector, { names: o.names || null, concurrency: o.concurrency || 4 }); S.notices = [...n0, ...S.notices]; } })(); return true; },
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
     windows: (sector, opts) => { S.jobStopped = false; runWindowsPass(sector, opts || {}); return true; },
+    repair: (sector, opts) => { S.jobStopped = false; runRepairPass(sector, opts || {}); return true; },
+    repairPlan: async (name) => { if (!(await loadInto(name))) return null; const w = repairPlan(name); dropFromMemory(name); return w; },
     stop: () => { S.jobStopped = true; const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
     status: () => { const r = S.sectorRun, dr = S.dailyRun;
       if (dr) return { busy: true, phase: "daily " + dr.phase, label: dr.label, working: [...dr.working], calls: dr.calls, notices: [], errors: dr.failed.slice(-5), reuse: null, daily: { done: dr.done.length, of: dr.of, revised: dr.revised, quiet: dr.quiet, failed: dr.failed } };
@@ -19947,11 +20038,11 @@ Return ONLY a JSON object:
   function fcLine(f, extra = "") {
     if (!f) return "";
     if (f.pending) return `<span class="fc pend">Fact-check didn't run: ${f.pending} numeric claim${f.pending === 1 ? "" : "s"} held back${extra}</span>`;
-    return `<span class="fc">Fact-check: ${f.checked} claims · ${f.verified} verified · ${f.corrected} corrected${f.background ? ` · ${f.background} legal background` : ""} · ${f.removed} removed</span>`;
+    return `<span class="fc">Fact-check: ${f.checked} claims · ${f.verified} verified · ${f.corrected} corrected${f.background ? ` · ${f.background} legal background` : ""}${f.analysis ? ` · ${f.analysis} kept as analysis` : ""} · ${f.removed} removed</span>`;
   }
   function fcLog(checks) {
     if (!checks?.length) return "";
-    const lab = { verified: ["verified", "pos"], corrected: ["corrected", "warn"], background: ["legal background, not source-verified", "neu"], unsupported: ["removed", "neg"] };
+    const lab = { verified: ["verified", "pos"], corrected: ["corrected", "warn"], background: ["legal background, not source-verified", "neu"], analysis: ["the analyst's reasoning, kept (not a sourced fact)", "neu"], unsupported: ["removed", "neg"] };
     return `<details class="inner"><summary class="small">Fact-check log (${checks.length})</summary><ul class="fclog">${checks.map((c) => { const [l, k] = lab[c.label] || lab.unsupported; const it = IDX[c.source];
       const link = c.quote && it?.url ? `<a href="${esc(it.url)}#:~:text=${encodeURIComponent(c.quote.split(/\s+/).slice(0, 10).join(" "))}" target="_blank" rel="noopener noreferrer">“${esc(c.quote)}”</a> ${citeOne(c.source)}` : c.quote ? `“${esc(c.quote)}” ${citeOne(c.source)}` : "";
       return `<li><span class="pill ${k}">${l}</span> <span class="${c.label === "unsupported" ? "struck" : ""}">${esc(c.text)}</span>${c.fix ? `<div class="small">→ ${rich(c.fix)}</div>` : ""}${link ? `<div class="small muted">${link}</div>` : ""}</li>`; }).join("")}</ul></details>`;

@@ -18,7 +18,8 @@
  *     company appears in the cited article;
  *   - a fact-check call labels every sentence carrying a number or citation
  *     verified / corrected / background / unsupported against the retrieved
- *     text; corrected sentences are rewritten, unsupported ones removed. If
+ *     text (or analysis: the analyst's reasoning, kept and marked);
+ *     corrected sentences are rewritten, unsupported ones removed. If
  *     the fact-check can't run, numeric claims are held back, never shown as
  *     verified;
  *   - when a rule book can't be built, a clearly labelled notice is shown
@@ -413,6 +414,7 @@ For each claim return one label:
 - "verified": a cited source states it. Give "quote": a verbatim passage (<= 25 words) copied exactly from that source, and "source": its ID.
 - "corrected": a cited source supports a different figure, date or name. Give "fix": the corrected sentence (same style, keep its [ID] citations) and the supporting "quote" and "source".
 - "background": ONLY for claims of kind "law" that state the instrument's own legal parameters (its statute or CFR section, the agency's authority, thresholds written in the rule, its effective date) which you are highly confident are accurate legal fact even though no retrieved source states them.
+- "analysis": ONLY for claims of kind "analysis" that are the analyst's own reasoning: what something means for the industry, why it matters, what could happen, what to watch, or a judgment of size or likelihood. Use it only when the sentence asserts no specific figure, date, quote, ruling, deal or company action as fact beyond what the sources state or what is common knowledge. If it does assert such a fact and no source states it, it is "unsupported".
 - "unsupported": anything else, including every company action, fine, deal, quote, earnings figure or date that the cited text does not state.
 Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": "...", "source": "RA3", "fix": ""}]}`;
   }
@@ -420,19 +422,22 @@ Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": ".
   /** Apply fact-check results to a working copy. Unknown or unlabeled claims count as unsupported. */
   function applyFactcheck(work, claimSet, raw, idx) {
     const byId = Object.fromEntries((Array.isArray(raw?.results) ? raw.results : []).map((r) => [String(r?.id || "").toUpperCase(), r]));
-    const sum = { checked: claimSet.claims.length, verified: 0, corrected: 0, background: 0, removed: 0, pending: 0 };
+    const sum = { checked: claimSet.claims.length, verified: 0, corrected: 0, background: 0, analysis: 0, removed: 0, pending: 0 };
     const checks = [];
     for (const c of claimSet.claims) {
       const r = byId[c.id] || {};
-      let label = ["verified", "corrected", "background", "unsupported"].includes(r.label) ? r.label : "unsupported";
+      let label = ["verified", "corrected", "background", "analysis", "unsupported"].includes(r.label) ? r.label : "unsupported";
       const src = String(r.source || "").toUpperCase(); const quote = trim(r.quote, 240);
       // A quote must really appear in the source it names; otherwise the label can't stand.
       if ((label === "verified" || label === "corrected") && !(idx[src] && quote && norm(snippetOf(idx[src])).includes(norm(quote).slice(0, 80)))) label = "unsupported";
       if (label === "background" && c.kind !== "law") label = "unsupported";
+      // The analyst's reasoning stays (marked as analysis, never as verified); facts still need a source.
+      if (label === "analysis" && c.kind !== "analysis") label = "unsupported";
       if (label === "corrected" && !String(r.fix || "").trim()) label = "unsupported";
-      c.apply(label, label === "corrected" ? trim(r.fix, 400) : null);
+      const fix = String(r.fix || "").replace(/\s+/g, " ").trim(); // a corrected sentence is saved whole
+      c.apply(label, label === "corrected" ? fix : null);
       sum[label === "unsupported" ? "removed" : label]++;
-      checks.push({ id: c.id, text: trim(c.text, 300), label, quote: label === "verified" || label === "corrected" ? quote : "", source: label === "verified" || label === "corrected" ? src : "", fix: label === "corrected" ? trim(r.fix, 400) : "" });
+      checks.push({ id: c.id, text: c.text, label, quote: label === "verified" || label === "corrected" ? quote : "", source: label === "verified" || label === "corrected" ? src : "", fix: label === "corrected" ? fix : "" });
     }
     claimSet.finalize();
     return { summary: sum, checks };
@@ -442,7 +447,7 @@ Reply with ONLY JSON: {"results": [{"id": "C1", "label": "verified", "quote": ".
     let pending = 0;
     for (const c of claimSet.claims) if (/\d/.test(c.text.replace(/\s\(\d{4}-\d{2}(-\d{2})?\)$/, "")) || c.kind === "event") { c.apply("unsupported"); pending++; }
     claimSet.finalize();
-    return { summary: { checked: 0, verified: 0, corrected: 0, background: 0, removed: 0, pending }, checks: [] };
+    return { summary: { checked: 0, verified: 0, corrected: 0, background: 0, analysis: 0, removed: 0, pending }, checks: [] };
   }
 
   // When a rule book can't be built, nothing hand-written stands in: a clearly labelled notice does, and it is never kept.
