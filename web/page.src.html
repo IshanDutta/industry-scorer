@@ -2826,7 +2826,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     let o = Outlook.clean(await call(Outlook.prompt(name, today(), dig)), { today: today() });
     if (o && !o.consistent) {
       onStage("Code found contradictions: one small fix");
-      const fix = await call(Outlook.repairPrompt(`the "${name}" industry`, today(), o, o.checks)).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
+      const fix = await call(Outlook.repairPrompt(`the "${name}" industry`, today(), o, o.checks, Outlook.INPUTS, { full: true })).catch((e) => { if (FATAL.has(e?.code) || STOP_CODES.has(e?.code)) throw e; return null; });
       const o2 = Outlook.clean(fix, { today: today() }); if (o2) { o2.repaired = o.checks; o = o2; }
     }
     if (!o) return null;
@@ -3558,7 +3558,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
    * update. Code refreshes the numbers first (prices, the statistical anchor, the calls held to it; no Claude), then one
    * lead-model call per industry (two if the lean contradicts its own evidence). `force` remakes today's leans too.
    */
-  async function runLeanPass(sector, { names = null, concurrency = 4, force = false, missing = false } = {}) {
+  async function runLeanPass(sector, { names = null, concurrency = 4, force = false, missing = false, tier = "complex" } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
     const dr = S.dailyRun = { sector, phase: "data", label: "Starting the lean pass", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), lean: true };
     try {
@@ -3574,7 +3574,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       dr.label = "Market data (no Claude)";
       const bench = await refreshBenchmark();
       const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
-      const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "complex", cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt.slice(0, (lim?.maxPromptBytes || 262144) - 4096), opts); };
+      const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: tier, cache: false, retryCut: true }; if (JOB) opts.jobStep = step; return await sampleJson(prompt.slice(0, (lim?.maxPromptBytes || 262144) - 4096), opts); };
       dr.phase = "lean";
       await pool(have, Math.max(1, concurrency), async (name) => {
         const sl = slug(name); dr.working.add(name);
@@ -5479,6 +5479,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Provisional: read off ${esc(x.basis || "the earlier call")}.</p>`}
         ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${ptList(x.for.map(rich))}</div>` : ""}
         ${x.against?.length ? `<div class="small"><b>Against, and why it loses:</b> ${ptList(x.against.map(rich))}</div>` : ""}
+        ${x.watch?.length ? `<div class="small"><b>What to watch:</b> ${ptList(x.watch.map(rich))}</div>` : ""}
         ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}
         ${o.nums ? o.nums(h, x) : ""}</div>`; };
     const ev = l.evidence || [];

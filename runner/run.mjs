@@ -29,7 +29,7 @@
 //   JOB_MONTH_BUDGET            daily update: this sector's monthly Claude budget in $; each day spends its share of what's left
 //   JOB_DAILY_ONLY              daily update: only these industries (separated by ";"), e.g. the ones a run left unfinished
 //   JOB_BACKFILL=1              daily update: the history pass only (Times like this for industries that lack it; no triage, no sections)
-//   JOB_LEAN=1                  daily update: the lean pass only (every industry's lean from everything, by the lead model)
+//   JOB_LEAN=1                  daily update: the outlook pass only (every industry's 1M-12M calls made again from everything, by the lead model, written out in full)
 //   JOB_LEAN_MISSING=1          with JOB_LEAN: only industries that don't have their 1M-12M calls yet (none or provisional)
 //   JOB_SHOCK                   daily update: a midday alarm's note ("SPY -3.1%, VIX +28% at 17:30 UTC"); makes today a big day
 //   CLAUDE_MODEL_LEAD           the lead strategist (synthesis, scenarios, calls, red team, investor verdicts) in every run,
@@ -147,7 +147,7 @@ async function main() {
     else if (env.JOB_WINDOWS === "1") { log(`Times like this for ${sector}: every industry, every window (1M, 3M, 6M, 1Y, 3Y, 5Y), with the historian's notes by ${sampler.models.default}`);
       await page.evaluate(([s, c, n]) => window.__industryScorer.windows(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
     else if (env.JOB_LEAN === "1") { log(`The lean pass for ${sector}: every industry's lean from everything, by ${sampler.models.lead || "the lead model"}`);
-      await page.evaluate(([s, c, n, m]) => window.__industryScorer.lean(s, { concurrency: c, missing: m, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames, env.JOB_LEAN_MISSING === "1"]); }
+      await page.evaluate(([s, c, n, m, f]) => window.__industryScorer.lean(s, { concurrency: c, missing: m, ...(f ? { force: true, tier: "lead" } : {}), ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames, env.JOB_LEAN_MISSING === "1", env.JOB_LEAN_MISSING !== "1"]); }
     else await page.evaluate(([s, c, b, n, r]) => window.__industryScorer.daily(s, { concurrency: c, backfill: b, refresh: r, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), env.JOB_BACKFILL === "1", onlyNames, env.JOB_REFRESH === "1"]);
   } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);
 
