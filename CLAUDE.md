@@ -19,7 +19,13 @@ The page is branded AdvisorMindOS: petrol canvas, one brass accent (`--accent`),
 Instrument Sans text, IBM Plex Mono numbers. The last `<script>` in `page.src.html` is the shell: it folds every
 `section.panel` from its `.panel-head` (state in localStorage, `data-fold-default="closed"` starts one folded), moves
 the tab indicator, runs the jump palette (Ctrl/Cmd K or /, Alt+1-5 for tabs), and animates sections the first time
-they appear. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the
+they appear. It also makes pages easy to digest: lists of long points become cards (`.cardlist`), text over 420
+characters shows four lines and "Read all" (`.clamp`), key numbers count up, and only a tab's first section and its
+verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
+Every tab starts with performance: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
+`groups`) set the order, and `wireSpy` puts the sections in that order and highlights from where they actually are.
+Points after a label render with `ptList` (a list, never "a; b; c"), and on-screen text is never cut (`showC`);
+prompts keep `trimC`. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the
 `--t1`..`--t4` tokens (100/150/200/300ms), transform and opacity only, and honors reduced motion.
 
 ## Layout
