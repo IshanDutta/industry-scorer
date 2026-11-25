@@ -3384,7 +3384,8 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   const _runOpen = new Map();
   async function runGet(sl) {
     const v = await idbGet("run:" + sl); if (!(JOB && v?.__lite && typeof window.__job_run === "function")) return v;
-    if (!_runOpen.has(sl)) _runOpen.set(sl, (async () => { const f = await window.__job_run(sl).catch(() => null); if (f) await idbPut("run:" + sl, f).catch(() => {}); return f; })().finally(() => _runOpen.delete(sl)));
+    if (!_runOpen.has(sl)) _runOpen.set(sl, (async () => { let f = await window.__job_run(sl).catch(() => null); if (typeof f === "string") try { f = JSON.parse(f); } catch { f = null; }
+      if (f) await idbPut("run:" + sl, f).catch(() => {}); return f; })().finally(() => _runOpen.delete(sl)));
     return (await _runOpen.get(sl)) || v;
   }
 
@@ -3575,7 +3576,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     }
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
+  // Caches a job carries from one run to the next (only these keys): the industry digests a fund's look-through reads.
+  const JOB_CACHES = new Set(["indDigest"]);
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
+    cacheGet: (k) => (JOB_CACHES.has(k) ? idbGet(k) : null),
+    cachePut: async (k, v) => { if (!JOB_CACHES.has(k) || !v?.runs) return 0; const cur = (await idbGet(k)) || { v: 1, runs: {} }; for (const [sl, e] of Object.entries(v.runs)) if (!cur.runs[sl] || String(e?.saved_at || "") >= String(cur.runs[sl].saved_at || "")) cur.runs[sl] = e; await idbPut(k, cur); return Object.keys(cur.runs).length; },
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
     daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
