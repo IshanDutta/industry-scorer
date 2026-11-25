@@ -17807,7 +17807,7 @@ Return ONLY a JSON object:
   /**
    * Times like this for every window (1M, 3M, 6M, 1Y, 3Y, 5Y), for every finished industry in a sector: the five past stretches
    * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
-   * the same stretches come back). Run on GitHub from "Update everything from GitHub"; saved on the run as `twin`.
+   * the same stretches come back). Run on GitHub (the Daily update workflow with windows=true, started from Actions); saved on the run as `twin`.
    */
   async function runWindowsPass(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp) return;
@@ -18552,7 +18552,7 @@ Return ONLY a JSON object:
     const db = await outlookDb();
     if (!S.mcp || !db) { pullFromGithub(); return; } // outside Claude: bring in what the page carries
     const at = new Date().toISOString();
-    S.sync = { ...(S.sync || {}), pending: true, state: "running", phase: "starting", requested_at: at, result: null, run_url: null, github_started_at: null, github_done_at: null, github_conclusion: null }; renderMeta();
+    S.sync = { ...(S.sync || {}), pending: true, state: "running", phase: "copying", requested_at: at, result: null, run_url: null, github_started_at: null, github_done_at: null, github_conclusion: null }; renderMeta();
     try {
       await db.doc("sync/github").set({ ...S.sync }).catch(() => {});
       await S.mcp.callTool(SYNC_SERVER, "fire_trigger", { trigger_id: SYNC_TRIGGER, text: "UPDATE" }, { cache: false });
@@ -18895,16 +18895,17 @@ Return ONLY a JSON object:
   }
 
   /** "Update everything from GitHub": where it's at, as a bar under the status line, while it runs. */
-  const SYNC_STAGES = [["starting", "Starting Times like this on GitHub", 2], ["github", "On GitHub: Times like this for every industry and every window (1M, 3M, 6M, 1Y, 3Y, 5Y), with the historian's notes", 20], ["copying", "Copying every updated sector into this page", 8]];
+  // It only copies what GitHub already has: it starts nothing on GitHub.
+  const SYNC_STAGES = [["copying", "Copying what changed on GitHub into this page", 8]];
   function syncProgress() {
     let box = $("sync-prog"); const x = S.sync, on = syncPending();
     if (!on) { if (box) box.remove(); clearInterval(S.syncTick); S.syncTick = null; return; }
     if (!box) { box = document.createElement("div"); box.id = "sync-prog"; box.className = "sync-prog"; document.querySelector(".statusline")?.after(box); }
-    const ph = x.phase === "copying" ? 2 : x.phase === "github" ? 1 : 0, since = Date.parse((ph === 2 ? x.github_done_at : ph === 1 ? x.github_started_at : x.requested_at) || x.requested_at);
+    const ph = 0, since = Date.parse(x.requested_at);
     const tot = SYNC_STAGES.reduce((a, s0) => a + s0[2], 0), before = SYNC_STAGES.slice(0, ph).reduce((a, s0) => a + s0[2], 0), mins = Math.max(0, (Date.now() - since) / 60000);
     const inPh = Math.min(SYNC_STAGES[ph][2] * 0.95, mins), frac = Math.min(0.98, (before + inPh) / tot), left = Math.max(1, Math.round(tot - before - inPh));
-    box.innerHTML = `<div class="sync-h"><b>${esc(SYNC_STAGES[ph][1])}</b><span class="small muted">step ${ph + 1} of 3 · about ${left} min left · started ${esc(ago(x.requested_at))}${x.run_url ? ` · <a href="${esc(x.run_url)}" target="_blank" rel="noopener">watch it on GitHub</a>` : ""}</span></div>
-      <div class="sync-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div><div class="sync-steps">${SYNC_STAGES.map((s0, i) => `<span class="${i < ph ? "done" : i === ph ? "now" : ""}">${i < ph ? "✓ " : ""}${esc(s0[1].split(":")[0])}</span>`).join("")}</div>`;
+    box.innerHTML = `<div class="sync-h"><b>${esc(SYNC_STAGES[ph][1])}</b><span class="small muted">about ${left} min left · started ${esc(ago(x.requested_at))}</span></div>
+      <div class="sync-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div>`;
     if (!S.syncTick) S.syncTick = setInterval(() => syncProgress(), 5000);
   }
   function renderPicker() {
