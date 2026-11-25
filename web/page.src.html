@@ -1330,6 +1330,147 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .dirty-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 .dirty-dot[hidden] { display: none; }
 .rb-t { display: inline-flex; align-items: center; gap: 6px; }
+/* ---- Screener tab */
+#scr { gap: 14px; }
+.scr-head { display: grid; gap: 14px; padding: 18px 20px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%), var(--surface); }
+.scr-title { display: flex; flex-wrap: wrap; gap: 6px 24px; align-items: end; justify-content: space-between; }
+.scr-title h2 { font-size: 24px; font-weight: 800; margin-top: 2px; }
+.scr-title p { max-width: 70ch; margin: 0; }
+.scr-row1 { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+.scr-types { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.scr-type { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); font: 600 14px var(--body); transition: border-color var(--t2, .15s), background var(--t2, .15s), color var(--t2, .15s); }
+.scr-type:hover { color: var(--ink); border-color: var(--line-2); }
+.scr-tick { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--line-2); display: grid; place-items: center; color: transparent; }
+.scr-tick svg { width: 13px; height: 13px; }
+.scr-type[aria-pressed="true"] { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 9%, var(--bg)); }
+.scr-type[aria-pressed="true"] .scr-tick { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.scr-tc { font-size: 11.5px; color: var(--faint); }
+.scr-like { flex: 1 1 280px; min-width: 0; }
+.scr-saved { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.scr-saved select, .scr-sorts select { padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 500 13px var(--body); max-width: 240px; }
+.scr-saveform { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.scr-saveform .pfe-field { flex: 1 1 260px; }
+
+.scr { display: grid; grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); gap: 14px; align-items: start; }
+.scr-side { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 10px; padding: 14px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); }
+.scr-side-head { display: flex; align-items: center; gap: 8px; }
+.scr-side-head h3 { flex: 1; font-size: 16px; font-weight: 700; margin: 0; }
+.scr-side-close, .scr-side-btn { display: none; }
+.scr-empty { margin: 0; }
+.scr-box { display: grid; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); animation: pfein .15s ease-out; }
+.scr-box-h { display: flex; align-items: center; gap: 8px; }
+.scr-box-h b { flex: 1; font-size: 14px; }
+.scr-for { font: 600 10.5px var(--body); letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+.scr-x { width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--faint); font-size: 17px; line-height: 1; }
+.scr-x:hover { color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
+.scr-help { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.scr-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.scr-chips.long { max-height: 220px; overflow-y: auto; padding-right: 2px; }
+.scr-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: 500 12.5px var(--body); text-align: left; }
+.scr-chip .mono { font-size: 10.5px; color: var(--faint); }
+.scr-chip:hover { color: var(--ink); border-color: var(--line-2); }
+.scr-chip[aria-pressed="true"] { color: var(--ink); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+.scr-vq { padding: 5px 9px; }
+.scr-th { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.scr-th .pfe-field { width: 86px; padding: 5px 8px; }
+.scr-per { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; padding: 3px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); }
+.scr-per button { flex: 1; min-width: 34px; padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 600 11.5px var(--mono); }
+.scr-per button[aria-pressed="true"] { background: var(--sunk); color: var(--ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.scr-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 6px; align-items: center; }
+.scr-range .pfe-field { padding: 6px 8px; }
+.scr-range .pfe-pre { font: 600 10.5px var(--body); text-transform: uppercase; letter-spacing: .05em; }
+.scr-hint { font-size: 11.5px; color: var(--faint); line-height: 1.4; }
+.scr-hint b { color: var(--muted); font-weight: 600; font-family: var(--mono); }
+.scr-add { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
+.scr-add > .pfe-lab { margin-top: 6px; }
+.scr-addg { display: grid; gap: 5px; }
+.scr-addg-h { font: 600 11px var(--body); color: var(--muted); }
+.scr-addg-b { display: flex; flex-wrap: wrap; gap: 4px; }
+.scr-addc { padding: 4px 9px; border-radius: 7px; border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--line)); background: transparent; color: var(--ink); font: 500 12.5px var(--body); }
+.scr-addc:hover:not(:disabled) { border-style: solid; background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.scr-addc:disabled { opacity: .4; }
+
+.scr-main { display: grid; gap: 10px; min-width: 0; }
+.scr-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.scr-count { flex: 1 1 auto; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.scr-count b { font-size: 22px; font-weight: 600; }
+.scr-cmp { display: inline-flex; gap: 6px; align-items: center; }
+.scr-cols { position: relative; }
+.scr-cols > summary { list-style: none; cursor: pointer; }
+.scr-cols > summary::-webkit-details-marker { display: none; }
+.scr-cols-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; width: min(560px, 86vw); max-height: 60vh; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; padding: 14px; border-radius: 12px; border: 1px solid var(--line-2); background: var(--surface); box-shadow: 0 12px 32px -12px rgba(0, 0, 0, .5); }
+.scr-colg { display: grid; gap: 4px; align-content: start; }
+.scr-colk { display: flex; gap: 7px; align-items: center; font-size: 13px; color: var(--ink); cursor: pointer; }
+.scr-colfoot { grid-column: 1 / -1; }
+.scr-sorts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scr-sortchip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 8px; background: var(--sunk); border: 1px solid var(--line); font-size: 13px; }
+.scr-sortchip button:not(.scr-x) { border: 0; background: transparent; color: var(--accent); font: 600 12px var(--body); padding: 2px 4px; }
+.scr-sortchip .scr-x { width: 22px; height: 22px; font-size: 15px; }
+.scr-likebar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+.scr-likebar > div { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.scr-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.scr-preset { padding: 6px 11px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 13px var(--body); }
+.scr-preset:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.scr-note { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--gD) 9%, var(--surface)); border: 1px solid color-mix(in srgb, var(--gD) 30%, var(--line)); font-size: 13px; }
+.scr-filling { background: var(--surface); border-color: var(--line); justify-content: flex-start; color: var(--muted); }
+.scr-msg { display: grid; gap: 8px; justify-items: start; padding: 22px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); }
+.scr-prog { width: min(420px, 100%); height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; }
+.scr-prog i { display: block; height: 100%; background: var(--accent); transition: width var(--t3, .2s) ease-out; }
+
+.scr-tblwrap { border-radius: 12px; border: 1px solid var(--line); background: var(--surface); overflow-x: auto; }
+.scr-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.scr-tbl th { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line-2); padding: 0; text-align: left; vertical-align: bottom; }
+.scr-tbl th.n { text-align: right; }
+.scr-th { width: 100%; border: 0; background: transparent; padding: 9px 8px; font: 600 11px var(--body); letter-spacing: .04em; text-transform: uppercase; color: var(--faint); text-align: inherit; line-height: 1.3; }
+.scr-th:hover { color: var(--ink); }
+.scr-tbl th.on .scr-th { color: var(--accent); }
+.scr-ar { margin-left: 3px; } .scr-ar sup { font-size: 9px; margin-left: 1px; }
+.scr-tbl td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.scr-tbl tbody tr:last-child td { border-bottom: 0; }
+.scr-tbl tbody tr:hover td { background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.scr-tbl tr.sel td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.scr-tbl td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scr-tbl td.tx { color: var(--muted); min-width: 90px; }
+.scr-tbl td.up { color: var(--pos); } .scr-tbl td.down { color: var(--neg); }
+.scr-ck { width: 34px; text-align: center !important; }
+.scr-ck input { width: 16px; height: 16px; accent-color: var(--accent); }
+.scr-symc { min-width: 190px; }
+.scr-symw { display: flex; gap: 10px; align-items: center; }
+.scr-symw > div { display: grid; gap: 1px; min-width: 0; }
+.scr-av { width: 32px; height: 32px; border-radius: 9px; font-size: 9.5px; flex: none; }
+.scr-sym { border: 0; background: transparent; padding: 0; font: 700 14.5px var(--mono); color: var(--ink); text-align: left; }
+.scr-sym:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.scr-nm { font-size: 12px; color: var(--muted); line-height: 1.3; overflow-wrap: anywhere; }
+.scr-sim { font-size: 10.5px; color: var(--accent); }
+.scr-ld { color: var(--faint); letter-spacing: 2px; animation: scrld 1s ease-in-out infinite alternate; }
+@keyframes scrld { from { opacity: .35; } to { opacity: 1; } }
+.scr-more { margin-top: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .scr-ld { animation: none; } .scr-box { animation: none; } }
+@media (max-width: 980px) {
+  .scr { grid-template-columns: minmax(0, 1fr); }
+  .scr-side { display: none; position: static; max-height: none; }
+  .scr.side-open .scr-side { display: grid; }
+  .scr-side-close, .scr-side-btn { display: inline-flex; }
+  .scr-head { padding: 14px; }
+  .scr-cols-pop { right: auto; left: 0; }
+}
+/* A phone: every result is a card (nothing scrolls sideways). */
+@media (max-width: 760px) {
+  .scr-tblwrap { overflow: visible; border: 0; background: transparent; }
+  .scr-tbl, .scr-tbl tbody { display: block; }
+  .scr-tbl thead { display: none; }
+  .scr-tbl tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; padding: 12px; margin-bottom: 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); position: relative; }
+  .scr-tbl tr.sel { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .scr-tbl td { display: grid; gap: 1px; padding: 0; border: 0; text-align: left !important; background: transparent !important; min-width: 0 !important; white-space: normal !important; }
+  .scr-tbl td.scr-symc { grid-column: 1 / -1; padding-right: 30px; }
+  .scr-tbl td.scr-ck { position: absolute; top: 12px; right: 10px; width: auto; }
+  .scr-tbl td[data-label]::before { content: attr(data-label); font: 600 10px var(--body); letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+  .scr-tbl td.n { font-size: 14px; }
+  .scr-range { grid-template-columns: minmax(0, 1fr); } .scr-range > .muted { display: none; }
+  .scr-count b { font-size: 19px; }
+}
+
 .rb .pfe-cols, .rb-row { grid-template-columns: 40px minmax(150px, 1.2fr) minmax(190px, 1.1fr) minmax(130px, auto) 34px; }
 .rb-tkline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rb-tick { font: 700 17px var(--mono); letter-spacing: .01em; }
@@ -1399,6 +1540,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   <div id="fund" style="display:grid;gap:18px" hidden></div>
   <div id="cmp" style="display:grid;gap:18px" hidden></div>
   <div id="pf" style="display:grid;gap:18px" hidden></div>
+  <div id="scr" style="display:grid;gap:14px" hidden></div>
 
   <footer class="amsfoot"><span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="m-leg" d="M6.5 26 16 7l9.5 19" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path class="m-line" d="M10.2 19.8l3.6-2.7 3.1 1.9 5.6-5.3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="m-apex" cx="16" cy="6.6" r="2.7"/><circle class="m-tip" cx="22.6" cy="13.7" r="1.9"/></svg><span class="word">AdvisorMind<span class="os">OS</span></span></span><span>Research on FMP, EODHD and Claude. Press <kbd>/</kbd> to jump anywhere.</span></footer>
 </div>
@@ -3995,7 +4137,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     // When a sync finishes, bring in what it copied right away: the task no longer republishes the page, so nothing
     // reloads by itself (autoPull pulls only the sectors newer than this browser's copies).
     try { db.doc("sync/github").onSnapshot((d) => { const prev = S.sync; S.sync = d.exists ? d.data() : null; renderMeta(); renderPicker();
-      if (S.sync?.state === "done" && S.sync.done_at && prev && prev.done_at !== S.sync.done_at) autoPull(); }, () => {}); } catch {}
+      if (S.sync?.state === "done" && S.sync.done_at && prev && prev.done_at !== S.sync.done_at) { autoPull(); scrPullGithub(true); } }, () => {}); } catch {}
   }
   const syncPending = () => { const x = S.sync; return !!(x?.pending && x.requested_at && Date.now() - Date.parse(x.requested_at) < 90 * 60000 && !(x.done_at && x.done_at > x.requested_at)); };
   async function updateFromGithub() {
@@ -5934,7 +6076,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     return `<nav class="secnav" aria-label="Report sections">${links.map(([id, l]) => `<a href="#${id}">${l}</a>`).join("")}</nav>`;
   }
 
-  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); renderCompare(); renderPortfolio(); keepAwake(); }
+  function renderAll() { renderMeta(); renderTabs(); renderPicker(); renderReport(); renderCompany(); renderFund(); renderCompare(); renderPortfolio(); renderScreener(); keepAwake(); }
 
   // ============================================================= Companies tab: one company, on top of its industry's analysis
   /**
@@ -10152,13 +10294,314 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 
+  // ------------------------------------------------------------- render: Screener tab
+  /*
+   * Kwanti-style screener: pick asset types, add criteria on the left, the results refresh as you go. Its rows come
+   * from the "Screener data" job on GitHub (every US stock, ETF and mutual fund, rebuilt monthly, copied in by
+   * "Update everything from GitHub"); until the page has that, it builds the list live from FMP for the types picked and
+   * fills in risk, fund facts and valuation for the rows on screen. web/screener.js does the screening.
+   */
+  const SCR_KEY = "ams.scr.v1", SCR_TL = { etf: "ETF", fund: "mutual fund", stock: "stock" };
+  const SCR_Q = { stock: { exchange: "NYSE,NASDAQ,AMEX", isEtf: false, isFund: false, marketCapMoreThan: 3e8 }, etf: { exchange: "NYSE,NASDAQ,AMEX", isEtf: true, marketCapMoreThan: 2.5e7 }, fund: { isFund: true, country: "US", marketCapMoreThan: 1e8 } };
+  const SCR_DEEP = ["r", "tr", "v3", "sh3", "b3", "dd", "pe", "pb", "ps", "eps", "qr", "npm", "de", "y", "er", "ac", "pv", "mc", "hc", "inc", "dom", "sw", "rg"];
+  const SCR_DEEPCOL = new Set(["v3", "sh3", "dd", "b3", "er", "ac", "pv", "hc", "age", "pe", "pb", "ps", "eps", "npm", "qr", "de", "box", "cat", "rk"]);
+  function scrState() {
+    if (S.scr) return S.scr;
+    let saved = null; try { saved = JSON.parse(localStorage.getItem(SCR_KEY) || "null"); } catch {}
+    S.scr = { types: ["etf"], filters: [], sorts: [{ c: "mc", d: -1 }], cols: null, like: null, ...(saved || {}), show: 50, sel: [], side: false, saveOpen: false, colsOpen: false };
+    if (!Array.isArray(S.scr.types) || !S.scr.types.length) S.scr.types = ["etf"];
+    S.scrX ||= {}; S.scrQ ||= new Set();
+    return S.scr;
+  }
+  function scrRemember() { const s = S.scr; try { localStorage.setItem(SCR_KEY, JSON.stringify({ types: s.types, filters: s.filters, sorts: s.sorts, cols: s.cols, like: s.like })); } catch {} }
+  const scrCols = () => { const s = S.scr; return (s.cols?.length ? s.cols : Screener.defaultCols(s.types)).filter((c) => Screener.COL[c]); };
+  const SCR_PL = { etf: "ETFs", fund: "mutual funds", stock: "stocks" };
+  const scrTypesLabel = (ts) => { const l = ts.map((t) => SCR_PL[t]); return l.length > 1 ? l.slice(0, -1).join(", ") + " and " + l[l.length - 1] : l[0] || ""; };
+
+  /** The rows: GitHub's monthly build when the page has one, else built live from FMP for the asset types picked. */
+  async function scrEnsure() {
+    const s = scrState();
+    if (!S.scrData || S.scrData.src !== "github") {
+      const gh = await idbGet("scr:gh").catch(() => null);
+      if (gh?.rows?.length) { S.scrData = { ...gh, src: "github" }; S.scrLoading = null; renderScreener(); }
+    }
+    scrPullGithub();
+    if (S.scrData?.src === "github") return;
+    await scrLive(s.types);
+  }
+  /** A newer build copied in by "Update everything from GitHub": read it and keep it in this browser. */
+  async function scrPullGithub(force = false) {
+    if (S.scrPulled && !force) return; S.scrPulled = true;
+    try {
+      const idx = await runsIndex(), x = idx?.screener; if (!x?.path) return;
+      if (S.scrData?.src === "github" && String(S.scrData.at || "") >= String(x.at || "")) return;
+      const doc = await jobRead({ path: runUrl(x), done_at: x.at }, "screener"); if (!doc?.rows?.length) return;
+      await idbPut("scr:gh", doc).catch(() => {});
+      S.scrData = { ...doc, src: "github" }; S.scrLoading = null; renderScreener();
+    } catch (e) { console.warn("screener data", e); }
+  }
+  async function scrLive(types) {
+    const L = S.scrLive || (S.scrLive = { rows: {} });
+    const need = types.filter((t) => !L.rows[t]);
+    if (need.length && !S.mcp) { S.scrLoading = null; if (!S.scrData) S.scrErr = "Open this page in Claude to screen live from FMP, or press Update everything from GitHub to bring in the monthly screener data."; renderScreener(); return; }
+    for (const t of need) {
+      const c = await idbGet("scr:live:" + t).catch(() => null);
+      if (c?.at && ageDays(c.at) < 1 && c.rows?.length) { L.rows[t] = c.rows; continue; }
+      S.scrLoading = { label: `Finding US ${SCR_TL[t]}s on FMP…`, p: 0.05 }; scrLoadTick();
+      let got = await fmp("search", { endpoint: "search-company-screener", isActivelyTrading: true, limit: 5000, ...SCR_Q[t] });
+      got = (got || []).filter((r) => r?.symbol && (t === "fund" ? r.isFund && !r.isEtf && /^[A-Z]{4}X$/.test(r.symbol) : t === "etf" ? r.isEtf && /^[A-Z]{1,5}$/.test(r.symbol) : !r.isEtf && !r.isFund && /^[A-Z]{1,5}(\.[A-Z])?$/.test(r.symbol)));
+      const rows = got.map((r) => Screener.row(r, t)), by = Object.fromEntries(rows.map((o) => [o.s, o]));
+      for (let i = 0; i < rows.length; i += 100) {
+        S.scrLoading = { label: `Returns for ${rows.length.toLocaleString()} ${SCR_TL[t]}s: ${Math.min(i + 100, rows.length).toLocaleString()} done`, p: 0.1 + 0.9 * (i / rows.length) }; scrLoadTick();
+        for (const ch of (await optional(() => fmp("quote", { endpoint: "quote-change", symbol: rows.slice(i, i + 100).map((o) => o.s).join(",") }), [])) || []) if (by[ch?.symbol]) Screener.withReturns(by[ch.symbol], ch);
+      }
+      L.rows[t] = rows; idbPut("scr:live:" + t, { at: new Date().toISOString(), rows }).catch(() => {});
+    }
+    if (S.scrData?.src === "github") return;
+    const rows = Object.values(L.rows).flat();
+    for (const o of rows) { const x = S.scrX[o.s]; if (x) Object.assign(o, x); }
+    Screener.derive(rows);
+    S.scrData = { rows, src: "live", at: new Date().toISOString() }; S.scrLoading = null; S.scrErr = null; renderScreener();
+  }
+  function scrLoadTick() { const b = $("scr-load"); if (b && S.scrLoading) { b.querySelector("span").textContent = S.scrLoading.label; b.querySelector("i").style.width = Math.round((S.scrLoading.p || 0) * 100) + "%"; } else renderScreener(); }
+  async function scrSpy() { return cached("scr:spy", async () => toSeries(await fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: "SPY", from_date: E.addDays(today(), -3680), to_date: today() })), 6 * 3600 * 1000); }
+  /** One asset's prices, fund facts or ratios (live mode), kept in this browser for 30 days. */
+  async function scrDeep(o) {
+    let x = S.scrX[o.s];
+    if (!x) { const c = await idbGet("scrx:" + o.s).catch(() => null); if (c?.at && ageDays(c.at) < 30) x = c.x; }
+    if (!x) {
+      const t = { s: o.s, t: o.t, y: o.y, mc: o.mc, n: o.n };
+      const ser = toSeries((await optional(() => fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: o.s, from_date: E.addDays(today(), -3680), to_date: today() }), [])) || []);
+      if (ser.dates.length >= 15) { Screener.returnsFromSeries(t, ser); Object.assign(t, Screener.metrics(ser, await scrSpy().catch(() => null), S.bench?.rf_latest ?? 0.04)); }
+      if (o.t === "stock") Screener.withRatios(t, await optional(() => fmp("statements", { endpoint: "metrics-ratios-ttm", symbol: o.s }), []));
+      else { const [info, ctry] = await Promise.all([optional(() => fmp("etfAndMutualFunds", { endpoint: "information", symbol: o.s }), []), optional(() => fmp("etfAndMutualFunds", { endpoint: "country-weighting", symbol: o.s }), [])]); Screener.withInfo(t, info, ctry); }
+      x = { dx: 1 }; for (const k of SCR_DEEP) if (t[k] !== undefined && t[k] !== null) x[k] = t[k];
+      idbPut("scrx:" + o.s, { at: new Date().toISOString(), x }).catch(() => {});
+    }
+    S.scrX[o.s] = x; Object.assign(o, x);
+  }
+  /** Live mode: fill in the rows given (four at a time), redrawing the results as they come. */
+  function scrFill(rows) {
+    if (S.scrData?.src !== "live" || !S.mcp) return;
+    const q = rows.filter((o) => !o.dx && !S.scrQ.has(o.s)); if (!q.length) return;
+    q.forEach((o) => S.scrQ.add(o.s));
+    const F = S.scrFill || (S.scrFill = { done: 0, of: 0 }); F.of += q.length;
+    pool(q, 4, async (o) => { try { await scrDeep(o); } catch (e) { if (STOP_ALL.has(e?.code)) { S.scrErr = errText(e); } } finally { F.done++; S.scrQ.delete(o.s); o.dx ||= 1; scrSoon(); } }, null)
+      .then(() => { if (S.scrFill === F && F.done >= F.of) { S.scrFill = null; if (S.scrData?.rows) Screener.derive(S.scrData.rows); renderScreenerMain(); } });
+  }
+  function scrSoon() { if (S.scrSoonT) return; S.scrSoonT = setTimeout(() => { S.scrSoonT = null; if (S.scrData?.rows) Screener.derive(S.scrData.rows); renderScreenerMain(); }, 700); }
+
+  /** The screen as it stands: criteria, sorting, and the asset to match when one is picked. */
+  function scrRun() {
+    const s = S.scr, D = S.scrData; if (!D) return null;
+    const spec = { types: s.types, filters: s.filters, sorts: s.sorts };
+    if (s.like) {
+      const x = D.rows.find((o) => o.s === s.like) || (S.scrLikeRow?.s === s.like ? S.scrLikeRow : null);
+      if (x) { const sim = Screener.similar(x, D.rows, 300), m = new Map(sim.map((z) => [z.o.s, z.sim]));
+        const res = Screener.run(sim.map((z) => z.o), spec); if (!s.sorts.length) res.rows.sort((a, b) => m.get(b.s) - m.get(a.s));
+        return { ...res, sim: m, like: x, total: sim.length }; }
+    }
+    return Screener.run(D.rows, spec);
+  }
+  async function scrLike(sym, it) {
+    const s = S.scr; sym = String(sym || "").toUpperCase(); if (!sym) return;
+    s.like = sym; s.sorts = []; s.show = 50;
+    let x = S.scrData?.rows?.find((o) => o.s === sym);
+    if (!x && S.mcp) {
+      const p = ((await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), [])) || [])[0];
+      if (p) { x = Screener.row({ ...p, lastAnnualDividend: p.lastDividend ?? p.lastAnnualDividend, exchangeShortName: p.exchangeShortName || p.exchange, marketCap: p.marketCap ?? p.mktCap }, p.isEtf ? "etf" : p.isFund ? "fund" : "stock");
+        S.scrLikeRow = x; try { await scrDeep(x); Screener.derive([x]); } catch {} }
+    }
+    if (x && !s.types.includes(x.t)) s.types = [...new Set([...s.types, x.t === "stock" ? "stock" : x.t])];
+    if (x && !x.dx && S.scrData?.src === "live") scrFill([x]);
+    scrRemember(); if (S.scrData?.src === "live") scrLive(s.types); renderScreener();
+  }
+
+  function renderScreener() {
+    const el = $("scr"); if (!el || S.tab !== "screener") return;
+    const s = scrState();
+    if (!S.scrData && !S.scrLoading && !S.scrErr) { S.scrLoading = { label: "Getting the screener ready…", p: 0.02 }; scrEnsure().catch((e) => { S.scrLoading = null; S.scrErr = errText(e); renderScreener(); }); }
+    if (!el.__scr) { el.__scr = 1; el.addEventListener("click", scrClick); el.addEventListener("input", scrInput); el.addEventListener("change", scrChange); el.addEventListener("submit", scrSubmit); }
+    if (!S.scrSaved && !S.scrSavedAsk) { S.scrSavedAsk = true; scrSavedList().then(() => renderScreener()).catch(() => {}); }
+    el.innerHTML = `${scrHead()}<div class="scr${s.side ? " side-open" : ""}"><aside class="scr-side" id="scr-side" aria-label="Criteria">${scrSide()}</aside><div class="scr-main" id="scr-main">${scrMain()}</div></div>`;
+    bindTickerBox($("scr-like-q"), { onPick: (sym, it) => { $("scr-like-q").value = ""; scrLike(sym, it); } });
+    scrAfter();
+  }
+  function renderScreenerMain() { const m = $("scr-main"); if (!m || S.tab !== "screener") return; m.innerHTML = scrMain(); scrAfter(); }
+  function scrAfter() { const r = S.scrLast; if (S.scrData?.src === "live" && r) scrFill(r.rows.slice(0, S.scr.show)); }
+
+  function scrHead() {
+    const s = S.scr, D = S.scrData, n = (t) => (D?.rows || []).filter((o) => o.t === t).length;
+    const note = !D ? "" : D.src === "github"
+      ? `${D.rows.length.toLocaleString()} US stocks, ETFs and mutual funds · prices to ${fmtDate(D.as_of)} · built on GitHub ${fmtDate(D.at)}`
+      : `Live from FMP: ${D.rows.length.toLocaleString()} ${scrTypesLabel(Object.keys(S.scrLive?.rows || {}))}. Returns are price changes; risk, fund facts and valuation fill in for the rows on screen. The monthly GitHub build has every number for every asset: it arrives with Update everything from GitHub.`;
+    const check = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const saved = S.scrSaved || [];
+    return `<section class="scr-head">
+      <div class="scr-title"><div><span class="eyebrow">Screener</span><h2>Find stocks, ETFs and mutual funds</h2></div><p class="small muted">${esc(note)}</p></div>
+      <div class="scr-row1">
+        <div class="scr-types" role="group" aria-label="Asset types">${Screener.TYPES.map(([k, l]) => { const on = s.types.includes(k), c = D?.src === "github" || S.scrLive?.rows?.[k] ? n(k) : null;
+          return `<button class="scr-type" aria-pressed="${on}" data-scr-type="${k}"><span class="scr-tick">${check}</span><span>${l}s</span>${isNum(c) && c ? `<span class="mono scr-tc">${c.toLocaleString()}</span>` : ""}</button>`; }).join("")}</div>
+        <div class="scr-like"><div class="pfe-tkbox"><svg class="pfe-tkic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><input class="pfe-in pfe-tkin" id="scr-like-q" type="search" placeholder="Search any asset to see the ones most like it" aria-label="Find assets like this one" spellcheck="false" autocomplete="off"></div></div>
+        <div class="scr-saved">
+          <select data-scr-load aria-label="Saved searches"><option value="">${saved.length ? `Saved searches (${saved.length})` : "No saved searches yet"}</option>${saved.map((x) => `<option value="${esc(x.id)}" ${x.id === s.savedId ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+          <button class="pfe-ghost" data-scr-saveopen="1">Save search</button>${s.savedId && saved.some((x) => x.id === s.savedId) ? `<button class="pfe-ghost" data-scr-del="1" title="Delete this saved search">Delete</button>` : ""}
+        </div>
+      </div>
+      ${s.saveOpen ? `<form class="scr-saveform" id="scr-saveform"><label class="pfe-field"><input class="pfe-in" id="scr-savename" placeholder="Name this search, e.g. Cheap dividend ETFs" value="${esc((saved.find((x) => x.id === s.savedId) || {}).name || "")}" maxlength="80"></label><button class="primary sm" type="submit">Save</button><button class="pfe-ghost" type="button" data-scr-saveopen="0">Cancel</button><span class="small muted">Keeps the criteria, columns and sorting.</span></form>` : ""}
+    </section>`;
+  }
+
+  function scrSide() {
+    const s = S.scr, D = S.scrData, rows = D?.rows || [], base = rows.filter((o) => s.types.includes(o.t));
+    const fits = (c) => c.for.some((t) => s.types.includes(t));
+    const forNote = (c) => (c.for.length < 3 && s.types.some((t) => !c.for.includes(t)) ? `<span class="scr-for">${c.for.includes("stock") ? "stocks only" : "funds only"}</span>` : "");
+    const box = (f, i) => {
+      const c = Screener.CRIT[f.k]; if (!c) return "";
+      let ctl = "";
+      if (c.kind === "multi" || c.kind === "th") {
+        const vals = Screener.values(base, f.k, s.types), on = new Set(f.any || []), nm = (v) => c.names?.[v] || v;
+        const list = [...vals.filter(([v]) => on.has(v)), ...vals.filter(([v]) => !on.has(v))];
+        ctl = `${list.length > 14 ? `<label class="pfe-field scr-vq"><input class="pfe-in" data-scr-vq="${i}" type="search" placeholder="Filter ${list.length} choices" aria-label="Filter the choices"></label>` : ""}
+          <div class="scr-chips${list.length > 14 ? " long" : ""}">${list.map(([v, n]) => `<button class="scr-chip" aria-pressed="${on.has(v)}" data-scr-val="${i}" data-v="${esc(v)}"><span>${esc(nm(v))}</span><span class="mono">${n.toLocaleString()}</span></button>`).join("") || `<span class="small muted">Nothing to pick among these assets yet.</span>`}</div>
+          ${c.kind === "th" ? `<label class="scr-th">At least <span class="pfe-field"><input class="pfe-in mono" data-scr-th="${i}" type="number" inputmode="decimal" min="0" max="100" step="1" value="${isNum(f.th) ? f.th : c.th}"><span class="pfe-suf">%</span></span> in what you pick</label>` : ""}`;
+      } else {
+        const vs = base.filter((o) => c.for.includes(o.t)).map((o) => c.get(o, f)).filter(isNum).sort((a, b) => a - b), q = (p) => vs[Math.min(vs.length - 1, Math.floor(p * vs.length))];
+        const show = (v) => { const x = Screener.toUI(c, v); return isNum(x) ? (c.unit === "%" ? x.toFixed(Math.abs(x) < 1 ? 2 : 1) + "%" : c.unit === "$M" ? "$" + Math.round(x).toLocaleString() + "M" : c.unit === "$B" ? "$" + x.toFixed(1) + "B" : x.toFixed(2)) : "—"; };
+        ctl = `${c.period ? `<div class="scr-per" role="group" aria-label="Period">${Screener.PERIODS.map((p) => `<button aria-pressed="${(f.p || "1Y") === p}" data-scr-per="${i}" data-p="${p}">${p}</button>`).join("")}</div>` : ""}
+          <div class="scr-range"><label class="pfe-field"><span class="pfe-pre">Min</span><input class="pfe-in mono" data-scr-min="${i}" type="number" inputmode="decimal" step="any" value="${isNum(f.min) ? Screener.toUI(c, f.min) : ""}" placeholder="any" aria-label="${esc(c.label)} at least"><span class="pfe-suf">${c.unit === "x" ? "" : esc(c.unit)}</span></label>
+            <span class="muted">to</span><label class="pfe-field"><span class="pfe-pre">Max</span><input class="pfe-in mono" data-scr-max="${i}" type="number" inputmode="decimal" step="any" value="${isNum(f.max) ? Screener.toUI(c, f.max) : ""}" placeholder="any" aria-label="${esc(c.label)} at most"><span class="pfe-suf">${c.unit === "x" ? "" : esc(c.unit)}</span></label></div>
+          ${vs.length > 5 ? `<span class="scr-hint">Most are between <b>${show(q(0.1))}</b> and <b>${show(q(0.9))}</b>; the middle is <b>${show(q(0.5))}</b> (${vs.length.toLocaleString()} known)</span>` : D?.src === "live" ? `<span class="scr-hint">Fills in as rows load (live mode)</span>` : ""}`;
+      }
+      return `<div class="scr-box"><div class="scr-box-h"><b>${esc(c.label)}${c.period ? ` <span class="mono muted">${esc(f.p || "1Y")}</span>` : ""}</b>${forNote(c)}<button class="scr-x" data-scr-rm="${i}" aria-label="Remove ${esc(c.label)}" title="Remove">×</button></div>${c.help ? `<p class="scr-help">${esc(c.help)}</p>` : ""}${ctl}</div>`;
+    };
+    const groups = [...new Set(Screener.CRITERIA.map((c) => c.group))];
+    const used = new Set(s.filters.map((f) => f.k));
+    return `<div class="scr-side-head"><h3>Criteria${s.filters.length ? ` <span class="mono muted">${s.filters.length}</span>` : ""}</h3>${s.filters.length ? `<button class="pfe-ghost" data-scr-clear="1">Clear all</button>` : ""}<button class="scr-x scr-side-close" data-scr-side="0" aria-label="Close criteria">×</button></div>
+      ${s.filters.length ? s.filters.map(box).join("") : `<p class="small muted scr-empty">Add criteria below. The results on the right change as you go.</p>`}
+      <div class="scr-add"><span class="pfe-lab">Add criteria</span>${groups.map((g) => { const cs = Screener.CRITERIA.filter((c) => c.group === g && fits(c)); return cs.length ? `<div class="scr-addg"><span class="scr-addg-h">${esc(g)}</span><div class="scr-addg-b">${cs.map((c) => `<button class="scr-addc" data-scr-add="${c.k}" ${used.has(c.k) && !c.period ? "disabled" : ""}>+ ${esc(c.label)}</button>`).join("")}</div></div>` : ""; }).join("")}</div>`;
+  }
+
+  function scrMain() {
+    const s = S.scr, D = S.scrData;
+    if (S.scrErr && !D) return `<div class="scr-msg"><b>The screener couldn't load.</b><span class="small muted">${esc(S.scrErr)}</span><button class="pfe-ghost" data-scr-retry="1">Try again</button></div>`;
+    if (!D) { const L = S.scrLoading || {}; return `<div class="scr-msg" id="scr-load"><b>Loading the screener</b><span class="small muted">${esc(L.label || "")}</span><div class="scr-prog"><i style="width:${Math.round((L.p || 0) * 100)}%"></i></div></div>`; }
+    const R = S.scrLast = scrRun(), cols = scrCols().filter((c) => c !== "s" && c !== "n"), C = (id) => Screener.COL[id];
+    const all = R.rows, shown = all.slice(0, s.show), live = D.src === "live";
+    const isN = (c) => c.fmt !== "text";
+    const nf = s.filters.length;
+    const sortsShown = s.sorts.length ? s.sorts : [];
+    const colOpts = Screener.COLUMNS.filter((c) => c.id !== "s");
+    const bar = `<div class="scr-bar">
+      <div class="scr-count"><b class="mono">${all.length.toLocaleString()}</b> <span>match${all.length === 1 ? "" : "es"}</span> <span class="muted">of ${R.total.toLocaleString()} ${esc(scrTypesLabel(s.types))}${R.like ? " like it" : ""}</span></div>
+      <button class="pfe-ghost scr-side-btn" data-scr-side="1">Criteria${nf ? ` <span class="mono">${nf}</span>` : ""}</button>
+      <details class="scr-cols" ${s.colsOpen ? "open" : ""}><summary class="pfe-ghost" data-scr-colsum="1">Columns <span class="mono">${cols.length + 1}</span></summary><div class="scr-cols-pop">${[...new Set(colOpts.map((c) => c.group))].map((g) => `<div class="scr-colg"><span class="scr-addg-h">${esc(g)}</span>${colOpts.filter((c) => c.group === g).map((c) => `<label class="scr-colk"><input type="checkbox" data-scr-col="${c.id}" ${scrCols().includes(c.id) ? "checked" : ""}> ${esc(c.long || c.label)}</label>`).join("")}</div>`).join("")}<div class="scr-colfoot"><button class="pfe-ghost" data-scr-coldef="1">Back to the usual columns</button></div></div></details>
+      <button class="pfe-ghost" data-scr-export="1" ${all.length ? "" : "disabled"}>Export</button>
+      <button class="primary sm scr-cmp" data-scr-cmp="1" ${s.sel.length >= 2 ? "" : "disabled"} title="Tick 2 to ${CMP_MAX} rows to compare them">Compare${s.sel.length ? ` <span class="mono">${s.sel.length}</span>` : ""}</button></div>`;
+    const sorts = `<div class="scr-sorts"><span class="pfe-lab">Sorted by</span>${R.like && !sortsShown.length ? `<span class="scr-sortchip">how alike</span>` : ""}${sortsShown.map((x, i) => C(x.c) ? `<span class="scr-sortchip">${i ? `<span class="muted">then</span> ` : ""}${esc(C(x.c).long || C(x.c).label)}<button data-scr-sdir="${i}" title="Change direction">${x.d > 0 ? "low to high ↑" : "high to low ↓"}</button><button class="scr-x" data-scr-srm="${i}" aria-label="Stop sorting by ${esc(C(x.c).label)}">×</button></span>` : "").join("")}
+      <select data-scr-sadd aria-label="Add a sort"><option value="">${sortsShown.length || R.like ? "Then by…" : "Sort by…"}</option>${colOpts.filter((c) => !sortsShown.some((x) => x.c === c.id)).map((c) => `<option value="${c.id}">${esc(c.long || c.label)}</option>`).join("")}</select></div>`;
+    const like = R.like ? `<div class="scr-likebar"><span class="pfe-av" style="--c:${tickColor(R.like.s)}">${esc(R.like.s.slice(0, 4))}</span><div><b>Most like ${esc(R.like.s)}</b><span class="small muted">${esc(R.like.n || "")}${R.like.cat ? " · " + esc(R.like.cat) : ""}. Ranked by what they hold, their risk and return${R.like.t === "stock" ? ", size and valuation" : " and cost"}; your criteria still apply.</span></div><button class="pfe-ghost" data-scr-unlike="1">Show all again</button></div>` : "";
+    const miss = Object.entries(R.missing || {}).filter(([, n]) => n > 0).map(([k, n]) => { const c = Screener.CRIT[k];
+      return `<div class="scr-note"><span><b>${esc(c.label)}</b> isn't known yet for ${n.toLocaleString()} of these, so they're left out.</span>${live ? `<button class="pfe-ghost" data-scr-fillall="${k}">Fill in ${Math.min(n, 1500).toLocaleString()} (about ${Math.max(1, Math.ceil(Math.min(n, 1500) * 0.7 / 60))} min)</button>` : ""}</div>`; }).join("");
+    const fill = S.scrFill ? `<div class="scr-note scr-filling"><span class="cx-spin"></span><span>Filling in risk, fund facts and valuation: ${S.scrFill.done.toLocaleString()} of ${S.scrFill.of.toLocaleString()}</span></div>` : "";
+    const presets = !nf && !R.like ? `<div class="scr-presets"><span class="pfe-lab">Start from</span>${Screener.PRESETS.map((p) => `<button class="scr-preset" data-scr-preset="${p.id}">${esc(p.label)}</button>`).join("")}</div>` : "";
+    const cell = (o, id) => { const c = C(id); let v = c.get(o); const loading = live && !o.dx && SCR_DEEPCOL.has(id) && (v === null || v === undefined);
+      const t = loading ? `<span class="scr-ld" aria-label="loading">···</span>` : esc(Screener.fmt(c, v));
+      const tone = c.fmt === "pct+" && isNum(v) ? (v > 0 ? " up" : v < 0 ? " down" : "") : id === "dd" && isNum(v) && v < -0.3 ? " down" : "";
+      return `<td class="${isN(c) ? "n" : "tx"}${tone}" data-label="${esc(c.long || c.label)}">${t}</td>`; };
+    const maxSel = s.sel.length >= CMP_MAX;
+    const row = (o) => { const on = s.sel.includes(o.s), sim = R.sim?.get(o.s);
+      return `<tr class="${on ? "sel" : ""}"><td class="scr-ck"><input type="checkbox" data-scr-sel="${esc(o.s)}" ${on ? "checked" : ""} ${!on && maxSel ? "disabled" : ""} aria-label="Pick ${esc(o.s)} to compare"></td>
+        <td class="scr-symc"><div class="scr-symw"><span class="pfe-av scr-av" style="--c:${tickColor(o.s)}">${esc(o.s.slice(0, 4))}</span><div><button class="scr-sym" ${o.t === "stock" ? `data-co="${esc(o.s)}"` : `data-fund="${esc(o.s)}"`} title="Open ${esc(o.s)}">${esc(o.s)}</button>${isNum(sim) ? `<span class="scr-sim mono" title="How alike">${sim}% alike</span>` : ""}<span class="scr-nm">${esc(o.n || "")}</span></div></div></td>
+        ${cols.map((id) => cell(o, id)).join("")}</tr>`; };
+    const sortOf = (id) => s.sorts.findIndex((x) => x.c === id);
+    const head = `<tr><th class="scr-ck"><span class="sr-only">Compare</span></th><th class="tx"><button class="scr-th" data-scr-sort="s">Symbol${sortOf("s") >= 0 ? (s.sorts[sortOf("s")].d > 0 ? " ↑" : " ↓") : ""}</button></th>${cols.map((id) => { const c = C(id), k = sortOf(id);
+      return `<th class="${isN(c) ? "n" : "tx"}${k >= 0 ? " on" : ""}" aria-sort="${k >= 0 ? (s.sorts[k].d > 0 ? "ascending" : "descending") : "none"}"><button class="scr-th" data-scr-sort="${id}" title="${esc(c.long || c.label)}: tap to sort, shift-tap to sort by it next">${esc(c.label)}${k >= 0 ? `<span class="scr-ar">${s.sorts[k].d > 0 ? "↑" : "↓"}${s.sorts.length > 1 ? `<sup>${k + 1}</sup>` : ""}</span>` : ""}</button></th>`; }).join("")}</tr>`;
+    const table = all.length ? `<div class="scr-tblwrap"><table class="scr-tbl"><thead>${head}</thead><tbody>${shown.map(row).join("")}</tbody></table></div>
+      ${all.length > shown.length ? `<button class="pfe-add scr-more" data-scr-more="1">Show ${Math.min(50, all.length - shown.length)} more <span class="muted">(${(all.length - shown.length).toLocaleString()} left)</span></button>` : ""}`
+      : `<div class="scr-msg"><b>Nothing matches all of these.</b><span class="small muted">Loosen a criterion on the left${nf > 1 ? ", or remove one" : ""}.</span></div>`;
+    return bar + sorts + like + presets + fill + miss + table;
+  }
+
+  // ---- Screener: events (one set of listeners on the tab; the page's own handler opens tickers)
+  function scrSet(fn, full = true) { fn(S.scr); S.scr.show = 50; scrRemember(); full ? renderScreener() : renderScreenerMain(); }
+  function scrClick(ev) {
+    const b = ev.target.closest("button, summary"); if (!b || !b.closest("#scr")) return; const ds = b.dataset, s = S.scr;
+    if (ds.scrColsum) { setTimeout(() => { s.colsOpen = !!b.parentElement.open; }, 0); return; }
+    if (ds.scrType) { const k = ds.scrType; scrSet((s) => { s.types = s.types.includes(k) ? (s.types.length > 1 ? s.types.filter((x) => x !== k) : s.types) : [...s.types, k]; s.cols = s.cols?.length ? s.cols : null; });
+      if (S.scrData?.src !== "github") scrLive(s.types).catch((e) => { S.scrErr = errText(e); renderScreener(); }); return; }
+    if (ds.scrAdd) { const c = Screener.CRIT[ds.scrAdd]; scrSet((s) => s.filters.push(c.kind === "range" ? (c.period ? { k: c.k, p: "1Y" } : { k: c.k }) : { k: c.k, any: [] })); s.side = true; renderScreener();
+      setTimeout(() => { const bx = $("scr-side")?.querySelectorAll(".scr-box"); const last = bx?.[bx.length - 1]; last?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }); last?.querySelector("input")?.focus({ preventScroll: true }); }, 30); return; }
+    if (ds.scrRm !== undefined) { scrSet((s) => s.filters.splice(+ds.scrRm, 1)); return; }
+    if (ds.scrClear) { scrSet((s) => { s.filters = []; }); return; }
+    if (ds.scrVal !== undefined) { const f = s.filters[+ds.scrVal], v = ds.v; if (!f) return; scrSet(() => { f.any = (f.any || []).includes(v) ? f.any.filter((x) => x !== v) : [...(f.any || []), v]; }); return; }
+    if (ds.scrPer !== undefined) { const f = s.filters[+ds.scrPer]; if (f) scrSet(() => { f.p = ds.p; }); return; }
+    if (ds.scrSort) { const id = ds.scrSort, k = s.sorts.findIndex((x) => x.c === id), num0 = Screener.COL[id]?.fmt !== "text";
+      scrSet((s) => { if (ev.shiftKey) { if (k >= 0) s.sorts[k].d *= -1; else s.sorts.push({ c: id, d: num0 ? -1 : 1 }); } else if (k === 0 && s.sorts.length === 1) s.sorts[0].d *= -1; else s.sorts = [{ c: id, d: k >= 0 ? -s.sorts[k].d : num0 ? -1 : 1 }]; }, false); return; }
+    if (ds.scrSdir !== undefined) { scrSet((s) => { s.sorts[+ds.scrSdir].d *= -1; }, false); return; }
+    if (ds.scrSrm !== undefined) { scrSet((s) => s.sorts.splice(+ds.scrSrm, 1), false); return; }
+    if (ds.scrMore) { s.show += 50; renderScreenerMain(); return; }
+    if (ds.scrSide !== undefined) { s.side = ds.scrSide === "1"; renderScreener(); if (s.side) $("scr-side")?.scrollIntoView?.({ block: "start", behavior: "smooth" }); return; }
+    if (ds.scrPreset) { const p = Screener.PRESETS.find((x) => x.id === ds.scrPreset); if (!p) return; scrSet((s) => { s.types = [...p.spec.types]; s.filters = JSON.parse(JSON.stringify(p.spec.filters)); s.sorts = JSON.parse(JSON.stringify(p.spec.sorts)); s.like = null; s.savedId = null; });
+      if (S.scrData?.src !== "github") scrLive(s.types); return; }
+    if (ds.scrUnlike) { scrSet((s) => { s.like = null; if (!s.sorts.length) s.sorts = [{ c: "mc", d: -1 }]; }); return; }
+    if (ds.scrFillall) { const R = S.scrLast, c = Screener.CRIT[ds.scrFillall]; if (!R || !c) return;
+      const pool0 = S.scrData.rows.filter((o) => s.types.includes(o.t) && c.for.includes(o.t) && !o.dx && Screener.run([o], { types: s.types, filters: s.filters.filter((f) => f.k !== c.k), sorts: [] }).rows.length).slice(0, 1500);
+      scrFill(pool0); renderScreenerMain(); return; }
+    if (ds.scrExport) { const R = S.scrLast; if (R) pfDownload(`screener-${today()}.csv`, Screener.csv(R.rows, ["s", "n", ...scrCols().filter((c) => c !== "s" && c !== "n")]), "text/csv"); return; }
+    if (ds.scrCmp) { const syms = [...s.sel]; if (syms.length < 2) return; S.tab = "compare"; renderAll(); if (S.cmp) { S.cmp.syms = []; cmpAdd(syms.join(",")); } window.scrollTo?.(0, 0); return; }
+    if (ds.scrColdef) { scrSet((s) => { s.cols = null; s.colsOpen = true; }, false); return; }
+    if (ds.scrSaveopen !== undefined) { s.saveOpen = ds.scrSaveopen === "1"; renderScreener(); if (s.saveOpen) setTimeout(() => $("scr-savename")?.focus(), 0); return; }
+    if (ds.scrDel) { scrSavedDel(s.savedId); return; }
+    if (ds.scrRetry) { S.scrErr = null; S.scrData = null; S.scrLoading = null; S.scrLive = null; renderScreener(); return; }
+  }
+  const scrDeb = (() => { let t; return (f) => { clearTimeout(t); t = setTimeout(f, 260); }; })();
+  function scrInput(ev) {
+    const t = ev.target, ds = t.dataset, s = S.scr; if (!t.closest("#scr")) return;
+    if (ds.scrVq !== undefined) { const q = t.value.trim().toLowerCase(); t.closest(".scr-box")?.querySelectorAll(".scr-chip").forEach((c) => { c.hidden = !!q && !c.textContent.toLowerCase().includes(q) && c.getAttribute("aria-pressed") !== "true"; }); return; }
+    const k = ds.scrMin ?? ds.scrMax ?? ds.scrTh; if (k === undefined) return;
+    const f = s.filters[+k], c = f && Screener.CRIT[f.k]; if (!f) return;
+    if (ds.scrTh !== undefined) f.th = t.value === "" ? undefined : Number(t.value);
+    else { const v = t.value === "" ? null : Screener.fromUI(c, t.value); if (ds.scrMin !== undefined) f.min = v ?? undefined; else f.max = v ?? undefined; }
+    scrDeb(() => { s.show = 50; scrRemember(); renderScreenerMain(); });
+  }
+  function scrChange(ev) {
+    const t = ev.target, ds = t.dataset, s = S.scr; if (!t.closest("#scr")) return;
+    if (ds.scrSel) { const sym = ds.scrSel; s.sel = t.checked ? [...new Set([...s.sel, sym])].slice(0, CMP_MAX) : s.sel.filter((x) => x !== sym); renderScreenerMain(); return; }
+    if (ds.scrCol) { const id = ds.scrCol; s.colsOpen = true; scrSet((s) => { const cur = scrCols(); s.cols = t.checked ? [...cur, id] : cur.filter((x) => x !== id); }, false); return; }
+    if (ds.scrSadd !== undefined && t.value) { const id = t.value; scrSet((s) => { s.sorts.push({ c: id, d: Screener.COL[id]?.fmt === "text" ? 1 : -1 }); }, false); return; }
+    if (ds.scrLoad !== undefined) { const x = (S.scrSaved || []).find((y) => y.id === t.value); if (!x) { s.savedId = null; renderScreener(); return; }
+      scrSet((s) => { s.types = x.types?.length ? [...x.types] : ["etf"]; s.filters = JSON.parse(JSON.stringify(x.filters || [])); s.sorts = JSON.parse(JSON.stringify(x.sorts || [])); s.cols = x.cols || null; s.like = x.like || null; s.savedId = x.id; });
+      if (S.scrData?.src !== "github") scrLive(s.types); return; }
+  }
+  function scrSubmit(ev) { if (ev.target.id !== "scr-saveform") return; ev.preventDefault(); const name = ($("scr-savename")?.value || "").trim(); if (name) scrSave(name); }
+  async function scrSavedList() {
+    let list = []; const db = await outlookDb().catch(() => null);
+    if (db) { try { const q = await db.collection("screens").limit(200).get(); list = q.docs.filter((d) => d.exists).map((d) => ({ ...d.data(), id: d.id })); } catch {} }
+    else { try { list = JSON.parse(localStorage.getItem("ams.scr.saved") || "[]"); } catch {} }
+    S.scrSaved = list.filter((x) => x && !x.gone).sort((a, b) => String(a.name).localeCompare(String(b.name))); return S.scrSaved;
+  }
+  async function scrSave(name) {
+    const s = S.scr, id = (slug(name) || "screen").slice(0, 60);
+    const doc = jsonSafe({ name, types: s.types, filters: s.filters, sorts: s.sorts, cols: s.cols || null, like: s.like || null, at: new Date().toISOString() });
+    const db = await outlookDb().catch(() => null);
+    try { if (db) await db.doc("screens/" + id).set(doc); else { const l = (S.scrSaved || []).filter((x) => x.id !== id).concat([{ ...doc, id }]); localStorage.setItem("ams.scr.saved", JSON.stringify(l)); } }
+    catch (e) { S.notices = [{ kind: "err", text: "Couldn't save the search: " + (sampleErr(e) || e?.message) }]; renderMeta(); return; }
+    s.savedId = id; s.saveOpen = false; await scrSavedList(); renderScreener();
+  }
+  async function scrSavedDel(id) {
+    if (!id) return; const db = await outlookDb().catch(() => null);
+    try { if (db) await db.doc("screens/" + id).set({ gone: true, at: new Date().toISOString() }); else localStorage.setItem("ams.scr.saved", JSON.stringify((S.scrSaved || []).filter((x) => x.id !== id))); } catch {}
+    S.scr.savedId = null; await scrSavedList(); renderScreener();
+  }
+
   function renderTabs() {
     const el = $("tabs"); if (!el) return;
-    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["compare", "Compare"], ["portfolios", "Portfolios"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
+    const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["compare", "Compare"], ["portfolios", "Portfolios"], ["screener", "Screener"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
     const IC = { industries: '<path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/>', companies: '<path d="M4 17V4.5L11 3v14M11 7l5 1.5V17M2.5 17h15M6.5 7.5h2M6.5 10.5h2M6.5 13.5h2M13.5 11h1M13.5 14h1"/>',
-      funds: '<path d="M10 3a7 7 0 1 0 7 7h-7z"/><path d="M12.5 1.5V8H19a6.5 6.5 0 0 0-6.5-6.5z"/>', compare: '<circle cx="7.5" cy="10" r="5"/><circle cx="12.5" cy="10" r="5"/>', portfolios: '<path d="M2.5 6.5h15v10h-15zM7 6.5V4h6v2.5M2.5 10.5h15"/>' };
+      funds: '<path d="M10 3a7 7 0 1 0 7 7h-7z"/><path d="M12.5 1.5V8H19a6.5 6.5 0 0 0-6.5-6.5z"/>', compare: '<circle cx="7.5" cy="10" r="5"/><circle cx="12.5" cy="10" r="5"/>', portfolios: '<path d="M2.5 6.5h15v10h-15zM7 6.5V4h6v2.5M2.5 10.5h15"/>', screener: '<path d="M2.5 4h15l-5.75 6.5v5l-3.5 1.75V10.5z"/>' };
     el.innerHTML = T.map(([k, l], i) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}" aria-keyshortcuts="Alt+${i + 1}" title="${l} (Alt ${i + 1})"><svg class="ti" viewBox="0 0 20 20" aria-hidden="true">${IC[k]}</svg><span>${l}</span></button>`).join("");
-    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["cmp", cur === "compare"], ["pf", cur === "portfolios"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
+    for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["cmp", cur === "compare"], ["pf", cur === "portfolios"], ["scr", cur === "screener"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
   }
   function companySearch() {
     const ci = S.coIdx;
@@ -11746,7 +12189,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 })();
 </script>
 <script>
-/* AdvisorMindOS shell: folding sections, the tab indicator, the jump palette (Ctrl/Cmd K or /), Alt+1-5 for tabs,
+/* AdvisorMindOS shell: folding sections, the tab indicator, the jump palette (Ctrl/Cmd K or /), Alt+1-6 for tabs,
    reading progress, back to top. It only reads and decorates the DOM the app renders; it never touches the app's state.
    Skipped in the headless GitHub job. */
 (() => {
@@ -12087,7 +12530,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); scrim.hidden ? openK() : closeK(); return; }
     if (!scrim.hidden) return;
     if (ev.key === "/" && !typing && !ev.metaKey && !ev.ctrlKey && !ev.altKey) { ev.preventDefault(); openK(); return; }
-    if (ev.altKey && !ev.metaKey && !ev.ctrlKey && /^Digit[1-5]$/.test(ev.code)) { const b = d.querySelectorAll("#tabs .tab")[+ev.code.slice(5) - 1]; if (b) { ev.preventDefault(); b.click(); b.focus(); } }
+    if (ev.altKey && !ev.metaKey && !ev.ctrlKey && /^Digit[1-6]$/.test(ev.code)) { const b = d.querySelectorAll("#tabs .tab")[+ev.code.slice(5) - 1]; if (b) { ev.preventDefault(); b.click(); b.focus(); } }
   });
 
   // ---------------------------------------------------------------- keep up with the app's renders

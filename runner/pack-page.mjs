@@ -12,6 +12,7 @@
  *   <out>/plan.json          { changed, unchanged, batches: [[file, ...], ...] (each under 55 MB, to publish in
  *                              turn), remove: [old files no longer listed], index: "index.json", commit }
  * plan.delete_assets lists the uploaded assets (ids) of the entries this replaces, to delete once the new ones are in.
+ * The Screener tab's data (screener/universe.json.gz) becomes screener.b64.txt the same way, listed as index.screener.
  *
  *   node runner/pack-page.mjs --set-urls <urls.json> --out <dir>
  *
@@ -29,7 +30,7 @@ const EXP = arg("exports"), OUT = arg("out"), CUR = arg("current"), URLS = arg("
 if (URLS && OUT) {
   const urls = JSON.parse(readFileSync(URLS, "utf8")), ip = join(OUT, "index.json"), idx = JSON.parse(readFileSync(ip, "utf8"));
   let n = 0, missing = [];
-  for (const x of [...(idx.files || []), ...(idx.portfolios || [])]) {
+  for (const x of [...(idx.files || []), ...(idx.portfolios || []), ...(idx.screener ? [idx.screener] : [])]) {
     const u = urls[x.path]; if (u?.url) { x.url = u.url; x.asset = u.id || null; n++; }
     else if (!x.url && JSON.parse(readFileSync(join(OUT, "plan.json"), "utf8")).batches.flat().includes(x.path)) missing.push(x.path);
   }
@@ -89,16 +90,28 @@ if (existsSync(pfDir)) for (const f of readdirSync(pfDir).filter((x) => /^[A-Za-
   console.log(`Portfolio ${id}: analyzed ${at}`);
 }
 for (const x of cur.portfolios || []) if (!portfolios.some((y) => y.id === x.id)) portfolios.push(x);
+// The Screener tab's data (the "Screener data" workflow, exports branch screener/universe.json.gz): screener.b64.txt,
+// written only when GitHub has a newer one than the page carries.
+let screener = cur.screener || null;
+const scrFile = join(EXP, "screener", "universe.json.gz");
+if (existsSync(scrFile)) {
+  const buf = readFileSync(scrFile); let j = null; try { j = JSON.parse(gunzipSync(buf)); } catch (e) { console.error(`screener: unreadable (${e.message}); skipped`); }
+  if (j?.rows && !(cur.screener?.at && j.at && cur.screener.at >= j.at)) {
+    const path = "screener.b64.txt", b = buf.toString("base64");
+    if (b.length > HARD) console.error(`${path} is over the page's file limit; skipped`);
+    else { writeFileSync(join(OUT, path), b); written.push({ path, bytes: b.length }); screener = { path, at: j.at, as_of: j.as_of, rows: j.rows.length }; changed.push("screener"); console.log(`Screener: ${j.rows.length} rows, built ${j.at}`); }
+  }
+}
 // Sectors the page has that GitHub no longer exports stay as they are.
 for (const x of cur.files || []) if (x.sector && !files.some((y) => y.sector === x.sector)) { files.push(x); if (!unchanged.includes(x.sector)) unchanged.push(x.sector); }
 
 const batches = []; let b = [], size = 0;
 for (const w of written) { if (b.length && size + w.bytes > BATCH) { batches.push(b); b = []; size = 0; } b.push(w.path); size += w.bytes; }
 if (b.length) batches.push(b);
-const listed = new Set([...files.map((x) => x.path), ...portfolios.map((x) => x.path)]), remove = (cur.files || []).map((x) => x.path).filter((p) => !listed.has(p));
+const listed = new Set([...files.map((x) => x.path), ...portfolios.map((x) => x.path), ...(screener ? [screener.path] : [])]), remove = (cur.files || []).map((x) => x.path).filter((p) => !listed.has(p));
 // Uploaded assets of the entries replaced or dropped (only entries that came from uploads carry an asset id).
-const kept = new Set([...files, ...portfolios].map((x) => x.asset).filter(Boolean));
-const delete_assets = [...new Set([...(cur.files || []), ...(cur.portfolios || [])].map((x) => x.asset).filter((a) => a && !kept.has(a)))];
-writeFileSync(join(OUT, "index.json"), JSON.stringify({ files, portfolios, copied_at: new Date().toISOString(), commit }));
+const kept = new Set([...files, ...portfolios, ...(screener ? [screener] : [])].map((x) => x.asset).filter(Boolean));
+const delete_assets = [...new Set([...(cur.files || []), ...(cur.portfolios || []), ...(cur.screener ? [cur.screener] : [])].map((x) => x.asset).filter((a) => a && !kept.has(a)))];
+writeFileSync(join(OUT, "index.json"), JSON.stringify({ files, portfolios, ...(screener ? { screener } : {}), copied_at: new Date().toISOString(), commit }));
 writeFileSync(join(OUT, "plan.json"), JSON.stringify({ changed, unchanged, batches, remove, delete_assets, index: "index.json", commit }, null, 2));
 console.log(changed.length ? `Changed: ${changed.join(", ")} (${written.length} files in ${batches.length} publish${batches.length === 1 ? "" : "es"})` : "Nothing newer on GitHub.");

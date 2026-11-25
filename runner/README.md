@@ -13,6 +13,10 @@ Only the connections change:
 | Your FMP and EODHD connectors | The same FMP and EODHD MCP servers, at their URLs |
 | One industry at a time, two agents at once | 10 industries, 8 agents and 12 regulators at once |
 
+## The Screener tab's data
+
+**Actions → Screener data** builds the Screener tab's list: every US-listed stock, ETF and mutual fund above a size floor, with returns, volatility, Sharpe, drawdown, beta, fund facts and valuation. It uses FMP only (no Claude), takes about 1-2 hours and runs on the 2nd of each month. "Update everything from GitHub" also starts it when it's 25+ days old, and the next press copies it into the page. Test: `node test/screener-job.mjs`.
+
 ## Set up (once, about 15 minutes)
 
 1. **Anthropic API key.** At console.anthropic.com: add credit (Billing), set a monthly spend limit, and create an API

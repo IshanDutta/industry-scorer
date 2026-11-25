@@ -56,6 +56,19 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
 - **Rebalance** adds and removes holdings; a dot on Rebalance and Edit holdings marks changes not saved; leaving the
   editor with unsaved edits asks first.
 
+## Screener
+
+The Screener tab (`renderScreener`, `web/screener.js`) works like Kwanti's screener:
+- Pick asset types (ETFs, mutual funds, stocks, in any combination) and add criteria on the left; the results refresh as you go.
+- Criteria include asset class, equity style, equity sector and region (with a minimum %), fund category, provider, return over any period, yield, volatility, Sharpe, max drawdown, beta, expense ratio, net assets, holdings, sector, industry, stock style, region, exchange, market cap and P/E, P/B, P/S, EPS, margin, quick ratio and debt.
+- You choose the columns, sort by several at once (shift-tap a header, or "Then by…"), tick 2-4 rows to compare (Compare tab), export to CSV, and save searches (page database `screens/<id>`).
+- Searching for one asset ranks the others by how alike they are (`Screener.similar`).
+
+Data:
+- The "Screener data" workflow (`runner/screener.mjs`, monthly and when the sync task finds it 25+ days old) builds every US stock, ETF and mutual fund above a size floor from FMP. It writes exports `screener/universe.json.gz`, which `pack-page.mjs` copies in as `screener.b64.txt` (index.screener).
+- Until the page has that, it builds the list live from FMP for the types picked and fills in risk, fund facts and valuation for the rows on screen (kept in IndexedDB for 30 days).
+- Fund category and style are our own grouping (Kwanti uses Morningstar's). Turnover, tax drag and bond duration and quality aren't available from FMP.
+
 ## Update everything from GitHub
 
 The button fires the `SYNC_TRIGGER` task (prompt in `runner/update-task.md`; the live task needs the same prompt). It
