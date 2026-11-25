@@ -142,7 +142,9 @@ async function main() {
     if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)`);
     const onlyNames = String(env.JOB_DAILY_ONLY || "").split(";").map((x) => x.trim()).filter(Boolean);
-    if (env.JOB_LEAN === "1") { log(`The lean pass for ${sector}: every industry's lean from everything, by ${sampler.models.lead || "the lead model"}`);
+    if (env.JOB_WINDOWS === "1") { log(`Times like this for ${sector}: every industry, every window (1M, 3M, 6M, 1Y), with the historian's notes by ${sampler.models.default}`);
+      await page.evaluate(([s, c, n]) => window.__industryScorer.windows(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
+    else if (env.JOB_LEAN === "1") { log(`The lean pass for ${sector}: every industry's lean from everything, by ${sampler.models.lead || "the lead model"}`);
       await page.evaluate(([s, c, n, m]) => window.__industryScorer.lean(s, { concurrency: c, missing: m, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames, env.JOB_LEAN_MISSING === "1"]); }
     else await page.evaluate(([s, c, b, n]) => window.__industryScorer.daily(s, { concurrency: c, backfill: b, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), env.JOB_BACKFILL === "1", onlyNames]);
   } else await page.evaluate(([s, f, g, a]) => window.__industryScorer.start(s, { fresh: f, redoGaps: g, addNew: a }), [sector, fresh, redoGaps, addNew]);

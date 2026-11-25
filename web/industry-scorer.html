@@ -574,7 +574,7 @@ input, select, textarea { color-scheme: dark; }
 .pfe-in::placeholder { color: var(--faint); }
 .pfe-in[type=number] { -moz-appearance: textfield; } .pfe-in::-webkit-outer-spin-button, .pfe-in::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .pfe-in::-webkit-calendar-picker-indicator { filter: invert(.75); cursor: pointer; }
-.pfe-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.pfe-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: 10px; }
 @media (max-width: 900px) { .pfe-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pfe-wide { grid-column: 1 / -1; order: 3; } }
 .pfe-card { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); cursor: text; transition: border-color .15s, box-shadow .15s; }
 .pfe-card:focus-within, .pfe-field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
@@ -593,7 +593,7 @@ input, select, textarea { color-scheme: dark; }
 .pfe-ghost { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 13px; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; }
 .pfe-ghost:hover:not(:disabled) { color: var(--ink); background: var(--sunk); }
 .pfe-list { display: grid; gap: 8px; }
-.pfe-cols, .pfe-row { display: grid; grid-template-columns: 40px minmax(150px, 1.5fr) minmax(170px, 1.3fr) minmax(90px, .7fr) minmax(100px, .8fr) 34px; gap: 10px; align-items: center; }
+.pfe-cols, .pfe-row { display: grid; grid-template-columns: 40px minmax(180px, 1.4fr) minmax(200px, 1.2fr) 34px; gap: 10px; align-items: center; }
 .pfe-cols { padding: 0 12px; font: 600 11px var(--body); letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
 .pfe-row { padding: 10px 12px; border-radius: 12px; background: var(--sunk); border: 1px solid transparent; transition: border-color .15s, background .15s; animation: pfein .18s ease-out; }
 .pfe-row:hover, .pfe-row:focus-within { border-color: var(--line); background: color-mix(in srgb, var(--ink) 3%, var(--sunk)); }
@@ -624,7 +624,7 @@ input, select, textarea { color-scheme: dark; }
 @media (max-width: 600px) { .pfe-foot { margin: 0 -14px -14px; padding: 10px 14px; border-radius: 0 0 12px 12px; } }
 @media (max-width: 820px) {
   .pfe-cols { display: none; }
-  .pfe-row { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 34px; grid-template-areas: "av tk tk rm" "w w w w" "sh sh co co"; row-gap: 10px; }
+  .pfe-row { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 34px; grid-template-areas: "av tk tk rm" "w w w w"; row-gap: 10px; }
   .pfe-av { grid-area: av; } .pfe-tk { grid-area: tk; } .pfe-rm { grid-area: rm; } .pfe-w { grid-area: w; }
   .pfe-opt:nth-of-type(1) { grid-area: sh; } .pfe-opt:nth-of-type(2) { grid-area: co; }
   .pfe-opt .pfe-lab { display: inline; margin-right: 2px; white-space: nowrap; }
@@ -1334,6 +1334,29 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .rb-x:hover:not(:disabled) { color: var(--neg); border-color: var(--neg); }
 .rb-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .rb-add input[type=search] { flex: 1 1 240px; width: auto; }
+.sync-prog { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); border-radius: 12px; background: var(--surface); }
+.sync-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+.sync-bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 14%, var(--line)); overflow: hidden; }
+.sync-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--t4) var(--out); }
+.sync-steps { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--faint); }
+.sync-steps .done { color: var(--pos); } .sync-steps .now { color: var(--ink); font-weight: 600; }
+/* ---------------------------------------------------------------- ticker boxes */
+.tb-host { position: relative; }
+.tb-sug { left: 0; right: auto; min-width: min(420px, calc(100vw - 32px)); max-width: min(520px, calc(100vw - 32px)); }
+.tb-item { grid-template-columns: 70px minmax(0, 1fr) auto; }
+.sug-name, .pfe-nm { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; overflow-wrap: anywhere; }
+.tb-kind { font: 600 10.5px var(--body); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+.tb-kind.k-stock { color: var(--gB); border-color: color-mix(in srgb, var(--gB) 40%, var(--line)); }
+.tb-kind.k-etf, .tb-kind.k-fund { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.tb-spin { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; border: 2px solid var(--line-2); border-top-color: var(--accent); animation: pfspin 0.9s linear infinite; vertical-align: -1px; }
+.pfe-tkbox { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line-2); }
+.pfe-tkbox:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+.pfe-tkic { width: 16px; height: 16px; flex: none; fill: none; stroke: var(--faint); stroke-width: 1.8; stroke-linecap: round; }
+.pfe-tkbox .pfe-tkin { flex: 1; min-width: 0; border: 0 !important; background: transparent; padding: 0; font: 700 16px var(--mono); letter-spacing: .02em; box-shadow: none !important; }
+.pfe-tkbox .pfe-tkin::placeholder { font: 500 14px var(--body); text-transform: none; letter-spacing: 0; color: var(--faint); }
+.pfe-tk { gap: 5px; }
+.pfe-tk .pfe-nm { padding-left: 2px; }
+@media (prefers-reduced-motion: reduce) { .tb-spin { animation: none; } }
 </style>
 
 <header class="appbar" id="appbar">
@@ -1357,27 +1380,6 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   <div id="cmp" style="display:grid;gap:18px" hidden></div>
   <div id="pf" style="display:grid;gap:18px" hidden></div>
 
-  <section class="panel method-panel" id="method" data-fold-default="closed">
-    <div class="panel-head"><h2>How the numbers are built</h2><span class="small muted">Every source, calculation and agent behind the scores, in full</span></div>
-    <div class="method">
-    <p><b>One industry at a time.</b> Nothing runs until you click an industry. Clicking one you haven't analyzed (or whose results are more than 3 days old) pulls its data, gathers the research and runs the analyst team; clicking one with recent results just opens them. "Run again" deletes everything cached for that industry (its results, research, earnings-call transcripts, every agent report, rule books and the companies' cached statements, plus the shared SPY, macro and world-news caches) and rebuilds all of it from scratch, including the rule books if you had built them.</p>
-    <p><b>Every industry in a sector, with one click.</b> Open a sector and choose "Analyze all": every industry in it is analyzed one after another and each gets the same report it gets on its own. What the industries share is researched once for the sector rather than once per industry: one macro planner picks the series for every industry and tags each series with the industries it matters to; indicator analysts explain what is driving each series once and say, for each tagged industry, how much it matters and why; one world-events scout finds the live situations and says which industries each one reaches; each situation's facts (what is happening, the trigger, dated developments, scenarios) are written once, and its transmission into earnings, exposure, winners and losers is written for each industry it reaches, three industries per call so every section stays full length; each country any industry's trade map names gets its US relationship, risks, threats and policy written once, and each industry's analyst writes what it depends on there and who is exposed; each regulator's instruments are chosen once with a top five per industry, each instrument's legal facts and events are written and fact-checked once, and its impact and company examples are written per industry. Judgment is never shared: each industry still gets its own KPI analyst, earnings-call analyst, customers and suppliers, regulation analyst, trade map and supply-chain verdict, macro strategist, regulatory verdict and the full lead strategist with its red team and review. Company-news IDs differ by industry, so in a multi-industry prompt they are shown under aliases and mapped back. A sector of ten industries takes roughly 400 Claude calls instead of roughly 700 one at a time. The run is saved in this browser after every step; if the page closes it carries on when reopened, and if it stops (a usage limit, or Stop) Resume finishes only what's left. The sector overview compares every industry's scores, opportunity call, horizon calls, forward P/E, revisions and positioning, and opens each industry's full report.</p>
-    <p><b>Universe.</b> Actively traded stocks in the FMP industry on NYSE, NASDAQ and AMEX above $300M market cap, excluding ETFs and funds. By default this includes foreign companies listed in the US (TSM, ASML, Medtronic); the "US-headquartered only" setting changes that. Share classes are merged and the 50 largest by market cap are kept. A company that stopped trading in this industry under one ticker and now trades under another (a relisting keeps its SEC CIK, e.g. Paramount Skydance PSKY → Skydance Corp SKYD) is found from FMP's own data and kept in the industry even if FMP files the new ticker elsewhere; its price history, statements, transcripts and news before the relisting come from the old ticker, and agents may refer to it by either.</p>
-    <p><b>Performance and risk.</b> Total returns from dividend-adjusted closes over calendar windows back from the last SPY close. Cap-weighted is buy-and-hold at start-of-window weights; median is the typical stock; breadth is the share of stocks beating SPY. Risk is measured on a daily cap-weighted industry index over 12 months, with Sharpe against the 3-month Treasury yield.</p>
-    <p><b>Fundamentals, valuation and health</b> use trailing-twelve-month figures from quarterly statements, aggregated as sums rather than averages of ratios: P/E is total market cap over total net income, margins are total profit over total revenue. P/E history rebuilds that aggregate at each of the last 20 quarter-ends. Banks, insurers and other financials skip ratios that don't apply to them.</p>
-    <p><b>Earnings</b> use each company's last four reported quarters: beat rate is the share of reports where EPS beat the estimate; surprises are medians across all reports.</p>
-    <p><b>Scores</b> take every section into account. Each is 0–100 for one investor type and combines 17 pillars. <i>Nine come from the computed metrics</i>: momentum (1M–1Y returns vs SPY, breadth in every window, the median stock), growth, profitability, valuation (P/E, P/E vs its own 5-year history and percentile, P/S, P/B, EV/EBITDA), earnings, financial health, risk (beta, volatility, downside volatility, drawdown, Sharpe, concentration), risk-adjusted return and income. Each metric maps to 0–100 on a fixed reference range, so scores don't depend on which other industries you've looked at. <i>Eight come from the report sections</i>, scored by code from each section's ratings, probabilities and counts, never from free text: the industry cycle and KPIs (cycle position, pricing power, demand and supply drivers, management tone, hot vs cool segments, operating leverage), the macro backdrop (the regime call overall and by horizon, and every indicator read weighted by relevance), world events (each live situation by stance, relevance and status, and the situations' scenario-weighted earnings direction), supply chain and trade (the code-computed system health, the rating, cost pass-through, de-rating risk, country stances, bottlenecks), regulation and legal (the regulatory verdict by stance and intensity, the binding rules in the rule books by severity, policy items, litigation), sentiment and perception, sell-side consensus (buy share and upside to price targets, cap-weighted), and the strategist's outlook (bull vs bear scenario probability, the ranked drivers, the evidence-checked landscape scorecard). Pillars are weighted per investor type (about two-thirds metrics, one-third sections): Income leans on dividends, health and rates; Conservative on low risk, valuation, health and supply-chain and regulatory risk; Growth on growth, earnings, momentum and the industry cycle; Aggressive on momentum, growth and sentiment. A section that isn't written yet has its weight shared out among the others. The lead strategist, which reads everything, can then add at most ±5 for judgment. Open any pillar on the page to see every data point and what it scored. Grades: A 80+, B 65+, C 50+, D 35+, F below.</p>
-    <p><b>Foreign companies</b> often report in their home currency (TSMC in Taiwan dollars, Mizuho in yen). Their statements and historical market caps are converted to US dollars at today's FMP exchange rate before aggregating; a company whose currency can't be converted is left out of the fundamentals and noted.</p>
-    <p><b>What's saved, and running in the background.</b> There is no server-side database and no built-in list: the industry list is read from FMP when the page opens, and clicking an industry fetches and writes everything for it right then, with every Claude call asking for a fresh answer. A run keeps going at full speed while the page sits in a background tab or behind another window (its waits use a background timer the browser doesn't slow down), and while it runs the page asks the device not to sleep. A web page can't run once it's closed, so each run is also saved <i>in this browser only</i> (IndexedDB) after every finished step: if the page is closed or the tab navigates away mid-run, reopening the page brings the run back and carries on by itself, redoing only the step that was interrupted and whatever came after it. Finished runs reopen as they were, with prices and news as of when they were made; "Run again" fetches and writes everything fresh and replaces the saved copy. The 12 most recent industries are kept; another browser or device starts empty.</p>
-    <p><b>Research</b> is gathered by code, not by a model: FMP company news, press releases, market news, SEC M&amp;A filings, analyst ratings and price targets, revenue segments by product and geography from filings, and the latest earnings-call transcript for the 8 largest companies (condensed to their most specific passages); EODHD measured news sentiment and sentiment-scored company news.</p>
-    <p><b>Macro indicators</b> aren't a fixed list either. Each run, code lists what the connectors offer that day: the whole Treasury curve, every economic release with a reported actual in the last ~45 days in every country, all commodity, index and US-dollar currency quotes, and EODHD's funding, real-yield and corporate-bond series when that connector has them. A macro planner agent picks the 30–50 series that matter for this industry, groups them by what they mean to it, and says why each was chosen (if it can't run, code picks from the data: the curve, high-impact releases in the countries the companies sell in, and the day's biggest commodity moves). Indicator analysts then take each group and, for every series, write its relevance to this industry and why, the effect (tailwind or headwind), what is driving it (actual vs consensus vs prior, the cause, whether the trend is building or fading), why it matters for revenue, costs or valuation, and what to watch next. Before they write, code gathers the coverage behind every series from the whole run: the CNBC wire, every article the world-events and trade teams pulled, market and company news, earnings-call excerpts, the market news from the day of each economic release and the day after, currency news linked to each currency pair, and topic searches the planner named for each series. Each article is scored against the series (its news phrases in the headline count most), a release in another country doesn't count ("UK CPI" is not US CPI), and the best matches are handed to the analyst along with what the world, trade and regulation teams found. Analysts can also search all of it themselves and read articles in full. For every article they cite, they must quote the sentence that explains the move; code checks the quote is word-for-word in the article and that the article is about that series, and removes the citation otherwise. The quotes are shown under each driver. When nothing relevant exists, the driver says so and explains the move from the data. The macro strategist then makes the regime call from those reads.</p>
-    <p><b>World events</b> aren't picked from a fixed list. Each run, the page reads the last 10 days of CNBC's US feed through EODHD (which carries CNBC articles in full), follows the other CNBC desks tagged on those articles, and adds FMP's general market news. It counts the topics that recur, so whatever the world is talking about surfaces on its own. The world-events scout reads that wire, can read articles in full and search further by topic (searches only return articles whose headline or opening actually mention the topic), and groups the news into up to 8 live situations. For each one, code then pulls 30 days of coverage on the scout's own search terms, and a situation analyst writes the deep dive from it.</p>
-    <p><b>Trade relations</b> ranks the 10–14 countries with the most operational leverage over the industry (where products are made, where tools and chokepoint inputs come from, where assembly and packaging happen, which end markets matter), with each country's stance and trajectory. Each country's share of the companies' revenue comes from their own geographic segment filings. For every country, code pulls 30 days of trade and policy news, and an agent writes the dependencies (criticality, how long replacing it would take, what breaks if trade freezes), the tickers exposed and through which P&amp;L line, the policy in play and the outlook. Dependencies drawn from industry knowledge rather than a retrieved article are labelled background. The system health score is computed by code from importance × stance × trajectory; the verdict adds bottlenecks and whether pricing power can pass trade-friction costs through.</p>
-    <p><b>Analyst team.</b> Specialist agents each write one part: the industry KPI analyst (demand and profitability metrics, unit economics, pricing power, drivers, hot and cool segments, what management is saying), the macro planner, indicator analysts and strategist (described above), the world-events scout and one situation analyst per situation (transmission chain, revenue, cost, demand and regulatory channels, statement impact, exposure map, scenarios, winners and losers), and the regulation, legal and deals analyst. The lead strategist runs last, after every specialist report, every regulatory rule book and the regulatory verdict are in. Code hands it one dossier of all of it (metrics and scores, KPIs, the macro regime with every indicator read, the world-event deep dives and their scenarios, trade relations and the supply-chain verdict, regulation, legal and deals, every rule book and the verdict, sell-side consensus, sentiment and news). It writes the thesis, the ranked drivers across sections, the market's key debates, what the valuation already prices in, where the specialist reports disagree, and what would change the view. Then it builds bull, base and bear scenarios that each say what happens in every section (KPIs and cycle, macro, world events, trade and supply chain, regulation and rule books, earnings and balance sheet, valuation, price action and risk, sentiment, consensus), with probabilities and numbers for EPS change, end P/E and 12-month price move. Code computes the expected return, upside, downside, reward-to-risk and chance of a loss from those numbers, and checks each price move against its own EPS and P/E. The strategist then answers whether this is a real opportunity (yes, conditional or no) with entry triggers, the best tickers to express it and what to avoid; if its answer contradicts its own numbers, the page says so. Each investor type's verdict includes a read of every section. An investment-committee reviewer then checks the draft against the dossier (missed factors, numbers that contradict the data, contradictions, unsupported claims) and its corrections are applied. Each citation chip (N news, P press release, W world news, M filing, E EODHD news, T earnings call, I macro indicator) opens its source; code removes citations that don't match a retrieved item, labels figures without a source as estimates, and only allows tickers from the industry. The lead strategist's judgment moves each score by at most ±5 points on top of the section pillars, scaled down when evidence is thin. All of it runs on your own Claude usage.</p>
-    <p><b>Regulatory bodies that matter.</b> The regulation analyst names the 4–8 agencies, commissions, ministries or self-regulatory bodies that actually move this industry's earnings, pricing or volumes, most impactful first, with what each controls and its levers. Each body's rule book is built in two steps: one agent picks its 5 most material binding instruments, ranked by 12-month financial materiality (searching the news as it goes), then each instrument is written up with its seven sections in its own call, so no answer is long enough to be cut off. An answer that is cut short anyway is repaired rather than discarded. The sources are a year of company news, press releases and EODHD regulation and trade news that mention the body, plus searches the agent runs itself. A separate fact-check call then labels every sentence that carries a number or citation: verified (with a verbatim quote linked to the source), corrected, legal background (only for the rule's own legal parameters) or unsupported (removed). Company examples must name a company that appears in the cited article. If the fact-check can't run, numeric claims are held back. If a rule book can't be built from live sources, the page says so rather than showing anything unverified. The overall regulatory verdict synthesizes all the rule books and is fact-checked the same way.</p>
-    <p><b>Known biases.</b> Today's top 50 are used for all history (survivorship), and past index weights come from price moves, ignoring buybacks and issuance.</p>
-  </div>
-  </section>
   <footer class="amsfoot"><span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="m-leg" d="M6.5 26 16 7l9.5 19" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path class="m-line" d="M10.2 19.8l3.6-2.7 3.1 1.9 5.6-5.3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="m-apex" cx="16" cy="6.6" r="2.7"/><circle class="m-tip" cx="22.6" cy="13.7" r="1.9"/></svg><span class="word">AdvisorMind<span class="os">OS</span></span></span><span>Research on FMP, EODHD and Claude. Press <kbd>/</kbd> to jump anywhere.</span></footer>
 </div>
 
@@ -14875,7 +14877,7 @@ Return ONLY a JSON object:
   const pts = (x) => { const v = Math.round(x * 100); return `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v)} point${Math.abs(v) === 1 ? "" : "s"}`; };
   const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const monthName = (d) => { const m = +String(d).slice(5, 7); return m ? `${MON[m - 1]} ${String(d).slice(0, 4)}` : String(d); };
-  const dayName = (d) => { const m = +String(d).slice(5, 7), day = +String(d).slice(8, 10); return m && day ? `${MON[m - 1].slice(0, 3)} ${day}` : String(d); };
+  const dayName = (d) => { const m = +String(d).slice(5, 7), day = +String(d).slice(8, 10); return m && day ? `${MON[m - 1].slice(0, 3)} ${day}, ${String(d).slice(0, 4)}` : String(d); };
   const money = (x) => (isNum(x) ? `$${x >= 100 ? x.toFixed(0) : x.toFixed(2)}` : "n/a");
   const back = (today, days) => { if (!today) return ""; const d = new Date(today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - days); return d.toISOString().slice(0, 10); };
 
@@ -15064,12 +15066,14 @@ Return ONLY a JSON object:
   // ------------------------------------------------------------- FMP calls
   let nextSlot = 0;
   const FMP_GAP_MS = JOB?.fmpGapMs > 0 ? JOB.fmpGapMs : CALL_GAP_MS;
+  let searchSlot = 0;
   async function fmp(tool, input) {
     // The FMP server puts arguments into the URL without encoding "&", so "Aerospace & Defense" comes back empty
     // (the screener and industry history alike). Send it encoded.
     if (input && typeof input === "object") input = Object.fromEntries(Object.entries(input).map(([k, v]) => [k, typeof v === "string" && v.includes("&") ? v.replace(/&/g, "%26") : v]));
-    const now = Date.now(); const slot = Math.max(now, nextSlot); nextSlot = slot + FMP_GAP_MS;
-    if (slot > now) await sleep(slot - now);
+    // Typing in a search box can't wait behind a page load's queue of data calls: searches get their own short lane.
+    if (tool === "search") { const n0 = Date.now(), s0 = Math.max(n0, searchSlot); searchSlot = s0 + 120; if (s0 > n0) await sleep(s0 - n0); }
+    else { const now = Date.now(); const slot = Math.max(now, nextSlot); nextSlot = slot + FMP_GAP_MS; if (slot > now) await sleep(slot - now); }
     let res;
     // A rate limit or a hiccup: up to three more tries, waiting longer each time.
     for (let k = 0; ; k++) {
@@ -15082,9 +15086,10 @@ Return ONLY a JSON object:
     if (p && typeof p === "object" && Object.keys(p).length === 0) return [];
     throw { code: "bad_payload", message: typeof p === "string" ? p.slice(0, 240) : "FMP returned an unexpected response." };
   }
-  let eodNext = 0;
+  let eodNext = 0, eodSearchNext = 0;
   async function eodCall(tool, input) {
-    const now = Date.now(); const slot = Math.max(now, eodNext); eodNext = slot + 150;
+    const now = Date.now(); let slot;
+    if (tool === "get_stocks_from_search") { slot = Math.max(now, eodSearchNext); eodSearchNext = slot + 120; } else { slot = Math.max(now, eodNext); eodNext = slot + 150; }
     if (slot > now) await sleep(slot - now);
     let res;
     try { res = await S.mcp.callTool(EOD_SERVER, tool, input); }
@@ -16817,6 +16822,39 @@ Return ONLY a JSON object:
     finally { S.dailyRun = null; renderAll(); }
   }
 
+  /**
+   * Times like this for every window (1M, 3M, 6M, 1Y), for every finished industry in a sector: the five past stretches
+   * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
+   * the same stretches come back). Run on GitHub from "Update everything from GitHub"; saved on the run as `twin`.
+   */
+  async function runWindowsPass(sector, { names = null, concurrency = 4 } = {}) {
+    if (busy() || !S.mcp) return;
+    const dr = S.dailyRun = { sector, phase: "windows", label: "Starting Times like this", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), windows: true };
+    try {
+      const rec = await secGet(sector);
+      const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
+      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r.industry.twin?.date !== today()) have.push(n); }
+      dr.of = have.length;
+      if (!have.length) { S.notices = [{ kind: "info", text: `Every ${sector} industry already has today's Times like this.` }]; return; }
+      dr.label = "Macro and market history (no Claude)";
+      const mk = await regimeData();
+      const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "default", cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt, opts); };
+      await pool(have, Math.max(1, concurrency), async (name) => {
+        const sl = slug(name); dr.working.add(name);
+        try {
+          if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
+          const d = S.industries[sl], tw = await twIndustryAll(name, { call: S.sample ? call : null, mk, prev: d.twin || null });
+          if (!tw) throw new Error("not enough price history");
+          S.industries[sl] = { ...d, twin: tw }; dr.revised.push(name);
+          await doFlush(name);
+        } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
+        finally { dr.done.push(name); dr.working.delete(name); dr.label = `${dr.done.length} of ${dr.of} industries: Times like this for every window`; dropFromMemory(name); }
+      }, null);
+      S.notices = [{ kind: "info", text: `Times like this for ${sector}: ${dr.revised.length} industries${dr.failed.length ? `, ${dr.failed.length} failed` : ""}.` }];
+    } catch (e) { S.notices = [{ kind: "err", text: `Times like this stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
+    finally { S.dailyRun = null; renderAll(); }
+  }
+
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
   async function runSector(sector, { fresh = false, redoGaps = false, addNew = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
@@ -17525,14 +17563,14 @@ Return ONLY a JSON object:
     try { db.doc("sync/github").onSnapshot((d) => { const prev = S.sync; S.sync = d.exists ? d.data() : null; renderMeta(); renderPicker();
       if (S.sync?.state === "done" && S.sync.done_at && prev && prev.done_at !== S.sync.done_at) autoPull(); }, () => {}); } catch {}
   }
-  const syncPending = () => { const x = S.sync; return !!(x?.pending && x.requested_at && Date.now() - Date.parse(x.requested_at) < 45 * 60000 && !(x.done_at && x.done_at > x.requested_at)); };
+  const syncPending = () => { const x = S.sync; return !!(x?.pending && x.requested_at && Date.now() - Date.parse(x.requested_at) < 90 * 60000 && !(x.done_at && x.done_at > x.requested_at)); };
   async function updateFromGithub() {
     if (busy() || S.pulling || syncPending()) return;
     await autoPull(); // whatever is already copied but not yet in this browser comes in now
     const db = await outlookDb();
     if (!S.mcp || !db) { pullFromGithub(); return; } // outside Claude: bring in what the page carries
     const at = new Date().toISOString();
-    S.sync = { ...(S.sync || {}), pending: true, state: "running", requested_at: at, result: null }; renderMeta();
+    S.sync = { ...(S.sync || {}), pending: true, state: "running", phase: "starting", requested_at: at, result: null, run_url: null, github_started_at: null, github_done_at: null, github_conclusion: null }; renderMeta();
     try {
       await db.doc("sync/github").set({ ...S.sync }).catch(() => {});
       await S.mcp.callTool(SYNC_SERVER, "fire_trigger", { trigger_id: SYNC_TRIGGER, text: "UPDATE" }, { cache: false });
@@ -17599,6 +17637,7 @@ Return ONLY a JSON object:
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
     daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
+    windows: (sector, opts) => { runWindowsPass(sector, opts || {}); return true; },
     stop: () => { const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
     status: () => { const r = S.sectorRun, dr = S.dailyRun;
       if (dr) return { busy: true, phase: "daily " + dr.phase, label: dr.label, working: [...dr.working], calls: dr.calls, notices: [], errors: dr.failed.slice(-5), reuse: null, daily: { done: dr.done.length, of: dr.of, revised: dr.revised, quiet: dr.quiet, failed: dr.failed } };
@@ -17870,8 +17909,22 @@ Return ONLY a JSON object:
     const have = S.carried?.newest ? `This page has GitHub's runs up to ${fmtDate(S.carried.newest)}${S.carried.commit ? ` (commit ${S.carried.commit})` : ""}.` : "";
     const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub… ${mins} min` : S.pulling ? `Saving GitHub's runs here${S.pullProgress ? ` (${S.pullProgress.i} of ${S.pullProgress.n})` : "…"}` : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
     $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
+    syncProgress();
   }
 
+  /** "Update everything from GitHub": where it's at, as a bar under the status line, while it runs. */
+  const SYNC_STAGES = [["starting", "Starting Times like this on GitHub", 2], ["github", "On GitHub: Times like this for every industry and every window (1M, 3M, 6M, 1Y), with the historian's notes", 20], ["copying", "Copying every updated sector into this page", 8]];
+  function syncProgress() {
+    let box = $("sync-prog"); const x = S.sync, on = syncPending();
+    if (!on) { if (box) box.remove(); clearInterval(S.syncTick); S.syncTick = null; return; }
+    if (!box) { box = document.createElement("div"); box.id = "sync-prog"; box.className = "sync-prog"; document.querySelector(".statusline")?.after(box); }
+    const ph = x.phase === "copying" ? 2 : x.phase === "github" ? 1 : 0, since = Date.parse((ph === 2 ? x.github_done_at : ph === 1 ? x.github_started_at : x.requested_at) || x.requested_at);
+    const tot = SYNC_STAGES.reduce((a, s0) => a + s0[2], 0), before = SYNC_STAGES.slice(0, ph).reduce((a, s0) => a + s0[2], 0), mins = Math.max(0, (Date.now() - since) / 60000);
+    const inPh = Math.min(SYNC_STAGES[ph][2] * 0.95, mins), frac = Math.min(0.98, (before + inPh) / tot), left = Math.max(1, Math.round(tot - before - inPh));
+    box.innerHTML = `<div class="sync-h"><b>${esc(SYNC_STAGES[ph][1])}</b><span class="small muted">step ${ph + 1} of 3 · about ${left} min left · started ${esc(ago(x.requested_at))}${x.run_url ? ` · <a href="${esc(x.run_url)}" target="_blank" rel="noopener">watch it on GitHub</a>` : ""}</span></div>
+      <div class="sync-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div><div class="sync-steps">${SYNC_STAGES.map((s0, i) => `<span class="${i < ph ? "done" : i === ph ? "now" : ""}">${i < ph ? "✓ " : ""}${esc(s0[1].split(":")[0])}</span>`).join("")}</div>`;
+    if (!S.syncTick) S.syncTick = setInterval(() => syncProgress(), 5000);
+  }
   function renderPicker() {
     const prev = document.activeElement?.id === "pick-filter" ? $("pick-filter").selectionStart : null;
     renderPickerInner();
@@ -21064,6 +21117,7 @@ Return ONLY a JSON object:
   /** FMP's symbol and name search for what's typed (mutual funds aren't in the ETF directory); one call pair per query, kept for the visit. */
   const _fundLive = new Map(); let _fundLiveT = null;
   function fundLive(q) {
+    const k0 = q.trim(); if (k0) { _liveWait.push((kk) => { if (kk === lc($("fund-q")?.value.trim() || "")) { _fundLive.set(kk, (_cmpLive.get(kk) || []).map((x) => ({ symbol: x.symbol, name: x.name, type: x.type, exchangeShortName: /mutual/i.test(x.type || "") ? "MUTUAL_FUND" : /etf/i.test(x.type || "") ? "ETF" : "" }))); fundSug(true); } }); cmpLive(k0); }
     const k = q.trim().toLowerCase(); if (k.length < 2 || !S.mcp || _fundLive.has(k)) return;
     clearTimeout(_fundLiveT);
     _fundLiveT = setTimeout(async () => {
@@ -21225,7 +21279,7 @@ Return ONLY a JSON object:
     const hero = `<section class="pf-hero">
       <div class="pf-hero-main"><span class="eyebrow">Portfolio${p.description ? " · " + esc(showC(p.description, 80)) : ""}</span><h1>${esc(p.name)}</h1>
         <div class="pf-value mono">${esc(usd(total))}</div>
-        <div class="pf-tags">${isNum(num(day)) && D ? `<span class="pf-tag ${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${pct(day, true, 2)} today</span>` : ""}${isNum(gain) ? `<span class="pf-tag ${gain >= 0 ? "up" : "down"}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${pct(gain / pos.cost, true, 1)}) unrealized</span>` : ""}<span class="pf-tag">${hs.length} holdings</span><span class="pf-tag">bought ${esc(fmtDate(pos?.from || pfStart(p)))}</span>${A ? `<span class="pf-tag">analyzed ${esc(fmtDate(A.day))}</span>` : ""}</div></div>
+        <div class="pf-tags">${isNum(num(day)) && D ? `<span class="pf-tag ${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${pct(day, true, 2)} today</span>` : ""}${isNum(gain) ? `<span class="pf-tag ${gain >= 0 ? "up" : "down"}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${pct(gain / pos.cost, true, 1)}) unrealized</span>` : ""}<span class="pf-tag">${hs.length} holdings</span>${A ? `<span class="pf-tag">analyzed ${esc(fmtDate(A.day))}</span>` : ""}</div></div>
       <div class="pf-hero-side">${g ? `<button class="pf-gradebtn" data-pf="tab-changes" title="Open what to change">${gradeBadge(g, 72)}<span><b>Grade ${esc(g.letter)}</b><span class="small muted">${Math.round(g.score)}/100 for a ${esc(A.goalFull.label.toLowerCase())} goal</span></span></button>` : ""}
         <div class="pf-actions"><button class="primary" data-pf="analyze" ${running ? "disabled" : ""}>${running ? "Analyzing…" : A ? "Analyze again" : "Analyze"}</button><button data-pf="goals-edit">Edit</button><button data-pf="rebal">Rebalance<i class="dirty-dot" data-dot="rebal" title="A rebalance not recorded yet" hidden></i></button>
           <details class="pf-more"><summary>More</summary><div><button class="sm" data-pf="dup">Duplicate</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch prices again</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete portfolio</button>` : ""}</div></details></div></div></section>`;
@@ -21412,14 +21466,12 @@ Return ONLY a JSON object:
     const row = (r, i) => { const t = (r.ticker || "").toUpperCase(), w = pfeW(r);
       return `<div class="pfe-row" data-row="${i}">
         <span class="pfe-av" style="--c:${t ? tickColor(t) : "var(--line)"}">${t ? esc(t.slice(0, 4)) : "?"}</span>
-        <div class="pfe-tk"><input class="pfe-in pfe-tkin" data-pfr="${i}" data-k="ticker" value="${esc(t)}" list="pf-sug" placeholder="Ticker" autocomplete="off" spellcheck="false" aria-label="Ticker ${i + 1}"><span class="pfe-nm" data-pfe-nm="${i}">${esc(showC(r.name || (t ? "" : "Search a stock, ETF or fund"), 34))}</span></div>
+        <div class="pfe-tk"><div class="pfe-tkbox"><svg class="pfe-tkic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><input class="pfe-in pfe-tkin" data-pfr="${i}" data-k="ticker" value="${esc(t)}" placeholder="Ticker or name" autocomplete="off" spellcheck="false" aria-label="Ticker ${i + 1}">${r.asset_type ? `<span class="tb-kind k-${String(r.asset_type).toLowerCase() === "stock" ? "stock" : "etf"}">${esc(String(r.asset_type).toLowerCase() === "stock" ? "Stock" : String(r.asset_type).toUpperCase() === "ETF" ? "ETF" : "Fund")}</span>` : ""}</div><span class="pfe-nm" data-pfe-nm="${i}">${esc(showC(r.name || (t ? "" : "Search a stock, ETF or fund"), 34))}</span></div>
         <div class="pfe-w"><label class="pfe-field">${entry === "pct"
           ? `<input class="pfe-in mono" data-pfr="${i}" data-k="weight" type="number" inputmode="decimal" step="0.1" min="0" value="${w ? r.weight : ""}" placeholder="0.0" aria-label="Weight ${i + 1}"><span class="pfe-suf">%</span>`
           : `<span class="pfe-pre">$</span><input class="pfe-in mono" data-pfr="${i}" data-k="dollar" type="number" inputmode="decimal" step="1" min="0" value="${w ? Math.round(w * tot / 100) : ""}" placeholder="0" aria-label="Amount ${i + 1}">`}</label>
           <div class="pfe-wbar"><i data-pfe-bar="${i}" style="width:${Math.min(100, w)}%;background:${t ? tickColor(t) : "var(--accent)"}"></i></div>
           <span class="pfe-hint mono" data-pfe-hint="${i}">${entry === "pct" ? `$${Math.round(w * tot / 100).toLocaleString()}` : `${w.toFixed(1)}%`}</span></div>
-        <label class="pfe-field pfe-opt"><span class="pfe-lab">Shares</span><input class="pfe-in mono" data-pfr="${i}" data-k="shares" type="number" inputmode="decimal" step="any" min="0" value="${pfeN(r.shares) > 0 ? r.shares : ""}" placeholder="—"></label>
-        <label class="pfe-field pfe-opt"><span class="pfe-lab">Avg cost</span><span class="pfe-pre">$</span><input class="pfe-in mono" data-pfr="${i}" data-k="avg_cost" type="number" inputmode="decimal" step="any" min="0" value="${pfeN(r.avg_cost) > 0 ? r.avg_cost : ""}" placeholder="—"></label>
         <button class="pfe-rm" data-pf="rm-${i}" aria-label="Remove ${esc(t || "row " + (i + 1))}" title="Remove">${I.x}</button></div>`; };
     const n = dr.rows.length;
     return `<section class="pfe" id="pf-editor">
@@ -21428,16 +21480,15 @@ Return ONLY a JSON object:
       <div class="pfe-meta">
         <label class="pfe-card"><span class="pfe-lab">Name</span><input class="pfe-in" id="pf-name" value="${esc(dr.name)}" placeholder="My portfolio"></label>
         <label class="pfe-card pfe-wide"><span class="pfe-lab">Description</span><input class="pfe-in" id="pf-desc" value="${esc(dr.description)}" placeholder="What it's for"></label>
-        <label class="pfe-card"><span class="pfe-lab">Total investment</span><span class="pfe-field"><span class="pfe-pre">$</span><input class="pfe-in mono" id="pf-total" type="number" inputmode="decimal" min="0" step="100" value="${tot || ""}"></span></label>
-        <label class="pfe-card"><span class="pfe-lab">Bought on</span><input class="pfe-in mono" id="pf-start" type="date" max="${today()}" value="${esc(dr.startDate)}"></label></div>
+        <label class="pfe-card"><span class="pfe-lab">Total investment</span><span class="pfe-field"><span class="pfe-pre">$</span><input class="pfe-in mono" id="pf-total" type="number" inputmode="decimal" min="0" step="100" value="${tot || ""}"></span></label></div>
       <div class="pfe-alloc"><div class="pfe-alloc-top"><div><span class="pfe-lab">Allocated</span><b class="mono" data-pfe-sum></b><span class="pfe-status" data-pfe-status></span></div>
         <div class="pfe-tools"><button class="pfe-ghost" data-pf="eq" ${n ? "" : "disabled"}>${I.eq}Equal weight</button><button class="pfe-ghost" data-pf="norm" ${n ? "" : "disabled"}>${I.scale}Normalize to 100%</button></div></div>
         <div class="pfe-stack" data-pfe-stack></div></div>
       <datalist id="pf-sug">${(S.pfSug || []).map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join("")}</datalist>
-      <div class="pfe-list">${n ? `<div class="pfe-cols" aria-hidden="true"><span></span><span>Holding</span><span>${entry === "pct" ? "Weight" : "Amount"}</span><span>Shares</span><span>Avg cost</span><span></span></div>` : ""}
+      <div class="pfe-list">${n ? `<div class="pfe-cols" aria-hidden="true"><span></span><span>Holding</span><span>${entry === "pct" ? "Weight" : "Amount"}</span><span></span></div>` : ""}
         ${n ? dr.rows.map(row).join("") : `<div class="pfe-empty"><b>No holdings yet</b><span class="muted small">Add stocks, ETFs or mutual funds, by weight or by dollar amount.</span></div>`}
         <button class="pfe-add" data-pf="row-add">${I.plus}<span>Add holding</span><kbd>Enter</kbd></button></div>
-      <footer class="pfe-foot"><span class="small muted"><b class="mono" data-pfe-count>${n}</b> holding${n === 1 ? "" : "s"} · shares and avg cost are optional: without them, positions are worked out from "Bought on".</span>
+      <footer class="pfe-foot"><span class="small muted"><b class="mono" data-pfe-count>${n}</b> holding${n === 1 ? "" : "s"}</span>
         <span class="pfe-foot-btns"><button class="pfe-ghost" data-pf="cancel">Discard</button><button class="primary pfe-save" data-pf="save">${I.check}Save changes</button></span></footer></section>`;
   }
   /** Live totals in the editor, updated in place (no re-render, so a click on a button is never lost). */
@@ -21485,7 +21536,7 @@ Return ONLY a JSON object:
     return `<section class="panel" id="pf-rebal"><div class="panel-head"><h2>Rebalance${dirty ? ` <i class="dirty-dot" title="Changes not recorded yet"></i>` : ""}</h2><span class="small muted">${dirty ? "changes not recorded yet · " : ""}set target weights, add or remove holdings; the order sheet follows</span></div>
       <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Current</th><th>Target</th><th>Action</th><th class="n">Amount</th><th class="n">Shares</th></tr></thead><tbody>${tr.map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td>${rm[t.ticker] ? `<span class="pill neg">removing</span> <button class="sm" data-pf="rb-keep-${esc(t.ticker)}">Keep it</button>` : `<span class="rb-t"><input data-pft="${esc(t.ticker)}" type="number" step="0.1" min="0" value="${num(tg[t.ticker]) || 0}" style="width:80px"> %<button class="rb-x" data-pf="rb-rm-${esc(t.ticker)}" aria-label="Remove ${esc(t.ticker)}" title="Remove ${esc(t.ticker)}">×</button></span>`}${S.pfRebal.added?.[t.ticker] ? ` <span class="pill pos">new</span>` : ""}</td>
         <td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : `$${Math.abs(Math.round(t.deltaUsd)).toLocaleString()}`}</td><td class="n">${isNum(num(t.shares)) && t.action !== "HOLD" ? fix(Math.abs(t.shares), 2) : "—"}</td></tr>`).join("")}</tbody></table></div>
-      <form class="rb-add" id="rb-add-form" autocomplete="off"><input id="rb-add-q" type="search" list="rb-sug" placeholder="Add a stock, ETF or fund: ticker or name" aria-label="Add a holding" spellcheck="false"><input id="rb-add-w" type="number" step="0.1" min="0" placeholder="Target %" aria-label="Target weight for the new holding" style="width:110px"><button class="sm primary" type="submit">Add</button><datalist id="rb-sug">${(S.pfSug || []).map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join("")}</datalist></form>
+      <form class="rb-add" id="rb-add-form" autocomplete="off"><input id="rb-add-q" type="search" list="rb-sug" placeholder="Add a stock, ETF or fund: ticker or name" aria-label="Add a holding" spellcheck="false"><input id="rb-add-w" type="number" step="0.1" min="0" placeholder="Target %" aria-label="Target weight for the new holding" style="width:110px"><button class="sm primary" type="submit">Add</button></form>
       <div class="actions" style="align-items:center"><button class="sm" data-pf="rb-equal">Equal weight</button><button class="sm" data-pf="rb-norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Targets add to ${sum.toFixed(1)}%</span><span style="margin-left:auto"></span><button class="sm" data-pf="rb-cancel">Close</button><button class="sm primary" data-pf="rb-apply" ${Math.abs(sum - 100) < 0.5 ? "" : "disabled"}>Record the rebalance</button></div>
       <div class="small muted">Current is today's weight (the targets drift as prices move). Δ value = total value × (target − current) / 100: positive is a BUY, negative a SELL. Recording it sets the new weights and pins today's date on the performance chart.</div></section>`;
   }
@@ -21515,9 +21566,14 @@ Return ONLY a JSON object:
         const next = el.querySelector(`#pf-editor input[data-pfr="${i + 1}"][data-k=ticker]`); if (next) next.focus(); else pfeAddRow(el); });
       inp.addEventListener("focus", () => { S.pfeFocus = { i, k }; });
       inp.addEventListener("blur", (ev) => { if (inp.isConnected && !ev.relatedTarget?.matches?.("input[data-pfr]")) S.pfeFocus = null; }); });
-    el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => inp.addEventListener("input", () => { clearTimeout(S.pfSugT); const q = inp.value.trim(); if (q.length < 1 || !S.mcp) return;
-      S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
-        const dl = $("pf-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); }));
+    // Ticker boxes: the shared suggestions; a pick fills the row (ticker, name, kind) and moves on to the weight.
+    el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => inp.addEventListener("input", () => inp.closest(".pfe-tkbox")?.querySelector(".tb-kind")?.remove()));
+    el.querySelectorAll("input[data-pfr][data-k=ticker]").forEach((inp) => bindTickerBox(inp, { exclude: () => (S.pfDraft?.rows || []).map((r) => r.ticker).filter(Boolean),
+      onPick: (sym, it) => { const i = +inp.dataset.pfr, r = S.pfDraft?.rows?.[i]; inp.value = sym; inp.dispatchEvent(new Event("input", { bubbles: true }));
+        if (r) { r.name = it.name || r.name || ""; r.asset_type = it.kind === "Stock" ? "stock" : it.kind === "ETF" ? "etf" : it.kind === "Fund" ? "fund" : r.asset_type || ""; }
+        const nm = inp.closest(".pfe-row")?.querySelector(".pfe-nm"); if (nm) nm.textContent = it.name || "";
+        const box = inp.closest(".pfe-tkbox"); if (box) { box.querySelector(".tb-kind")?.remove(); if (it.kind) box.insertAdjacentHTML("beforeend", `<span class="tb-kind k-${it.kind.toLowerCase()}">${it.kind}</span>`); }
+        inp.closest(".pfe-row")?.querySelector('input[data-k="weight"], input[data-k="dollar"]')?.focus(); } }));
     // A background re-render (prices, the analysis watch) puts the cursor back where it was.
     if (S.pfeFocus && el.querySelector("#pf-editor") && (!document.activeElement || document.activeElement === document.body)) {
       const f = el.querySelector(`#pf-editor input[data-pfr="${S.pfeFocus.i}"][data-k="${S.pfeFocus.k}"]`); if (f) { f.focus({ preventScroll: true }); try { const L = f.value.length; f.setSelectionRange?.(L, L); } catch {} } }
@@ -21530,15 +21586,13 @@ Return ONLY a JSON object:
     if (S.gq) { const f = el.querySelector(".q-dialog .q-card.on, .q-dialog .q-row.on, .q-dialog input[type=range], .q-dialog .q-next"); if (f && !el.querySelector(".q-dialog")?.contains(document.activeElement)) f.focus({ preventScroll: true }); }
     if (!S.gqEsc) { S.gqEsc = true; document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && S.gq) { S.gq = null; renderPortfolio(); } }); }
     el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
-    $("rb-add-q")?.addEventListener("input", (ev) => { clearTimeout(S.pfSugT); const q = ev.target.value.trim(); if (!q || !S.mcp) return;
-      S.pfSugT = setTimeout(async () => { const r = (await optional(() => fmp("search", { endpoint: "search-symbol", query: q, limit: 8 }), [])) || []; S.pfSug = r.filter((x) => x?.symbol).slice(0, 8);
-        const dl = $("rb-sug"); if (dl) dl.innerHTML = S.pfSug.map((x) => `<option value="${esc(x.symbol)}">${esc(x.name || "")}</option>`).join(""); }, 250); });
+    bindTickerBox($("rb-add-q"), { exclude: () => Object.keys(S.pfRebal?.targets || {}), onPick: (sym, it) => { $("rb-add-q").value = sym; S.rbPick = it; $("rb-add-w")?.focus(); } });
     $("rb-add-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); if (!S.pfRebal) return;
       const t = String($("rb-add-q").value || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!t) return;
-      const w = Number($("rb-add-w").value); const sug = (S.pfSug || []).find((x) => String(x.symbol).toUpperCase() === t);
+      const w = Number($("rb-add-w").value); const sug = S.rbPick?.symbol === t ? S.rbPick : (S.pfSug || []).find((x) => String(x.symbol).toUpperCase() === t);
       if (S.pfRebal.removed?.[t] !== undefined) delete S.pfRebal.removed[t];
       S.pfRebal.targets[t] = isNum(w) && w > 0 ? w : num(S.pfRebal.targets[t]) || 0;
-      if (!p0().holdings.some((h) => h.ticker === t)) (S.pfRebal.added ||= {})[t] = { name: sug?.name || "", asset_type: /etf|fund|trust/i.test(`${sug?.name || ""} ${sug?.exchangeShortName || ""}`) ? "etf" : sug ? "stock" : "" };
+      if (!p0().holdings.some((h) => h.ticker === t)) (S.pfRebal.added ||= {})[t] = { name: sug?.name || "", asset_type: sug?.kind === "Stock" ? "stock" : sug?.kind === "ETF" ? "etf" : sug?.kind === "Fund" ? "fund" : /etf|fund|trust/i.test(`${sug?.name || ""} ${sug?.exchangeShortName || ""}`) ? "etf" : sug ? "stock" : "" };
       renderPortfolio(); setTimeout(() => $("rb-add-q")?.focus(), 0); });
     if (!el.dataset.bound) { el.dataset.bound = "1"; el.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-pf], button[data-pf-per]"); if (b) pfClick(b); }); }
   }
@@ -21593,7 +21647,7 @@ Return ONLY a JSON object:
     if (a.startsWith("rm-")) { S.pfDraft?.rows.splice(+a.slice(3), 1); renderPortfolio(); return; }
     if (a === "norm") { if (S.pfDraft) S.pfDraft.rows = PMode.normalizeWeights(S.pfDraft.rows.map((r) => ({ ...r, weight: pfeW(r) }))); renderPortfolio(); return; }
     if (a === "cancel") { S.pfDraft = null; S.pfTab = "overview"; renderPortfolio(); return; }
-    if (a === "save") { const dr = S.pfDraft; if (!dr) return; const fresh = !S.pfAna?.[p.id] && !S.pfJobs?.[p.id]; const rows = dr.rows.filter((r) => r.ticker).map((r) => ({ ...r, weight: pfeW(r), shares: pfeN(r.shares), avg_cost: pfeN(r.avg_cost) }));
+    if (a === "save") { const dr = S.pfDraft; if (!dr) return; const fresh = !S.pfAna?.[p.id] && !S.pfJobs?.[p.id]; const rows = dr.rows.filter((r) => r.ticker).map(({ shares, avg_cost, ...r }) => ({ ...r, weight: pfeW(r) }));
       const before = p.holdings.map((h) => `${h.ticker}:${num(h.weight) || 0}`).sort().join(), after = rows.map((r) => `${r.ticker}:${num(r.weight) || 0}`).sort().join();
       // With rebalances on record, new weights are a change made today (kept as one more event), not a rewrite of the past.
       if ((p.rebalanceEvents || []).length && before !== after) { if (!p.startWeights) p.startWeights = Object.fromEntries(p.holdings.map((h) => [h.ticker, num(h.weight) || 0]));
@@ -22925,11 +22979,13 @@ Return ONLY a JSON object:
       const fm = [...(a || []), ...(b || [])].filter((x) => x?.symbol && !/\./.test(x.symbol.replace(/\.[AB]$/, "")) && (!x.exchangeShortName || /NASDAQ|NYSE|AMEX|ETF|OTC|MUTUAL|CBOE/i.test(x.exchangeShortName)));
       _cmpLive.set(k, [...fm.map((x) => ({ symbol: x.symbol, name: x.name || "", type: /MUTUAL/i.test(x.exchangeShortName || "") ? "Mutual fund" : /ETF/i.test(x.exchangeShortName || "") ? "ETF" : "" })), ...eo]);
       if (lc(($("cmp-q")?.value || "").split(/[,;]/).pop().trim()) === k) cmpSug(true);
+      for (const f of _liveWait.splice(0)) try { f(k); } catch {}
     }, 220);
   }
+  const _liveWait = [];
   /** Ranked suggestions: your funds, your analyzed companies, the ETF directory, then the live searches. */
-  function cmpSuggest(q, k = 9) {
-    const t = String(q || "").trim(), T = t.toUpperCase().replace(/\s+/g, ""), words = lc(t).split(/\s+/).filter(Boolean), seen = new Map(), inSet = new Set(S.cmp?.syms || []);
+  function cmpSuggest(q, k = 9, exclude = null) {
+    const t = String(q || "").trim(), T = t.toUpperCase().replace(/\s+/g, ""), words = lc(t).split(/\s+/).filter(Boolean), seen = new Map(), inSet = new Set(exclude || S.cmp?.syms || []);
     const add = (sym, name, type, src) => { sym = String(sym || "").toUpperCase(); if (!sym || seen.has(sym) || inSet.has(sym)) return; seen.set(sym, { symbol: sym, name: String(name || "").trim(), type, src }); };
     for (const x of S.fundList || []) add(x.sym, x.name, x.type || "Fund", "yours");
     for (const x of Object.values(S.coIdx?.cos || {})) add(x.symbol, x.name, `Stock · ${x.industry || ""}`, "runs");
@@ -22950,6 +23006,38 @@ Return ONLY a JSON object:
     box.innerHTML = items.map((x, i) => `<div class="sug-item${i === S.cmpSugI ? " on" : ""}" role="option" id="cmp-sug-${i}" aria-selected="${i === S.cmpSugI}" data-csug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span><span class="small muted">${esc(x.src === "yours" ? "your fund" : x.type || "")}</span></div>`).join("")
       + (pending ? `<div class="sug-foot small muted">Searching FMP and EODHD…</div>` : "");
     box.hidden = false; inp.setAttribute("aria-expanded", "true");
+  }
+  /**
+   * Any ticker box: suggestions as you type (your funds, your analyzed companies, the ETF directory, then FMP's and
+   * EODHD's searches), arrows and Enter to pick, a click to pick. onPick(symbol, item).
+   */
+  const SUG_KIND = (x) => /mutual/i.test(x.type || "") ? "Fund" : /etf/i.test(x.type || "") ? "ETF" : /fund/i.test(x.type || "") ? "Fund" : /stock/i.test(x.type || "") || x.src === "runs" ? "Stock" : "";
+  function bindTickerBox(inp, { onPick, exclude = () => [], k = 8 } = {}) {
+    if (!inp || inp.__tb) return; inp.__tb = true; inp.removeAttribute("list"); inp.setAttribute("autocomplete", "off");
+    inp.setAttribute("role", "combobox"); inp.setAttribute("aria-autocomplete", "list"); inp.setAttribute("aria-expanded", "false");
+    const host = inp.parentElement; host.classList.add("tb-host");
+    const box = document.createElement("div"); box.className = "sug tb-sug"; box.setAttribute("role", "listbox"); box.hidden = true; host.appendChild(box);
+    let items = [], at = -1;
+    const draw = () => {
+      const q = inp.value.trim(); items = q ? cmpSuggest(q, k, exclude()) : [];
+      if (!(at < items.length)) at = -1;
+      const pending = q && S.mcp && !_cmpLive.has(lc(q));
+      if (!items.length && !pending) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
+      box.innerHTML = items.map((x, i) => { const kd = SUG_KIND(x); return `<div class="sug-item tb-item${i === at ? " on" : ""}" role="option" aria-selected="${i === at}" data-tsug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span>${kd ? `<span class="tb-kind k-${kd.toLowerCase()}">${kd}</span>` : "<span></span>"}</div>`; }).join("")
+        + (pending ? `<div class="sug-foot small muted"><span class="tb-spin"></span>Searching stocks, ETFs and mutual funds…</div>` : "");
+      box.hidden = false; inp.setAttribute("aria-expanded", "true");
+    };
+    const pick = (i) => { const x = items[i]; if (!x) return; box.hidden = true; inp.setAttribute("aria-expanded", "false"); onPick?.(x.symbol, { ...x, kind: SUG_KIND(x) }); };
+    inp.addEventListener("input", () => { at = -1; draw(); const q = inp.value.trim(); if (q) { _liveWait.push((kk) => { if (kk === lc(inp.value.trim()) && document.activeElement === inp) draw(); }); cmpLive(q); } });
+    inp.addEventListener("focus", () => { fundEtfs().then(() => { if (document.activeElement === inp) draw(); }).catch(() => {}); if (inp.value.trim()) draw(); });
+    inp.addEventListener("blur", () => setTimeout(() => { if (document.activeElement !== inp) box.hidden = true; }, 150));
+    // On the box's parent, in the capture phase: it runs before the input's own keys (the editor's Enter moves to the next row).
+    host.addEventListener("keydown", (ev) => { if (ev.target !== inp) return;
+      if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { if (!items.length || box.hidden) return; ev.preventDefault(); ev.stopImmediatePropagation(); at = (at + (ev.key === "ArrowDown" ? 1 : -1) + items.length + 1) % (items.length + 1); if (at === items.length) at = -1; draw(); }
+      else if (ev.key === "Enter" && !box.hidden && items.length) { ev.preventDefault(); ev.stopImmediatePropagation(); pick(at >= 0 ? at : 0); }
+      else if (ev.key === "Escape" && !box.hidden) { ev.stopImmediatePropagation(); box.hidden = true; at = -1; }
+    }, true);
+    box.addEventListener("mousedown", (ev) => { const it = ev.target.closest("[data-tsug]"); if (!it) return; ev.preventDefault(); pick(items.findIndex((x) => x.symbol === it.dataset.tsug)); });
   }
   function bindCmpSearch() {
     const inp = $("cmp-q"), box = $("cmp-sug"); if (!inp || !box) return;
@@ -23558,7 +23646,7 @@ Return ONLY a JSON object:
         : `<div class="small">${isNum(st.buy_share) ? `<b>${pct(st.buy_share, false, 0)}</b> of ratings on its ${st.n} biggest holdings are buy` : "No ratings on its holdings."}</div>`;
       const tgt = s0.kind === "stock" && isNum(st.target) && st.px > 0 ? `${rangeBar(isNum(st.low) ? st.low : st.target, isNum(st.high) ? st.high : st.target, [{ v: st.px, label: `Price ${fix(st.px, 0)}`, cls: "px", top: true }, { v: st.target, label: `Target ${fix(st.target, 0)}` }])}<div class="small">Target ${fix(st.target, 2)}: <b class="${cls(st.target / st.px - 1)}">${pct(st.target / st.px - 1)}</b>${st.ptrend?.y ? ` · a year ago ${fix(st.ptrend.y, 0)}, last month ${fix(st.ptrend.m, 0)}` : ""}</div>`
         : s0.kind === "fund" && isNum(st.upside) ? `<div class="small">Upside to the targets on its holdings, weighted: <b class="${cls(st.upside)}">${pct(st.upside)}</b></div>` : "";
-      const moves = s0.kind === "stock" && (st.up || st.dn) ? `<div class="small">Last 4 months: <b class="pos-t">${st.up} upgrade${st.up === 1 ? "" : "s"}</b>, <b class="neg-t">${st.dn} downgrade${st.dn === 1 ? "" : "s"}</b>${st.acts?.length ? `<div class="muted">${st.acts.slice(0, 3).map((a) => `${esc(fmtShort(a.date))} ${esc(a.firm || "")} ${esc(a.action || "")}${a.to ? " → " + esc(a.to) : ""}`).join(" · ")}</div>` : ""}</div>` : "";
+      const moves = s0.kind === "stock" && (st.up || st.dn) ? `<div class="small">Last 4 months: <b class="pos-t">${st.up} upgrade${st.up === 1 ? "" : "s"}</b>, <b class="neg-t">${st.dn} downgrade${st.dn === 1 ? "" : "s"}</b>${st.acts?.length ? `<div class="muted">${st.acts.slice(0, 3).map((a) => `${esc(fmtDate(a.date))} ${esc(a.firm || "")} ${esc(a.action || "")}${a.to ? " → " + esc(a.to) : ""}`).join(" · ")}</div>` : ""}</div>` : "";
       return `<div class="cx-card" style="--tc:${cmpColor(s0.sym)}"><div class="cx-card-top">${cmpTick(s0.sym, true)}${d0?.signal ? `<span class="pill ${d0.signal === "positive" ? "pos" : d0.signal === "negative" ? "neg" : "neu"}">${esc(d0.signal)}</span>` : ""}${d0?.crowding ? `<span class="pill ${d0.crowding === "high" ? "warn" : "neu"}">crowding ${esc(d0.crowding)}</span>` : ""}</div>
         <span class="eyebrow">Wall Street</span>${ratings}${tgt}${moves}
         <span class="eyebrow">News sentiment, 30 days</span>${sentBar(se.s30)}${isNum(se.s90) ? `<div class="small muted">90 days ${se.s90 > 0 ? "+" : ""}${fix(se.s90, 2)}${se.n30 ? ` · ${se.n30} articles in 30 days` : ""}</div>` : ""}
@@ -23656,6 +23744,7 @@ Return ONLY a JSON object:
   }
   function bindCompany() {
     $("co-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); openCompany($("co-q").value); });
+    bindTickerBox($("co-q"), { onPick: (sym, it) => { $("co-q").value = sym; if (it.kind === "ETF" || it.kind === "Fund") openFund(sym); else openCompany(sym); } });
     $("co-q")?.addEventListener("input", (ev) => { S.coQuery = ev.target.value; });
     // DCF sliders recompute in place, without redrawing the page.
     document.querySelectorAll("#company input[data-dcf]").forEach((inp) => inp.addEventListener("input", () => { if (!S.co?.dcfP) return; S.co.dcfP[inp.dataset.dcf] = Number(inp.value) / 100; updateDcf(); }));
@@ -23744,8 +23833,8 @@ Return ONLY a JSON object:
     const read = Street.text(T, { what, coverage }).map((p) => `<p>${stMd(p)}</p>`).join("");
     const names = T.many ? `<h4 class="st-h">Name by name</h4><div class="rgrid st-names">${T.names.map((x) => `<article class="rcard st-name"><div class="st-nh"><b class="tick">${esc(x.sym)}</b><span class="small muted">${pct(x.w / (T.weight || 1), false, 0)} of these</span><span class="pill ${ST_LC[x.T.label] || "neu"}">${esc(x.T.label)}</span></div>
         <div class="st-nv"><b>${pct(x.T.now.buy, false, 0)}</b><span>buys</span><span class="${cls(x.T.dBuy)}">${stPts(x.T.dBuy)} in a year</span></div>${stSpark(x.T.months)}
-        <div class="small muted">${x.T.a365.up} up · ${x.T.a365.down} down in 12 months${x.T.pt && isNum(x.T.pt.chg) ? ` · targets ${sgnPct(x.T.pt.chg)}` : ""}${x.T.acts[0] ? ` · latest: ${esc(x.T.acts[0].firm || "")} ${esc(x.T.acts[0].action || "")} ${esc(fmtShort(x.T.acts[0].date))}` : ""}</div></article>`).join("")}</div>` : "";
-    const actCard = (a) => `<article class="rcard st-act"><div class="rcard-top"><span class="pill ${ST_AC[String(a.action || "").toLowerCase()] || "neu"}">${esc(a.action || "rating")}</span><span class="small muted">${esc(fmtShort(a.date))}</span>${a.sym ? `<b class="tick">${esc(a.sym)}</b>` : ""}</div>
+        <div class="small muted">${x.T.a365.up} up · ${x.T.a365.down} down in 12 months${x.T.pt && isNum(x.T.pt.chg) ? ` · targets ${sgnPct(x.T.pt.chg)}` : ""}${x.T.acts[0] ? ` · latest: ${esc(x.T.acts[0].firm || "")} ${esc(x.T.acts[0].action || "")} ${esc(fmtDate(x.T.acts[0].date))}` : ""}</div></article>`).join("")}</div>` : "";
+    const actCard = (a) => `<article class="rcard st-act"><div class="rcard-top"><span class="pill ${ST_AC[String(a.action || "").toLowerCase()] || "neu"}">${esc(a.action || "rating")}</span><span class="small muted">${esc(fmtDate(a.date))}</span>${a.sym ? `<b class="tick">${esc(a.sym)}</b>` : ""}</div>
       <div><b>${esc(a.firm || "A firm")}</b></div><div class="small">${a.from && a.from !== a.to ? `${esc(a.from)} → ` : ""}<b>${esc(a.to || "")}</b></div></article>`;
     const A = T.acts || [];
     const acts = A.length ? `<h4 class="st-h">Rating actions, last 12 months <span class="small muted">${A.length}</span></h4><div class="rgrid st-acts">${A.slice(0, 6).map(actCard).join("")}</div>${A.length > 6 ? `<details class="st-more"><summary>All ${A.length} rating actions</summary><div class="rgrid st-acts">${A.slice(6).map(actCard).join("")}</div></details>` : ""}` : "";
@@ -23770,10 +23859,8 @@ Return ONLY a JSON object:
   }
   /** The window Performance is showing (its period buttons), for Times like this. */
   const twWinOf = (kind) => { const r = kind === "company" ? S.coRet || "1Y" : kind === "fund" ? S.fundRet || "1Y" : S.indRet || "1Y"; return r === "12M" ? "1Y" : r; };
-  async function twSeries(kind, key) {
-    const norm = (x) => (x?.dates?.length ? { dates: x.dates, values: x.closes || x.values || x.levels } : null);
-    if (kind === "company") return S.co?.sym === key ? norm(S.co.data?.ser || S.co.ser) : null;
-    if (kind === "fund") return S.fund?.sym === key ? norm(S.fund.ser) : null;
+  /** An industry's daily level since 2008 (FMP's industry performance, weighted by exchange), kept 6 hours. */
+  function twIndustrySeries(key) {
     return cached("twind:" + key, async () => {
       const d = S.industries[slug(key)], cons = d?.constituents || [];
       let w = exchangeWeights(cons.map((c) => ({ exchange: c.exchange || c.exchangeShortName, market_cap: c.market_cap || c.marketCap })));
@@ -23782,12 +23869,33 @@ Return ONLY a JSON object:
       return ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null;
     }, 6 * 3600 * 1000);
   }
+  /** One industry's Times like this for every window, with the historian's notes (reused when the same stretches come back). */
+  async function twIndustryAll(name, { call, mk, prev = null }) {
+    const ind = await twIndustrySeries(name); if (!ind) return null;
+    const out = { date: today(), at: new Date().toISOString(), windows: {} };
+    for (const win of Object.keys(TW_WIN)) {
+      const R = Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }); if (!R) continue;
+      const old = prev?.windows?.[win], same = old?.N?.ends && old.N.ends.join() === R.episodes.map((e) => e.end).join();
+      let N = same ? old.N : null;
+      if (!N && call) N = Regimes.cleanWindowHistorian(await call(Regimes.windowHistorianPrompt(`the US-listed "${name}" industry`, "the industry", R, { today: today() }), `Times like this, ${TW_LAB[win]}: ${name}`), R);
+      out.windows[win] = { R: jsonSafe(R), N };
+    }
+    return out;
+  }
+  async function twSeries(kind, key) {
+    const norm = (x) => (x?.dates?.length ? { dates: x.dates, values: x.closes || x.values || x.levels } : null);
+    if (kind === "company") return S.co?.sym === key ? norm(S.co.data?.ser || S.co.ser) : null;
+    if (kind === "fund") return S.fund?.sym === key ? norm(S.fund.ser) : null;
+    return twIndustrySeries(key);
+  }
   function wireTimes(root) { for (const el of (root || document).querySelectorAll(".tw:not([data-tw-on])")) { el.dataset.twOn = "1"; twShow(el); } }
   async function twShow(el, win) {
     const kind = el.dataset.tw, key = el.dataset.twKey, k0 = kind + ":" + key; S.twWin ||= {};
     win = win || twWinOf(kind); S.twWin[k0] = win; if (!TW_WIN[win]) return;
     const body = el.querySelector(".tw-body"), ck = `${k0}|${win}|${today()}`;
     if (_twHtml.has(ck)) { body.innerHTML = _twHtml.get(ck); return; }
+    const pre = kind === "industry" ? S.industries[slug(key)]?.twin : null, preW = pre?.windows?.[win];
+    if (preW?.R && pre.date >= Horizon.addDays(today(), -3)) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; return; }
     if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
     body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}…</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
     try {
@@ -23853,7 +23961,7 @@ Return ONLY a JSON object:
       return `${it} ${up === ok.length ? "kept rising" : up === 0 ? "kept falling" : "went both ways"}: ${ok.map((h) => `${sgn(r[h])} after ${h === "12M" ? "12M" : h}`).join(", ")}${isNum(num(e.maxdd6)) ? `, with a worst drop of ${e.maxdd6}% inside six months` : ""}. The S&P 500 was ${ok.map((h) => `${sgn(sp[h])} after ${h}`).join(", ")}${own}.`; };
     const diff = (e) => { const ks = e.unlike.slice(0, 2); return ks.length ? `The biggest gaps: ${ks.map((k) => `${lab2(k)} is ${Regimes.wval(k, R.now[k])} now against ${Regimes.wval(k, e.then[k])} then`).join("; ")}.` : ""; };
     const every = (e) => `<details class="tw-every"><summary>Then vs now, every measure</summary><div class="tw-meas">${R.features.map((k) => `<div class="tw-m"><span>${esc(lab(k))}</span><span class="small muted">${ML(e.end)}</span><b>${esc(Regimes.wval(k, e.then[k]))}</b><span class="small muted">Today</span><b>${esc(Regimes.wval(k, R.now[k]))}</b></div>`).join("")}</div></details>`;
-    const cards = R.episodes.map((e, i) => `<article class="rcard tw-ep${NN?.closest === "W" + (i + 1) ? " tw-closest" : ""}" style="--k:${i}"><div class="tw-ep-h"><div><b class="tw-ep-t">${ML(e.end)}</b> <span class="small muted">the ${TW_LAB[win]} from ${ML(e.start)}</span><div class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches since ${esc(String(R.from || "").slice(0, 4))}${NN?.closest === "W" + (i + 1) ? ` · <b class="tw-most">most like today</b>` : ""}</div></div></div>
+    const cards = R.episodes.map((e, i) => `<article class="rcard tw-ep${NN?.closest === "W" + (i + 1) ? " tw-closest" : ""}" style="--k:${i}"><div class="tw-ep-h"><div><b class="tw-ep-t">${ML(e.start)} – ${ML(e.end)}</b> <span class="small muted">${TW_LAB[win]}</span><div class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches since ${esc(String(R.from || "").slice(0, 4))}${NN?.closest === "W" + (i + 1) ? ` · <b class="tw-most">most like today</b>` : ""}</div></div></div>
         ${nb(i)?.then ? `<p class="tw-p"><b>Then.</b> ${esc(nb(i).then)}</p>` : pend ? `<p class="tw-p small muted">The historian is writing what was going on then…</p>` : ""}
         <p class="tw-p"><b>What happened next.</b> ${esc(nb(i)?.after || after(e))}</p>
         <p class="tw-p"><b>What's different now.</b> ${esc(nb(i)?.different || diff(e))}</p>

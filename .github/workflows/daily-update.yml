@@ -20,7 +20,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
-run-name: ${{ inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
+run-name: ${{ inputs.windows && 'Times like this (every industry, every window)' || inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:
@@ -47,6 +47,10 @@ on:
         default: false
       lean:
         description: "The outlook pass only: where every industry is going over 1M-12M and why, from every component (one cheap call each; runs even while daily updates are paused)"
+        type: boolean
+        default: false
+      windows:
+        description: "Times like this only: for every industry and every window (1M, 3M, 6M, 1Y), the five past stretches most like the last one and what followed, with the historian's notes (started by the page's Update everything from GitHub; runs even while daily updates are paused)"
         type: boolean
         default: false
       lean_missing:
@@ -78,7 +82,7 @@ jobs:
           # The most the daily updates may spend on Claude in a month, all sectors together (about $500 a month with
           # GitHub's minutes). Each sector gets its share by number of industries; each day spends its share of what's left.
           MONTH_BUDGET: ${{ vars.DAILY_MONTHLY_BUDGET_USD || '500' }}
-          BACKFILL: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing) && '1' || '' }}
+          BACKFILL: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows) && '1' || '' }}
           LEAN: ${{ (inputs.lean || inputs.lean_missing) && '1' || '' }}
           LEAN_MISSING: ${{ inputs.lean_missing && '1' || '' }}
         run: |
@@ -126,7 +130,8 @@ jobs:
         if: strategy.job-index > 0
         env:
           INDEX: ${{ strategy.job-index }}
-        run: sleep $(( (INDEX % 6) * 180 ))
+          WIN: ${{ inputs.windows && '1' || '' }}
+        run: if [ -n "$WIN" ]; then GAP=30; else GAP=180; fi; sleep $(( (INDEX % 6) * GAP ))
       - name: Get the sector's last analysis
         env:
           SLUG: ${{ steps.slug.outputs.slug }}
@@ -153,15 +158,17 @@ jobs:
           CLAUDE_MODEL_DEFAULT: ${{ vars.CLAUDE_MODEL_DAILY || 'claude-sonnet-5-5' }}
           # Bringing the whole analysis up to date, and rewriting it from scratch: the best model, where it matters most.
           CLAUDE_MODEL_LEAD: ${{ vars.CLAUDE_MODEL_DAILY_LEAD || 'claude-opus-5-5' }}
-          JOB_MONTH_BUDGET: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing) && '' || matrix.budget }}
+          JOB_MONTH_BUDGET: ${{ (inputs.backfill || inputs.lean || inputs.lean_missing || inputs.windows) && '' || matrix.budget }}
           JOB_SHOCK: ${{ inputs.shock }}
           JOB_BACKFILL: ${{ inputs.backfill && '1' || '' }}
           JOB_LEAN: ${{ (inputs.lean || inputs.lean_missing) && '1' || '' }}
           JOB_LEAN_MISSING: ${{ inputs.lean_missing && '1' || '' }}
+          # Times like this for every window: someone is watching the page, so no batch wait.
+          JOB_WINDOWS: ${{ inputs.windows && '1' || '' }}
           JOB_DAILY_ONLY: ${{ inputs.industries }}
           # Sections rewritten for the news (set the variable to claude-opus-5-5 for full quality, about twice the cost).
           CLAUDE_MODEL_COMPLEX: ${{ vars.CLAUDE_MODEL_DAILY_COMPLEX || 'claude-sonnet-5-5' }}
-          CLAUDE_MODE: batch
+          CLAUDE_MODE: ${{ inputs.windows && 'direct' || 'batch' }}
           # Overnight nobody is waiting: give a slow batch two and a half hours at half price before paying full price.
           CLAUDE_STRAGGLER_MIN: "150"
           # The lead model's daily update thinks at medium effort (about half the output of its default).
