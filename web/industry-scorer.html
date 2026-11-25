@@ -1,23 +1,26 @@
-<title>Industry Scorer</title>
+<meta charset="utf-8">
+<title>AdvisorMindOS</title>
+<meta name="theme-color" content="#11242a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2311242a'/%3E%3Cpath d='M7 25 16 7l9 18' fill='none' stroke='%23e0ae5c' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M10.5 19.5l3.5-2.6 3 1.8 5-4.7' fill='none' stroke='%23e8efec' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
 /* Layout: one industry at a time. Header with the industry picker, then a single
    research report for the chosen industry: scores, macro landscape, performance,
    fundamentals, valuation, earnings, health, constituents. */
 :root {
-  /* Dark terminal, always: near-black ground, dense type, emerald up / rose down. */
-  --bg: #0a0e13; --surface: #10161d; --sunk: #161e27; --ink: #e6edf3; --muted: #93a1b0;
-  --faint: #66737f; --line: #212b36; --accent: #4ea8ff; --accent-ink: #06121f;
-  --pos: #10b981; --neg: #f43f5e; --bench: #8b95a1; --c3: #f5a524; --c4: #a78bfa; --warn-bg: #2f240c; --warn-ink: #f6d48a;
-  --err-bg: #34141b; --err-ink: #fbb4c0;
-  --gA: #34d399; --gA-bg: #0f2e22; --gB: #7cc0ff; --gB-bg: #10263f; --gC: #b4c0cc; --gC-bg: #1d2731;
-  --gD: #f5c063; --gD-bg: #34280c; --gF: #fb8ba0; --gF-bg: #3a1620;
-  --display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
-  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  /* AdvisorMindOS: petrol canvas, one brass accent, emerald up / rose down. Grades keep their own hues. */
+  --bg: #0c1a1e; --surface: #11242a; --sunk: #162d34; --ink: #e8efec; --muted: #9aaeab;
+  --faint: #6c8283; --line: #22393f; --accent: #e0ae5c; --accent-ink: #1c1405;
+  --pos: #2fc48f; --neg: #f2647d; --bench: #8c9c9c; --c3: #f08a5d; --c4: #b39bff; --warn-bg: #35240f; --warn-ink: #f3c98b;
+  --err-bg: #3a1720; --err-ink: #fbb7c2;
+  --gA: #40d6a2; --gA-bg: #0e3328; --gB: #86c6ff; --gB-bg: #12304a; --gC: #b9c6c6; --gC-bg: #1e3036;
+  --gD: #f59362; --gD-bg: #3b2216; --gF: #fb8da2; --gF-bg: #3d1823;
+  --display: "Bricolage Grotesque", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --body: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
-  --r: 8px;
+  --r: 10px;
   color-scheme: dark;
 }
 
@@ -49,7 +52,7 @@ label.check { display: inline-flex; gap: 8px; align-items: center; font-size: 13
 .brand b { font: 800 18px var(--display); font-stretch: 85%; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; color: var(--muted); }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--faint); margin-right: 6px; vertical-align: 1px; }
-.dot.ok { background: #1f9d55; } .dot.bad { background: var(--neg); }
+.dot.ok { background: var(--pos); } .dot.bad { background: var(--neg); }
 .picker { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; }
 .picker-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; }
 .picker-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 6px; max-height: 360px; overflow-y: auto; padding: 2px; }
@@ -111,7 +114,7 @@ tr.self td { background: var(--sunk); }
 #fund .kpi { border: 0; border-radius: 0; background: var(--surface); padding: 12px 14px; }
 .fcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
 .fcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; background: var(--surface); min-width: 0; }
-.fcard.pos { border-left: 3px solid var(--pos); } .fcard.neg { border-left: 3px solid var(--neg); } .fcard.neu { border-left: 3px solid var(--line); } .fcard.warn { border-left: 3px solid var(--warn, #d9a400); }
+.fcard.pos { border-left: 3px solid var(--pos); } .fcard.neg { border-left: 3px solid var(--neg); } .fcard.neu { border-left: 3px solid var(--line); } .fcard.warn { border-left: 3px solid var(--warn-ink); }
 .fcard .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .fcard .w { font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
 .fcard .nm { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -233,7 +236,7 @@ tbody tr:last-child td { border-bottom: 0; }
 /* Sticky sidebar with scrollspy; on narrow screens it becomes a strip across the top. */
 .shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; align-items: start; }
 .stream { display: grid; gap: 16px; min-width: 0; }
-.sidenav { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; display: grid; gap: 1px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); scrollbar-width: thin; }
+.sidenav { position: sticky; top: calc(var(--bar) + 12px); max-height: calc(100vh - var(--bar) - 24px); overflow-y: auto; display: grid; gap: 1px; padding: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); scrollbar-width: thin; }
 .sidenav a { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 6px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 500; border-left: 2px solid transparent; }
 .sidenav a .num { font: 500 11px var(--mono); color: var(--faint); min-width: 18px; }
 .sidenav a.sub { padding-left: 34px; font-size: 12px; color: var(--faint); }
@@ -276,7 +279,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .skel { height: 12px; border-radius: 4px; background: linear-gradient(90deg, var(--sunk) 25%, var(--line) 50%, var(--sunk) 75%); background-size: 200% 100%; animation: skel 1.3s linear infinite; }
 @keyframes skel { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
-.secnav { position: sticky; top: 0; z-index: 5; display: flex; gap: 4px; overflow-x: auto; padding: 8px; margin: 0 -4px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.secnav { position: sticky; top: var(--bar); z-index: 5; display: flex; gap: 4px; overflow-x: auto; padding: 8px; margin: 0 -4px; background: color-mix(in srgb, var(--bg) 92%, transparent); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
 .secnav a { white-space: nowrap; text-decoration: none; color: var(--muted); font-size: 13px; font-weight: 600; padding: 5px 10px; border-radius: 999px; }
 .secnav a:hover { color: var(--ink); background: var(--sunk); }
 .co-ind { display: grid; gap: inherit; min-width: 0; }
@@ -288,7 +291,8 @@ tbody tr:last-child td { border-bottom: 0; }
 .co-indnav a { font-size: 13px; font-weight: 600; text-decoration: none; padding: 4px 10px; border-radius: 999px; background: var(--sunk); color: var(--ink); }
 .gk { text-transform: none; font-size: 1.15em; letter-spacing: 0; }
 .strip.wins { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
-section[id] { scroll-margin-top: 56px; }
+section[id] { scroll-margin-top: calc(var(--bar) + 16px); }
+@media (max-width: 960px) { section[id] { scroll-margin-top: calc(var(--bar) + 56px); } }
 .headline { font-size: 19px; font-family: var(--display); font-stretch: 85%; line-height: 1.3; }
 .prose { margin: 0; font-size: 14.5px; line-height: 1.6; max-width: 92ch; }
 .cites { white-space: nowrap; }
@@ -442,7 +446,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .memo-watch { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 8px; }
 .memo-watch > div { border-left: 3px solid var(--accent); background: var(--sunk); border-radius: 0 10px 10px 0; padding: 8px 12px; display: grid; gap: 3px; font-size: 13.5px; }
 .memo-date { font: 600 12px var(--mono); color: var(--accent); }
-.ana-nav { position: sticky; top: 0; z-index: 8; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(8px); scrollbar-width: none; }
+.ana-nav { position: sticky; top: var(--bar); z-index: 8; display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; background: color-mix(in srgb, var(--bg) 94%, transparent); scrollbar-width: none; }
 .ana-nav button { border-radius: 999px; padding: 8px 16px; font-weight: 600; white-space: nowrap; background: var(--surface); color: var(--muted); }
 .ana-nav button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .ana-nav button .cnt { font: 600 11px var(--mono); opacity: .75; margin-left: 4px; }
@@ -469,7 +473,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .ov-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .ov-chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; background: var(--surface); }
 .iv-seg { margin-left: auto; }
-.iv-jump { position: static; margin: 10px 0 0; flex-wrap: wrap; background: transparent; backdrop-filter: none; padding: 0; }
+.iv-jump { position: static; margin: 10px 0 0; flex-wrap: wrap; background: transparent; padding: 0; }
 .iv-jump button { padding: 6px 12px; font-size: 12.5px; }
 .iv-sec h3 { margin: 16px 0 8px; font-size: 14px; }
 .iv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; }
@@ -502,7 +506,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .iv-reads p { margin: 2px 0 0; }
 .iv-list { display: grid; }
 .q-ico { width: 16px; height: 16px; flex: none; }
-.q-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / .6); backdrop-filter: blur(2px); }
+.q-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgb(0 0 0 / .6); }
 .q-dialog { width: min(672px, 100%); max-height: 85vh; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px; box-shadow: 0 20px 60px rgb(0 0 0 / .45); display: grid; gap: 12px; }
 .q-head { display: flex; justify-content: space-between; align-items: center; }
 .q-head h2 { margin: 0; font-size: 18px; }
@@ -613,7 +617,7 @@ input, select, textarea { color-scheme: dark; }
 .pfe-add:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: var(--accent); border-style: solid; }
 .pfe-add kbd { font: 500 11px var(--mono); color: var(--faint); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin-left: 4px; }
 .pfe-empty { display: grid; gap: 4px; justify-items: center; text-align: center; padding: 28px 12px; border-radius: 12px; background: var(--sunk); }
-.pfe-foot { position: sticky; bottom: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin: 0 -20px -20px; padding: 12px 20px; border-top: 1px solid var(--line); border-radius: 0 0 16px 16px; background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); }
+.pfe-foot { position: sticky; bottom: 0; z-index: 4; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin: 0 -20px -20px; padding: 12px 20px; border-top: 1px solid var(--line); border-radius: 0 0 16px 16px; background: color-mix(in srgb, var(--surface) 92%, transparent); }
 .pfe-foot > .small { flex: 1 1 280px; }
 .pfe-foot-btns { display: flex; gap: 8px; margin-left: auto; }
 .pfe-save { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
@@ -727,7 +731,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
 .tab.cur { color: var(--ink); border-bottom-color: var(--accent); }
 .co-form { display: flex; gap: 8px; } .co-form input { flex: 1; }
 .sug-wrap { position: relative; flex: 1; min-width: 0; } .sug-wrap input { width: 100%; }
-.sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45); max-height: 340px; overflow-y: auto; padding: 4px; }
+.sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .3); max-height: 340px; overflow-y: auto; padding: 4px; }
 .sug-item { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
 .sug-item:hover, .sug-item.on { background: var(--sunk); } .sug-item.on { box-shadow: inset 2px 0 0 var(--accent); }
 .sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sug-foot { padding: 6px 10px; }
@@ -884,16 +888,12 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
 .cx-chg { font: 500 11.5px var(--mono); padding: 0 5px; border-radius: 4px; background: var(--sunk); }
 .cx-eod { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; }
 /* Compare: the macro indicator explorer, card grids, folding sections */
-#cmp section.panel > .panel-head { cursor: pointer; }
-#cmp section.panel > .panel-head h2::after { content: "▾"; font-size: 13px; color: var(--faint); margin-left: 8px; display: inline-block; transition: transform .15s; }
-#cmp section.panel.cx-folded > .panel-head h2::after { transform: rotate(-90deg); }
-#cmp section.panel.cx-folded > :not(.panel-head) { display: none !important; }
 .cx-rcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; }
 .cx-rcard { border: 1px solid var(--line); border-top: 3px solid var(--tc, var(--accent)); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; background: var(--surface); min-width: 0; }
 .cx-rcard p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 .cx-rc-who { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 .cx-rc-top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
-.cx-mi-bar { position: sticky; top: 0; z-index: 4; display: grid; gap: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 12px; }
+.cx-mi-bar { position: sticky; top: var(--bar); z-index: 4; display: grid; gap: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--line); border-radius: 12px; }
 .cx-mi-bar input[type=search] { max-width: 420px; }
 .cx-fchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .cx-fchips .chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12.5px; padding: 3px 10px; }
@@ -920,7 +920,7 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
 .cx-progs { display: grid; gap: 10px; }
 .cx-prog { display: grid; gap: 5px; } .cx-prog-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
 .cx-prog-t { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 15%, var(--line)); overflow: hidden; }
-.cx-prog-t i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--pos))); transition: width 1.8s linear; }
+.cx-prog-t i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width 1.8s linear; }
 .cx-tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-bottom: 6px; }
 .cx-tcard { border: 1px solid var(--line); border-top: 4px solid var(--tc, var(--accent)); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; background: linear-gradient(180deg, color-mix(in srgb, var(--tc, var(--accent)) 7%, var(--surface)), var(--surface) 70%); min-width: 0; }
 .cx-tcard p { margin: 0; line-height: 1.55; overflow-wrap: anywhere; } .cx-tcard .memo-pts { margin-top: 4px; }
@@ -960,15 +960,223 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
 .cx-split { display: flex; height: 16px; border-radius: 8px; overflow: hidden; gap: 2px; margin: 6px 0; }
 .cx-split i { display: block; height: 100%; }
 
+/* ================================================================ AdvisorMindOS
+   Brand shell, folding sections, jump palette and motion. Petrol canvas, one brass accent.
+   Motion: 100/150/200/300ms only, ease-out in and ease-in out, transform and opacity only. */
+:root {
+  --l2: #152c33; --l3: #19343c; --line-2: #2d4a51;
+  --bar: 60px; --barh: 60px; --rp: 14px;
+  --t1: 100ms; --t2: 150ms; --t3: 200ms; --t4: 300ms;
+  --out: cubic-bezier(0.16, 1, 0.3, 1); --in: cubic-bezier(0.7, 0, 0.84, 0);
+}
+@media (max-width: 760px) { :root { --bar: 0px; --barh: 54px; } }
+html { scroll-padding-top: calc(var(--bar) + 12px); }
+body { font: 14.5px/1.55 var(--body); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+::selection { background: color-mix(in srgb, var(--accent) 34%, transparent); color: var(--ink); }
+a { text-underline-offset: 2px; }
+button { font-family: var(--body); }
+button:hover:not(:disabled) { border-color: var(--line-2); }
+button.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, #fff); border-color: transparent; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="search"], input[type="text"], select, textarea { background: var(--bg); border-color: var(--line-2); }
+input[type="search"]:focus, input[type="text"]:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+h1, h2, h3 { font-stretch: 88%; letter-spacing: -0.015em; }
+.eyebrow { letter-spacing: 0.01em; text-transform: none; font-size: 12.5px; color: var(--muted); }
+.subhead { letter-spacing: 0.01em; text-transform: none; font-size: 13px; color: var(--ink); font-weight: 600; }
+.cx-desk { letter-spacing: 0; text-transform: none; }
+.pick .when { font: 500 12px var(--body); font-variant-numeric: tabular-nums; letter-spacing: 0; }
+.wrap { padding-block: 18px 72px; gap: 18px; }
+
+/* ---------------------------------------------------------------- app bar */
+.appbar { position: sticky; top: 0; z-index: 50; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.02); }
+.appbar-in { max-width: 1480px; margin: 0 auto; height: var(--barh); padding-inline: 20px; display: flex; align-items: center; gap: 24px; }
+.brand { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; flex: none; border-radius: 10px; padding: 4px 6px 4px 2px; }
+.brand:hover .word { color: #fff; }
+.brand .mark { width: 30px; height: 30px; flex: none; overflow: visible; }
+.brand .word { font: 800 20px/1 var(--display); font-stretch: 78%; letter-spacing: -0.025em; white-space: nowrap; }
+.brand .word .os { font-weight: 400; font-stretch: 100%; letter-spacing: 0; margin-left: 1px; }
+.mark .m-leg { stroke: var(--accent); }
+.mark .m-line { stroke: var(--ink); }
+.mark .m-apex { fill: var(--accent); }
+.mark .m-tip { fill: var(--ink); }
+.readbar { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); pointer-events: none; }
+.tabs-wrap { position: relative; align-self: stretch; display: flex; align-items: center; flex: 1; min-width: 0; }
+.tabs { display: flex; flex-wrap: nowrap; gap: 2px; border: 0; }
+.tab { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 8px; background: transparent; padding: 8px 12px; font: 600 14.5px var(--body); font-stretch: 100%; color: var(--muted); white-space: nowrap; }
+.tab:hover:not(:disabled) { color: var(--ink); background: var(--sunk); }
+.tab.cur { color: var(--ink); border: 0; }
+.tab .ti { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tab.cur .ti { stroke: var(--accent); }
+.tab-ind { position: absolute; left: 0; bottom: -1px; width: 100px; height: 2px; border-radius: 2px; background: var(--accent); transform-origin: 0 50%; transform: scaleX(0); pointer-events: none; }
+.tab-ind.ready { transition: transform var(--t3) var(--out); }
+.bar-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.jump { display: inline-flex; align-items: center; gap: 10px; min-width: 220px; padding: 7px 8px 7px 12px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--bg); color: var(--muted); font: 500 13.5px var(--body); }
+.jump:hover:not(:disabled) { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
+.jump svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+.jump span { flex: 1; text-align: left; }
+kbd { font: 600 11px var(--body); color: var(--muted); background: var(--sunk); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px; }
+@media (max-width: 1180px) { .jump { min-width: 0; } .jump span, .jump kbd { display: none; } .tab { padding: 8px 10px; } }
+@media (max-width: 960px) { .tab .ti { display: none; } }
+
+/* Phone: the tabs become a bar along the bottom of the screen; the app bar scrolls away with the page. */
+@media (max-width: 760px) {
+  .appbar { position: relative; }
+  .appbar-in { padding-inline: 16px; gap: 12px; justify-content: space-between; }
+  .brand .word { font-size: 19px; }
+  .tabs-wrap { position: fixed; z-index: 60; left: 0; right: 0; bottom: 0; flex: none; padding: 4px 6px calc(4px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--line); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+  .tabs { width: 100%; justify-content: space-between; }
+  .tab { flex: 1 1 0; min-width: 0; flex-direction: column; gap: 3px; padding: 7px 2px 6px; min-height: 54px; font-size: 11.5px; font-weight: 600; border-radius: 10px; }
+  .tab .ti { display: block; width: 22px; height: 22px; }
+  .tab:hover:not(:disabled) { background: transparent; }
+  .tab.cur { background: var(--sunk); }
+  .tab-ind { top: -1px; bottom: auto; }
+  .jump { display: inline-flex; padding: 8px 10px; }
+  .readbar { position: fixed; top: 0; bottom: auto; z-index: 61; }
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
+
+/* ---------------------------------------------------------------- status line under the bar */
+.statusline { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; justify-content: space-between; }
+.tagline { margin: 0; font-size: 14px; color: var(--muted); max-width: 72ch; }
+.meta { gap: 6px 16px; }
+.meta .dot.ok { background: var(--pos); }
+
+/* ---------------------------------------------------------------- surfaces */
+.panel { position: relative; border-radius: var(--rp); padding: 18px 20px; gap: 14px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035); }
+@media (max-width: 600px) { .panel { padding: 14px 14px; border-radius: 12px; } }
+.picker { border-radius: var(--rp); padding: 20px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035); }
+.picker-head h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.025em; font-stretch: 82%; line-height: 1.1; }
+@media (max-width: 600px) { .picker { padding: 16px; } .picker-head h2 { font-size: 23px; } }
+.panel-head h2 { font-size: 19px; font-weight: 750; }
+.tbl-wrap { border-radius: 10px; background: var(--surface); }
+th { background: var(--l2); }
+tbody tr:hover td { background: color-mix(in srgb, var(--sunk) 70%, transparent); }
+tr.self td { background: var(--l2); }
+.chip { background: var(--l2); }
+.co-chip { background: var(--surface); }
+.co-chip span { white-space: normal; text-align: left; }
+.notice { border-radius: 12px; border: 1px solid transparent; }
+.notice.warn { border-color: color-mix(in srgb, var(--warn-ink) 22%, transparent); }
+.notice.err { border-color: color-mix(in srgb, var(--err-ink) 22%, transparent); }
+.notice.info { border-color: var(--line); }
+.sidenav { border-radius: var(--rp); padding: 10px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035); }
+.sidenav a.on { background: var(--l2); }
+.sidenav a .num { font: 600 11px var(--body); font-variant-numeric: tabular-nums; }
+.secnav, .ana-nav { background: var(--bg); }
+.cx-mi-bar { background: var(--surface); }
+.pfe-foot { background: var(--surface); }
+.q-backdrop { background: rgb(4 11 13 / 0.72); }
+.q-dialog, .sug { background: var(--l3); border-color: var(--line-2); }
+
+/* ---------------------------------------------------------------- folding sections */
+.ph-t { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.panel-head[data-fold] { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.panel-head[data-fold] .small, .panel-head[data-fold] p { user-select: text; -webkit-user-select: text; }
+.fold-btn { flex: none; width: 28px; height: 28px; margin-left: -6px; padding: 0; display: inline-grid; place-items: center; border-radius: 8px; border: 1px solid transparent; background: transparent; color: var(--faint); }
+.fold-btn svg { transition: transform var(--t3) var(--out); }
+.panel-head[data-fold]:hover .fold-btn { color: var(--ink); border-color: var(--line-2); background: var(--sunk); }
+.panel.is-folded > .panel-head .fold-btn svg { transform: rotate(-90deg); }
+.panel.is-folded > :not(.panel-head) { display: none !important; }
+.panel.is-folded { gap: 0; padding-block: 12px; }
+.panel.is-folded > .panel-head h2 { color: var(--muted); }
+.panel.is-folded:hover > .panel-head h2 { color: var(--ink); }
+.co-ind .panel-head .fold-btn { display: inline-grid !important; }
+.panel.is-opening > :not(.panel-head) { animation: ams-rise var(--t3) var(--out) both; }
+.panel.is-closing > :not(.panel-head) { animation: ams-sink var(--t1) var(--in) both; }
+.panel.is-flash::after { content: ""; position: absolute; inset: -1px; border-radius: inherit; border: 2px solid var(--accent); pointer-events: none; animation: ams-flash var(--t4) var(--out) 2 alternate both; }
+
+/* Every disclosure on the page gets the same chevron and opens with the same short rise. */
+details > summary { cursor: pointer; }
+details:not(.cx-mi-row):not(.cx-fold):not(.pf-more):not(.iv-card) > summary { list-style: none; position: relative; padding-left: 22px; }
+details:not(.cx-mi-row):not(.cx-fold):not(.pf-more):not(.iv-card) > summary::-webkit-details-marker { display: none; }
+details:not(.cx-mi-row):not(.cx-fold):not(.pf-more):not(.iv-card) > summary::before { content: ""; position: absolute; left: 4px; top: calc(0.75em - 4px); width: 7px; height: 7px; border-right: 1.75px solid var(--faint); border-bottom: 1.75px solid var(--faint); transform: rotate(-45deg); transition: transform var(--t3) var(--out); }
+details[open]:not(.cx-mi-row):not(.cx-fold):not(.pf-more):not(.iv-card) > summary::before { transform: translateY(-2px) rotate(45deg); }
+details > summary:hover::before { border-color: var(--ink); }
+details.d-open > :not(summary) { animation: ams-rise var(--t3) var(--out) both; }
+
+/* ---------------------------------------------------------------- motion */
+@keyframes ams-rise { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes ams-sink { to { opacity: 0; transform: translateY(-4px); } }
+@keyframes ams-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes ams-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ams-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes ams-flash { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ams-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes ams-draw { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+/* A section seen for the first time in this view rises into place, a few at a time. */
+.p-new { animation: ams-in var(--t4) var(--out) both; animation-delay: calc(var(--i, 0) * 50ms); }
+.p-new :is(.meter > i, .pillar-bar > i, .cx-track > i, .trk-prog > i, .cx-split > i, .cx-rate > i) { transform-origin: 0 50%; animation: ams-grow var(--t4) var(--out) both; animation-delay: calc(var(--i, 0) * 50ms + 100ms); }
+.v-enter { animation: ams-fade var(--t3) var(--out) both; }
+/* The one load moment: the mark assembles, then the wordmark settles. */
+.boot .mark .m-leg { animation: ams-draw var(--t4) var(--out) both; }
+.boot .mark .m-line { animation: ams-draw var(--t4) var(--out) 100ms both; }
+.boot .mark .m-apex, .boot .mark .m-tip { transform-box: fill-box; transform-origin: center; animation: ams-pop var(--t3) var(--out) 200ms both; }
+.boot .brand .word { animation: ams-fade var(--t4) var(--out) 100ms both; }
+
+/* ---------------------------------------------------------------- jump palette */
+.cmdk-scrim { position: fixed; inset: 0; z-index: 1100; display: grid; justify-items: center; align-items: start; padding: 12vh 16px 16px; background: rgb(4 11 13 / 0.7); opacity: 0; transition: opacity var(--t2) var(--in); }
+.cmdk-scrim.open { opacity: 1; transition: opacity var(--t2) var(--out); }
+.cmdk-scrim[hidden] { display: none; }
+.cmdk { width: min(640px, 100%); max-height: min(70vh, 620px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: var(--l3); border: 1px solid var(--line-2); border-radius: 16px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 24px 48px rgb(0 0 0 / 0.35); overflow: hidden; transform: translateY(-8px); opacity: 0; transition: transform var(--t2) var(--in), opacity var(--t2) var(--in); }
+.cmdk-scrim.open .cmdk { transform: none; opacity: 1; transition: transform var(--t3) var(--out), opacity var(--t3) var(--out); }
+.cmdk-in { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line-2); }
+.cmdk-in svg { width: 18px; height: 18px; flex: none; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; }
+.cmdk-in input { flex: 1; min-width: 0; font: 500 16px var(--body); color: var(--ink); background: transparent; border: 0; padding: 4px 0; outline: none; box-shadow: none; }
+.cmdk-in input:focus { box-shadow: none; }
+.cmdk-list { overflow-y: auto; padding: 6px; overscroll-behavior: contain; }
+.cmdk-g { padding: 10px 10px 4px; font-size: 12px; font-weight: 600; color: var(--faint); }
+.cmdk-o { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; cursor: pointer; color: var(--ink); }
+.cmdk-o svg { width: 18px; height: 18px; fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.cmdk-o .l { min-width: 0; overflow-wrap: anywhere; }
+.cmdk-o .s { display: block; font-size: 12.5px; color: var(--muted); }
+.cmdk-o .h { font-size: 12px; color: var(--faint); white-space: nowrap; }
+.cmdk-o[aria-selected="true"] { background: var(--sunk); box-shadow: inset 2px 0 0 var(--accent); }
+.cmdk-o[aria-selected="true"] svg { stroke: var(--accent); }
+.cmdk-o mark { background: none; color: var(--accent); font-weight: 700; }
+.cmdk-none { padding: 18px 12px; color: var(--muted); font-size: 14px; }
+.cmdk-foot { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 16px; border-top: 1px solid var(--line-2); font-size: 12px; color: var(--faint); }
+@media (max-width: 760px) { .cmdk-scrim { padding-top: 10px; } .cmdk { max-height: calc(100vh - 100px); } .cmdk-foot { display: none; } }
+
+/* ---------------------------------------------------------------- page tools (bottom right) */
+.ptools { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: grid; gap: 8px; justify-items: end; }
+.ptools button { width: 44px; height: 44px; padding: 0; display: grid; place-items: center; border-radius: 12px; background: var(--l3); border: 1px solid var(--line-2); color: var(--ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 16px rgb(0 0 0 / 0.25); transition: transform var(--t2) var(--out), opacity var(--t2) var(--out); }
+.ptools button:hover:not(:disabled) { border-color: var(--accent); }
+.ptools svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ptools .to-top { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.ptools .to-top.show { opacity: 1; transform: none; pointer-events: auto; }
+.ptools .p-jump { display: none; }
+@media (max-width: 760px) { .ptools { right: 12px; bottom: calc(74px + env(safe-area-inset-bottom)); } .ptools button { width: 40px; height: 40px; } .ptools .p-fold { display: none; } }
+
+/* ---------------------------------------------------------------- footer */
+.amsfoot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding-top: 6px; color: var(--faint); font-size: 12.5px; }
+.amsfoot .brand { pointer-events: none; }
+.amsfoot .brand .mark { width: 22px; height: 22px; }
+.amsfoot .brand .word { font-size: 15px; color: var(--muted); }
+.method-panel .method { max-width: 80ch; }
+.method-panel .method h3 { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .p-new, .v-enter, .boot .mark *, .boot .brand .word, .panel.is-opening > *, .panel.is-closing > *, details.d-open > *, .p-new :is(.meter > i, .pillar-bar > i, .cx-track > i, .trk-prog > i, .cx-split > i, .cx-rate > i) { animation: none !important; }
+  .panel.is-flash::after { animation: ams-flash var(--t4) linear 2 alternate both; }
+  .tab-ind.ready, .fold-btn svg, details > summary::before, .ptools button { transition: none !important; }
+  .cmdk-scrim, .cmdk-scrim.open, .cmdk, .cmdk-scrim.open .cmdk { transition: opacity var(--t2) linear; transform: none; }
+}
 </style>
 
-<div class="wrap">
-  <header class="masthead">
-    <div class="brand"><b>Industry Scorer</b><span class="small muted">One industry or a whole sector · top 50 companies each · scored for four investor types</span></div>
+<header class="appbar" id="appbar">
+  <div class="appbar-in">
+    <a class="brand" href="#top" aria-label="AdvisorMindOS, back to top"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="m-leg" d="M6.5 26 16 7l9.5 19" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path class="m-line" d="M10.2 19.8l3.6-2.7 3.1 1.9 5.6-5.3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="m-apex" cx="16" cy="6.6" r="2.7"/><circle class="m-tip" cx="22.6" cy="13.7" r="1.9"/></svg><span class="word">AdvisorMind<span class="os">OS</span></span></a>
+    <div class="tabs-wrap"><nav class="tabs" id="tabs" aria-label="View"></nav><i class="tab-ind" id="tab-ind" aria-hidden="true"></i></div>
+    <div class="bar-tools"><button type="button" class="jump" id="jump-open" aria-label="Jump to a tab, section, industry or ticker (Ctrl K or /)" aria-keyshortcuts="Control+K /" title="Jump to (Ctrl K or /)"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button></div>
+  </div>
+  <i class="readbar" id="readbar" aria-hidden="true"></i>
+</header>
+<div class="wrap" id="top">
+  <div class="statusline">
+    <p class="tagline">One industry or a whole sector, the top 50 companies in each, scored for four investor types.</p>
     <div class="meta" id="meta"></div>
-  </header>
+  </div>
 
-  <nav class="tabs" id="tabs" aria-label="View"></nav>
   <section class="picker" id="picker" aria-label="Choose an industry"></section>
   <div id="report" style="display:grid;gap:18px"></div>
   <div id="company" style="display:grid;gap:18px" hidden></div>
@@ -976,8 +1184,9 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
   <div id="cmp" style="display:grid;gap:18px" hidden></div>
   <div id="pf" style="display:grid;gap:18px" hidden></div>
 
-  <section class="method">
-    <h3 style="color:var(--ink)">How the numbers are built</h3>
+  <section class="panel method-panel" id="method" data-fold-default="closed">
+    <div class="panel-head"><h2>How the numbers are built</h2><span class="small muted">Every source, calculation and agent behind the scores, in full</span></div>
+    <div class="method">
     <p><b>One industry at a time.</b> Nothing runs until you click an industry. Clicking one you haven't analyzed (or whose results are more than 3 days old) pulls its data, gathers the research and runs the analyst team; clicking one with recent results just opens them. "Run again" deletes everything cached for that industry (its results, research, earnings-call transcripts, every agent report, rule books and the companies' cached statements, plus the shared SPY, macro and world-news caches) and rebuilds all of it from scratch, including the rule books if you had built them.</p>
     <p><b>Every industry in a sector, with one click.</b> Open a sector and choose "Analyze all": every industry in it is analyzed one after another and each gets the same report it gets on its own. What the industries share is researched once for the sector rather than once per industry: one macro planner picks the series for every industry and tags each series with the industries it matters to; indicator analysts explain what is driving each series once and say, for each tagged industry, how much it matters and why; one world-events scout finds the live situations and says which industries each one reaches; each situation's facts (what is happening, the trigger, dated developments, scenarios) are written once, and its transmission into earnings, exposure, winners and losers is written for each industry it reaches, three industries per call so every section stays full length; each country any industry's trade map names gets its US relationship, risks, threats and policy written once, and each industry's analyst writes what it depends on there and who is exposed; each regulator's instruments are chosen once with a top five per industry, each instrument's legal facts and events are written and fact-checked once, and its impact and company examples are written per industry. Judgment is never shared: each industry still gets its own KPI analyst, earnings-call analyst, customers and suppliers, regulation analyst, trade map and supply-chain verdict, macro strategist, regulatory verdict and the full lead strategist with its red team and review. Company-news IDs differ by industry, so in a multi-industry prompt they are shown under aliases and mapped back. A sector of ten industries takes roughly 400 Claude calls instead of roughly 700 one at a time. The run is saved in this browser after every step; if the page closes it carries on when reopened, and if it stops (a usage limit, or Stop) Resume finishes only what's left. The sector overview compares every industry's scores, opportunity call, horizon calls, forward P/E, revisions and positioning, and opens each industry's full report.</p>
     <p><b>Universe.</b> Actively traded stocks in the FMP industry on NYSE, NASDAQ and AMEX above $300M market cap, excluding ETFs and funds. By default this includes foreign companies listed in the US (TSM, ASML, Medtronic); the "US-headquartered only" setting changes that. Share classes are merged and the 50 largest by market cap are kept. A company that stopped trading in this industry under one ticker and now trades under another (a relisting keeps its SEC CIK, e.g. Paramount Skydance PSKY → Skydance Corp SKYD) is found from FMP's own data and kept in the industry even if FMP files the new ticker elsewhere; its price history, statements, transcripts and news before the relisting come from the old ticker, and agents may refer to it by either.</p>
@@ -994,7 +1203,9 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
     <p><b>Analyst team.</b> Specialist agents each write one part: the industry KPI analyst (demand and profitability metrics, unit economics, pricing power, drivers, hot and cool segments, what management is saying), the macro planner, indicator analysts and strategist (described above), the world-events scout and one situation analyst per situation (transmission chain, revenue, cost, demand and regulatory channels, statement impact, exposure map, scenarios, winners and losers), and the regulation, legal and deals analyst. The lead strategist runs last, after every specialist report, every regulatory rule book and the regulatory verdict are in. Code hands it one dossier of all of it (metrics and scores, KPIs, the macro regime with every indicator read, the world-event deep dives and their scenarios, trade relations and the supply-chain verdict, regulation, legal and deals, every rule book and the verdict, sell-side consensus, sentiment and news). It writes the thesis, the ranked drivers across sections, the market's key debates, what the valuation already prices in, where the specialist reports disagree, and what would change the view. Then it builds bull, base and bear scenarios that each say what happens in every section (KPIs and cycle, macro, world events, trade and supply chain, regulation and rule books, earnings and balance sheet, valuation, price action and risk, sentiment, consensus), with probabilities and numbers for EPS change, end P/E and 12-month price move. Code computes the expected return, upside, downside, reward-to-risk and chance of a loss from those numbers, and checks each price move against its own EPS and P/E. The strategist then answers whether this is a real opportunity (yes, conditional or no) with entry triggers, the best tickers to express it and what to avoid; if its answer contradicts its own numbers, the page says so. Each investor type's verdict includes a read of every section. An investment-committee reviewer then checks the draft against the dossier (missed factors, numbers that contradict the data, contradictions, unsupported claims) and its corrections are applied. Each citation chip (N news, P press release, W world news, M filing, E EODHD news, T earnings call, I macro indicator) opens its source; code removes citations that don't match a retrieved item, labels figures without a source as estimates, and only allows tickers from the industry. The lead strategist's judgment moves each score by at most ±5 points on top of the section pillars, scaled down when evidence is thin. All of it runs on your own Claude usage.</p>
     <p><b>Regulatory bodies that matter.</b> The regulation analyst names the 4–8 agencies, commissions, ministries or self-regulatory bodies that actually move this industry's earnings, pricing or volumes, most impactful first, with what each controls and its levers. Each body's rule book is built in two steps: one agent picks its 5 most material binding instruments, ranked by 12-month financial materiality (searching the news as it goes), then each instrument is written up with its seven sections in its own call, so no answer is long enough to be cut off. An answer that is cut short anyway is repaired rather than discarded. The sources are a year of company news, press releases and EODHD regulation and trade news that mention the body, plus searches the agent runs itself. A separate fact-check call then labels every sentence that carries a number or citation: verified (with a verbatim quote linked to the source), corrected, legal background (only for the rule's own legal parameters) or unsupported (removed). Company examples must name a company that appears in the cited article. If the fact-check can't run, numeric claims are held back. If a rule book can't be built from live sources, the page says so rather than showing anything unverified. The overall regulatory verdict synthesizes all the rule books and is fact-checked the same way.</p>
     <p><b>Known biases.</b> Today's top 50 are used for all history (survivorship), and past index weights come from price moves, ignoring buybacks and issuance.</p>
+  </div>
   </section>
+  <footer class="amsfoot"><span class="brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="m-leg" d="M6.5 26 16 7l9.5 19" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path class="m-line" d="M10.2 19.8l3.6-2.7 3.1 1.9 5.6-5.3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="m-apex" cx="16" cy="6.6" r="2.7"/><circle class="m-tip" cx="22.6" cy="13.7" r="1.9"/></svg><span class="word">AdvisorMind<span class="os">OS</span></span></span><span>Research on FMP, EODHD and Claude. Press <kbd>/</kbd> to jump anywhere.</span></footer>
 </div>
 
 <script>
@@ -18735,7 +18946,7 @@ Return ONLY a JSON object:
     const vis = new Set();
     const pick = (id) => { links.forEach((a) => a.classList.toggle("on", a.dataset.spy === id || (a.dataset.grp || "").split(" ").includes(id)));
       const on = nav.querySelector("a.on:not(.sub)"); if (on && getComputedStyle(nav).display === "flex") on.scrollIntoView({ block: "nearest", inline: "nearest" }); };
-    const ob = new IntersectionObserver((ents) => { for (const e of ents) e.isIntersecting ? vis.add(e.target.id) : vis.delete(e.target.id); const first = secs.find((x) => vis.has(x.id)); if (first) pick(first.id); }, { rootMargin: "-8% 0px -72% 0px", threshold: 0 });
+    const ob = new IntersectionObserver((ents) => { for (const e of ents) e.isIntersecting ? vis.add(e.target.id) : vis.delete(e.target.id); const first = secs.find((x) => vis.has(x.id)); if (first) pick(first.id); }, { rootMargin: `-${(parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0) + Math.round(innerHeight * 0.08)}px 0px -72% 0px`, threshold: 0 });
     secs.forEach((x) => ob.observe(x)); _spies[key] = ob; if (secs[0]) pick(secs[0].id);
   }
   /** The industry report's sidebar, in the order the sections appear. */
@@ -22376,9 +22587,8 @@ Return ONLY a JSON object:
     }
     const n0 = $("cx-mi-count"); if (n0) n0.textContent = `${shown} of ${L.children.length} shown`;
   }
-  /** Compare's interactions, wired once: the explorer's filters, open rows kept across refreshes, sections that fold. */
+  /** Compare's interactions, wired once: the explorer's filters and open rows kept across refreshes (sections fold through the page shell). */
   function cmpWire(el) {
-    for (const id of S.cmpCol || []) $(id)?.classList.add("cx-folded");
     if (el.__cmpWired) return; el.__cmpWired = true;
     el.addEventListener("click", (ev) => {
       const j = ev.target.closest("[data-mi-jump]");
@@ -22392,9 +22602,6 @@ Return ONLY a JSON object:
         for (const [a, k] of [["miG", "g"], ["miT", "t"], ["miE", "e"], ["miS", "s"]]) if (a in t.dataset) M[k] = t.dataset[a];
         t.parentElement.querySelectorAll(`[data-${t.dataset.miG !== undefined ? "mi-g" : t.dataset.miT !== undefined ? "mi-t" : t.dataset.miE !== undefined ? "mi-e" : "mi-s"}]`).forEach((b) => b.classList.toggle("cur", b === t));
         cmpMiApply(); return; }
-      // A section's title folds it away (and back).
-      const h = ev.target.closest("section.panel > .panel-head"); if (h && !ev.target.closest("a,button,input,select")) { const sec0 = h.parentElement, col = (S.cmpCol ||= new Set());
-        sec0.classList.toggle("cx-folded"); if (sec0.classList.contains("cx-folded")) col.add(sec0.id); else col.delete(sec0.id); }
     });
     el.addEventListener("input", (ev) => { if (ev.target.id === "cx-mi-q") { (S.cmpMi ||= {}).q = ev.target.value; cmpMiApply(); } });
     el.addEventListener("toggle", (ev) => { const r = ev.target; if (!r.classList?.contains("cx-mi-row")) return; const o = (S.cmpOpen ||= new Set()); if (r.open) o.add(r.dataset.miKey); else o.delete(r.dataset.miKey); }, true);
@@ -22418,7 +22625,7 @@ Return ONLY a JSON object:
   function cmpBar() {
     const c = S.cmp;
     const chips = c.syms.map((s) => { const x = c.subj[s], st = x?.stage;
-      return `<span class="cx-chip" style="--tc:${cmpColor(s)}"><i></i><b>${esc(s)}</b>${st === "loading" ? `<span class="cx-spin"></span>` : st === "error" ? `<span class="pill neg">!</span>` : `<span class="muted small">${esc(trimC(x?.s?.name || "", 22))}</span>`}<button class="cx-x" data-cmp-del="${esc(s)}" aria-label="Remove ${esc(s)}">×</button></span>`; }).join("");
+      return `<span class="cx-chip" style="--tc:${cmpColor(s)}"><i></i><b>${esc(s)}</b>${st === "loading" ? `<span class="cx-spin"></span>` : st === "error" ? `<span class="pill neg">!</span>` : `<span class="muted small">${esc(x?.s?.name || "")}</span>`}<button class="cx-x" data-cmp-del="${esc(s)}" aria-label="Remove ${esc(s)}">×</button></span>`; }).join("");
     const empty = Array.from({ length: Math.max(0, CMP_MAX - c.syms.length) }, (_, i) => `<span class="cx-chip cx-empty">${i === 0 && c.syms.length < 2 ? "add a ticker" : "+"}</span>`).join("");
     const quick = !c.syms.length ? `<div class="cx-quick small muted">Try: ${[["AAPL,MSFT", "AAPL vs MSFT"], ["XOM,CVX", "XOM vs CVX"], ["SPY,QQQ", "SPY vs QQQ"], ["KO,PEP,MDLZ", "KO, PEP, MDLZ"]].map(([v, l]) => `<button class="chip" data-cmp-quick="${v}">${l}</button>`).join(" ")}</div>` : "";
     return `<section class="cx-bar"><div class="cx-bar-head"><div><span class="eyebrow">Compare</span><h2>Head to head, up to ${CMP_MAX} tickers</h2></div><span class="small muted">Stocks or funds · built on your industry reports and any analysis already written · one Claude call for the verdict</span></div>
@@ -22788,7 +22995,9 @@ Return ONLY a JSON object:
   function renderTabs() {
     const el = $("tabs"); if (!el) return;
     const T = [["industries", "Industries"], ["companies", "Companies"], ["funds", "Funds"], ["compare", "Compare"], ["portfolios", "Portfolios"]], cur = T.some(([k]) => k === S.tab) ? S.tab : "industries";
-    el.innerHTML = T.map(([k, l]) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}">${l}</button>`).join("");
+    const IC = { industries: '<path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/>', companies: '<path d="M4 17V4.5L11 3v14M11 7l5 1.5V17M2.5 17h15M6.5 7.5h2M6.5 10.5h2M6.5 13.5h2M13.5 11h1M13.5 14h1"/>',
+      funds: '<path d="M10 3a7 7 0 1 0 7 7h-7z"/><path d="M12.5 1.5V8H19a6.5 6.5 0 0 0-6.5-6.5z"/>', compare: '<circle cx="7.5" cy="10" r="5"/><circle cx="12.5" cy="10" r="5"/>', portfolios: '<path d="M2.5 6.5h15v10h-15zM7 6.5V4h6v2.5M2.5 10.5h15"/>' };
+    el.innerHTML = T.map(([k, l], i) => `<button class="tab ${cur === k ? "cur" : ""}" data-tab="${k}" aria-pressed="${cur === k}" aria-keyshortcuts="Alt+${i + 1}" title="${l} (Alt ${i + 1})"><svg class="ti" viewBox="0 0 20 20" aria-hidden="true">${IC[k]}</svg><span>${l}</span></button>`).join("");
     for (const [id, show] of [["picker", cur === "industries"], ["report", cur === "industries"], ["company", cur === "companies"], ["fund", cur === "funds"], ["cmp", cur === "compare"], ["pf", cur === "portfolios"]]) { const x = $(id); if (x) { x.hidden = !show; x.style.display = show ? (id === "picker" ? "" : "grid") : "none"; } }
   }
   function companySearch() {
@@ -22807,7 +23016,7 @@ Return ONLY a JSON object:
     if (!secs.length) return `<div class="small muted">No saved industries yet. Analyze an industry (or pull runs from GitHub) and its companies appear here.</div>`;
     return secs.map((s) => `<section class="panel"><div class="panel-head"><h2>${esc(s)}</h2><span class="small muted">${bySector[s].length} industries · click a company</span></div>
       ${bySector[s].sort((a, b) => b.cos.reduce((x, c) => x + (c.market_cap || 0), 0) - a.cos.reduce((x, c) => x + (c.market_cap || 0), 0)).map((r) => `<details class="co-ind" ${s === "Consumer Defensive" ? "open" : ""}><summary>${esc(r.name)} <span class="small muted">${r.cos.length} companies · analyzed ${esc(fmtShort(r.as_of || ""))}</span></summary>
-        <div class="co-chips">${r.cos.sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((c) => `<button class="chip co-chip" data-co="${esc(c.symbol)}" title="${esc(c.name)}"><b class="tick">${esc(c.symbol)}</b> <span>${esc(trimC(c.name || "", 26))}</span></button>`).join("")}</div></details>`).join("")}</section>`).join("");
+        <div class="co-chips">${r.cos.sort((a, b) => (a.rank || 99) - (b.rank || 99)).map((c) => `<button class="chip co-chip" data-co="${esc(c.symbol)}" title="${esc(c.name)}"><b class="tick">${esc(c.symbol)}</b> <span>${esc(c.name || "")}</span></button>`).join("")}</div></details>`).join("")}</section>`).join("");
   }
   function renderCompany() {
     const el = $("company"); if (!el) return;
@@ -24153,5 +24362,253 @@ Return ONLY a JSON object:
     renderAll();
     autoPull();
   })();
+})();
+</script>
+<script>
+/* AdvisorMindOS shell: folding sections, the tab indicator, the jump palette (Ctrl/Cmd K or /), Alt+1-5 for tabs,
+   reading progress, back to top. It only reads and decorates the DOM the app renders; it never touches the app's state.
+   Skipped in the headless GitHub job. */
+(() => {
+  "use strict";
+  if (window.__INDUSTRY_SCORER_JOB__) return;
+  const d = document, html = d.documentElement, $ = (id) => d.getElementById(id);
+  const RM = matchMedia("(prefers-reduced-motion: reduce)"), PHONE = matchMedia("(max-width: 760px)");
+  const store = {
+    get(k, dflt) { try { const v = localStorage.getItem(k); return v == null ? dflt : JSON.parse(v); } catch { return dflt; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const later = (ms, f) => setTimeout(f, RM.matches ? 0 : ms);
+
+  // ---------------------------------------------------------------- which view is on screen
+  const VIEWS = ["picker", "report", "company", "fund", "cmp", "pf"];
+  const shown = (el) => el && !el.hidden && el.style.display !== "none";
+  const liveViews = () => VIEWS.map($).filter(shown);
+  const viewOf = (el) => el.closest("#picker,#report,#company,#fund,#cmp,#pf,#method")?.id || "page";
+  const curTab = () => d.querySelector("#tabs .tab.cur")?.dataset.tab || "industries";
+
+  // ---------------------------------------------------------------- folding sections
+  const FK = "ams.fold.v1";
+  const fold = store.get(FK, {}) || {};
+  const saveFold = () => { const ks = Object.keys(fold); if (ks.length > 600) for (const k of ks.slice(0, ks.length - 600)) delete fold[k]; store.set(FK, fold); };
+  const titleOf = (p) => (p.querySelector(":scope > .panel-head h2, :scope > .panel-head h3")?.textContent || "").replace(/\s+/g, " ").trim();
+  const keyOf = (p) => viewOf(p) + ":" + (p.id || titleOf(p).slice(0, 80));
+  const CHEV = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const label = (p, folded) => `${folded ? "Expand" : "Collapse"} ${titleOf(p) || "section"}`;
+  function setFolded(p, f) {
+    p.classList.toggle("is-folded", f);
+    const b = p.querySelector(":scope > .panel-head .fold-btn"); if (b) { b.setAttribute("aria-expanded", String(!f)); b.setAttribute("aria-label", label(p, f)); b.title = f ? "Expand" : "Collapse"; }
+  }
+  function enhance(p) {
+    const head = p.querySelector(":scope > .panel-head"); if (!head) return false;
+    if (!head.dataset.fold) {
+      head.dataset.fold = "1";
+      const b = d.createElement("button"); b.type = "button"; b.className = "fold-btn"; b.innerHTML = CHEV;
+      const h = head.querySelector(":scope > h2, :scope > h3, :scope > div > h2, :scope > div > h3");
+      if (h) { const t = d.createElement("span"); t.className = "ph-t"; h.parentNode.insertBefore(t, h); t.append(b, h); } else head.prepend(b);
+    }
+    const k = keyOf(p); p.dataset.foldKey = k;
+    setFolded(p, k in fold ? !!fold[k] : p.dataset.foldDefault === "closed");
+    return true;
+  }
+  function toggle(p, to, quiet) {
+    const now = p.classList.contains("is-folded"), next = to ?? !now; if (next === now) return;
+    fold[p.dataset.foldKey || keyOf(p)] = next; if (!quiet) saveFold();
+    const done = () => { p.classList.remove("is-closing"); setFolded(p, next); if (!next && !quiet) { p.classList.add("is-opening"); later(300, () => p.classList.remove("is-opening")); } };
+    if (next && !quiet && !RM.matches) { p.classList.add("is-closing"); setTimeout(done, 100); } else done();
+  }
+  function foldAll(to) {
+    const ps = [...liveViews(), $("method")].filter(Boolean).flatMap((el) => [...el.querySelectorAll("section.panel")]).filter((p) => p.querySelector(":scope > .panel-head[data-fold]"));
+    for (const p of ps) toggle(p, to, true); saveFold(); syncFoldBtn();
+  }
+  const anyOpen = () => liveViews().some((el) => el.querySelector("section.panel:not(.is-folded) > .panel-head[data-fold]"));
+  d.addEventListener("click", (ev) => {
+    const head = ev.target.closest("section.panel > .panel-head[data-fold]"); if (!head) return;
+    if (!ev.target.closest(".fold-btn") && ev.target.closest("a, button, input, select, textarea, label, summary, details, .seg, [data-tab]")) return;
+    if (getSelection && String(getSelection()).length > 2 && !ev.target.closest(".fold-btn")) return;
+    toggle(head.parentElement); syncFoldBtn();
+  });
+  // A disclosure the reader opens rises into place (re-rendered open ones don't replay it).
+  d.addEventListener("click", (ev) => {
+    const s = ev.target.closest("summary"); if (!s || RM.matches) return; const det = s.parentElement;
+    setTimeout(() => { if (det.open) { det.classList.add("d-open"); setTimeout(() => det.classList.remove("d-open"), 320); } }, 0);
+  });
+
+  // ---------------------------------------------------------------- first sight of a section: rise in, a few at a time
+  let seen = new Set(), lastTab = null, booted = false;
+  function decorate() {
+    const fresh = [];
+    for (const p of d.querySelectorAll("section.panel")) {
+      if (!p.querySelector(":scope > .panel-head[data-fold]") || !p.dataset.foldKey) enhance(p);
+      const k = p.dataset.foldKey || keyOf(p);
+      if (!seen.has(k)) { seen.add(k); if (shown(p.closest("#picker,#report,#company,#fund,#cmp,#pf") || p) && !p.closest(".is-folded")) fresh.push(p); }
+    }
+    if (!RM.matches && booted) fresh.forEach((p, i) => { if (p.getBoundingClientRect().top > innerHeight * 1.5) return; p.style.setProperty("--i", String(Math.min(i, 7))); p.classList.add("p-new"); setTimeout(() => p.classList.remove("p-new"), 900); });
+    syncFoldBtn();
+  }
+
+  // ---------------------------------------------------------------- tabs: the sliding indicator, and a fade on switch
+  const ind = $("tab-ind");
+  function placeInd() {
+    const cur = d.querySelector("#tabs .tab.cur"); if (!cur || !ind) return;
+    const wr = ind.parentElement.getBoundingClientRect(), r = cur.getBoundingClientRect(); if (!r.width) return;
+    const w = PHONE.matches ? 28 : r.width - 16, x = r.left - wr.left + (r.width - w) / 2;
+    ind.style.transform = `translateX(${x.toFixed(1)}px) scaleX(${(w / 100).toFixed(3)})`;
+    if (!ind.classList.contains("ready")) requestAnimationFrame(() => ind.classList.add("ready"));
+  }
+  function onTabs() {
+    placeInd(); const t = curTab();
+    if (t !== lastTab) {
+      const first = lastTab == null; lastTab = t; seen = new Set();
+      if (!first && !RM.matches) for (const v of liveViews()) { v.classList.remove("v-enter"); void v.offsetWidth; v.classList.add("v-enter"); setTimeout(() => v.classList.remove("v-enter"), 260); }
+      if (!first) { const top = $("top"); if (top && scrollY > top.offsetTop) scrollTo({ top: 0, behavior: "instant" }); }
+    }
+  }
+
+  // ---------------------------------------------------------------- reading progress, back to top, fold-all button
+  const bar = $("readbar"), tools = d.createElement("div");
+  tools.className = "ptools";
+  tools.innerHTML = `<button type="button" class="p-jump" data-ams="jump" aria-label="Jump to a section, tab or ticker" title="Jump to (/)"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg></button>
+    <button type="button" class="p-fold" data-ams="fold" aria-label="Collapse every section" title="Collapse every section"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4.5l4 4 4-4M6 15.5l4-4 4 4"/></svg></button>
+    <button type="button" class="to-top" data-ams="top" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4.5M5 9l5-5 5 5"/></svg></button>`;
+  d.body.appendChild(tools);
+  const foldBtn = tools.querySelector(".p-fold"), topBtn = tools.querySelector(".to-top");
+  function syncFoldBtn() {
+    const open = anyOpen(), l = open ? "Collapse every section" : "Expand every section";
+    foldBtn.setAttribute("aria-label", l); foldBtn.title = l;
+    foldBtn.innerHTML = open ? '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4.5l4 4 4-4M6 15.5l4-4 4 4"/></svg>' : '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 8l4-4 4 4M6 12l4 4 4-4"/></svg>';
+  }
+  tools.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-ams]"); if (!b) return;
+    if (b.dataset.ams === "top") scrollTo({ top: 0, behavior: RM.matches ? "instant" : "smooth" });
+    if (b.dataset.ams === "fold") foldAll(anyOpen());
+    if (b.dataset.ams === "jump") openK();
+  });
+  let tick = false;
+  addEventListener("scroll", () => {
+    if (tick) return; tick = true;
+    requestAnimationFrame(() => { tick = false; const max = html.scrollHeight - innerHeight, f = max > 0 ? Math.min(1, scrollY / max) : 0;
+      if (bar) bar.style.transform = `scaleX(${f.toFixed(4)})`; topBtn.classList.toggle("show", scrollY > 700); });
+  }, { passive: true });
+  addEventListener("resize", () => placeInd());
+
+  // ---------------------------------------------------------------- the jump palette
+  const IC = {
+    tab: '<path d="M3 5.5h14v10H3zM3 8.5h14"/>',
+    sec: '<path d="M4 5h12M4 10h12M4 15h8"/>',
+    ind: '<path d="M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z"/>',
+    co: '<path d="M4 17V4.5L11 3v14M11 7l5 1.5V17M2.5 17h15"/>',
+    fund: '<path d="M10 3a7 7 0 1 0 7 7h-7z"/>',
+    cmp: '<circle cx="7.5" cy="10" r="5"/><circle cx="12.5" cy="10" r="5"/>',
+    act: '<path d="M11 2.5 4.5 11H10l-1 6.5L15.5 9H10z"/>',
+  };
+  const scrim = d.createElement("div");
+  scrim.className = "cmdk-scrim"; scrim.id = "cmdk"; scrim.hidden = true;
+  scrim.innerHTML = `<div class="cmdk" role="dialog" aria-modal="true" aria-label="Jump to">
+    <div class="cmdk-in"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg>
+      <input id="cmdk-q" type="text" placeholder="Jump to a tab, section, industry or ticker" aria-label="Jump to" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list"><kbd>Esc</kbd></div>
+    <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Results"></div>
+    <div class="cmdk-foot"><span><kbd>↑</kbd> <kbd>↓</kbd> move</span><span><kbd>Enter</kbd> open</span><span><kbd>Alt</kbd> + <kbd>1</kbd>–<kbd>5</kbd> switch tabs</span><span><kbd>/</kbd> or <kbd>Ctrl</kbd> <kbd>K</kbd> open this</span></div></div>`;
+  d.body.appendChild(scrim);
+  const q = scrim.querySelector("#cmdk-q"), list = scrim.querySelector("#cmdk-list");
+  let opts = [], sel = 0, back = null;
+
+  const clickTab = (t) => d.querySelector(`#tabs [data-tab="${t}"]`)?.click();
+  const afterRender = (f) => requestAnimationFrame(() => requestAnimationFrame(f));
+  function goSection(p) {
+    if (p.classList.contains("is-folded")) toggle(p, false);
+    p.scrollIntoView({ behavior: RM.matches ? "instant" : "smooth", block: "start" });
+    p.classList.remove("is-flash"); void p.offsetWidth; p.classList.add("is-flash"); setTimeout(() => p.classList.remove("is-flash"), 700);
+  }
+  function viaForm(tab, input, form, v) {
+    clickTab(tab);
+    afterRender(() => { const i = $(input), f = $(form); if (!i || !f) return; i.value = v; i.dispatchEvent(new Event("input", { bubbles: true })); f.requestSubmit ? f.requestSubmit() : f.dispatchEvent(new Event("submit", { cancelable: true })); });
+  }
+  function gather(qs) {
+    const out = [], ql = qs.trim().toLowerCase();
+    [...d.querySelectorAll("#tabs .tab")].forEach((b, i) => out.push({ g: "Tabs", ic: "tab", l: b.textContent.trim(), h: `Alt ${i + 1}`, run: () => b.click() }));
+    for (const v of liveViews()) for (const p of v.querySelectorAll("section.panel")) {
+      const t = titleOf(p); if (!t || !shown(p) || p.closest("[hidden]")) continue;
+      out.push({ g: "On this page", ic: "sec", l: t, s: p.classList.contains("is-folded") ? "Collapsed, opens when you jump" : "", run: () => goSection(p) });
+    }
+    if (ql) {
+      const seenI = new Set();
+      for (const b of d.querySelectorAll("#picker [data-pick], [data-open-industry]")) {
+        const name = b.dataset.pick || b.dataset.openIndustry; if (!name || seenI.has(name)) continue; seenI.add(name);
+        out.push({ g: "Industries", ic: "ind", l: name, run: () => { clickTab("industries"); afterRender(() => { const x = d.querySelector(`#picker [data-pick="${CSS.escape(name)}"], [data-open-industry="${CSS.escape(name)}"]`); x ? x.click() : b.click(); }); } });
+      }
+      if (/^[a-z][a-z.\-]{0,4}$/i.test(qs.trim())) { const T = qs.trim().toUpperCase();
+        out.push({ g: "Ticker", ic: "co", l: `Open ${T} on Companies`, run: () => viaForm("companies", "co-q", "co-form", T), always: true });
+        out.push({ g: "Ticker", ic: "fund", l: `Open ${T} on Funds`, run: () => viaForm("funds", "fund-q", "fund-form", T), always: true });
+        out.push({ g: "Ticker", ic: "cmp", l: `Add ${T} to Compare`, run: () => viaForm("compare", "cmp-q", "cmp-form", T), always: true });
+      }
+    }
+    const open = anyOpen();
+    out.push({ g: "Actions", ic: "act", l: open ? "Collapse every section" : "Expand every section", run: () => foldAll(open) });
+    if (open) out.push({ g: "Actions", ic: "act", l: "Expand every section", run: () => foldAll(false) });
+    out.push({ g: "Actions", ic: "act", l: "Back to top", run: () => scrollTo({ top: 0, behavior: RM.matches ? "instant" : "smooth" }) });
+    const m = $("method"); if (m) out.push({ g: "Actions", ic: "act", l: "Read how the numbers are built", run: () => goSection(m) });
+    const pull = d.querySelector("[data-pull-all]"); if (pull && !pull.disabled) out.push({ g: "Actions", ic: "act", l: "Update everything from GitHub", run: () => pull.click() });
+    if (!ql) return out;
+    const score = (o) => { const l = o.l.toLowerCase(), words = ql.split(/\s+/).filter(Boolean);
+      if (o.always) return 1; if (!words.every((w) => l.includes(w) || (o.s || "").toLowerCase().includes(w))) return 0;
+      return l.startsWith(ql) ? 4 : new RegExp("\\b" + ql.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(l) ? 3 : 2; };
+    return out.map((o) => ({ ...o, sc: score(o) })).filter((o) => o.sc > 0).sort((a, b) => b.sc - a.sc);
+  }
+  const mark = (s, qs) => { const t = qs.trim(); if (!t) return esc(s); const i = s.toLowerCase().indexOf(t.toLowerCase()); return i < 0 ? esc(s) : esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + t.length)) + "</mark>" + esc(s.slice(i + t.length)); };
+  function draw() {
+    const qs = q.value; let all = gather(qs);
+    const cap = { Tabs: 5, "On this page": qs ? 12 : 40, Industries: 8, Ticker: 3, Actions: 6 };
+    const order = qs ? [...new Set(all.map((o) => o.g))] : ["Tabs", "On this page", "Actions"];
+    opts = []; let h = "";
+    for (const g of order) { const xs = all.filter((o) => o.g === g).slice(0, cap[g] || 8); if (!xs.length) continue;
+      h += `<div class="cmdk-g" role="presentation">${esc(g)}</div>` + xs.map((o) => { const n = opts.push(o) - 1;
+        return `<div class="cmdk-o" role="option" id="cmdk-o${n}" data-n="${n}" aria-selected="false"><svg viewBox="0 0 20 20" aria-hidden="true">${IC[o.ic] || IC.sec}</svg><span class="l">${mark(o.l, qs)}${o.s ? `<span class="s">${esc(o.s)}</span>` : ""}</span>${o.h ? `<span class="h">${esc(o.h)}</span>` : ""}</div>`; }).join(""); }
+    list.innerHTML = h || `<div class="cmdk-none">Nothing here matches “${esc(qs)}”. Try a section title, an industry or a ticker.</div>`;
+    sel = 0; pick(0);
+  }
+  function pick(n) {
+    if (!opts.length) { q.removeAttribute("aria-activedescendant"); return; }
+    sel = (n + opts.length) % opts.length;
+    list.querySelectorAll(".cmdk-o").forEach((e) => e.setAttribute("aria-selected", String(+e.dataset.n === sel)));
+    const e = $("cmdk-o" + sel); if (e) { q.setAttribute("aria-activedescendant", e.id); e.scrollIntoView({ block: "nearest" }); }
+  }
+  function openK() {
+    if (!scrim.hidden) return; back = d.activeElement; scrim.hidden = false; q.value = ""; draw();
+    requestAnimationFrame(() => { scrim.classList.add("open"); q.focus(); });
+  }
+  function closeK(run) {
+    if (scrim.hidden) return; scrim.classList.remove("open");
+    setTimeout(() => { scrim.hidden = true; if (!run && back && back.focus) back.focus(); if (run) run(); }, RM.matches ? 0 : 150);
+  }
+  q.addEventListener("input", draw);
+  q.addEventListener("keydown", (ev) => {
+    if (ev.key === "ArrowDown") { ev.preventDefault(); pick(sel + 1); }
+    else if (ev.key === "ArrowUp") { ev.preventDefault(); pick(sel - 1); }
+    else if (ev.key === "Enter") { ev.preventDefault(); const o = opts[sel]; if (o) closeK(o.run); }
+    else if (ev.key === "Escape") { ev.preventDefault(); closeK(); }
+    else if (ev.key === "Tab") { ev.preventDefault(); pick(sel + (ev.shiftKey ? -1 : 1)); }
+  });
+  list.addEventListener("mousemove", (ev) => { const o = ev.target.closest(".cmdk-o"); if (o && +o.dataset.n !== sel) pick(+o.dataset.n); });
+  list.addEventListener("click", (ev) => { const o = ev.target.closest(".cmdk-o"); if (o) closeK(opts[+o.dataset.n]?.run); });
+  scrim.addEventListener("mousedown", (ev) => { if (ev.target === scrim) closeK(); });
+  $("jump-open")?.addEventListener("click", openK);
+  d.addEventListener("keydown", (ev) => {
+    const typing = ev.target.closest?.("input, textarea, select, [contenteditable]") && ev.target !== q;
+    if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key.toLowerCase() === "k") { ev.preventDefault(); scrim.hidden ? openK() : closeK(); return; }
+    if (!scrim.hidden) return;
+    if (ev.key === "/" && !typing && !ev.metaKey && !ev.ctrlKey && !ev.altKey) { ev.preventDefault(); openK(); return; }
+    if (ev.altKey && !ev.metaKey && !ev.ctrlKey && /^Digit[1-5]$/.test(ev.code)) { const b = d.querySelectorAll("#tabs .tab")[+ev.code.slice(5) - 1]; if (b) { ev.preventDefault(); b.click(); b.focus(); } }
+  });
+
+  // ---------------------------------------------------------------- keep up with the app's renders
+  let queued = false;
+  const mo = new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; onTabs(); decorate(); }); });
+  mo.observe(d.querySelector(".wrap") || d.body, { childList: true, subtree: true });
+  mo.observe($("tabs"), { childList: true, subtree: true });
+  onTabs(); decorate();
+  if (!RM.matches) { html.classList.add("boot"); setTimeout(() => html.classList.remove("boot"), 900); }
+  setTimeout(() => { booted = true; }, 400);
+  d.fonts?.ready?.then(placeInd);
 })();
 </script>
