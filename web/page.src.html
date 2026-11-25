@@ -3384,7 +3384,8 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   const _runOpen = new Map();
   async function runGet(sl) {
     const v = await idbGet("run:" + sl); if (!(JOB && v?.__lite && typeof window.__job_run === "function")) return v;
-    if (!_runOpen.has(sl)) _runOpen.set(sl, (async () => { const f = await window.__job_run(sl).catch(() => null); if (f) await idbPut("run:" + sl, f).catch(() => {}); return f; })().finally(() => _runOpen.delete(sl)));
+    if (!_runOpen.has(sl)) _runOpen.set(sl, (async () => { let f = await window.__job_run(sl).catch(() => null); if (typeof f === "string") try { f = JSON.parse(f); } catch { f = null; }
+      if (f) await idbPut("run:" + sl, f).catch(() => {}); return f; })().finally(() => _runOpen.delete(sl)));
     return (await _runOpen.get(sl)) || v;
   }
 
@@ -3575,7 +3576,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     }
   }
   // The overnight job drives this page headlessly and reads/writes results through these.
+  // Caches a job carries from one run to the next (only these keys): the industry digests a fund's look-through reads.
+  const JOB_CACHES = new Set(["indDigest"]);
   if (JOB) window.__industryScorer = { exportSector, importRecords, idbKeys,
+    cacheGet: (k) => (JOB_CACHES.has(k) ? idbGet(k) : null),
+    cachePut: async (k, v) => { if (!JOB_CACHES.has(k) || !v?.runs) return 0; const cur = (await idbGet(k)) || { v: 1, runs: {} }; for (const [sl, e] of Object.entries(v.runs)) if (!cur.runs[sl] || String(e?.saved_at || "") >= String(cur.runs[sl].saved_at || "")) cur.runs[sl] = e; await idbPut(k, cur); return Object.keys(cur.runs).length; },
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
     daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
@@ -8604,7 +8609,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || (so?.outlook?.calls && (!co.run || so.industry === co.run.name) && cmpOut(so.outlook.calls, "saved calls", so.outlook.date))
       || (co.run && cmpOut(coPrior(co), "from its industry"));
     const cl = f.ser?.closes || [];
-    return { sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
+    return { affIn: co.run ? { industries: [{ industry: co.run.name, weight: 1 }], hold: [{ ticker: sym, weight: 1 }] } : null, sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
       px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
       m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens, aff,
       regime: co.lensIn?.macroInd ? { regime: co.lensIn.macroInd.regime, headline: co.lensIn.macroInd.headline } : null };
@@ -8661,6 +8666,9 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (fd.bond && fd.bondM) { try { dz.bond = BondAn.dossier(fd.bond, fd.bondM, fd.bondRuns || {}, today()).text; } catch (e) { console.warn("compare bond dossier", e); }
       const p0 = fd.bond, b0 = fd.bondM; bond = { kind: BondAn.KINDS[p0.kind] || p0.kind || "bonds", ytm: num(p0.ytm), dist: num(p0.distYield), duration: num(p0.duration), maturity: num(p0.maturity), carry: num(b0.carry), spread: num(b0.spread), credit: !!b0.credit,
         tsy: num(b0.tsy), breakeven: num(b0.breakeven), y10: num(b0.curve?.y10), y3m: num(b0.curve?.y3m), shocks: (b0.shocks || []).map((x) => ({ bp: x.bp, ret: num(x.ret), ret12: num(x.ret12) })) }; }
+    if (fd.bond && bond && !(fd.aff?.indicators || []).length) { const bi = (fd.bondRuns?.indicators || []).filter((x) => x.label && isNum(num(x.value)));
+      const rd = bi.map((x) => ({ x, r: Compare.bondRead({ ...bond, kind: bond.kind }, { label: x.label, value: num(x.value), prior: num(x.prior) }) })).filter((y) => y.r);
+      dz.aff_macro = [`A BOND FUND (${bond.kind}${isNum(bond.duration) ? `, ${fix(bond.duration, 1)}-year duration` : ""}): no industries. Code's read of the rate, inflation, Fed and growth indicators from your industry runs through its duration (rising rates and inflation hurt it; slack and risk-off help Treasuries${bond.credit ? ", hurt credit" : ""}):\n${rd.map(({ x, r }) => `${x.label}: ${x.value}${x.unit && x.unit !== "$" ? x.unit : ""}${x.prior !== undefined && x.prior !== null ? ` (${x.prior_label || "before"} ${x.prior})` : ""} → ${r.effect} (${r.relevance}): ${r.why}`).join("\n") || "(no runs' rate rows)"}${(fd.bondRuns?.reads || []).length ? `\nThe industry runs' macro analysts:\n${fd.bondRuns.reads.map((y) => `${y.industry} (${y.date}): ${y.regime || ""}. ${trimC(y.headline || "", 300)}`).join("\n")}` : ""}`, dz.aff_macro].filter(Boolean).join("\n\n"); }
     const st = fd.street || {}, se = fd.sent || {};
     m.news_sent = isNum(num(se.s30)) ? num(se.s30) : null;
     const street = { buy_share: num(st.buy_share), upside: num(st.upside), n: st.n || 0, on: num(st.on), rows: (st.rows || []).slice(0, 8).map((r) => ({ ticker: r.ticker, weight: r.weight, consensus: r.consensus, upside: num(r.upside), buy_share: num(r.buy_share) })), px: m.px };
@@ -8675,7 +8683,10 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
       ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null, bond,
       topShare: fd.raw?.holdFrom === "EODHD top holdings" ? (fd.raw.holdings || []).reduce((a, h) => a + (isNum(h.weight) ? h.weight : 0), 0) : null,
+      affIn: (fd.cov?.industries || []).length ? { industries: fd.cov.industries.map((g) => ({ industry: g.industry, weight: g.weight })), hold: (fd.hold || []).filter((h) => h.ticker).slice(0, 80).map((h) => ({ ticker: h.ticker, weight: h.weight })) } : null,
       holdTop: (fd.hold || []).slice(0, 15).map((h) => ({ ticker: h.ticker, name: h.name, weight: fd.raw?.holdFrom === "EODHD top holdings" ? ((fd.raw.holdings || []).find((r) => r.ticker && r.ticker === h.ticker)?.weight ?? h.weight) : h.weight, industry: h.industry || "", call12: h.call12 || "", pe: num(h.pe), r1y: num(h.r1y), inTop50: !!h.inTop50 })),
+      bondInd: fd.bond ? (fd.bondRuns?.indicators || []).map((x) => ({ label: x.label, value: num(x.value), unit: x.unit || "", prior: num(x.prior), prior_label: x.prior_label || "", date: x.date || "" })).filter((x) => x.label && isNum(x.value)) : [],
+      bondHeadline: fd.bond ? fd.bondFull?.w?.headline || "" : "",
       sectors: Object.entries(f.sectors || {}).filter(([, w]) => isNum(w) && w > 0.003).sort((a, b) => b[1] - a[1]).slice(0, 11).map(([k, w]) => ({ sector: k, weight: w })), holdFrom: fd.raw?.holdFrom || "",
       buckets: fd.cov?.buckets || null, covered: num(fd.cov?.covered), nInd: (fd.cov?.industries || []).length, look: fd.look?.calls ? Object.fromEntries(Outlook.HZ.filter((h) => fd.look.calls[h]).map((h) => [h, { call: fd.look.calls[h].call, dist: fd.look.calls[h].dist || null }])) : null };
   }
@@ -8838,7 +8849,11 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   /** The Compare button: start the comparison on GitHub, or write it here when GitHub can't be used. */
   async function cmpRun() {
     const c = S.cmp; if (!c?.an || c.busy) return;
-    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null;
+    const syms = c.an.subs.map((s) => s.sym), id = cmpGhId(syms); c.err = null; c.note = "";
+    // Nothing to redo: the saved verdict was written today from the same industry runs and analyses, and no price has moved 2%.
+    const have = c.vCache?.[cmpKey(syms)], fpNow = Compare.fingerprint([...c.an.subs].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
+    if (have?.v && have.fp === fpNow && have.px && c.an.subs.every((s) => isNum(have.px[s.sym]) && isNum(s.px) && Math.abs(s.px / have.px[s.sym] - 1) < 0.02)) {
+      c.note = `Nothing has changed since this verdict was written ${ago(have.at)}: same industry reports and analyses, and no price has moved 2%. It's kept as is.`; renderCompare(); return; }
     if (await ghCan()) {
       const db = await outlookDb(), at = new Date().toISOString();
       const req = { id, kind: "compare", symbols: syms, requested_at: at, holdings: [] };
@@ -8853,6 +8868,26 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     c.err = "Open this page in Claude to run the comparison."; renderCompare();
   }
   /** The verdict written here: one Claude call (the Compare button without GitHub, and the GitHub job itself). */
+  /**
+   * Every ticker's industries' macro tables, world situations, trade maps and regulation as one text for the macro desk:
+   * each indicator, situation, country and rule once, with every industry's read of it, instead of one copy per ticker
+   * (three staples names read the same 10-year yield and the same Iran situation three times otherwise). Room for as
+   * many rows and reads as the tickers' own copies had together.
+   */
+  async function cmpCombinedAffairs(subs) {
+    const n = subs.length, W = {}, hold = {}, legend = []; let reads = 0;
+    for (const s of subs) { const ins = s.affIn?.industries || []; if (!ins.length) continue; reads += s.kind === "fund" ? 2 : 1;
+      for (const g of ins) if (g.industry && isNum(num(g.weight))) W[g.industry] = (W[g.industry] || 0) + num(g.weight) / n;
+      for (const h of s.affIn.hold || []) if (h.ticker && isNum(num(h.weight))) hold[h.ticker] = (hold[h.ticker] || 0) + num(h.weight) / n;
+      legend.push(`${s.sym} → ${ins.slice(0, 15).map((g) => `${g.industry} ${pct(g.weight, false, 0)}`).join(", ")}${ins.length > 15 ? ` (+${ins.length - 15} more)` : ""}`); }
+    const names = Object.keys(W); if (names.length < 2) return "";
+    const ci = await coIndex(), dg = await fundDigests(names, ci);
+    const A = FundMore.affairs({ industries: names.map((nm) => ({ industry: nm, weight: W[nm], status: "analyzed" })) }, dg, Object.entries(hold).map(([ticker, weight]) => ({ ticker, weight })),
+      { nI: 40 * n, nW: 16 * n, nC: 16 * n, nR: 18 * n, nL: 14 * n, nF: 8 * n });
+    if (!A) return "";
+    const k = Math.min(8, Math.max(2, reads)), T = FundMore.affairsText(A, { reads: k, inds: Math.max(6, k) });
+    return `THE INDUSTRIES BEHIND THESE TICKERS, COMBINED (each ticker's industry reports merged: every indicator, world situation, country and rule appears once with each industry's read of it; "of the fund" here means of this comparison, each ticker counted equally)\n${legend.join("\n")}\n\n${[T.macro, T.world, T.trade, T.reg].filter(Boolean).join("\n\n")}`;
+  }
   async function cmpVerdict() {
     const c = S.cmp; if (!c?.an || !S.sample) return;
     const an = c.an, ready = an.subs, syms = ready.map((s) => s.sym), key = cmpKey(syms), fp = Compare.fingerprint([...ready].sort((a, b) => (a.sym < b.sym ? -1 : 1)), today());
@@ -8864,8 +8899,9 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       const fitB = (p) => { const b = new TextEncoder().encode(p); return b.length <= lim ? p : new TextDecoder().decode(b.slice(0, lim - 2000)) + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
       c.stage = `${Compare.DESK_KEYS.length} desks are reading the full dossiers`; renderCompare();
       const desks = {}, failed = [], econ = cmpEconText(await cmpEcon().catch(() => []));
+      let combined = ""; try { combined = await cmpCombinedAffairs(ready); } catch (e) { console.warn("compare combined affairs", e); }
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
-        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
+        try { const out = await sampleJson(fitB(Compare.deskPrompt(d, Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "", combined: d === "macro" ? combined : "" }), syms, today())), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk` });
           desks[d] = Compare.cleanDesk(d, out, syms); if (!desks[d]) failed.push(d); }
         catch (e) { if (FATAL.has(e?.code) || ctl.signal.aborted) throw e; failed.push(d); }
         c.stage = `${Object.keys(desks).length} of ${Compare.DESK_KEYS.length} desks done`; renderCompare(); }));
@@ -8877,7 +8913,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       const out = await sampleJson(fitB(Compare.prompt(text.slice(0, 120000), syms, today(), Compare.desksText(desks, syms))), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: "Compare head of research",
         onText: ({ text: t }) => { if (Date.now() - last < 900) return; last = Date.now(); const v = RegBook.repairJson(t); if (v && typeof v === "object") { c.partial = Compare.clean(v, syms); if (c.vKey === key) renderCompare(); } } });
       const v = Compare.clean(out, syms); if (!v) throw new Error("no usable verdict came back");
-      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
+      const rec = jsonSafe({ fp, at: new Date().toISOString(), syms, v, desks, failed, px: Object.fromEntries(ready.filter((s) => isNum(s.px)).map((s) => [s.sym, s.px])), checks: Compare.checks(v, an.h2h, an.fit), secs: Math.round((Date.now() - c.start) / 1000) });
       c.vCache[key] = rec; await idbPut(key, rec).catch(() => {});
     } catch (e) { if (!ctl.signal.aborted) c.err = FATAL.has(e?.code) ? errText(e) : sampleErr(e); }
     finally { if (c.busy === key) { c.busy = null; c.partial = null; c.stage = null; } c.ctl = null; renderCompare(); }
@@ -9091,7 +9127,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>` : "";
     const macroInd = MA.indicators.length || econT ? sec("cmp-macroind", "Macro indicators", `${MA.indicators.length ? `the full macro tables of their industry reports (${MA.indicators.length} indicators) with each ticker's read, ` : ""}live US releases from EODHD`,
       `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
-      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 260))}</div>`).join("")}</div>` : ""}
+      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call${subs.some((s0) => s0.bond) ? " (a bond fund: its rate and inflation read)" : ""}</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${r.bond ? ` <span class="muted">read by code through its duration</span>` : subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing|support/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 260))}</div>`).join("")}</div>` : ""}
       ${MA.indicators.length ? `<div class="tbl-wrap cx-mi"><table><thead><tr><th>Indicator · latest · change</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>` : `<div class="small muted">None of these tickers has an analyzed industry with a macro table yet.</div>`}
       ${econT}
       ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(trimC(stripCites(m0.move), 160))}${m0.driver ? ` <span class="muted">Driver: ${esc(trimC(stripCites(m0.driver), 160))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(trimC(stripCites(m0.so_what), 160))}</span>` : ""}</div>`).join("")}</div>` : ""}

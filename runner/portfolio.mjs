@@ -104,10 +104,11 @@ async function main() {
   // gets every run "lite" (what the indexes, the company map and the rate rows read) and the page asks for a whole run
   // when it opens one (window.__job_run); that's about a seventh of the data to move into the page.
   const runsDir = join(resolve(args.exports || "exports"), "runs");
-  const lite = req.kind === "compare" && env.JOB_LITE_RUNS !== "0", fullAt = new Map(), fileCache = new Map();
-  if (lite) await page.exposeFunction("__job_run", async (sl) => { const f = fullAt.get(sl); if (!f) return null;
-    let j = fileCache.get(f); if (!j) { j = readMaybeGz(join(runsDir, f)); fileCache.clear(); fileCache.set(f, j); }
-    log(`${j.records["run:" + sl]?.name || sl}: opened in full`); return j.records["run:" + sl] || null; });
+  // Each whole run is kept here as JSON text from the one read of its sector file (a fund can open a hundred of them;
+  // re-reading a 30 MB sector file for each took a second apiece).
+  const lite = req.kind === "compare" && env.JOB_LITE_RUNS !== "0", fullText = new Map();
+  let opened = 0;
+  if (lite) await page.exposeFunction("__job_run", async (sl) => { const t = fullText.get(sl); if (!t) return null; opened++; return t; });
   const files = existsSync(runsDir) ? readdirSync(runsDir).filter((f) => /\.json\.gz$/.test(f) && !/-\d{6,}\.json\.gz$/.test(f)).sort() : [];
   let industries = 0;
   for (const f of files) {
@@ -117,12 +118,17 @@ async function main() {
     let chunk = {}, size = 0;
     const flush = async () => { if (!Object.keys(chunk).length) return; industries += await page.evaluate((x) => window.__industryScorer.importRecords(x), { ...head, records: chunk }); chunk = {}; size = 0; };
     for (let [k, v] of Object.entries(records)) { if (!/^(run|sector):/.test(k)) continue;
-      if (lite && k.startsWith("run:") && v) { fullAt.set(k.slice(4), f); v = liteRun(k.slice(4), v); }
+      if (lite && k.startsWith("run:") && v) { fullText.set(k.slice(4), JSON.stringify(v)); v = liteRun(k.slice(4), v); }
       const z = JSON.stringify(v).length; if (size && size + z > 8e6) await flush(); chunk[k] = v; size += z; }
     await flush();
     log(`${j.sector || f}: loaded`);
   }
   log(`${industries} industry runs loaded from ${files.length} sectors${lite ? " (lite; opened in full when read)" : ""}`);
+  // The industry digests earlier jobs built (a fund's look-through reads one per industry it holds): kept in the exports
+  // branch as cache/indDigest.json.gz, each tied to its run's save time, so a new save rebuilds only that one.
+  const cacheFile = join(resolve(args.exports || "exports"), "cache", "indDigest.json.gz");
+  let digestIn = 0;
+  if (existsSync(cacheFile)) try { const dc = readMaybeGz(cacheFile); digestIn = await page.evaluate((x) => window.__industryScorer.cachePut("indDigest", x), dc); log(`${digestIn} industry digests from earlier jobs`); } catch (e) { log(`industry digest cache unreadable (${e.message}); building them`); }
   if (industries < 8) { console.error("Too few industry runs in the exports branch to build a target distribution."); process.exit(1); }
 
   // A comparison reads the analyses already written for its tickers (saved in the exports branch by earlier runs).
@@ -142,6 +148,9 @@ async function main() {
     if (!st.busy) { if (st.error) { console.error("The analysis failed: " + st.error); summary(`### ${one ? req.symbol : "Portfolio " + req.name}: failed\n\n> ${st.error}`); process.exit(1); } break; }
     if (Date.now() > deadline) { console.error("Out of time."); process.exit(1); }
   }
+  if (opened) log(`${opened} industry runs opened in full`);
+  try { const dc = await page.evaluate(() => window.__industryScorer.cacheGet("indDigest")), n = Object.keys(dc?.runs || {}).length;
+    if (n > digestIn) { writeFileSync(join(outDir, "indDigest.json.gz"), gzipSync(Buffer.from(JSON.stringify(dc)), { level: 9 })); log(`${n} industry digests kept for later jobs (${n - digestIn} new)`); } } catch (e) { log(`couldn't keep the industry digests (${e.message})`); }
   const res = await page.evaluate((o) => (o ? window.__industryScorer.oneResult() : window.__industryScorer.portfolioResult()), one);
   if (!res) { console.error("No result came back."); process.exit(1); }
   res.job = { id: req.id, cost_usd: Math.round(sampler.usage.usd * 100) / 100, requests: sampler.usage.requests, mcp_calls: mcp.calls, minutes: Math.round((Date.now() - t0) / 60000), run: env.GITHUB_RUN_ID || null, industries };
