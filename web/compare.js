@@ -458,16 +458,31 @@ Return ONLY a JSON object:
     return out.join("\n\n");
   }
   const IMPACT = ["strong positive", "positive", "neutral", "negative", "strong negative"];
-  function deskPrompt(desk, text, syms, today) {
+  /**
+   * A desk's prompt: its role, the dossier, then (after mark, the cache break on the API) its instructions. part splits
+   * the two slow desks in two halves that run at once on the same dossier (DESK_PARTS): each writes part of the fields,
+   * mergeParts puts them back together. Without part, the whole desk in one call.
+   */
+  function deskPrompt(desk, text, syms, today, { part = null, mark = "" } = {}) {
     const S = syms.join(" | "), per = (o) => `{${syms.map((x) => `"${x}": ${o}`).join(", ")}}`;
+    const wrap = (intro, spec, note = "") => `${intro}\n\n${text}${mark}\n\n${note ? note + "\n\n" : ""}${common}\n\nReturn ONLY a JSON object:\n${spec}`;
+    const d90 = (() => { const d = new Date(today + "T00:00:00Z"); if (isNaN(d)) return "the next 90 days"; d.setUTCDate(d.getUTCDate() + 90); return d.toISOString().slice(0, 10); })();
     const common = `Rules: be specific and analytical; every claim names its numbers, dates and the source rows it rests on (the bracketed IDs in the dossier, e.g. [E3], [Q2], [MI4], [WS2], [N4], are welcome). Use only what is in the dossier; never invent a fact, date or figure. Compare the tickers with each other, not in isolation. Every "pick" is exactly one of: ${S}.`;
-    if (desk === "events") return `You are the event strategist on a comparison desk, today ${today}. Below is each ticker's dated 12-month calendar (its industry's events, its own reports and ex-dividend dates, its peers' reports, the macro releases), the releases its industries are watching, its industry's 1M-12M cards (decisions, conflicts and what to do in each window), its windows, its earnings history and price reactions, its measured factor sensitivities and what it did in past setups like today. Your job: walk the next 12 months event by event and say, for each, what could happen, how likely each outcome is, and what each outcome does to ${syms.join(", ")}, with sizes. Then say what that means month by month and for each ticker's path.
-${common}
-
-${text}
-
-Return ONLY a JSON object:
-{"events": [{"date": "YYYY-MM-DD", "event": "what happens", "kind": "macro | fed | earnings | policy | trade | world | industry | dividend", "importance": "high | medium",
+    if (desk === "events") {
+      const intro = `You are the event strategist on a comparison desk, today ${today}. Below is each ticker's dated 12-month calendar (its industry's events, its own reports and ex-dividend dates, its peers' reports, the macro releases), the releases its industries are watching, its industry's 1M-12M cards (decisions, conflicts and what to do in each window), its windows, its earnings history and price reactions, its measured factor sensitivities and what it did in past setups like today. Your job: walk the next 12 months event by event and say, for each, what could happen, how likely each outcome is, and what each outcome does to ${syms.join(", ")}, with sizes. Then say what that means month by month and for each ticker's path.`, item = `{"date": "YYYY-MM-DD", "event": "what happens", "kind": "macro | fed | earnings | policy | trade | world | industry | dividend", "importance": "high | medium",
+   "watch": "the number or threshold that decides it (consensus, prior, the line in the sand)",
+   "impact": ${per(`"${IMPACT.join(" | ")}"`)},
+   "outcomes": [{"if": "one outcome, e.g. a hot print at or above 0.4%", "odds": 30, "moves": ${per(`"-2% to -4%"`)}}] (2-3 outcomes whose odds sum to 100),
+   "why": "2-3 sentences: the mechanism for each ticker and its rough size, with the numbers",
+   "play": "one sentence: what to do before or after it (add, trim, wait, hedge) and in which ticker"}`;
+      if (part === "near") return wrap(intro, `{"events": [${item}] (8-12 events from today through ${d90}, soonest first; every event in that window that could move any of them by 2% or more, plus each one's earnings in it),
+ "horizons": {"1M": {"pick": "...", "why": "the events in this window that decide it"}, "3M": {...}}}`, `You write the events from today through ${d90} and the 1M and 3M picks. Another strategist on this desk writes the later events, the months, the paths and the overall pick from the same dossier.`);
+      if (part === "far") return wrap(intro, `{"events": [${item}] (6-10 events after ${d90} through the next 12 months, soonest first; every event in that window that could move any of them by 2% or more, plus each one's earnings in it),
+ "months": [{"month": "YYYY-MM", "theme": "what this month is about", "risk": "high | medium | low", "read": "1-2 sentences: who it favors and why"}] (the next 12 months),
+ "paths": ${per(`{"path": "3-4 sentences: its catalyst path over the year, the biggest single event and what has to go right", "biggest": "its biggest single event and date", "skew": "upside | balanced | downside"}`)},
+ "horizons": {"6M": {"pick": "...", "why": "the events in this window that decide it"}, "12M": {...}},
+ "pick": "the best positioned for what's coming over the whole year", "why": "2-3 sentences"}`, `You write the events after ${d90}, the months, the paths, the 6M and 12M picks and the overall pick. Another strategist on this desk writes the events from today through ${d90} from the same dossier; your months, paths and pick still weigh the whole year, those near events included.`);
+      return wrap(intro, `{"events": [{"date": "YYYY-MM-DD", "event": "what happens", "kind": "macro | fed | earnings | policy | trade | world | industry | dividend", "importance": "high | medium",
    "watch": "the number or threshold that decides it (consensus, prior, the line in the sand)",
    "impact": ${per(`"${IMPACT.join(" | ")}"`)},
    "outcomes": [{"if": "one outcome, e.g. a hot print at or above 0.4%", "odds": 30, "moves": ${per(`"-2% to -4%"`)}}] (2-3 outcomes whose odds sum to 100),
@@ -476,14 +491,20 @@ Return ONLY a JSON object:
  "months": [{"month": "YYYY-MM", "theme": "what this month is about", "risk": "high | medium | low", "read": "1-2 sentences: who it favors and why"}] (the next 12 months),
  "paths": ${per(`{"path": "3-4 sentences: its catalyst path over the year, the biggest single event and what has to go right", "biggest": "its biggest single event and date", "skew": "upside | balanced | downside"}`)},
  "horizons": {"1M": {"pick": "...", "why": "the events in this window that decide it"}, "3M": {...}, "6M": {...}, "12M": {...}},
- "pick": "the best positioned for what's coming", "why": "2-3 sentences"}`;
-    if (desk === "macro") return `You are the macro and foreign-affairs strategist on a comparison desk, today ${today}. Below, for each ticker's industries: the full macro indicator table (latest, prior, 1M/3M/1Y changes, what drives each and what's next, and each industry's read: relevance, headwind or tailwind, and why), each industry's macro call and how macro reaches it, the world situations and threats (deep dives with scenarios and what to watch), the trade map country by country (revenue there, stance, threats, risks, dependencies), and regulation and policy. Your job: read the macro backdrop and the world, and say what each piece does to ${syms.join(", ")}, with numbers.
-${common}
-
-${text}
-
-Return ONLY a JSON object:
-{"regime": "4-5 sentences: the macro backdrop today, which way it is moving, and what that means for these tickers, with the indicators' numbers",
+ "pick": "the best positioned for what's coming", "why": "2-3 sentences"}`);
+    }
+    if (desk === "macro") {
+      const intro = `You are the macro and foreign-affairs strategist on a comparison desk, today ${today}. Below, for each ticker's industries: the full macro indicator table (latest, prior, 1M/3M/1Y changes, what drives each and what's next, and each industry's read: relevance, headwind or tailwind, and why), each industry's macro call and how macro reaches it, the world situations and threats (deep dives with scenarios and what to watch), the trade map country by country (revenue there, stance, threats, risks, dependencies), and regulation and policy. Your job: read the macro backdrop and the world, and say what each piece does to ${syms.join(", ")}, with numbers.`;
+      if (part === "core") return wrap(intro, `{"regime": "4-5 sentences: the macro backdrop today, which way it is moving, and what that means for these tickers, with the indicators' numbers",
+ "indicators": [{"label": "the indicator as named in the table", "now": "its latest value and trend", "read": "1-2 sentences: what it says and where it is heading", "impact": ${per(`"${IMPACT.join(" | ")}"`)}}] (the 10-16 indicators that matter most for this comparison),
+ "scenarios": [{"name": "a macro or world scenario", "probability": 30, "what": "1-2 sentences: what happens, with triggers", "impact": ${per(`{"move": "-8% to -12%", "why": "one sentence"}`)}}] (4 scenarios whose probabilities sum to 100: a base case, a bull, a bear, and the biggest tail risk),
+ "sensitivities": ${per(`"which macro factors move it most and which way (rates, oil, the dollar, credit, growth, consumer), with numbers"`)},
+ "names": ${per(`{"read": "3-4 sentences: its macro and foreign-affairs case", "tailwinds": ["2-4 specific tailwinds"], "headwinds": ["2-4 specific headwinds"]}`)},
+ "pick": "best positioned for the macro and the world", "why": "2-3 sentences"}`, `You write the regime, the indicators, the scenarios, the sensitivities, each name's case and the pick. Another strategist on this desk writes the world-situation, trade and regulation rows from the same dossier; your regime, scenarios, names and pick still weigh the world, trade and regulation.`);
+      if (part === "world") return wrap(intro, `{"world": [{"situation": "as named in the dossier", "status": "where it stands now", "outlook": "2 sentences: what happens next over 3-12 months, with odds where the dossier gives them", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence with the channel (revenue, costs, supply, demand, rates)"}`)}}] (6-10 situations, the most material first),
+ "trade": [{"country": "...", "read": "1-2 sentences: the relationship, tariffs, threats and where it is heading", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence: its exposure there"}`)}}] (4-8 countries),
+ "regulation": [{"item": "a rule, policy, case or deal", "status": "...", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence"}`)}}] (3-6 items)}`, `You write only the world-situation, trade and regulation rows. Another strategist on this desk writes the regime, indicators, scenarios, each name's case and the pick from the same dossier.`);
+      return wrap(intro, `{"regime": "4-5 sentences: the macro backdrop today, which way it is moving, and what that means for these tickers, with the indicators' numbers",
  "indicators": [{"label": "the indicator as named in the table", "now": "its latest value and trend", "read": "1-2 sentences: what it says and where it is heading", "impact": ${per(`"${IMPACT.join(" | ")}"`)}}] (the 10-16 indicators that matter most for this comparison),
  "world": [{"situation": "as named in the dossier", "status": "where it stands now", "outlook": "2 sentences: what happens next over 3-12 months, with odds where the dossier gives them", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence with the channel (revenue, costs, supply, demand, rates)"}`)}}] (6-10 situations, the most material first),
  "trade": [{"country": "...", "read": "1-2 sentences: the relationship, tariffs, threats and where it is heading", "impact": ${per(`{"direction": "${IMPACT.join(" | ")}", "why": "one sentence: its exposure there"}`)}}] (4-8 countries),
@@ -491,24 +512,22 @@ Return ONLY a JSON object:
  "scenarios": [{"name": "a macro or world scenario", "probability": 30, "what": "1-2 sentences: what happens, with triggers", "impact": ${per(`{"move": "-8% to -12%", "why": "one sentence"}`)}}] (4 scenarios whose probabilities sum to 100: a base case, a bull, a bear, and the biggest tail risk),
  "sensitivities": ${per(`"which macro factors move it most and which way (rates, oil, the dollar, credit, growth, consumer), with numbers"`)},
  "names": ${per(`{"read": "3-4 sentences: its macro and foreign-affairs case", "tailwinds": ["2-4 specific tailwinds"], "headwinds": ["2-4 specific headwinds"]}`)},
- "pick": "best positioned for the macro and the world", "why": "2-3 sentences"}`;
-    if (desk === "street") return `You are the Wall Street and sentiment analyst on a comparison desk, today ${today}. Below is each ticker's analyst consensus, price targets and their trend, rating changes, estimate revisions, earnings history and reactions, news sentiment and headlines, ownership, short interest, insiders and technicals. Your job: what the street and the crowd think of ${syms.join(", ")}, which way that is moving, where it is already priced in, and where they are likely wrong.
-${common}
-
-${text}
-
-Return ONLY a JSON object:
-{"names": ${per(`{"street": "2-3 sentences: ratings mix, target and upside, how the target and estimates have moved, recent upgrades and downgrades", "sentiment": "2-3 sentences: news sentiment level and trend, and what the headlines are about (cite N-IDs)", "positioning": "1-2 sentences: short interest, insiders, institutions, and the technical picture", "crowding": "low | medium | high", "signal": "positive | neutral | negative", "surprise_risk": "one sentence: the next report and how the stock has reacted to reports"}`)},
+ "pick": "best positioned for the macro and the world", "why": "2-3 sentences"}`);
+    }
+    if (desk === "street") return wrap(`You are the Wall Street and sentiment analyst on a comparison desk, today ${today}. Below is each ticker's analyst consensus, price targets and their trend, rating changes, estimate revisions, earnings history and reactions, news sentiment and headlines, ownership, short interest, insiders and technicals. Your job: what the street and the crowd think of ${syms.join(", ")}, which way that is moving, where it is already priced in, and where they are likely wrong.`, `{"names": ${per(`{"street": "2-3 sentences: ratings mix, target and upside, how the target and estimates have moved, recent upgrades and downgrades", "sentiment": "2-3 sentences: news sentiment level and trend, and what the headlines are about (cite N-IDs)", "positioning": "1-2 sentences: short interest, insiders, institutions, and the technical picture", "crowding": "low | medium | high", "signal": "positive | neutral | negative", "surprise_risk": "one sentence: the next report and how the stock has reacted to reports"}`)},
  "pick": "the one the street and sentiment favor most, adjusted for crowding", "why": "2-3 sentences",
- "contrarian": "2 sentences: where the street or the crowd is most likely wrong across these tickers"}`;
-    return `You are the fundamentals analyst on a comparison desk, today ${today}. Below is each ticker's business, segments, quarters, margins, quality, valuation against its own history and its industry, cash flow, balance sheet, dividends, what the price assumes, and any written analysis. Your job: which is the better business at the better price, and what each is worth.
-${common}
-
-${text}
-
-Return ONLY a JSON object:
-{"names": ${per(`{"quality": "2 sentences: moat, margins, returns on capital, earnings quality", "growth": "2 sentences: revenue and EPS growth, drivers, estimates", "valuation": "cheap | fair | rich: 2 sentences with multiples vs history and peers, and what the price assumes", "balance_sheet": "1-2 sentences", "income": "1-2 sentences: yield, growth, coverage", "expected_12m": {"bull": "+x%", "base": "+y%", "bear": "-z%"}, "read": "3 sentences: the fundamental case"}`)},
- "pick": "the better business at the better price", "why": "2-3 sentences"}`;
+ "contrarian": "2 sentences: where the street or the crowd is most likely wrong across these tickers"}`);
+    return wrap(`You are the fundamentals analyst on a comparison desk, today ${today}. Below is each ticker's business, segments, quarters, margins, quality, valuation against its own history and its industry, cash flow, balance sheet, dividends, what the price assumes, and any written analysis. Your job: which is the better business at the better price, and what each is worth.`, `{"names": ${per(`{"quality": "2 sentences: moat, margins, returns on capital, earnings quality", "growth": "2 sentences: revenue and EPS growth, drivers, estimates", "valuation": "cheap | fair | rich: 2 sentences with multiples vs history and peers, and what the price assumes", "balance_sheet": "1-2 sentences", "income": "1-2 sentences: yield, growth, coverage", "expected_12m": {"bull": "+x%", "base": "+y%", "bear": "-z%"}, "read": "3 sentences: the fundamental case"}`)},
+ "pick": "the better business at the better price", "why": "2-3 sentences"}`);
+  }
+  // The two slow desks, each split in two halves that write different fields from the same dossier, at the same time.
+  const DESK_PARTS = { events: ["near", "far"], macro: ["core", "world"] };
+  /** A split desk's halves put back together as one desk's answer (events joined and dated, horizons joined). */
+  function mergeParts(desk, raws) {
+    const xs = (raws || []).filter((x) => x && typeof x === "object"); if (!xs.length) return null;
+    const out = {}; for (const x of xs) for (const [k, v] of Object.entries(x)) if (k !== "events" && k !== "horizons" && out[k] === undefined) out[k] = v;
+    if (desk === "events") { out.events = xs.flatMap((x) => (Array.isArray(x.events) ? x.events : [])); out.horizons = Object.assign({}, ...xs.map((x) => x.horizons || {})); }
+    return out;
   }
   const IMPV = (x) => (IMPACT.includes(x) ? x : "neutral");
   const dirOf = (syms, o, k = 300) => Object.fromEntries(syms.map((x) => [x, { direction: IMPV(o?.[x]?.direction), why: str(o?.[x]?.why, k) }]));
@@ -632,6 +651,6 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { DESK_PARTS, mergeParts, mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -129,3 +129,21 @@ console.log("compare ok");
   const t3 = C3.deskDossier("events", subs, { combined: "COMBINED-TEXT" }); assert.ok(!t3.includes("COMBINED-TEXT"));
   console.log("combined affairs ok");
 }
+
+// The two slow desks run as two halves on the same dossier; their answers merge back into one desk.
+{
+  const C4 = require("./compare.js"), syms = ["AAA", "BBB"];
+  for (const [d, parts] of Object.entries(C4.DESK_PARTS)) for (const p of parts) {
+    const t = C4.deskPrompt(d, "DOSSIER-X", syms, "2026-11-25", { part: p, mark: "<<M>>" });
+    assert.ok(t.indexOf("DOSSIER-X") < t.indexOf("<<M>>") && t.indexOf("<<M>>") < t.indexOf("Return ONLY"), d + p);
+    const pre = (q) => C4.deskPrompt(d, "DOSSIER-X", syms, "2026-11-25", { part: q, mark: "<<M>>" }).split("<<M>>")[0];
+    assert.equal(pre(parts[0]), pre(parts[1]), "both halves share the cached prefix");
+  }
+  const ev = C4.mergeParts("events", [{ events: [{ date: "2027-01-10", event: "a" }], horizons: { "1M": { pick: "AAA" } } }, { events: [{ date: "2026-12-01", event: "b" }], months: [{ month: "2026-12" }], horizons: { "12M": { pick: "BBB" } }, pick: "BBB", why: "w" }]);
+  const ce = C4.cleanDesk("events", ev, syms);
+  assert.deepEqual(ce.events.map((e) => e.event), ["b", "a"]); assert.equal(ce.horizons["1M"].pick, "AAA"); assert.equal(ce.horizons["12M"].pick, "BBB"); assert.equal(ce.pick, "BBB");
+  const mc = C4.cleanDesk("macro", C4.mergeParts("macro", [{ regime: "r", pick: "AAA", why: "y", indicators: [{ label: "CPI" }] }, { world: [{ situation: "Iran" }], trade: [{ country: "China" }] }]), syms);
+  assert.ok(mc.regime === "r" && mc.pick === "AAA" && mc.world.length === 1 && mc.trade.length === 1 && mc.indicators.length === 1);
+  assert.equal(C4.mergeParts("macro", [null, { world: [] }]).world.length, 0, "one half failing still gives the other");
+  console.log("desk halves ok");
+}
