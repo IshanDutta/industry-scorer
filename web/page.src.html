@@ -1452,6 +1452,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .pfx-indc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pfx-indr p { margin: 0; line-height: 1.5; }
 .pfx-spark { width: 100%; height: 34px; display: block; }
+.pfx-det { font-size: 12.5px; } .pfx-det td:first-child { min-width: 150px; } .pfx-det td:last-child { min-width: 140px; } .pfx-det td, .pfx-det td .small { overflow-wrap: normal !important; word-break: normal !important; }
+@media (min-width: 761px) { .pfx-det th { white-space: nowrap; } }
 .pf-card .pfx-hstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .pf-card .pfx-hstats > div { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--sunk); }
 .pf-card .pfx-hstats b { font-size: 13px; }
@@ -7903,10 +7905,12 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   /** One ticker's facts (FMP profile and quote), kept a week: name, type, sector, dividend; price and day change are fresh. */
   async function pfInfo(sym) {
     const k = "tkInfo:" + sym; let x = await idbGet(k).catch(() => null);
-    if (!x || x.v !== 3 || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
+    if (!x || x.v !== 4 || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
       const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0] || {}, type = p.isEtf ? "etf" : p.isFund ? "fund" : p.companyName ? "stock" : "";
       const rt = type === "stock" ? (await optional(() => fmp("statements", { endpoint: "metrics-ratios-ttm", symbol: sym }), []))?.[0] || {} : {};
-      x = jsonSafe({ v: 3, at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", country: p.country || "", type, lastDiv: num(p.lastDividend), cap: num(p.marketCap), beta: num(p.beta),
+      const bv = num(rt.bookValuePerShareTTM), ni = num(rt.netIncomePerShareTTM);
+      x = jsonSafe({ v: 4, at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", country: p.country || "", type, lastDiv: num(p.lastDividend), cap: num(p.marketCap), beta: num(p.beta),
+        pb: num(rt.priceToBookRatioTTM), ps: num(rt.priceToSalesRatioTTM), npm: num(rt.netProfitMarginTTM), de: num(rt.debtToEquityRatioTTM), roe: bv > 0 && isNum(ni) ? ni / bv : NaN, gm: num(rt.grossProfitMarginTTM),
         pe: num(rt.priceToEarningsRatioTTM), divYield: num(rt.dividendYieldTTM) });
       await idbPut(k, x).catch(() => {});
     }
@@ -7925,10 +7929,14 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
       const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
       // Funds: their holdings and sector weights (the fund page's own fetch, kept 20 hours).
-      const funds = {}, fsec = {}, fpe = {}, fexp = {}, fctry = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
+      const funds = {}, fsec = {}, fpe = {}, fexp = {}, fctry = {}, fval = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
       await pool(syms.filter((s) => info[s]?.type === "etf" || info[s]?.type === "fund"), 2, async (sym) => { const raw = await fundRaw(sym).catch(() => null); if (!raw) return;
         funds[sym] = (raw.holdings || []).filter((h) => h.ticker || h.name).map((h) => ({ ticker: h.ticker || "", name: h.name, weight: h.weight }));
         const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name; if (isNum(num(f.expense))) fexp[sym] = num(f.expense);
+        // The fund's own valuation and growth, as its provider reports them (EODHD, ETFs).
+        const VG = raw.eod?.ETF_Data?.Valuations_Growth || {}, VR = VG.Valuations_Rates_Portfolio || {}, GR = VG.Growth_Rates_Portfolio || {}, fv = (o, k) => { const v = num(Number(String(o?.[k] ?? "").replace(/[%,]/g, ""))); return v > 0 || (isNum(v) && v !== 0) ? v : NaN; };
+        fval[sym] = { pe: fv(VR, "Price/Prospective Earnings"), pb: fv(VR, "Price/Book"), ps: fv(VR, "Price/Sales"), pcf: fv(VR, "Price/Cash Flow"), g_eps: fv(GR, "Long-Term Projected Earnings Growth"), g_hist: fv(GR, "Historical Earnings Growth"), g_sales: fv(GR, "Sales Growth"),
+          yield: num(f.yield), aum: num(f.aum), holdings: num(f.holdings_count), turnover: num(f.turnover), family: f.family || "", category: f.category || "", inception: f.inception || "" };
         // Where the fund's money is: FMP's country weights, kept a week.
         const cwk = "fundCtry:" + sym, cwc = await idbGet(cwk).catch(() => null);
         const cw = cwc && Date.now() - Date.parse(cwc.at || 0) < 7 * 864e5 ? cwc.rows : (await optional(() => fmp("etfAndMutualFunds", { endpoint: "country-weighting", symbol: sym }), [])) || [];
@@ -7945,13 +7953,22 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         fsec[sym] = Object.keys(fw).length ? fw : null;
         // The fund's P/E through its holdings: harmonic, over the holdings whose P/E the industry runs know (half its weight or more).
         let wk = 0, inv = 0; for (const h of funds[sym]) { const pe = num(ci0?.cos?.[h.ticker]?.pe), w = num(h.weight); if (pe > 0 && w > 0) { wk += w; inv += w / pe; } }
-        const wt = funds[sym].reduce((a, h) => a + (num(h.weight) || 0), 0); if (inv > 0 && wt > 0 && wk / wt >= 0.5) fpe[sym] = wk / inv; }, null);
+        const wt = funds[sym].reduce((a, h) => a + (num(h.weight) || 0), 0); if (inv > 0 && wt > 0 && wk / wt >= 0.5) fpe[sym] = wk / inv; else if (fval[sym]?.pe > 0) fpe[sym] = fval[sym].pe; }, null);
+      // The companies inside: the 60 biggest through the funds, each one's sector, industry, country, size and ratios.
+      // ...and each fund's own 25 biggest, so every fund's valuation can be read through what it holds.
+      const okT = (t) => t && /^[A-Z][A-Z0-9.\-]{0,6}$/.test(t), lt = { ...info };
+      const want = [...new Set([...PMode.lookThrough(p.holdings.map((h) => ({ ...h, weight: num(h.weight) || 0 })), funds).rows.map((r) => r.ticker).filter(okT).slice(0, 60),
+        ...Object.values(funds).flatMap((fh) => fh.slice().sort((a, b) => num(b.weight) - num(a.weight)).slice(0, 25).map((h) => h.ticker).filter(okT))])].filter((t) => !lt[t]).slice(0, 150), ltRows = want.map((ticker) => ({ ticker }));
+      if (ltRows.length) { let k = 0; S.pfLoading = `Reading the companies inside the funds (0 of ${ltRows.length})…`; renderPortfolio();
+        await pool(ltRows, 4, async (r) => { lt[r.ticker] = await pfInfo(r.ticker).catch(() => ({})); if (++k % 10 === 0) { S.pfLoading = `Reading the companies inside the funds (${k} of ${ltRows.length})…`; renderPortfolio(); } }, null); }
+      // A fund's P/E through what it holds, where the saved runs didn't give one (a third of the fund or more read).
+      for (const [sym, fh] of Object.entries(funds)) { if (fpe[sym] > 0) continue; let w = 0, inv = 0, tw = 0; for (const h of fh) { const x = num(h.weight); tw += x || 0; const pe = num(lt[h.ticker]?.pe); if (pe > 0 && x > 0) { w += x; inv += x / pe; } } if (inv > 0 && tw > 0 && w / tw >= 0.33) fpe[sym] = w / inv; }
       // The S&P 500's own sector weights (SPY), kept a week: what the portfolio's sectors are compared with.
       const sk = await idbGet("spySecW").catch(() => null); let spyRows = sk && Date.now() - Date.parse(sk.at || 0) < 7 * 864e5 ? sk.rows : null;
       if (!spyRows) { spyRows = (await optional(() => fmp("etfAndMutualFunds", { endpoint: "sector-weighting", symbol: "SPY" }), [])) || []; if (spyRows.length) idbPut("spySecW", { at: new Date().toISOString(), rows: spyRows }).catch(() => {}); }
       const spySec = {}; for (const r of spyRows) { const v = num(String(r?.weightPercentage ?? "").replace("%", "")); if (r?.sector && v > 0 && !/cash/i.test(r.sector)) spySec[r.sector] = v; }
       const sst = Object.values(spySec).reduce((a, v) => a + v, 0); if (sst > 0) for (const k of Object.keys(spySec)) spySec[k] /= sst;
-      S.pfData = { key, from, day: today(), series, quotes, info, funds, fsec, fpe, fexp, fctry, spySec: sst > 0 ? spySec : null, cos: ci0?.cos || {} };
+      S.pfData = { key, from, day: today(), series, quotes, info, funds, fsec, fpe, fexp, fctry, fval, lt, spySec: sst > 0 ? spySec : null, cos: ci0?.cos || {} };
     } catch (e) { S.pfErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { S.pfLoading = null; renderPortfolio(); }
   }
@@ -8221,8 +8238,13 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const by = { us: 0, dev: 0, em: 0, other: 0 }; let tot = 0;
     const put = (rg, x) => { const k = rg === "us" ? "us" : rg === "em" ? "em" : rg ? "dev" : "other"; by[k] += x; };
     for (const h of hs) { const x = w[h.ticker] || 0; if (!(x > 0)) continue; tot += x; const fc = D.fctry?.[h.ticker];
-      if (fc && Object.keys(fc).length) { const s = Object.values(fc).reduce((a, v) => a + v, 0) || 1; for (const [c, v] of Object.entries(fc)) put(Screener.regionOf(c), (x * v) / s); }
-      else put(Screener.regionOf(D.info?.[h.ticker]?.country || (h.asset_type === "stock" ? "US" : "")), x); }
+      if (fc && Object.keys(fc).length) { const s = Object.values(fc).reduce((a, v) => a + v, 0) || 1; for (const [c, v] of Object.entries(fc)) put(Screener.regionOf(c), (x * v) / s); continue; }
+      if (h.asset_type === "stock") { put(Screener.regionOf(D.info?.[h.ticker]?.country || "US"), x); continue; }
+      // Through the fund's holdings, where their countries are known (the rest by the fund's name).
+      const fh = (D.funds?.[h.ticker] || []).filter((y) => num(y.weight) > 0), tw = fh.reduce((a, y) => a + num(y.weight), 0); let known = 0;
+      for (const y of fh) { const c = D.lt?.[y.ticker]?.country; if (c) { put(Screener.regionOf(c), (x * num(y.weight)) / (tw || 1)); known += num(y.weight); } }
+      const rest = x * (tw > 0 ? 1 - known / tw : 1), nm = `${h.name || ""} ${D.fval?.[h.ticker]?.category || ""}`;
+      if (rest > 0) put(/emerging/i.test(nm) ? "em" : /international|developed|ex-us|eafe|europe|japan|pacific|foreign|world|global/i.test(nm) ? "eu" : "us", rest); }
     return tot ? Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v / tot])) : null;
   }
   function pfDash(p, hs, D, total, pos) {
@@ -8235,7 +8257,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     // ---- what it owns: sectors vs the S&P 500, regions, look-through, overlap, industries
     const secs = pfSectors(hs, D), secTot = secs.reduce((a, s) => a + s.weight, 0) || 1, secF = Object.fromEntries(secs.map((s) => [s.sector, s.weight / secTot]));
     const tilt = PfX.tilt(secF, D.spySec || {}), lt = PMode.lookThrough(hs, D.funds || {});
-    const cos2 = { ...(D.cos || {}) }; for (const h of hs) { const i = D.info?.[h.ticker]; if (h.asset_type === "stock" && i?.industry && !cos2[h.ticker]) cos2[h.ticker] = { industry: i.industry, sector: i.sector }; }
+    const cos2 = { ...(D.cos || {}) }; for (const [t, i] of Object.entries(D.lt || D.info || {})) if (i?.type === "stock" && i.industry && !cos2[t]) cos2[t] = { industry: i.industry, sector: i.sector };
     const indA = PfX.industries(lt.rows.map((r) => ({ ticker: r.ticker, total: r.total })), cos2), indKey = D.key + "|" + indA.rows.map((r) => r.industry).join(",");
     if (indA.rows.length && S.pfDig?.key !== indKey) setTimeout(() => pfIndLoad(indKey, indA.rows.map((r) => r.industry)), 0);
     const dig = S.pfDig?.key === indKey ? S.pfDig.dg : null, mix = dig ? PfX.callMix(indA.rows, dig) : null;
@@ -8274,17 +8296,40 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       <button class="pp-tog" data-pp-spy="1" aria-pressed="${!!S.ppSpy}"><i></i>S&amp;P 500</button></div>
       <div class="chart">${lineChart(perfLines, { height: innerWidth < 720 ? 280 : 260, width: wpx, area: col, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : (v / 1000).toFixed(v < 10000 ? 1 : 0) + "k"), markers: evIdx })}<div class="tip" hidden></div>
       <div class="legend"><span><i style="background:${col}"></i>${esc(p.name)} ${pfPP(m?.totalReturn)}</span>${S.ppSpy ? `<span><i class="dash" style="background:var(--bench)"></i>S&amp;P 500 ${pfPP(ms?.totalReturn)}</span>` : ""}${evIdx.length ? `<span class="muted">┊ rebalances</span>` : ""}</div></div>`);
+    // ---- every holding, in numbers
+    const serOf = (t) => D.series?.[t], retBack = (t, days) => { const c = serOf(t)?.closes || []; return c.length > days ? c[c.length - 1] / c[c.length - 1 - days] - 1 : NaN; };
+    const ytdOf = (t) => { const s0 = serOf(t); if (!s0?.dates?.length) return NaN; const y0 = `${s0.dates[s0.dates.length - 1].slice(0, 4)}-01-01`; let k = s0.dates.findIndex((d) => d >= y0); k = k > 0 ? k - 1 : 0; return s0.closes[s0.closes.length - 1] / s0.closes[k] - 1; };
+    const volOf = (t) => { const c = (serOf(t)?.closes || []).slice(-253); if (c.length < 60) return NaN; const r = []; for (let i = 1; i < c.length; i++) r.push(Math.log(c[i] / c[i - 1])); const mu = r.reduce((a, x) => a + x, 0) / r.length; return Math.sqrt(r.reduce((a, x) => a + (x - mu) ** 2, 0) / (r.length - 1) * 252); };
+    const ann = (t, y) => { const r = retBack(t, Math.round(252 * y)); return isNum(r) ? Math.pow(1 + r, 1 / y) - 1 : NaN; };
+    const rcOf = Object.fromEntries((rc?.rows || []).map((r) => [r.ticker, r.share]));
+    const detRows = hs.slice().sort((a, b) => wf(b.ticker) - wf(a.ticker)).map((h) => { const t = h.ticker, i = D.info?.[t] || {}, fvv = D.fval?.[t] || {};
+      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(t)}"` : `data-fund="${esc(t)}"`}>${esc(t)}</button><div class="small muted">${esc(h.name || "")}</div></td><td class="n"><b>${pfPc(wf(t), 1)}</b><div class="small muted">target ${(num(h.weight) || 0).toFixed(1)}%</div></td><td class="n">${usd(total * wf(t))}</td>
+        ${[retBack(t, 21), ytdOf(t), retBack(t, 252), ann(t, 3), ann(t, 5)].map((r) => `<td class="n ${cls(r)}">${pfPP(r)}</td>`).join("")}
+        <td class="n">${pfPc(volOf(t), 0)}</td><td class="n">${isNum(num(i.beta)) ? num(i.beta).toFixed(2) : "—"}</td><td class="n">${isNum(rcOf[t]) ? pfPc(rcOf[t], 0) : "—"}</td><td class="n">${pfPc(num(h.yield), 2)}</td><td class="n">${h.pe > 0 ? h.pe.toFixed(1) : "—"}</td>
+        <td class="n">${h.asset_type === "stock" ? "—" : pfPc(num(D.fexp?.[t]), 2)}</td><td class="small">${esc(h.asset_type === "stock" ? [i.sector, i.industry].filter(Boolean).join(" · ") : [fvv.category, fvv.family].filter(Boolean).join(" · ") || h.sector || "")}</td></tr>`; }).join("");
+    const detSec = sec("pfx-det", "Every holding, in numbers", "today's weights; returns to the last close (3Y and 5Y a year)", `<div class="tbl-wrap"><table class="wrap-table pfx-det"><thead><tr><th>Holding</th><th class="n">Weight</th><th class="n">Value</th><th class="n">1M</th><th class="n">YTD</th><th class="n">1Y</th><th class="n">3Y</th><th class="n">5Y</th><th class="n">Volatility</th><th class="n">Beta</th><th class="n">Risk share</th><th class="n">Yield</th><th class="n">P/E</th><th class="n">Expense</th><th>Sector / category</th></tr></thead><tbody>${detRows}</tbody></table></div>`);
+    // ---- valuation and quality, through the funds to the companies inside
+    const ltS = lt.rows.filter((r) => D.lt?.[r.ticker]?.type === "stock"), ltW = ltS.reduce((a, r) => a + r.total, 0) || 1;
+    const wAvg = (k, { harm = false, pos = false } = {}) => { let w = 0, s0 = 0; for (const r of ltS) { const v = num(D.lt[r.ticker][k]); if (!isNum(v) || (pos && v <= 0)) continue; w += r.total; s0 += harm ? r.total / v : r.total * v; } return w > 0 ? { v: harm ? w / s0 : s0 / w, cov: w / ltW } : { v: NaN, cov: 0 }; };
+    const VM = [["P/E", wAvg("pe", { harm: true, pos: true }), (v) => v.toFixed(1) + "×", "harmonic: earnings yield averaged"], ["P/B", wAvg("pb", { harm: true, pos: true }), (v) => v.toFixed(1) + "×", "harmonic"], ["P/S", wAvg("ps", { harm: true, pos: true }), (v) => v.toFixed(1) + "×", "harmonic"],
+      ["Return on equity", wAvg("roe"), (v) => pfPc(v, 0), "profit over book value"], ["Net margin", wAvg("npm"), (v) => pfPc(v, 0), "profit over sales"], ["Gross margin", wAvg("gm"), (v) => pfPc(v, 0), ""], ["Debt to equity", wAvg("de", { pos: true }), (v) => v.toFixed(2), ""], ["Beta", wAvg("beta"), (v) => v.toFixed(2), "the companies' own (FMP)"], ["Dividend yield", wAvg("divYield"), (v) => pfPc(v, 2), ""]];
+    const SZ = [["Mega (over $200B)", 2e11, Infinity], ["Large ($10-200B)", 1e10, 2e11], ["Mid ($2-10B)", 2e9, 1e10], ["Small (under $2B)", 0, 2e9]], szW = SZ.map(([l, lo, hi]) => [l, ltS.filter((r) => { const c = num(D.lt[r.ticker].cap); return c >= lo && c < hi; }).reduce((a, r) => a + r.total, 0) / ltW]);
+    // Each fund through its own holdings (the companies read above), else what its provider reports.
+    const fundThru = (t) => { const fh = (D.funds?.[t] || []).filter((y) => num(y.weight) > 0 && D.lt?.[y.ticker]?.type === "stock"), tw = (D.funds?.[t] || []).reduce((a, y) => a + (num(y.weight) || 0), 0) || 1;
+      const g = (k, harm) => { let w = 0, s0 = 0; for (const y of fh) { const v = num(D.lt[y.ticker][k]); if (!isNum(v) || (harm && v <= 0)) continue; w += num(y.weight); s0 += harm ? num(y.weight) / v : num(y.weight) * v; } return w > 0 ? (harm ? w / s0 : s0 / w) : NaN; };
+      return { pe: g("pe", true), pb: g("pb", true), ps: g("ps", true), roe: g("roe"), npm: g("npm"), cov: fh.reduce((a, y) => a + num(y.weight), 0) / tw }; };
+    const fvRows = hs.filter((h) => h.asset_type !== "stock").map((h) => { const f = D.fval?.[h.ticker] || {}, th = fundThru(h.ticker), x = (v, d = 1, u = "×") => (isNum(num(v)) ? Number(v).toFixed(d) + u : "—"), pick = (a, b) => (isNum(num(a)) ? a : b);
+      return `<tr><td><b class="tick">${esc(h.ticker)}</b><div class="small muted">${esc(f.category || h.name || "")}</div></td><td class="n">${x(pick(th.pe, f.pe))}</td><td class="n">${x(pick(th.pb, f.pb))}</td><td class="n">${x(pick(th.ps, f.ps))}</td><td class="n">${pfPc(th.roe, 0)}</td><td class="n">${pfPc(th.npm, 0)}</td><td class="n">${th.cov > 0 ? pfPc(th.cov, 0) : "—"}</td><td class="n">${isNum(num(f.holdings)) ? Math.round(f.holdings).toLocaleString() : "—"}</td><td class="n">${isNum(num(f.turnover)) ? pfPc(f.turnover > 1.5 ? f.turnover / 100 : f.turnover, 0) : "—"}</td><td class="n">${isNum(num(f.aum)) ? cap(f.aum) : "—"}</td></tr>`; }).join("");
+    const valSec = ltS.length ? sec("pfx-val", "Valuation and quality", `the companies it owns, directly and through the funds (${pfPc(ltS.reduce((a, r) => a + r.total, 0), 0)} of the portfolio read company by company)`, `<div class="pfx-tiles">${VM.map(([l, x, f, sub]) => tile(l, isNum(x.v) ? f(x.v) : "—", `${sub ? sub + " · " : ""}covers ${pfPc(x.cov, 0)}`)).join("")}</div>
+      <h3>By company size</h3><div class="pfx-tilt">${szW.map(([l, v]) => `<div class="pfx-tr"><span class="pfx-tn">${esc(l)}</span><span class="pfx-tb"><i class="p" style="width:${Math.min(100, v * 100)}%"></i></span><b class="mono">${pfPc(v, 0)}</b><span></span></div>`).join("")}</div>
+      ${fvRows ? `<h3>The funds' own numbers</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Fund</th><th class="n">P/E</th><th class="n">P/B</th><th class="n">P/S</th><th class="n">ROE</th><th class="n">Net margin</th><th class="n">Read through</th><th class="n">Holdings</th><th class="n">Turnover</th><th class="n">Size</th></tr></thead><tbody>${fvRows}</tbody></table></div><div class="small muted">Each fund read through its biggest holdings (their FMP ratios, weighted); "read through" is how much of the fund that covers. Where it can't be read, the provider's figures (EODHD).</div>` : ""}
+      <div class="small muted">Each company's ratios from FMP (trailing 12 months), weighted by how much of the portfolio it is; the 60 biggest companies inside the funds and each fund's 25 biggest are read, plus every stock held directly.</div>`) : "";
     // ---- drawdowns
     const ddSec = bt.dates.length > 60 ? sec("pfx-dd", "Drawdowns", esc(btLab), `<div class="chart">${lineChart([{ name: p.name, color: "var(--neg)", dates: bt.dates, values: X.uw.map((v) => v * 100) }, ...(btSpy ? [{ name: "S&P 500", color: "var(--bench)", dash: true, dates: btSpy.dates, values: X.uwS.map((v) => v * 100) }] : [])], { height: 200, width: wpx, zeroLine: true, area: "var(--neg)", fmtY: (v) => v.toFixed(0) + "%", xLabels: bt.dates.length > 300 ? yearTicks : null })}<div class="tip" hidden></div>
       <div class="legend"><span><i style="background:var(--neg)"></i>below its last high</span><span><i class="dash" style="background:var(--bench)"></i>S&amp;P 500</span></div></div>
       <div class="pfx-cards">${dd.map((x, i) => `<div class="pfx-dd"><span class="pfx-rank mono">${i + 1}</span><div><b class="mono neg-t">${pfPP(x.depth)}</b><span class="small muted">${esc(fmtDate(x.start))} → bottom ${esc(fmtDate(x.bottom))}</span><span class="small">${x.end ? `back to the high ${esc(fmtDate(x.end))}: <b>${x.fall_days}</b> trading days down, <b>${x.recover_days}</b> back up` : `<b>not recovered yet</b> (${x.fall_days} trading days down so far)`}</span></div></div>`).join("")}</div>`) : "";
     // ---- calendar
     const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const calSec = cal ? sec("pfx-cal", "Month by month", esc(btLab), `<div class="pfx-heat" role="table" aria-label="Monthly returns"><div class="pfx-hrow pfx-hh" role="row"><span role="columnheader">Year</span>${MO.map((x) => `<span role="columnheader">${x}</span>`).join("")}<span role="columnheader">Year</span><span role="columnheader">S&amp;P</span></div>
-      ${cal.years.slice().reverse().map((y) => `<div class="pfx-hrow" role="row"><span class="pfx-hy mono" role="rowheader">${y.year}</span>${y.months.map((r, k) => `<span class="pfx-hc mono" role="cell" style="${pfHeat(r)}" title="${MO[k]} ${y.year}: ${isNum(r) ? pfPP(r) : "—"}"><em>${MO[k]}</em>${isNum(r) ? (r * 100).toFixed(1) : ""}</span>`).join("")}<span class="pfx-hc pfx-ht mono" role="cell" style="${pfHeat(y.total, 0.3)}"><em>Year</em>${pfPP(y.total)}${y.partial ? "<sup>*</sup>" : ""}</span><span class="pfx-hc pfx-hs mono" role="cell"><em>S&amp;P</em>${pfPP(y.spy)}</span></div>`).join("")}</div>
-      <div class="pfx-stats">${[["Best month", cal.best ? `${pfPP(cal.best.r)}` : "—", cal.best ? `${MO[+cal.best.m.slice(5) - 1]} ${cal.best.m.slice(0, 4)}` : ""], ["Worst month", cal.worst ? pfPP(cal.worst.r) : "—", cal.worst ? `${MO[+cal.worst.m.slice(5) - 1]} ${cal.worst.m.slice(0, 4)}` : ""], ["Months up", pfPc(cal.up, 0), `of ${cal.n}`],
-        ["Best day", ds ? pfPP(ds.best.r, 2) : "—", ds ? fmtDate(ds.best.date) : ""], ["Worst day", ds ? pfPP(ds.worst.r, 2) : "—", ds ? fmtDate(ds.worst.date) : ""], ["Days up", ds ? pfPc(ds.up, 0) : "—", ds ? `longest runs: ${ds.upRun} up, ${ds.dnRun} down` : ""]].map(([l, v, s]) => `<div><span class="pfx-tl">${l}</span><b class="mono">${v}</b><span class="pfx-ts">${esc(s)}</span></div>`).join("")}</div>
-      <div class="small muted">* part of a year. Months from month-end values; the first month counts from ${esc(fmtDate(btFrom))}.</div>`) : "";
     // ---- rolling
     const rl = roll, rch = (vals, sp, fmtY, name, opts = {}) => lineChart([{ name, color: "var(--accent)", dates: rl.dates, values: vals.map((v) => (isNum(num(v)) ? v * (opts.k ?? 100) : NaN)) }, ...(sp ? [{ name: "S&P 500", color: "var(--bench)", dash: true, dates: rl.dates, values: sp.map((v) => (isNum(num(v)) ? v * 100 : NaN)) }] : [])], { height: 170, width: Math.round(wpx / (innerWidth < 900 ? 1 : 3)) + 60, fmtY, baseLine: opts.base ?? 0, xLabels: yearTicks });
     const rollSec = rl ? sec("pfx-roll", "Rolling 6 months", `${esc(btLab)}: each point looks back 6 months`, `<div class="pfx-3">
@@ -8297,6 +8342,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const bySec = {}; for (const r of rows) { const s0 = r.sector || "Other"; bySec[s0] = (bySec[s0] || 0) + r.contribution; }
     const maxC = Math.max(...rows.map((r) => Math.abs(r.contribution)), 1e-9);
     const attr = rows.length ? sec("pf-attr", "Where the return came from", `${esc(per)}: weight × the holding's return = its contribution`, `<div class="pfx-bars">${rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => `<div class="pfx-bar"><span class="pfx-bl"><b class="mono">${esc(r.ticker)}</b><span class="small muted">${pfPc(r.weight / 100, 0)} × ${pfPP(r.return)}</span></span><span class="pfx-btrack"><i class="${r.contribution >= 0 ? "pos" : "neg"}" style="${r.contribution >= 0 ? "left:50%" : `right:50%`};width:${(Math.abs(r.contribution) / maxC) * 50}%"></i></span><b class="mono ${r.contribution >= 0 ? "pos-t" : "neg-t"}">${pfPP(r.contribution, 2)}</b></div>`).join("")}</div>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th class="n">Return</th><th class="n">Contribution</th><th class="n">Share of the return</th><th>Sector</th></tr></thead><tbody>${rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => `<tr><td><b class="tick">${esc(r.ticker)}</b><div class="small muted">${esc(nameOf(r.ticker))}</div></td><td class="n">${(num(r.weight) || 0).toFixed(1)}%</td><td class="n ${cls(r.return)}">${pfPP(r.return)}</td><td class="n ${cls(r.contribution)}"><b>${pfPP(r.contribution, 2)}</b></td><td class="n">${ct.total ? Math.round((r.contribution / ct.total) * 100) + "%" : "—"}</td><td class="small">${esc(r.sector || hs.find((h) => h.ticker === r.ticker)?.sector || "")}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td class="n">100%</td><td></td><td class="n"><b>${pfPP(ct.total, 2)}</b></td><td class="n">100%</td><td></td></tr></tfoot></table></div>
       <div class="pfx-sum"><span class="pill ${Math.abs(ct.total - (m?.totalReturn ?? ct.total)) < 1e-6 ? "pos" : "warn"}">Contributions add to ${pfPP(ct.total, 2)} = the portfolio's ${pfPP(m?.totalReturn, 2)}</span>${Object.keys(bySec).length > 1 ? ` <span class="small muted">By sector: ${Object.entries(bySec).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${pfPP(v, 2)}`).join(" · ")}</span>` : ""}</div>`) : "";
     // ---- risk: the table against the S&P 500
     const rowM = (l, v, sv, fmt, tgt) => `<tr><td>${l}${tgt ? `<div class="small muted">${tgt}</div>` : ""}</td><td class="n"><b>${fmt(v)}</b></td><td class="n muted">${fmt(sv)}</td></tr>`;
@@ -8328,13 +8375,6 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       ${isNum(num(beta)) ? `<h3>If the market fell from here</h3><div class="pfx-tiles small3">${[-0.1, -0.2, -0.3].map((s0) => tile(`S&amp;P 500 ${Math.round(s0 * 100)}%`, `${usd(beta * s0 * total)}`, `about ${pfPP(beta * s0)} at a beta of ${beta.toFixed(2)}`, "neg")).join("")}</div>` : ""}
       <div class="small muted">Each holding's own move where it traded through the episode; otherwise (*) its beta × the S&amp;P 500's move. Capture: the portfolio's move as a share of the S&amp;P 500's.</div>`) : "";
     // ---- range of outcomes
-    let projSec = "";
-    if (proj) { const base = new Date(); const pd = proj.path.map((x) => { const t = new Date(base); t.setMonth(t.getMonth() + x.k); return t.toISOString().slice(0, 10); });
-      const yt = (dates) => dates.map((d, i) => [i, d]).filter(([i]) => i % 24 === 0).map(([i, d]) => [i, i ? `+${i / 12}y` : "now"]);
-      projSec = sec("pfx-proj", "A range of outcomes", `if the next years look like ${btFrom ? `the years since ${esc(fmtDate(btFrom))}` : "its history"} for today's mix: ${pfPP(proj.mu)} a year, swinging ${pfPc(proj.sigma, 0)}`, `<div class="chart">${lineChart([{ name: "Middle (50th percentile)", color: "var(--accent)", dates: pd, values: proj.path.map((x) => x.p50) }, { name: "Good case (90th)", color: "var(--pos)", dash: true, dates: pd, values: proj.path.map((x) => x.p90) }, { name: "Bad case (10th)", color: "var(--neg)", dash: true, dates: pd, values: proj.path.map((x) => x.p10) }], { height: 240, width: wpx, band: { lo: proj.path.map((x) => x.p25), hi: proj.path.map((x) => x.p75), color: "var(--accent)" }, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v / 1000) + "k"), xLabels: yt, baseLine: total })}<div class="tip" hidden></div>
-        <div class="legend"><span><i style="background:var(--accent)"></i>middle</span><span><i style="background:var(--accent);opacity:.3"></i>half of outcomes</span><span><i class="dash" style="background:var(--pos)"></i>1 in 10 better</span><span><i class="dash" style="background:var(--neg)"></i>1 in 10 worse</span></div></div>
-        <div class="tbl-wrap"><table><thead><tr><th>In</th><th class="n">1 in 10 worse</th><th class="n">Middle</th><th class="n">1 in 10 better</th><th class="n">Chance it's below today</th></tr></thead><tbody>${proj.rows.map((r) => `<tr><td><b>${r.years} year${r.years > 1 ? "s" : ""}</b></td><td class="n">${usd(r.p10)}</td><td class="n"><b>${usd(r.p50)}</b></td><td class="n">${usd(r.p90)}</td><td class="n">${pfPc(r.loss, 0)}</td></tr>`).join("")}</tbody></table></div>
-        <div class="small muted">A lognormal spread around its own yearly return and volatility, from ${esc(usd(total))} with nothing added or taken out. It is what the history implies, not a forecast: the industries' calls are under What it owns.</div>`); }
     // ---- what it owns: sectors against the S&P 500, regions, types
     const maxT = Math.max(...tilt.map((t) => Math.max(t.port, t.spy)), 0.01);
     const types = {}; for (const h of hs) types[h.asset_type] = (types[h.asset_type] || 0) + wf(h.ticker);
@@ -8370,13 +8410,13 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const evList = evs.length ? sec("pf-events", "Rebalances", `${evs.length}`, `<ul class="dlist small">${evs.slice().reverse().map((e) => `<li><b class="mono">${esc(e.date)}</b> ${esc(e.label || "Rebalance")}: ${(e.trades || []).filter((t) => Math.abs(t.amountUsd) >= 1).map((t) => `<span class="pill ${t.amountUsd > 0 ? "pos" : "neg"}">${t.amountUsd > 0 ? "BUY" : "SELL"} ${esc(t.ticker)} $${Math.abs(Math.round(t.amountUsd)).toLocaleString()}</span>`).join(" ")}</li>`).join("")}</ul>`) : "";
     const it = (ok, id, l) => (ok ? [id, l] : null);
     const groups = [{ label: "At a glance", items: [["pfx-glance", "At a glance"]] },
-      { label: "Performance", items: [["pf-perf", "Value"], it(ddSec, "pfx-dd", "Drawdowns"), it(calSec, "pfx-cal", "Month by month"), it(rollSec, "pfx-roll", "Rolling 6 months"), it(attr, "pf-attr", "Where the return came from")] },
-      { label: "Risk", items: [it(riskSec, "pfx-risk", "Risk & ratios"), it(rcSec, "pfx-rc", "Who carries the risk"), it(corrSec, "pfx-corr", "How they move together"), it(stressSec, "pfx-stress", "Stress test"), it(projSec, "pfx-proj", "Range of outcomes")] },
-      { label: "What it owns", items: [["pfx-alloc", "Sectors & regions"], it(lookSec, "pfx-look", "The companies inside"), it(indSec, "pfx-ind", "Industries & our calls")] },
+      { label: "Performance", items: [["pf-perf", "Value"], ["pfx-det", "Every holding"], it(ddSec, "pfx-dd", "Drawdowns"), it(rollSec, "pfx-roll", "Rolling 6 months"), it(attr, "pf-attr", "Where the return came from")] },
+      { label: "Risk", items: [it(riskSec, "pfx-risk", "Risk & ratios"), it(rcSec, "pfx-rc", "Who carries the risk"), it(corrSec, "pfx-corr", "How they move together"), it(stressSec, "pfx-stress", "Stress test")] },
+      { label: "What it owns", items: [["pfx-alloc", "Sectors & regions"], it(valSec, "pfx-val", "Valuation & quality"), it(lookSec, "pfx-look", "The companies inside"), it(indSec, "pfx-ind", "Industries & our calls")] },
       { label: "Income & costs", items: [["pfx-inc", "Income & costs"]] },
       { label: "Wall Street", items: [it(streetSec, "pfx-street", "Ratings")] },
       { label: "History", items: [it(evList, "pf-events", "Rebalances")] }];
-    return `<div class="shell">${sideNav(groups)}<div class="stream">${glance}${perf}${ddSec}${calSec}${rollSec}${attr}${riskSec}${rcSec}${corrSec}${stressSec}${projSec}${allocSec}${lookSec}${indSec}${incSec}${streetSec}${evList}</div></div>`;
+    return `<div class="shell">${sideNav(groups)}<div class="stream">${glance}${perf}${detSec}${ddSec}${rollSec}${attr}${riskSec}${rcSec}${corrSec}${stressSec}${allocSec}${valSec}${lookSec}${indSec}${incSec}${streetSec}${evList}</div></div>`;
   }
   /** A small price line for a holding's card: the last year. */
   function pfSpark(ser, w = 120, h = 34) {
