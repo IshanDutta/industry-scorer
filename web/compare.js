@@ -664,7 +664,7 @@ Return ONLY a JSON object:
   }
   const LV = ["buy", "accumulate", "hold", "trim", "avoid"], CONF = ["high", "medium", "low"];
   // Desk and verdict text: twice the length asked for before anything is cut, so a long sentence is never cut off.
-  const str = (x, k = 900) => (typeof x === "string" ? cut(x, k * 2) : "");
+  const str = (x, k = 900) => (typeof x === "string" ? cut(x, Infinity) : ""); // desk output is kept whole
   const arr = (x, k = 6, m = 220) => (Array.isArray(x) ? x.map((y) => str(y, m)).filter(Boolean).slice(0, k) : []);
   /** The call's answer, checked: picks must be one of the tickers; everything trimmed; missing names filled. */
   function clean(raw, syms) {

@@ -205,7 +205,67 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     return L.join("\n");
   }
 
-  const Regimes = { H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
+  // ---------------------------------------------------------------- times like this, by window
+  /**
+   * The window version: for a window of `months` (1, 3, 6 or 12), the past stretches of the same length most like the
+   * one just ended, on the macro backdrop at its end and on how it (an industry or a single name) and the market moved
+   * over the window; then what followed 1, 3, 6 and 12 months later. Stretches don't overlap (at least a window, and
+   * three months, apart) and the last 12 months are left out so every follow-on is known.
+   */
+  const WFEAT = [
+    // key, label, unit, weight; labels with {w} name the window
+    ["iw", "It, over the {w}", "%", 1.6], ["sw", "S&P 500, over the {w}", "%", 1.1], ["rw", "It vs the S&P 500, over the {w}", "pp", 1.2],
+    ["ddw", "Its worst drop within the {w}", "%", 1], ["volw", "Its volatility over the {w}, annualized", "%", 0.9], ["v200", "It vs its 200-day average", "%", 0.9],
+    ["ff", "Fed funds rate", "%", 1], ["ff12", "Fed funds change over 12 months", "pp", 0.8], ["cpi", "CPI inflation, year on year", "%", 1],
+    ["un12", "Unemployment change over 12 months", "pp", 0.6], ["vix", "VIX", "", 1], ["ratesw", "7-10 year Treasuries (IEF), over the {w}", "%", 0.7],
+    ["creditw", "High-yield bonds vs Treasuries, over the {w}", "pp", 0.6], ["oilw", "Oil (USO), over the {w}", "%", 0.5], ["usdw", "US dollar (UUP), over the {w}", "%", 0.5],
+  ];
+  const WMAP = Object.fromEntries(WFEAT.map(([k, label, unit, w]) => [k, { key: k, label, unit, w }]));
+  const wname = (m) => (m === 12 ? "year" : m === 1 ? "month" : `${m} months`);
+  function wfingerprint(d, m, mk, ind) {
+    const mv = (s, back = 0) => valueAt(s, back ? monthEnd(addMonths(d, -back)) : d, 100);
+    const f = {};
+    f.ff = mv(mk.ff); f.ff12 = isNum(f.ff) && isNum(mv(mk.ff, 12)) ? f.ff - mv(mk.ff, 12) : NaN;
+    const c0 = mv(mk.cpi), c12 = mv(mk.cpi, 12); f.cpi = isNum(c0) && isNum(c12) && c12 > 0 ? (c0 / c12 - 1) * 100 : NaN;
+    f.un12 = isNum(mv(mk.un)) && isNum(mv(mk.un, 12)) ? mv(mk.un) - mv(mk.un, 12) : NaN; f.vix = valueAt(mk.vix, d);
+    f.iw = ret(ind, d, m); f.sw = ret(mk.spy, d, m); f.rw = isNum(f.iw) && isNum(f.sw) ? f.iw - f.sw : NaN;
+    const i = at(ind.dates, d), j0 = at(ind.dates, monthEnd(addMonths(d, -m)));
+    if (i > 0 && j0 >= 0 && i - j0 >= 10) { let peak = ind.values[j0], dd = 0; const lr = [];
+      for (let j = j0 + 1; j <= i; j++) { peak = Math.max(peak, ind.values[j]); dd = Math.min(dd, ind.values[j] / peak - 1); if (ind.values[j - 1] > 0) lr.push(Math.log(ind.values[j] / ind.values[j - 1])); }
+      f.ddw = dd * 100; f.volw = sd(lr) * Math.sqrt(252) * 100; } else { f.ddw = NaN; f.volw = NaN; }
+    if (i >= 199) { let s = 0; for (let j = i - 199; j <= i; j++) s += ind.values[j]; f.v200 = (ind.values[i] / (s / 200) - 1) * 100; } else f.v200 = NaN;
+    f.ratesw = ret(mk.ief, d, m); const hy = ret(mk.hyg, d, m); f.creditw = isNum(hy) && isNum(f.ratesw) ? hy - f.ratesw : NaN;
+    f.oilw = ret(mk.uso, d, m); f.usdw = ret(mk.uup, d, m);
+    return f;
+  }
+  function windowEpisodes({ ind, mk = {}, months = 6, today, k = 5, recentMonths = 12 }) {
+    if (!ind?.dates?.length || ind.dates.length < 400) return null;
+    const last = ind.dates[ind.dates.length - 1], now = today && today < last ? today : last;
+    const ends = []; for (let i = 0; i < ind.dates.length; i++) { const d = ind.dates[i]; if (i === ind.dates.length - 1 || ind.dates[i + 1].slice(0, 7) !== d.slice(0, 7)) ends.push(d); }
+    const first = addMonths(ind.dates[0], Math.max(months, 10) + 1), cutoff = addMonths(now, -recentMonths);
+    const fNow = wfingerprint(now, months, mk, ind);
+    const rows = ends.filter((d) => d >= first && d <= cutoff).map((d) => ({ d, f: wfingerprint(d, months, mk, ind) }));
+    if (rows.length < 24) return null;
+    const keys = WFEAT.map(([kk]) => kk).filter((kk) => isNum(fNow[kk]) && rows.filter((r) => isNum(r.f[kk])).length >= rows.length * 0.5);
+    if (keys.length < 3) return null;
+    const sds = Object.fromEntries(keys.map((kk) => [kk, sd(rows.map((r) => r.f[kk])) || 1])), totW = keys.reduce((a, kk) => a + WMAP[kk].w, 0);
+    for (const r of rows) { let s = 0, w = 0; for (const kk of keys) { if (!isNum(r.f[kk])) continue; s += WMAP[kk].w * ((r.f[kk] - fNow[kk]) / sds[kk]) ** 2; w += WMAP[kk].w; } r.dist = w >= totW * 0.6 ? Math.sqrt(s / w) : Infinity; }
+    const ranked = rows.filter((r) => r.dist < Infinity).sort((a, b) => a.dist - b.dist), N = ranked.length, gap = Math.max(months, 3);
+    const top = []; for (const r of ranked) { if (top.every((o) => Math.abs((Date.parse(o.d) - Date.parse(r.d)) / (30.44 * 864e5)) >= gap)) top.push(r); if (top.length >= k) break; }
+    const spy = mk.spy?.dates?.length ? mk.spy : null, fmt = (kk, v) => (isNum(v) ? r1(v, WMAP[kk].unit === "" ? 0 : 1) : null);
+    const ep = top.map((r) => { const fi = forward(ind, r.d), fs = spy ? forward(spy, r.d) : { ret: {}, path: [] };
+      const diffs = keys.filter((kk) => isNum(r.f[kk])).map((kk) => ({ key: kk, z: Math.abs(r.f[kk] - fNow[kk]) / sds[kk] })).sort((a, b) => a.z - b.z);
+      return { start: monthEnd(addMonths(r.d, -months)), end: r.d, similarity: Math.round((1 - ranked.indexOf(r) / N) * 1000) / 10,
+        then: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, r.f[kk])])), alike: diffs.slice(0, 3).map((x) => x.key), unlike: diffs.slice(-2).reverse().map((x) => x.key),
+        it: fi.ret, spy: fs.ret, excess: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(fi.ret[h]) && isNum(fs.ret[h]) ? r1(fi.ret[h] - fs.ret[h]) : null])), maxdd6: fi.maxdd6, path: fi.path, spy_path: fs.path }; });
+    const base = Object.fromEntries(Object.keys(H).map((h) => { const t = ep.map((e) => e.it[h]).filter(isNum), x = ep.map((e) => e.excess[h]).filter(isNum);
+      return [h, { up: t.filter((v) => v > 0).length, n: t.length, median: r1(quant(t, 0.5)), beat: x.filter((v) => v > 0).length, best: t.length ? r1(Math.max(...t)) : null, worst: t.length ? r1(Math.min(...t)) : null }]; }));
+    return { as_of: now, from: rows[0]?.d || null, window: months, wname: wname(months), stretches: N, features: keys, now: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, fNow[kk])])), episodes: ep, base };
+  }
+  const wlabel = (kk, months) => (WMAP[kk]?.label || kk).replace("{w}", wname(months));
+  const wval = (kk, v) => { if (!isNum(v)) return "n/a"; const u = WMAP[kk]?.unit; return u === "" ? `${v}` : u === "pp" ? `${v > 0 ? "+" : ""}${v}pp` : `${["ff", "cpi", "volw"].includes(kk) ? "" : v > 0 ? "+" : ""}${v}%`; };
+
+  const Regimes = { windowEpisodes, wfingerprint, WFEAT, WMAP, wlabel, wval, H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
   if (typeof module !== "undefined" && module.exports) module.exports = Regimes;
   else root.Regimes = Regimes;
 })(typeof window !== "undefined" ? window : globalThis);

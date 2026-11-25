@@ -1201,6 +1201,116 @@ details.rcard-more[open] > summary { margin-bottom: 4px; }
 /* A folded section says so, and shows what it holds. */
 .panel.is-folded > .panel-head .small.muted { color: var(--faint); }
 @media (prefers-reduced-motion: reduce) { :is(.p-new, .is-opening) :is(.cardlist > li, .rgrid > *, .rbar > i), .clamp.open > .clamp-in { animation: none !important; } }
+/* ---------------------------------------------------------------- only vertical scrolling */
+.tbl-wrap { overflow: visible; }
+th, td { white-space: normal; overflow-wrap: anywhere; }
+td.n, th.n, td.mono, td.tick { white-space: nowrap; overflow-wrap: normal; }
+th { top: var(--bar); }
+.secnav, .ana-nav, .pf-tabs, .cx-fchips { flex-wrap: wrap !important; overflow: visible !important; }
+.nav-list { display: contents; }
+.nav-toggle { display: none; }
+@media (max-width: 960px) {
+  .sidenav { display: block !important; position: sticky; top: var(--bar); z-index: 7; overflow: visible !important; max-height: none; margin-inline: -20px; padding: 0 !important; border-radius: 0; border-inline: 0; background: var(--surface); }
+  .nav-toggle { display: flex; width: 100%; align-items: center; gap: 10px; padding: 11px 20px; border: 0; border-radius: 0; background: transparent; color: var(--ink); text-align: left; font: 600 14px var(--body); }
+  .nav-toggle .nt-k { color: var(--faint); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+  .nav-toggle .nt-cur { flex: 1; min-width: 0; color: var(--ink); }
+  .nav-toggle svg { color: var(--muted); transition: transform var(--t3) var(--out); }
+  .sidenav.open .nav-toggle svg { transform: rotate(180deg); }
+  .nav-list { display: grid; gap: 1px; position: absolute; left: 0; right: 0; top: 100%; max-height: min(70vh, 560px); overflow-y: auto; padding: 8px 12px 12px; background: var(--l3); border-bottom: 1px solid var(--line-2); box-shadow: 0 16px 32px rgb(0 0 0 / .35); opacity: 0; transform: translateY(-6px); pointer-events: none; visibility: hidden; transition: opacity var(--t2) var(--in), transform var(--t2) var(--in), visibility 0s linear var(--t2); }
+  .sidenav.open .nav-list { opacity: 1; transform: none; pointer-events: auto; visibility: visible; transition: opacity var(--t3) var(--out), transform var(--t3) var(--out), visibility 0s; }
+  .sidenav .nav-list a, .sidenav .nav-list a.sub { display: flex !important; white-space: normal; border-left: 2px solid transparent !important; border-bottom: 0 !important; border-radius: 8px; padding: 9px 10px; }
+  .sidenav .nav-list a.sub { padding-left: 34px; }
+  .sidenav .nav-list a.on { background: var(--sunk); border-left-color: var(--accent) !important; }
+}
+@media (max-width: 600px) { .sidenav { margin-inline: -16px; } .nav-toggle { padding-inline: 16px; } }
+@media (max-width: 760px) {
+  table.stackable, table.stackable tbody, table.stackable tr { display: block; width: 100%; }
+  table.stackable thead { display: none; }
+  table.stackable tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 14px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.stackable tbody tr:last-child { border-bottom: 0; }
+  table.stackable td { display: grid; gap: 2px; align-content: start; padding: 0; border: 0; text-align: left !important; white-space: normal; min-width: 0; }
+  table.stackable td::before { content: attr(data-label); font: 600 11.5px var(--body); color: var(--faint); }
+  table.stackable td[data-label=""]::before { content: none; }
+  table.stackable td:first-child, table.stackable td.wide, table.stackable td[colspan] { grid-column: 1 / -1; }
+  table.stackable td:first-child { font-weight: 600; }
+  table.stackable tr.self { background: var(--l2); }
+}
+
+/* ---------------------------------------------------------------- long text, made readable */
+.prose, .clamp > .clamp-in, .st-read p { line-height: 1.65; }
+.lead { color: var(--ink); font-weight: 600; }
+b.num { font-weight: 650; color: var(--ink); font-variant-numeric: tabular-nums; }
+.clamp em, .prose em, .rcard em, .cardlist em, .st-read em, .st-read i { font-style: italic; color: color-mix(in srgb, var(--ink) 88%, var(--accent)); }
+
+/* ---------------------------------------------------------------- Wall Street over the last 12 months */
+.st { display: grid; gap: 14px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--l2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.st-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+.st-trend { font-size: 13px; padding: 4px 12px; }
+.st .kpis .kpi { background: var(--surface); }
+.st-chart svg { max-height: 260px; }
+.st-chart .st-now { fill: var(--ink); font: 600 12px var(--body); }
+.st-read { display: grid; gap: 8px; max-width: 86ch; }
+.st-read p { margin: 0; font-size: 14.5px; }
+.st-read p:last-child { padding: 10px 12px; border-radius: 10px; background: var(--surface); border-left: 3px solid var(--accent); }
+.st-h { margin: 4px 0 0; font: 700 15px var(--display); font-stretch: 88%; }
+.st-names .st-nh { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.st-names .st-nh .pill { margin-left: auto; }
+.st-nv { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.st-nv b { font: 700 22px var(--mono); font-variant-numeric: tabular-nums; }
+.st-spark { width: 100%; height: 30px; display: block; }
+.st-act { gap: 4px; }
+.st-act .rcard-top { align-items: center; }
+details.st-more > summary { font-size: 13px; color: var(--accent); }
+.st-multi { display: grid; gap: 14px; }
+.st-one { display: grid; gap: 8px; }
+.st-one-h { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+:is(.p-new, .is-opening) .st-col { animation: ams-in var(--t3) var(--out) both; animation-delay: calc(var(--k, 0) * 30ms + 100ms); }
+.st-slot .skel { border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { :is(.p-new, .is-opening) .st-col { animation: none !important; } }
+/* ---------------------------------------------------------------- macro tables: a card per row, on every screen */
+.tbl-wrap:has(> table.cardtable) { border: 0; background: transparent; border-radius: 0; }
+table.cardtable { display: block; }
+table.cardtable thead { display: none; }
+table.cardtable tbody { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 10px; align-items: start; }
+table.cardtable tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 14px; padding: 12px 14px; background: var(--l2); border: 1px solid var(--line); border-radius: 12px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+table.cardtable tr:hover { border-color: var(--line-2); }
+table.cardtable tr:hover td { background: transparent; }
+table.cardtable td { display: grid; gap: 2px; align-content: start; padding: 0; border: 0; text-align: left !important; white-space: normal; min-width: 0; }
+table.cardtable td::before { content: attr(data-label); font: 600 11.5px var(--body); color: var(--faint); }
+table.cardtable td[data-label=""]::before { content: none; }
+table.cardtable td:first-child, table.cardtable td.wide, table.cardtable td[colspan] { grid-column: 1 / -1; }
+table.cardtable td:first-child { font-weight: 600; font-size: 14px; }
+table.cardtable td, table.stackable td { min-width: 0 !important; max-width: 100%; }
+table.cardtable td *, table.stackable td * { max-width: 100%; white-space: normal; }
+.cx-mi-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 10px; align-items: start; }
+.cx-mi-row { background: var(--l2); border-radius: 12px; }
+.cx-mi-row[open] { grid-column: 1 / -1; }
+.cx-mi-sum { grid-template-columns: minmax(0, 1fr) !important; }
+.cx-mi-body { padding-left: 12px; }
+
+/* ---------------------------------------------------------------- times like this, in Performance */
+.tw { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--l2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.tw-head { display: grid; gap: 2px; }
+.tw-head h3 { font: 700 18px var(--display); font-stretch: 88%; letter-spacing: -0.01em; }
+.tw-tabs { width: fit-content; max-width: 100%; }
+.tw-tabs button { padding: 8px 14px; font-weight: 600; }
+.tw-base { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 8px; }
+.tw-b { display: grid; gap: 2px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.tw-bn b { font: 700 22px var(--mono); }
+.tw-now { display: grid; gap: 6px; }
+.tw-chips, .tw-then { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tw-chip { font-size: 12.5px; padding: 3px 9px; border-radius: 8px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.tw-chip b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.tw-then .eyebrow, .tw-after .eyebrow { width: 100%; }
+.tw-ep { gap: 10px; }
+.tw-ep-h { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.tw-ep-n { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font: 700 13px var(--body); }
+.tw-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.tw-cell { display: grid; gap: 1px; padding: 8px; border-radius: 8px; background: var(--surface); text-align: center; }
+.tw-cell b { font: 700 16px var(--mono); font-variant-numeric: tabular-nums; }
+.tw-old > summary { font-size: 14px; }
+.tw-old-in { display: grid; gap: 12px; margin-top: 8px; }
+@media (max-width: 420px) { .tw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
 
 <header class="appbar" id="appbar">
@@ -3114,7 +3224,67 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     return L.join("\n");
   }
 
-  const Regimes = { H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
+  // ---------------------------------------------------------------- times like this, by window
+  /**
+   * The window version: for a window of `months` (1, 3, 6 or 12), the past stretches of the same length most like the
+   * one just ended, on the macro backdrop at its end and on how it (an industry or a single name) and the market moved
+   * over the window; then what followed 1, 3, 6 and 12 months later. Stretches don't overlap (at least a window, and
+   * three months, apart) and the last 12 months are left out so every follow-on is known.
+   */
+  const WFEAT = [
+    // key, label, unit, weight; labels with {w} name the window
+    ["iw", "It, over the {w}", "%", 1.6], ["sw", "S&P 500, over the {w}", "%", 1.1], ["rw", "It vs the S&P 500, over the {w}", "pp", 1.2],
+    ["ddw", "Its worst drop within the {w}", "%", 1], ["volw", "Its volatility over the {w}, annualized", "%", 0.9], ["v200", "It vs its 200-day average", "%", 0.9],
+    ["ff", "Fed funds rate", "%", 1], ["ff12", "Fed funds change over 12 months", "pp", 0.8], ["cpi", "CPI inflation, year on year", "%", 1],
+    ["un12", "Unemployment change over 12 months", "pp", 0.6], ["vix", "VIX", "", 1], ["ratesw", "7-10 year Treasuries (IEF), over the {w}", "%", 0.7],
+    ["creditw", "High-yield bonds vs Treasuries, over the {w}", "pp", 0.6], ["oilw", "Oil (USO), over the {w}", "%", 0.5], ["usdw", "US dollar (UUP), over the {w}", "%", 0.5],
+  ];
+  const WMAP = Object.fromEntries(WFEAT.map(([k, label, unit, w]) => [k, { key: k, label, unit, w }]));
+  const wname = (m) => (m === 12 ? "year" : m === 1 ? "month" : `${m} months`);
+  function wfingerprint(d, m, mk, ind) {
+    const mv = (s, back = 0) => valueAt(s, back ? monthEnd(addMonths(d, -back)) : d, 100);
+    const f = {};
+    f.ff = mv(mk.ff); f.ff12 = isNum(f.ff) && isNum(mv(mk.ff, 12)) ? f.ff - mv(mk.ff, 12) : NaN;
+    const c0 = mv(mk.cpi), c12 = mv(mk.cpi, 12); f.cpi = isNum(c0) && isNum(c12) && c12 > 0 ? (c0 / c12 - 1) * 100 : NaN;
+    f.un12 = isNum(mv(mk.un)) && isNum(mv(mk.un, 12)) ? mv(mk.un) - mv(mk.un, 12) : NaN; f.vix = valueAt(mk.vix, d);
+    f.iw = ret(ind, d, m); f.sw = ret(mk.spy, d, m); f.rw = isNum(f.iw) && isNum(f.sw) ? f.iw - f.sw : NaN;
+    const i = at(ind.dates, d), j0 = at(ind.dates, monthEnd(addMonths(d, -m)));
+    if (i > 0 && j0 >= 0 && i - j0 >= 10) { let peak = ind.values[j0], dd = 0; const lr = [];
+      for (let j = j0 + 1; j <= i; j++) { peak = Math.max(peak, ind.values[j]); dd = Math.min(dd, ind.values[j] / peak - 1); if (ind.values[j - 1] > 0) lr.push(Math.log(ind.values[j] / ind.values[j - 1])); }
+      f.ddw = dd * 100; f.volw = sd(lr) * Math.sqrt(252) * 100; } else { f.ddw = NaN; f.volw = NaN; }
+    if (i >= 199) { let s = 0; for (let j = i - 199; j <= i; j++) s += ind.values[j]; f.v200 = (ind.values[i] / (s / 200) - 1) * 100; } else f.v200 = NaN;
+    f.ratesw = ret(mk.ief, d, m); const hy = ret(mk.hyg, d, m); f.creditw = isNum(hy) && isNum(f.ratesw) ? hy - f.ratesw : NaN;
+    f.oilw = ret(mk.uso, d, m); f.usdw = ret(mk.uup, d, m);
+    return f;
+  }
+  function windowEpisodes({ ind, mk = {}, months = 6, today, k = 5, recentMonths = 12 }) {
+    if (!ind?.dates?.length || ind.dates.length < 400) return null;
+    const last = ind.dates[ind.dates.length - 1], now = today && today < last ? today : last;
+    const ends = []; for (let i = 0; i < ind.dates.length; i++) { const d = ind.dates[i]; if (i === ind.dates.length - 1 || ind.dates[i + 1].slice(0, 7) !== d.slice(0, 7)) ends.push(d); }
+    const first = addMonths(ind.dates[0], Math.max(months, 10) + 1), cutoff = addMonths(now, -recentMonths);
+    const fNow = wfingerprint(now, months, mk, ind);
+    const rows = ends.filter((d) => d >= first && d <= cutoff).map((d) => ({ d, f: wfingerprint(d, months, mk, ind) }));
+    if (rows.length < 24) return null;
+    const keys = WFEAT.map(([kk]) => kk).filter((kk) => isNum(fNow[kk]) && rows.filter((r) => isNum(r.f[kk])).length >= rows.length * 0.5);
+    if (keys.length < 3) return null;
+    const sds = Object.fromEntries(keys.map((kk) => [kk, sd(rows.map((r) => r.f[kk])) || 1])), totW = keys.reduce((a, kk) => a + WMAP[kk].w, 0);
+    for (const r of rows) { let s = 0, w = 0; for (const kk of keys) { if (!isNum(r.f[kk])) continue; s += WMAP[kk].w * ((r.f[kk] - fNow[kk]) / sds[kk]) ** 2; w += WMAP[kk].w; } r.dist = w >= totW * 0.6 ? Math.sqrt(s / w) : Infinity; }
+    const ranked = rows.filter((r) => r.dist < Infinity).sort((a, b) => a.dist - b.dist), N = ranked.length, gap = Math.max(months, 3);
+    const top = []; for (const r of ranked) { if (top.every((o) => Math.abs((Date.parse(o.d) - Date.parse(r.d)) / (30.44 * 864e5)) >= gap)) top.push(r); if (top.length >= k) break; }
+    const spy = mk.spy?.dates?.length ? mk.spy : null, fmt = (kk, v) => (isNum(v) ? r1(v, WMAP[kk].unit === "" ? 0 : 1) : null);
+    const ep = top.map((r) => { const fi = forward(ind, r.d), fs = spy ? forward(spy, r.d) : { ret: {}, path: [] };
+      const diffs = keys.filter((kk) => isNum(r.f[kk])).map((kk) => ({ key: kk, z: Math.abs(r.f[kk] - fNow[kk]) / sds[kk] })).sort((a, b) => a.z - b.z);
+      return { start: monthEnd(addMonths(r.d, -months)), end: r.d, similarity: Math.round((1 - ranked.indexOf(r) / N) * 1000) / 10,
+        then: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, r.f[kk])])), alike: diffs.slice(0, 3).map((x) => x.key), unlike: diffs.slice(-2).reverse().map((x) => x.key),
+        it: fi.ret, spy: fs.ret, excess: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(fi.ret[h]) && isNum(fs.ret[h]) ? r1(fi.ret[h] - fs.ret[h]) : null])), maxdd6: fi.maxdd6, path: fi.path, spy_path: fs.path }; });
+    const base = Object.fromEntries(Object.keys(H).map((h) => { const t = ep.map((e) => e.it[h]).filter(isNum), x = ep.map((e) => e.excess[h]).filter(isNum);
+      return [h, { up: t.filter((v) => v > 0).length, n: t.length, median: r1(quant(t, 0.5)), beat: x.filter((v) => v > 0).length, best: t.length ? r1(Math.max(...t)) : null, worst: t.length ? r1(Math.min(...t)) : null }]; }));
+    return { as_of: now, from: rows[0]?.d || null, window: months, wname: wname(months), stretches: N, features: keys, now: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, fNow[kk])])), episodes: ep, base };
+  }
+  const wlabel = (kk, months) => (WMAP[kk]?.label || kk).replace("{w}", wname(months));
+  const wval = (kk, v) => { if (!isNum(v)) return "n/a"; const u = WMAP[kk]?.unit; return u === "" ? `${v}` : u === "pp" ? `${v > 0 ? "+" : ""}${v}pp` : `${["ff", "cpi", "volw"].includes(kk) ? "" : v > 0 ? "+" : ""}${v}%`; };
+
+  const Regimes = { windowEpisodes, wfingerprint, WFEAT, WMAP, wlabel, wval, H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
   if (typeof module !== "undefined" && module.exports) module.exports = Regimes;
   else root.Regimes = Regimes;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -3327,6 +3497,8 @@ Reply with ONLY this JSON:
 {"partners": [{"symbol": "TICKER", "name": "...", "role": "customer | supplier | channel | competitor", "metric": "capex | revenue | inventory | orders", "share": "how much of the industry's revenue or supply runs through them, if known (e.g. '~40% of data-center GPU demand'), else ''", "depends": ["TICKER"], "why": "1-2 sentences on how their decisions reach this industry's revenue or costs", "evidence": []}]}`;
   }
   function cleanChain(raw, doc, idx = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const inInd = new Set((doc.constituents || []).map((c) => String(c.symbol).toUpperCase()));
     const ours = (a) => (Array.isArray(a) ? a : []).map((x) => String(x).toUpperCase().trim()).filter((x) => inInd.has(x)).slice(0, 6);
     const seen = new Set();
@@ -3399,6 +3571,8 @@ Reply with ONLY this JSON:
   }
   const norm = (s) => String(s || "").toLowerCase().replace(/[“”"'’‘]/g, "").replace(/[^a-z0-9%$. ]+/g, " ").replace(/\s+/g, " ").trim();
   function cleanCalls(raw, transcripts) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const by = Object.fromEntries((transcripts || []).filter((t) => t.prev?.excerpt).map((t) => [String(t.symbol).toUpperCase(), t]));
     const strs = (a, k, m) => (Array.isArray(a) ? a : []).map((x) => trim(x, m)).filter(Boolean).slice(0, k);
     const verified = (q, text) => { const a = norm(q); return a.split(" ").length >= 8 && norm(text).includes(a) ? trim(q, 400) : ""; };
@@ -4263,6 +4437,8 @@ At most 5 evidence IDs per dimension.`;
 
   /** Critic: resolve citations, drop anything not retrieved, neutralize unsupported dimensions, cap overlay. */
   function critic(raw, pack, seenUrls) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const byId = Object.fromEntries((pack?.items || []).map((i) => [String(i.id).toUpperCase(), i]));
     const seen = new Set(seenUrls || []);
     const resolve = (e) => {
@@ -4530,6 +4706,8 @@ Reply with ONLY JSON:
 Use 4-8 groups named for what they mean to this industry. 30-50 series. Keys must match the catalog exactly. Phrases must be specific to the series (never a lone generic word like 'manufacturing' or 'rates').`;
   }
   function cleanPlan(raw, cat) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const keys = new Set((cat?.items || []).map((i) => i.key));
     const tenors = new Set((cat?.items || []).filter((i) => i.kind === "treasury").map((i) => i.key.slice(9)));
     const out = []; const seen = new Set();
@@ -4627,6 +4805,8 @@ Cover EVERY indicator listed, in the same order.`;
    * without it, an article must be about the indicator (relevantTo).
    */
   function cleanIndicators(raw, idx, doc, rows, verify = null) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const { S, Ev, En } = makeCritic(idx, tickersOf(doc));
     const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
     const out = {}; let dropped = 0;
@@ -4825,6 +5005,8 @@ Sizes: 4-8 regulators, 0-8 policy items, 0-8 litigation items, 0-8 deals. Empty 
 
   // ------------------------------------------------------------------ critic
   function makeCritic(idx, tickers) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const tk = new Set([...tickers].map((t) => String(t).toUpperCase()));
     const alias = tickers.aliases || {};
     const S = (x, n = 600) => {
@@ -5304,6 +5486,9 @@ Sizes: 3-5 most_material, up to 10 timeline events (chronological), 2-5 winners 
 
   /** Normalize a rule book. idx: citable items by ID (pack + this body's sources). */
   function cleanBook(raw, idx, doc, ctx, T) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+    const words = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const { S, Ev, Tk, A } = T.makeCritic(idx, T.tickersOf(doc));
     const names = new Set();
     const nameOf = Object.fromEntries((doc?.constituents || []).map((c) => [c.symbol, c.name]));
@@ -6973,6 +7158,8 @@ Sizes: 4-10 situations (fewer when the news is quiet), up to 5 also_watching.`;
   }
   /** Shared situations (each with its industries), cleaned like Team.cleanScout. */
   function cleanScout(raw, idx, inds) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const nm = names(inds);
     const all = { name: "sector", constituents: inds.flatMap((i) => i.doc.constituents || []) };
     const sits = Array.isArray(raw?.situations) ? raw.situations : [];
@@ -7232,6 +7419,8 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
   function batches(list, n = BATCH) { const out = []; for (let k = 0; k < list.length; k += n) out.push(list.slice(k, k + n)); return out; }
   /** One row of the sector overview from an industry's finished run. */
   function overviewRow(name, doc, agent, scores) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const r = agent?.result || {};
     return { name, n: doc?.summary?.n_constituents, cap: doc?.summary?.total_market_cap, as_of: doc?.as_of,
       scores: Object.fromEntries(Object.entries(scores?.profiles || {}).map(([k, v]) => [k, isNum(v.total) ? Math.round(v.total) : null])),
@@ -7664,6 +7853,8 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
    * sources, rule-book sources, indicators). seenUrls: URLs the tools returned.
    */
   function critic(raw, idx, doc, seenUrls, today = null, cal = null) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const tickers = new Set((doc.constituents || []).map((c) => String(c.symbol).toUpperCase()));
     const seen = new Set(seenUrls || []);
     const stats = { kept: 0, dropped: 0 };
@@ -7993,7 +8184,8 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
   const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
   /** For the write-up itself: generous room (2.5x), and when something is still too long, end at a sentence, never mid-word. */
-  const keepT = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); const K = Math.round(k * 2.5); if (s.length <= K) return s;
+  // Saved analysis is kept whole (the page lets the reader expand long text); k stays for the call sites.
+  const keepT = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); const K = Infinity; if (s.length <= K) return s;
     const cut = s.slice(0, K), m = [...cut.matchAll(/[.!?](?=\s|$)/g)].pop(); if (m && m.index > K * 0.4) return cut.slice(0, m.index + 1);
     const w = cut.lastIndexOf(" "); return (w > K * 0.6 ? cut.slice(0, w) : cut).replace(/[,;:\s]+$/, "") + "…"; };
   const median = (a) => { const v = a.filter(isNum).sort((x, y) => x - y); if (!v.length) return NaN; const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
@@ -9503,6 +9695,8 @@ Reply with ONLY this JSON:
    * Each revised horizon keeps where it came from; a daily history of the last 20 updates is kept.
    */
   function apply(res, upd, x, { today, via, tri = null, sources = [], sections = [], known = [] }) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const out = JSON.parse(JSON.stringify(res || {}));
     // The analysis keeps citing after today, so today's [D#] become lasting IDs (DU1, DU2, ...) with their source kept
     // in `refs` (the page adds them to the lead's sources); IDs already in the analysis, or known to the page, stay.
@@ -9770,6 +9964,8 @@ ${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdic
 
   /** Clean the answer; add the tally and code's checks. */
   function clean(raw, { today = "", inputs = INPUTS } = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     if (!raw || typeof raw !== "object") return null;
     const IL = Object.fromEntries(inputs), IK = inputs.map(([k]) => k);
     const list = (a, n, k) => (Array.isArray(a) ? a : a ? [a] : []).slice(0, n).map((x) => trim(x, k)).filter(Boolean);
@@ -10072,6 +10268,8 @@ ${A_SCHEMA.replace("${SYM}", c.sym)}`;
 
   /** Clean call A: the applied components, and an outlook (the components are its evidence). */
   function cleanApply(raw, { today = "" } = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     if (!raw || typeof raw !== "object") return null;
     const components = {};
     for (const e of Array.isArray(raw.components) ? raw.components : []) {
@@ -10172,6 +10370,8 @@ Reply with ONLY this JSON:
 {"rows": [{"id": "C1", "applies": "more | same | less | none", "effect": "up | down | mixed", "note": "one sentence for ${c.sym}"}]}`;
   }
   function cleanRows(raw, ids) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const ok = new Set(ids || []), out = {};
     for (const r of Array.isArray(raw?.rows) ? raw.rows : []) {
       const id = String(r?.id || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); if (!id || (ids && !ok.has(id)) || out[id]) continue;
@@ -10715,7 +10915,7 @@ Reply with JSON only, in this shape:
   function cleanWriteup(o, idx) {
     let dropped = 0;
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
-    const txt = (s, k = 1200) => String(s ?? "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1").trim().slice(0, k);
+    const txt = (s, k = 1200) => String(s ?? "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1").trim(); // kept whole
     const list = (a, k = 5) => (Array.isArray(a) ? a : []).slice(0, k).map((x) => (typeof x === "string" ? { text: txt(x, 500), ids: [] } : { text: txt(x?.text, 500), ids: (Array.isArray(x?.ids) ? x.ids : []).filter((id) => known(id) || (dropped++, false)) })).filter((x) => x.text);
     const fit = {}; for (const t of ["income", "conservative", "growth", "aggressive"]) { const x = o?.fit?.[t] || {}; const adj = Math.max(-5, Math.min(5, Math.round(n(x.adjust) || 0)));
       fit[t] = { fit: FITS.includes(lc(x.fit)) ? lc(x.fit) : null, adjust: adj, why: txt(x.why, 300) }; }
@@ -11654,6 +11854,8 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   const MAX_SIZE = 15;
   const CALLV = ["bullish", "slightly bullish", "neutral", "slightly bearish", "bearish"];
   function cleaner(idx) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     let dropped = 0;
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
     const t = (s, k = 900) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1"), k);
@@ -13836,6 +14038,8 @@ The calls are about this fund's total return (price plus income) against holding
 
   /** The strategist's answer, cleaned: only ids the dossier has, known enums, scenarios priced by code, the 12M call checked. */
   function clean(raw, dz, m) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const idx = dz.idx || {}; let dropped = 0; raw = raw || {};
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
     const t = (s, k = 1200) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (x, id) => (known(id) ? x : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1"), k);
@@ -14528,7 +14732,7 @@ Return ONLY a JSON object:
   }
   const LV = ["buy", "accumulate", "hold", "trim", "avoid"], CONF = ["high", "medium", "low"];
   // Desk and verdict text: twice the length asked for before anything is cut, so a long sentence is never cut off.
-  const str = (x, k = 900) => (typeof x === "string" ? cut(x, k * 2) : "");
+  const str = (x, k = 900) => (typeof x === "string" ? cut(x, Infinity) : ""); // desk output is kept whole
   const arr = (x, k = 6, m = 220) => (Array.isArray(x) ? x.map((y) => str(y, m)).filter(Boolean).slice(0, k) : []);
   /** The call's answer, checked: picks must be one of the tickers; everything trimmed; missing names filled. */
   function clean(raw, syms) {
@@ -14588,6 +14792,116 @@ Return ONLY a JSON object:
   const api = { factorOf, geoExpo, codeRead, DESK_PARTS, mergeParts, mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
+
+/**
+ * Wall Street over the last year: how analysts' ratings, rating changes and price targets have moved, for one stock
+ * or for a group (an industry's biggest companies, a fund's biggest holdings), and a plain-English read of the trend.
+ * Code only: no Claude. Inputs are FMP's monthly rating counts (historical-grades), rating actions (grades) and the
+ * price-target summary, already normalized by the page:
+ *   rhist: [{ date, sb, b, h, s, ss }]   actions: [{ date, firm, from, to, action }]   ptrend: { m, m_n, q, q_n, y, y_n }
+ * Text marks emphasis with **bold** and *italic*; the page turns that into tags after escaping.
+ */
+(function (root) {
+  "use strict";
+  const isNum = (x) => typeof x === "number" && isFinite(x);
+  const n0 = (x) => (isNum(+x) ? +x : 0);
+  const pc = (x, d = 0) => `${(Math.abs(x) * 100).toFixed(d)}%`;
+  const pts = (x) => { const v = Math.round(x * 100); return `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v)} point${Math.abs(v) === 1 ? "" : "s"}`; };
+  const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const monthName = (d) => { const m = +String(d).slice(5, 7); return m ? `${MON[m - 1]} ${String(d).slice(0, 4)}` : String(d); };
+  const dayName = (d) => { const m = +String(d).slice(5, 7), day = +String(d).slice(8, 10); return m && day ? `${MON[m - 1].slice(0, 3)} ${day}` : String(d); };
+  const money = (x) => (isNum(x) ? `$${x >= 100 ? x.toFixed(0) : x.toFixed(2)}` : "n/a");
+  const back = (today, days) => { if (!today) return ""; const d = new Date(today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - days); return d.toISOString().slice(0, 10); };
+
+  /** One month of ratings: counts, total and the buy and sell shares. */
+  function month(m) {
+    const sb = n0(m.sb), b = n0(m.b), h = n0(m.h), s = n0(m.s), ss = n0(m.ss), tot = sb + b + h + s + ss;
+    return { date: String(m.date || "").slice(0, 10), sb, b, h, s, ss, tot, buy: tot ? (sb + b) / tot : NaN, sell: tot ? (s + ss) / tot : NaN };
+  }
+  const tally = (xs) => ({ up: xs.filter((a) => a.action === "upgrade").length, down: xs.filter((a) => a.action === "downgrade").length,
+    init: xs.filter((a) => /^init/i.test(a.action || "")).length, kept: xs.filter((a) => /maintain|reiterat/i.test(a.action || "")).length, n: xs.length });
+  /** The path of the buy share across the year, in words. */
+  function shape(ms) {
+    const v = ms.map((m) => m.buy).filter(isNum); if (v.length < 3) return "";
+    const a = v[0], z = v[v.length - 1], hi = Math.max(...v), lo = Math.min(...v), t = 0.02;
+    if (hi - lo < 0.03) return "barely moved all year";
+    if (z - a > t && hi - z < t) return "climbed through the year";
+    if (a - z > t && z - lo < t) return "slid through the year";
+    if (hi - Math.max(a, z) > t) return `peaked in ${monthName(ms[v.indexOf(hi)]?.date || "")} and has eased since`;
+    if (Math.min(a, z) - lo > t) return `bottomed in ${monthName(ms[v.indexOf(lo)]?.date || "")} and has recovered since`;
+    return z > a ? "drifted up" : z < a ? "drifted down" : "ended where it started";
+  }
+  const LABELS = { 2: "improving", 1: "leaning better", 0: "steady", "-1": "leaning worse", "-2": "cooling" };
+  const label = (score) => LABELS[Math.max(-2, Math.min(2, score))];
+  const signals = (dBuy, net90, tchg) => [isNum(dBuy) ? (dBuy > 0.03 ? 1 : dBuy < -0.03 ? -1 : 0) : 0, net90 > 0 ? 1 : net90 < 0 ? -1 : 0, isNum(tchg) ? (tchg > 0.03 ? 1 : tchg < -0.03 ? -1 : 0) : 0];
+
+  /** One stock's last year on Wall Street. */
+  function one({ sym, rhist = [], actions = [], ptrend = null, px = NaN, today = "" }) {
+    const months = (rhist || []).map(month).filter((m) => m.tot > 0 && m.date).sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-13);
+    const now = months[months.length - 1] || null, ago = months.length > 1 ? months[0] : null;
+    const acts = (actions || []).filter((a) => a && a.date && (!today || a.date >= back(today, 366))).slice().sort((a, b) => (a.date < b.date ? 1 : -1));
+    const a90 = tally(acts.filter((a) => !today || a.date >= back(today, 91))), a365 = tally(acts);
+    const P = ptrend || {}, m = +P.m || NaN, y = +P.y || NaN, q = +P.q || NaN;
+    const pt = isNum(m) || isNum(y) ? { m, q, y, m_n: n0(P.m_n), q_n: n0(P.q_n), y_n: n0(P.y_n), chg: isNum(m) && isNum(y) ? m / y - 1 : NaN, vs_px: isNum(m) && isNum(px) && px > 0 ? m / px - 1 : NaN } : null;
+    const dBuy = now && ago ? now.buy - ago.buy : NaN, sig = signals(dBuy, a90.up - a90.down, pt?.chg), score = sig.reduce((x, s) => x + s, 0);
+    return { sym, months, now, ago, dBuy, a90, a365, acts, pt, px, score, label: label(score), sig, path: shape(months) };
+  }
+
+  /** A group: each name's year, weighted. list: [{ sym, w, T }] where T = one(...). */
+  function many(list) {
+    const ok = (list || []).filter((x) => x?.T?.now && n0(x.w) > 0), W = ok.reduce((a, x) => a + n0(x.w), 0);
+    if (!ok.length || !W) return null;
+    const keys = [...new Set(ok.flatMap((x) => x.T.months.map((m) => m.date.slice(0, 7))))].sort().slice(-13);
+    const months = keys.map((k) => { const at = ok.map((x) => ({ w: n0(x.w), m: x.T.months.find((m) => m.date.slice(0, 7) === k) })).filter((x) => x.m);
+      const ww = at.reduce((a, x) => a + x.w, 0); if (!ww || at.length < Math.max(1, ok.length * 0.5)) return null;
+      const f = (key) => at.reduce((a, x) => a + (x.w * x.m[key]) / x.m.tot, 0) / ww;
+      return { date: k + "-01", sb: f("sb"), b: f("b"), h: f("h"), s: f("s"), ss: f("ss"), tot: 1, buy: f("sb") + f("b"), sell: f("s") + f("ss"), n: at.reduce((a, x) => a + x.m.tot, 0) }; }).filter(Boolean);
+    const now = months[months.length - 1] || null, ago = months.length > 1 ? months[0] : null;
+    const sum = (k, p) => ok.reduce((a, x) => a + x.T[k][p], 0);
+    const a90 = { up: sum("a90", "up"), down: sum("a90", "down"), init: sum("a90", "init"), n: sum("a90", "n") }, a365 = { up: sum("a365", "up"), down: sum("a365", "down"), init: sum("a365", "init"), n: sum("a365", "n") };
+    const tp = ok.filter((x) => isNum(x.T.pt?.chg)), tw = tp.reduce((a, x) => a + n0(x.w), 0), tchg = tw ? tp.reduce((a, x) => a + n0(x.w) * x.T.pt.chg, 0) / tw : NaN;
+    const up = ok.filter((x) => isNum(x.T.pt?.vs_px)), uw = up.reduce((a, x) => a + n0(x.w), 0), upside = uw ? up.reduce((a, x) => a + n0(x.w) * x.T.pt.vs_px, 0) / uw : NaN;
+    const names = ok.map((x) => ({ sym: x.sym, w: n0(x.w), T: x.T })).sort((a, b) => b.w - a.w);
+    const moved = names.filter((x) => isNum(x.T.dBuy)).sort((a, b) => b.T.dBuy - a.T.dBuy);
+    const dBuy = now && ago ? now.buy - ago.buy : NaN, sig = signals(dBuy, a90.up - a90.down, tchg), score = sig.reduce((x, s) => x + s, 0);
+    const latest = names.flatMap((x) => x.T.acts.map((a) => ({ ...a, sym: x.sym }))).sort((a, b) => (a.date < b.date ? 1 : -1));
+    return { many: true, n: ok.length, of: (list || []).length, weight: W, months, now, ago, dBuy, a90, a365, pt: isNum(tchg) ? { chg: tchg, vs_px: upside, n: tp.length } : null,
+      names, up: moved.filter((x) => x.T.dBuy > 0.02).slice(0, 3), down: moved.filter((x) => x.T.dBuy < -0.02).reverse().slice(0, 3), acts: latest, score, label: label(score), sig, path: shape(months) };
+  }
+
+  const direction = (d) => (!isNum(d) ? "" : d > 0.03 ? "up" : d < -0.03 ? "down" : "about level");
+  /** The read, as short paragraphs. */
+  function text(T, { what = "", coverage = NaN } = {}) {
+    if (!T?.now) return [];
+    const out = [], reasons = [];
+    if (T.many) {
+      out.push(`Across the ${T.n} biggest ${what || "names"} with analyst coverage${isNum(coverage) ? ` (${pc(coverage)} of it by weight)` : ""}, a weighted **${pc(T.now.buy)}** of ratings are buys${T.ago ? `, against ${pc(T.ago.buy)} in ${monthName(T.ago.date)}: *${direction(T.dBuy)}* (${pts(T.dBuy)})` : ""}.${T.path ? ` The buy share ${T.path}.` : ""}`);
+      const mv = [T.up.length ? `Most improved: ${T.up.map((x) => `**${x.sym}** (${pts(x.T.dBuy)}, to ${pc(x.T.now.buy)} buys)`).join(", ")}.` : "", T.down.length ? `Most cooled: ${T.down.map((x) => `**${x.sym}** (${pts(x.T.dBuy)}, to ${pc(x.T.now.buy)} buys)`).join(", ")}.` : ""].filter(Boolean).join(" ");
+      if (mv) out.push(mv);
+    } else {
+      out.push(`**${pc(T.now.buy)}** of the ${T.now.tot} analysts covering ${T.sym} rate it a buy${T.ago ? `, against ${pc(T.ago.buy)} of ${T.ago.tot} in ${monthName(T.ago.date)}: *${direction(T.dBuy)}* (${pts(T.dBuy)})` : ""}.${T.path ? ` The buy share ${T.path}.` : ""}`);
+      const sNow = T.now.s + T.now.ss, sAgo = T.ago ? T.ago.s + T.ago.ss : NaN;
+      if (sNow || sAgo) out.push(`Sell ratings: **${sNow}** now${isNum(sAgo) ? `, ${sAgo} a year ago` : ""}. Holds: ${T.now.h}${T.ago ? `, ${T.ago.h} a year ago` : ""}.`);
+    }
+    if (T.a365.n) {
+      const last = T.acts[0];
+      out.push(`Over the last 12 months: **${T.a365.up} upgrade${T.a365.up === 1 ? "" : "s"}** and **${T.a365.down} downgrade${T.a365.down === 1 ? "" : "s"}**, with ${T.a365.init} new initiation${T.a365.init === 1 ? "" : "s"}. In the last 90 days, ${T.a90.up} up and ${T.a90.down} down${T.a90.up === T.a90.down ? ", *a wash*" : T.a90.up > T.a90.down ? ", *more firms turning positive*" : ", *more firms turning cautious*"}.${last ? ` The latest: ${last.firm || "a firm"} ${last.action === "upgrade" ? "upgraded" : last.action === "downgrade" ? "downgraded" : /^init/i.test(last.action || "") ? "started coverage on" : "reiterated"} ${T.many && last.sym ? `**${last.sym}**` : "it"}${last.to ? ` at *${last.to}*` : ""} on ${dayName(last.date)}.` : ""}`);
+    }
+    if (T.pt && isNum(T.pt.chg)) {
+      out.push(T.many ? `New price targets on these names moved **${T.pt.chg >= 0 ? "up" : "down"} ${pc(T.pt.chg, 1)}** (last month's average against the year's, weighted)${isNum(T.pt.vs_px) ? `, and sit ${pc(T.pt.vs_px, 1)} ${T.pt.vs_px >= 0 ? "above" : "below"} today's prices` : ""}.`
+        : `New price targets averaged **${money(T.pt.m)}** over the last month (${T.pt.m_n} target${T.pt.m_n === 1 ? "" : "s"}) against ${money(T.pt.y)} over the year (${T.pt.y_n}): *${T.pt.chg >= 0 ? "up" : "down"} ${pc(T.pt.chg, 1)}*${isNum(T.pt.vs_px) ? `, and ${pc(T.pt.vs_px, 1)} ${T.pt.vs_px >= 0 ? "above" : "below"} today's price` : ""}.`);
+    }
+    if (T.sig[0]) reasons.push(T.sig[0] > 0 ? "more buy ratings than a year ago" : "fewer buy ratings than a year ago");
+    if (T.sig[1]) reasons.push(T.sig[1] > 0 ? "more upgrades than downgrades lately" : "more downgrades than upgrades lately");
+    if (T.sig[2]) reasons.push(T.sig[2] > 0 ? "rising targets" : "falling targets");
+    out.push(`**The trend: ${T.label}.** ${reasons.length ? reasons.join(", ").replace(/^./, (c) => c.toUpperCase()) + "." : "Ratings, rating changes and targets are all roughly where they were."}`);
+    return out;
+  }
+
+  const Street = { month, one, many, text, shape, label, monthName, dayName };
+  if (typeof module !== "undefined" && module.exports) module.exports = Street;
+  else root.Street = Street;
+})(typeof window !== "undefined" ? window : globalThis);
 
 </script>
 <script>
@@ -17871,14 +18185,14 @@ Return ONLY a JSON object:
         <div class="prof-cards">${cards}</div>
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
-      ${timesSection(d)}
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
           <div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
         ${note(ag, "performance")}
         <div class="strip" aria-label="SPY and rates">${strip}</div>
-        <div class="kpis">${perfK}</div>${charts}</section>
+        <div class="kpis">${perfK}</div>${charts}${twBlock("industry", d.name, timesSection(d))}</section>
       <section class="panel" id="risk"><h2>Risk profile</h2>${note(ag, "risk")}<div class="kpis">${riskK}</div></section>
-      ${estimatesSection(d)}
+      ${addTo(estimatesSection(d), (() => { const top = [...(d.constituents || [])].filter((c) => c?.symbol).sort((a, b) => num(b.weight) - num(a.weight)).slice(0, 10);
+        return top.length ? `<h3>Wall Street over the last 12 months</h3>${streetSlot(top.map((c) => ({ sym: c.symbol, w: c.weight })), { what: "companies in the industry", coverage: top.reduce((a, c) => a + (num(c.weight) || 0), 0), label: d.name })}` : ""; })())}
       ${rankingSection(d)}
       ${historySection(d)}
       ${kpiSection(d, pack, tx)}
@@ -18228,7 +18542,7 @@ Return ONLY a JSON object:
         ${f ? `<div class="small muted">Trailing ${h}: ${f.trailing !== null ? sgn(f.trailing) : "—"} (${f.vs_spy !== null ? sgn(f.vs_spy) : "—"} vs SPY)${f.reporting.length ? ` · reporting in the window: ${f.reporting.slice(0, 5).map((y) => `${esc(y.symbol)} ${esc(fmtShort(y.date))}`).join(", ")} (${f.reporting_weight}% of the industry)` : ""}</div>` : ""}
         ${x.sections?.length ? `<div class="small muted">Driven by: ${x.sections.map((k) => esc(SCN_L[k] || k)).join(", ")}</div>` : ""}
         ${ck && !ck.ok && ck.issues?.length ? `<div class="notice warn small">Doesn't add up: ${esc(ck.issues.join("; "))}.</div>` : ""}
-        ${ck && ck.covered === false ? `<div class="notice warn small">Leaves out: ${[...(ck.missing_events || []), ...(ck.missing_standing || [])].map((id) => `${esc(id)} ${esc(trimTxt(IDX[id]?.title || "", 60))}`).join("; ")}${ck.missing_sections?.length ? `${ck.missing_events?.length || ck.missing_standing?.length ? "; " : ""}no read for ${ck.missing_sections.map((k) => esc(SCN_L[k] || k)).join(", ")}` : ""}.</div>` : ""}</div>`; };
+        ${ck && ck.covered === false ? `<div class="notice warn small">Leaves out: ${[...(ck.missing_events || []), ...(ck.missing_standing || [])].map((id) => `${esc(id)} ${esc(IDX[id]?.title || "")}`).join("; ")}${ck.missing_sections?.length ? `${ck.missing_events?.length || ck.missing_standing?.length ? "; " : ""}no read for ${ck.missing_sections.map((k) => esc(SCN_L[k] || k)).join(", ")}` : ""}.</div>` : ""}</div>`; };
     const trimTxt = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "…" : String(t));
     const hzRows = Brain.SCN_SECTIONS.map(([k, l]) => `<tr><td><b>${esc(l)}</b></td>${Brain.HORIZONS.map(([h]) => `<td class="wr">${r.horizons?.[h]?.section_reads?.[k] ? rich(r.horizons[h].section_reads[k]) : `<span class="muted">—</span>`}</td>`).join("")}</tr>`).join("");
     const hasReads = Brain.HORIZONS.some(([h]) => Object.keys(r.horizons?.[h]?.section_reads || {}).length);
@@ -18993,6 +19307,7 @@ Return ONLY a JSON object:
    * link is the section at the top of the screen, worked out from where the sections are rather than guessed.
    */
   function wireSpy(root) {
+    wireStreet(root); wireTimes(root);
     const key = root.id || "x"; if (_spies[key]) { _spies[key](); delete _spies[key]; }
     const nav = root.querySelector(".sidenav"); if (!nav) return;
     const links = [...nav.querySelectorAll("a[data-spy]")];
@@ -19011,8 +19326,8 @@ Return ONLY a JSON object:
     const secs = ids.map(find).filter(Boolean).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
     if (!secs.length) return;
     const RMq = matchMedia("(prefers-reduced-motion: reduce)");
-    const horiz = () => getComputedStyle(nav).display === "flex";
-    const line = () => (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0) + (horiz() ? nav.offsetHeight : 0) + 28;
+    const horiz = () => false, narrow = matchMedia("(max-width: 960px)");
+    const line = () => (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0) + (narrow.matches ? nav.offsetHeight : 0) + 28;
     const keep = (a) => {
       if (!a) return;
       if (horiz()) nav.scrollTo({ left: Math.max(0, a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2), behavior: RMq.matches ? "auto" : "smooth" });
@@ -19048,8 +19363,9 @@ Return ONLY a JSON object:
   /** The industry report's sidebar, in the order the sections appear. */
   function industryGroups(d) {
     const has = (id) => true;
-    return [{ label: "Performance", items: [["performance", "Returns vs SPY"], ["risk", "Risk"]] },
-      { label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"]] },
+    return [{ label: "Performance", items: [["performance", "Returns & times like this"]] },
+      { label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"]] },
+      { label: "Risk", items: [["risk", "Risk profile"]] },
       { label: "Analyst Consensus", items: [["estimates", "Estimates & revisions"]] },
       { label: "Industry Landscape", items: [["ranking", "Company ranking"], ["history", "History & peers"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["companies", "The companies"]] },
       { label: "Foreign Affairs", items: [["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"]] },
@@ -20134,8 +20450,9 @@ Return ONLY a JSON object:
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
   function fundGroups(fd) {
-    return [{ label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
-      { label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-times", "Times like this"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
+    return [{ label: "Performance", items: [["fund-perf", "Returns & times like this"]] },
+      { label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
+      { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
       { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"], ["fund-peers", "Peer funds"]] },
       { label: "Wall Street & news", items: [["fund-street", "Wall Street"], ["fund-news", "News & sentiment"], ["fund-season", "Earnings season"]] },
       { label: "Through its industries", items: [["fund-look", "Calls & scores"], ["fund-val", "Valuation & fundamentals"], ["fund-kpi", "KPIs & cycle"], ["fund-scen", "Scenarios & debates"], ["fund-dist", "Distributions"]] },
@@ -20562,6 +20879,7 @@ Return ONLY a JSON object:
       <div class="chart"><h3>Upside to the consensus target, by holding</h3>${barsChart(ST2.rows.filter((r) => isNum(num(r.upside))).slice(0, 15).map((r) => ({ label: r.ticker, a: r.upside * 100 })), { fmtY: (v) => v.toFixed(0) + "%", height: 170 })}</div>
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th>Consensus</th><th class="n">Buy / hold / sell</th><th class="n">Target</th><th class="n">Upside</th></tr></thead><tbody>${ST2.rows.map((r) => `<tr><td><span class="tick">${esc(r.ticker)}</span></td><td class="n">${pct(r.weight, false, 2)}</td><td>${esc(r.consensus || "—")}</td><td class="n">${r.buy} / ${r.hold} / ${r.sell}</td><td class="n">${fix(r.target, 2)}</td><td class="n ${cls(num(r.upside))}">${pct(r.upside)}</td></tr>`).join("")}</tbody></table></div>`)
       : fd.netDone ? "" : sec("fund-street", "Wall Street on its holdings", "", `<div class="small muted">${S.mcp ? "Reading the analysts' ratings and targets for the biggest holdings…" : "Open this page in Claude to read the analysts' views."}</div>`);
+    const streetF = ST2?.rows?.length ? addTo(street, `<h3>Wall Street over the last 12 months</h3>${streetSlot(ST2.rows.slice().sort((a, b) => num(b.weight) - num(a.weight)).map((r) => ({ sym: r.ticker, w: r.weight })), { what: "holdings", coverage: ST2.on, label: fd.sym })}`) : street;
     // ---- news and sentiment
     // ---- news and sentiment: its holdings' measured sentiment, its industries' news flow (the industry runs), the headlines
     const NL = fd.newsL, NWR = MK.news;
@@ -20639,11 +20957,12 @@ Return ONLY a JSON object:
       <div class="tbl-wrap"><table><thead><tr><th>Input</th><th>As of</th><th class="n">Age</th><th></th></tr></thead><tbody>${FR.map((r) => `<tr><td>${esc(r.what)}</td><td class="mono">${esc(r.date || "—")}</td><td class="n ${r.age > 14 ? "down" : ""}">${r.age === null ? "—" : r.age + "d"}</td><td class="small muted">${esc(r.note)}</td></tr>`).join("")}</tbody></table></div>
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls (code's starting point moving a full notch or clearly crossing zero, a move of a normal month or more, a big holding reporting, the write-up's inputs, or calls a week old) and redoes only that, by itself: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis. "Update my funds" on the fund list does the same for every fund you've analyzed.</div>`) : "";
-    const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
-    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] }, { label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
+    const secs = [snap, leanSec, thesisSec, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, tim)), riskSec, stressSec, tech, streetF, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Performance", items: [["fund-perf", "Returns & times like this"]] }, { label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
+        { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
         { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
         { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-peers", "Peer funds"]] }];
-      return `<div class="shell">${sideNav(g)}<div class="stream">${[...bs, holdSec, peerSec, perfSec, riskSec, stressSec, tech, dist].filter(Boolean).join("")}</div></div>`; }
+      return `<div class="shell">${sideNav(g)}<div class="stream">${[...bs, holdSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, "")), riskSec, stressSec, tech, dist].filter(Boolean).join("")}</div></div>`; }
     return `<div class="shell">${sideNav(fundGroups(fd))}<div class="stream">${secs.filter(Boolean).join("")}</div></div>`;
   }
   function renderFund() {
@@ -23058,6 +23377,7 @@ Return ONLY a JSON object:
       ${SD ? `${SD.pick ? `<div class="small"><b>The desk's pick:</b> ${cmpTick(SD.pick)} ${esc(SD.why)}</div>` : ""}${SD.contrarian ? `<div class="cx-checks small"><b>Where the crowd may be wrong:</b> ${esc(SD.contrarian)}</div>` : ""}${deskBy("street")}` : `<div class="small muted">The street and sentiment desk's read comes with the verdict.</div>`}`);
 
     // ---- the cases
+    const streetY = `<h3>Wall Street over the last 12 months</h3><div class="st-multi">${subs.map((s0) => `<div class="st-one" style="--tc:${cmpColor(s0.sym)}"><div class="st-one-h">${cmpTick(s0.sym, true)}<span class="small muted">${s0.kind === "fund" ? "through its biggest holdings" : esc(s0.name || "")}</span></div>${s0.kind === "fund" ? streetSlot((s0.holdTop || []).filter((h) => h.ticker).map((h) => ({ sym: h.ticker, w: h.weight })), { what: "holdings", label: s0.sym }) : streetSlot([{ sym: s0.sym, w: 1 }], { label: s0.sym })}</div>`).join("")}</div>`;
     const cases = sec("cmp-cases", "The case for each", "strengths, weaknesses, bull and bear", `<div class="cx-cases">${subs.map((s) => { const n0 = v?.names?.[s.sym], sv = s.saved;
       const scen = sv?.scenarios?.length ? `<div class="cx-scen">${sv.scenarios.map((x) => `<div class="${x.k}"><span class="eyebrow">${esc(x.k)} ${x.probability ?? ""}%</span><b class="mono">${isNum(x.target) ? fix(x.target, 0) : "—"}</b><span class="small ${cls(x.move)}">${pct(x.move, true, 0)}</span></div>`).join("")}${isNum(sv.expected) ? `<div><span class="eyebrow">weighted</span><b class="mono ${cls(sv.expected)}">${pct(sv.expected, true, 1)}</b><span class="small muted">12 months</span></div>` : ""}</div>` : "";
       const fd0 = FD?.names?.[s.sym], e12 = fd0?.expected_12m;
@@ -23079,13 +23399,14 @@ Return ONLY a JSON object:
     const tog = v?.together?.pairing || mixItems.length || v?.risks?.length ? sec("cmp-together", "Owning them together", "", `<div class="two">${mixItems.length ? `<div class="box"><h3>A split for a balanced investor</h3><div class="cx-split">${mixItems.map((x) => `<i style="flex:${x.value};background:${cmpColor(x.name)}" title="${esc(x.name)} ${x.value}%"></i>`).join("")}</div><div class="legend">${mixItems.map((x) => `<span><i style="background:${cmpColor(x.name)}"></i>${esc(x.name)} ${x.value}%</span>`).join("")}</div>${v.together.pairing ? `<p class="small">${esc(v.together.pairing)}</p>` : ""}</div>` : v?.together?.pairing ? `<div class="box"><p class="small">${esc(v.together.pairing)}</p></div>` : ""}
       ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
 
-    const groups = [{ label: "Performance", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"]] },
+    const groups = [{ label: "Performance", items: [["cmp-perf", "Performance"]] },
       { label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
+      { label: "Risk", items: [["cmp-risk", "Risk & diversification"]] },
       { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [insideF ? ["cmp-funds", "Inside the funds"] : null, ["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
       { label: "Outlook", items: [["cmp-outlook", "Where it's going"]] },
       { label: "Analysis", items: [["cmp-cases", "The case for each"], tog ? ["cmp-together", "Owning them together"] : null] }];
-    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${tog}
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${addTo(streetS, streetY)}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 
@@ -23129,7 +23450,7 @@ Return ONLY a JSON object:
     const co = S.co, el = $("company"); if (!co || !el || S.tab !== "companies" || co.stage !== "ready") return renderCompany();
     IDX = co.idx || {};
     const t = co.thesis?.thesis || co.partial;
-    for (const [id, html] of [["co-snap", coSnapshot(co, t)], ["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-times", coTimes(co)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-plan", coPlan(co, t)], ["co-scen", coScenDeb(co, t)], ["co-kpi", coKpis(co, t)], ["co-chain", coChain(co, t)], ["co-cal", coCalendar(co, t)], ["co-biz", coBusiness(co)], ["co-scores", coScores(co, t)], ["co-street", coStreet(co)]]) {
+    for (const [id, html] of [["co-snap", coSnapshot(co, t)], ["co-thesis", coThesis(co, t, co.thesis?.checks)], ["co-macro", coMacro(co, t)], ["co-world", coWorld(co, t)], ["co-trade", coTrade(co, t)], ["co-reg", coReg(co, t)], ["co-drivers", coDrivers(co, t)], ["co-plan", coPlan(co, t)], ["co-scen", coScenDeb(co, t)], ["co-kpi", coKpis(co, t)], ["co-chain", coChain(co, t)], ["co-cal", coCalendar(co, t)], ["co-biz", coBusiness(co)], ["co-scores", coScores(co, t)], ["co-street", coStreet(co)]]) {
       const cur = el.querySelector("#" + id); if (!cur) return renderCompany();
       if (!html) continue; const tmp = document.createElement("div"); tmp.innerHTML = withRead(co, t, html); const nx = tmp.firstElementChild; if (nx) cur.replaceWith(nx);
     }
@@ -23159,6 +23480,148 @@ Return ONLY a JSON object:
   const trimC = (t, k) => (String(t).length > k ? String(t).slice(0, k - 1) + "…" : String(t));
   /** Text for the screen: whole. The length argument stays so call sites read the same; the reader expands long text instead. */
   const showC = (t) => String(t ?? "");
+  // ------------------------------------------------------------- Wall Street over the last 12 months (every tab)
+  const _street = new Map(), _stHtml = new Map();
+  /** One stock's monthly rating counts, rating actions and price-target summary (FMP), kept for the day. */
+  function streetGet(sym) {
+    const k = sym + "|" + today(); if (_street.has(k)) return _street.get(k);
+    const one = async (tool, input) => (await optional(() => fmp(tool, input), [])) || [];
+    const p = Promise.all([one("analyst", { endpoint: "historical-grades", symbol: sym, limit: 13 }), one("analyst", { endpoint: "grades", symbol: sym }), one("analyst", { endpoint: "price-target-summary", symbol: sym })])
+      .then(([h, a, pt]) => ({ sym, rhist: (h || []).filter((x) => x?.date).map((x) => ({ date: String(x.date).slice(0, 10), sb: x.analystRatingsStrongBuy, b: x.analystRatingsBuy, h: x.analystRatingsHold, s: x.analystRatingsSell, ss: x.analystRatingsStrongSell })),
+        actions: (a || []).filter((x) => x?.date).map((x) => ({ date: String(x.date).slice(0, 10), firm: x.gradingCompany, from: x.previousGrade, to: x.newGrade, action: x.action })),
+        ptrend: pt?.[0] ? { m: Number(pt[0].lastMonthAvgPriceTarget) || null, m_n: Number(pt[0].lastMonthCount) || 0, q: Number(pt[0].lastQuarterAvgPriceTarget) || null, q_n: Number(pt[0].lastQuarterCount) || 0, y: Number(pt[0].lastYearAvgPriceTarget) || null, y_n: Number(pt[0].lastYearCount) || 0 } : null }))
+      .catch(() => ({ sym, rhist: [], actions: [], ptrend: null }));
+    _street.set(k, p); return p;
+  }
+  async function streetPx(syms) {
+    const r = await optional(() => fmp("quote", { endpoint: "batch-quote-short", symbols: syms }), []);
+    return new Map((r || []).filter((x) => x?.symbol).map((x) => [x.symbol, Number(x.price)]));
+  }
+  /** A place in a section where the last year of ratings is drawn once it has loaded. */
+  function streetSlot(items, { what = "", coverage = NaN, label = "" } = {}) {
+    const xs = items.filter((x) => x?.sym).slice(0, 10); if (!xs.length) return "";
+    return `<div class="st-slot" data-st="${esc(xs.map((x) => x.sym).join(","))}" data-stw="${xs.map((x) => (isNum(num(x.w)) ? num(x.w) : 1)).join(",")}" data-st-what="${esc(what)}" data-st-cov="${isNum(num(coverage)) ? coverage : ""}" data-st-label="${esc(label)}"><div class="small muted">Reading 12 months of analyst ratings${xs.length > 1 ? ` for ${xs.length} names` : ""}…</div><div class="skel" style="height:140px;margin-top:8px"></div></div>`;
+  }
+  /** Fill every slot under root (on any tab); the drawn block is kept so a redraw of the page doesn't flicker. */
+  function wireStreet(root) {
+    if (!window.Street) return;
+    for (const el of (root || document).querySelectorAll(".st-slot:not([data-st-on])")) {
+      const key = [el.dataset.st, el.dataset.stw, el.dataset.stWhat, el.dataset.stCov].join("|");
+      el.dataset.stOn = "1";
+      if (_stHtml.has(key)) { el.innerHTML = _stHtml.get(key); continue; }
+      if (!S.mcp) { el.innerHTML = `<div class="small muted">Open this page in Claude to read the analysts' last 12 months.</div>`; continue; }
+      const syms = el.dataset.st.split(","), ws = el.dataset.stw.split(",").map(Number);
+      (async () => {
+        const [data, px] = await Promise.all([Promise.all(syms.map(streetGet)), streetPx(syms)]);
+        const Ts = data.map((d0) => Street.one({ ...d0, px: px.get(d0.sym), today: today() }));
+        const T = syms.length === 1 ? Ts[0] : Street.many(Ts.map((T0, i) => ({ sym: T0.sym, w: ws[i], T: T0 })));
+        const html = streetHTML(T, { what: el.dataset.stWhat, coverage: el.dataset.stCov === "" ? NaN : +el.dataset.stCov, label: el.dataset.stLabel });
+        _stHtml.set(key, html);
+        for (const x of document.querySelectorAll(".st-slot")) if ([x.dataset.st, x.dataset.stw, x.dataset.stWhat, x.dataset.stCov].join("|") === key) x.innerHTML = html;
+      })().catch(() => { el.innerHTML = `<div class="small muted">The analysts' rating history didn't come back from FMP.</div>`; });
+    }
+  }
+  const stMd = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>");
+  const stPts = (x) => (isNum(num(x)) ? `${x > 0 ? "+" : x < 0 ? "−" : "±"}${Math.abs(Math.round(x * 100))} pts` : "—");
+  const ST_C = [["sb", "Strong buy", "var(--pos)"], ["b", "Buy", "color-mix(in srgb, var(--pos) 55%, var(--surface))"], ["h", "Hold", "var(--bench)"], ["s", "Underperform", "color-mix(in srgb, var(--neg) 55%, var(--surface))"], ["ss", "Sell", "var(--neg)"]];
+  /** Twelve months of the rating mix as stacked columns (buys at the bottom), with the buy share as a line on top. */
+  function stChart(months) {
+    if (months.length < 2) return "";
+    const W = 640, H = 210, L = 36, R = 10, Tp = 14, B = 30, n = months.length, cw = (W - L - R) / n, bw = Math.min(30, cw * 0.62), y = (v) => Tp + (1 - v) * (H - Tp - B);
+    const cols = months.map((m, i) => { const tot = ST_C.reduce((a, [k]) => a + (m[k] || 0), 0) || 1, x = L + i * cw + (cw - bw) / 2; let acc = 0;
+      const tip = `${Street.monthName(m.date)}: ${pct(m.buy, false, 0)} buys${m.tot > 1 ? ` (${ST_C.map(([k, l]) => `${m[k]} ${l.toLowerCase()}`).join(", ")})` : ""}`;
+      return `<g class="st-col" style="--k:${Math.min(i, 12)}"><title>${esc(tip)}</title>${ST_C.map(([k, , c]) => { const v = (m[k] || 0) / tot; if (v <= 0) return ""; const y0 = y(acc + v), h0 = y(acc) - y0; acc += v; return `<rect x="${x.toFixed(1)}" y="${y0.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0.5, h0).toFixed(1)}" rx="2" fill="${c}"/>`; }).join("")}</g>`; }).join("");
+    const pts0 = months.map((m, i) => [L + i * cw + cw / 2, y(m.buy)]);
+    const line = `<polyline class="st-line" points="${pts0.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" ")}" fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round"/>${pts0.map(([a, b], i) => `<circle cx="${a.toFixed(1)}" cy="${b.toFixed(1)}" r="${i === n - 1 ? 4 : 2.5}" fill="var(--ink)" stroke="var(--surface)" stroke-width="1.5"/>`).join("")}`;
+    const grid = [0, 0.5, 1].map((v) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join("");
+    const lab = months.map((m, i) => { const mo = +m.date.slice(5, 7), show = n <= 7 || i % 2 === (n - 1) % 2; return show ? `<text x="${(L + i * cw + cw / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle">${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][mo - 1]}${mo === 1 || i === 0 ? " " + m.date.slice(2, 4) : ""}</text>` : ""; }).join("");
+    const last = pts0[n - 1];
+    return `<div class="chart st-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Analyst rating mix by month, last ${n} months">${grid}${cols}${line}<text class="st-now" x="${Math.min(W - R - 2, last[0] + 8).toFixed(1)}" y="${(last[1] - 8).toFixed(1)}" text-anchor="end">${pct(months[n - 1].buy, false, 0)} buys</text>${lab}</svg>
+      <div class="legend">${ST_C.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}<span><i style="background:var(--ink);height:2px;vertical-align:3px"></i>Share rated buy</span></div></div>`;
+  }
+  const stSpark = (months) => { const v = months.map((m) => m.buy).filter(isNum); if (v.length < 2) return ""; const lo = Math.min(...v), hi = Math.max(...v), r = hi - lo || 0.01;
+    return `<svg class="st-spark" viewBox="0 0 120 30" aria-hidden="true"><polyline points="${v.map((x, i) => `${((i / (v.length - 1)) * 116 + 2).toFixed(1)},${(26 - ((x - lo) / r) * 22).toFixed(1)}`).join(" ")}" fill="none" stroke="${v[v.length - 1] >= v[0] ? "var(--pos)" : "var(--neg)"}" stroke-width="2" stroke-linejoin="round"/></svg>`; };
+  const ST_LC = { improving: "pos", "leaning better": "pos", steady: "neu", "leaning worse": "warn", cooling: "neg" };
+  const ST_AC = { upgrade: "pos", downgrade: "neg", maintain: "neu", init: "neu", initiate: "neu", initialise: "neu" };
+  function streetHTML(T, { what = "", coverage = NaN, label = "" } = {}) {
+    if (!T?.now) return `<div class="small muted">No monthly analyst ratings came back${label ? ` for ${esc(label)}` : ""}.</div>`;
+    const K = [kpi("Buy ratings now", pct(T.now.buy, false, 0), T.many ? `weighted across ${T.n} names` : `${T.now.sb + T.now.b} of ${T.now.tot} analysts`),
+      kpi(T.ago ? `In ${esc(Street.monthName(T.ago.date))}` : "A year ago", T.ago ? pct(T.ago.buy, false, 0) : "—", T.ago ? `${stPts(T.dBuy)} since` : "", cls(T.dBuy)),
+      kpi("Upgrades / downgrades", `${T.a90.up} / ${T.a90.down}`, `last 90 days · ${T.a365.up} / ${T.a365.down} in 12 months`, T.a90.up === T.a90.down ? "" : cls(T.a90.up - T.a90.down)),
+      T.pt && isNum(T.pt.chg) ? kpi(T.many ? "Targets, month vs year" : "New targets, last month", T.many ? sgnPct(T.pt.chg) : fix(T.pt.m, 2), T.many ? `weighted, ${T.pt.n} names` : `${sgnPct(T.pt.chg)} vs the year's ${fix(T.pt.y, 2)}`, cls(T.pt.chg)) : ""].join("");
+    const read = Street.text(T, { what, coverage }).map((p) => `<p>${stMd(p)}</p>`).join("");
+    const names = T.many ? `<h4 class="st-h">Name by name</h4><div class="rgrid st-names">${T.names.map((x) => `<article class="rcard st-name"><div class="st-nh"><b class="tick">${esc(x.sym)}</b><span class="small muted">${pct(x.w / (T.weight || 1), false, 0)} of these</span><span class="pill ${ST_LC[x.T.label] || "neu"}">${esc(x.T.label)}</span></div>
+        <div class="st-nv"><b>${pct(x.T.now.buy, false, 0)}</b><span>buys</span><span class="${cls(x.T.dBuy)}">${stPts(x.T.dBuy)} in a year</span></div>${stSpark(x.T.months)}
+        <div class="small muted">${x.T.a365.up} up · ${x.T.a365.down} down in 12 months${x.T.pt && isNum(x.T.pt.chg) ? ` · targets ${sgnPct(x.T.pt.chg)}` : ""}${x.T.acts[0] ? ` · latest: ${esc(x.T.acts[0].firm || "")} ${esc(x.T.acts[0].action || "")} ${esc(fmtShort(x.T.acts[0].date))}` : ""}</div></article>`).join("")}</div>` : "";
+    const actCard = (a) => `<article class="rcard st-act"><div class="rcard-top"><span class="pill ${ST_AC[String(a.action || "").toLowerCase()] || "neu"}">${esc(a.action || "rating")}</span><span class="small muted">${esc(fmtShort(a.date))}</span>${a.sym ? `<b class="tick">${esc(a.sym)}</b>` : ""}</div>
+      <div><b>${esc(a.firm || "A firm")}</b></div><div class="small">${a.from && a.from !== a.to ? `${esc(a.from)} → ` : ""}<b>${esc(a.to || "")}</b></div></article>`;
+    const A = T.acts || [];
+    const acts = A.length ? `<h4 class="st-h">Rating actions, last 12 months <span class="small muted">${A.length}</span></h4><div class="rgrid st-acts">${A.slice(0, 6).map(actCard).join("")}</div>${A.length > 6 ? `<details class="st-more"><summary>All ${A.length} rating actions</summary><div class="rgrid st-acts">${A.slice(6).map(actCard).join("")}</div></details>` : ""}` : "";
+    return `<div class="st"><div class="st-head"><span class="pill ${ST_LC[T.label] || "neu"} st-trend">Trend: ${esc(T.label)}</span><span class="small muted">${T.months.length} months of ratings from FMP${T.many ? ` · ${T.n} of the biggest names, weighted` : ""}</span></div>
+      <div class="kpis">${K}</div>${stChart(T.months)}<div class="st-read prose">${read}</div>${names}${acts}</div>`;
+  }
+  const addTo = (html, extra) => (extra ? html.replace(/<\/section>\s*$/, extra + "</section>") : html);
+  // ------------------------------------------------------------- times like this, by window (inside Performance)
+  const TW_WIN = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 }, _twHtml = new Map();
+  const TW_LAB = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year" };
+  /** Performance's "Times like this": pick a window, see the five past stretches most like it and what came after. The
+   * older monthly view (with the historian's notes) stays underneath, whole. */
+  function twBlock(kind, key, old = "") {
+    if (!key) return "";
+    const body = old ? old.replace(/^\s*<section[^>]*>\s*<div class="panel-head">[\s\S]*?<\/div>/, "").replace(/<\/section>\s*$/, "") : "";
+    const title = old ? (old.match(/<h2>([\s\S]*?)<\/h2>/)?.[1] || "").replace(/<[^>]+>/g, "") : "";
+    const sub = old ? (old.match(/<span class="small muted">([\s\S]*?)<\/span><\/div>/)?.[1] || "") : "";
+    const w = S.twWin?.[kind + ":" + key] || (kind === "company" && TW_WIN[S.coRet] ? S.coRet : "6M");
+    return `<div class="tw" data-tw="${kind}" data-tw-key="${esc(key)}"><div class="tw-head"><h3>Times like this</h3><span class="small muted">Pick a window: the 5 past stretches most like the last one (the macro backdrop at its end, and how ${kind === "industry" ? "the industry" : esc(key)} and the market moved through it), and what came 1, 3, 6 and 12 months after</span></div>
+      <div class="seg tw-tabs" role="group" aria-label="Window">${Object.keys(TW_WIN).map((h) => `<button type="button" data-tw-win="${h}" aria-pressed="${h === w}">Last ${TW_LAB[h]}</button>`).join("")}</div>
+      <div class="tw-body"><div class="skel" style="height:120px"></div></div>
+      ${body ? `<details class="tw-old"><summary><b>${esc(title || "Times like this")}</b>${sub ? ` <span class="small muted">${sub}</span>` : ""}</summary><div class="tw-old-in">${body}</div></details>` : ""}</div>`;
+  }
+  async function twSeries(kind, key) {
+    const norm = (x) => (x?.dates?.length ? { dates: x.dates, values: x.closes || x.values || x.levels } : null);
+    if (kind === "company") return S.co?.sym === key ? norm(S.co.data?.ser || S.co.ser) : null;
+    if (kind === "fund") return S.fund?.sym === key ? norm(S.fund.ser) : null;
+    return cached("twind:" + key, async () => {
+      const d = S.industries[slug(key)], cons = d?.constituents || [];
+      let w = exchangeWeights(cons.map((c) => ({ exchange: c.exchange || c.exchangeShortName, market_cap: c.market_cap || c.marketCap })));
+      if (!Object.keys(w).length) w = { NASDAQ: 0.5, NYSE: 0.5 };
+      const h = await fetchHistory(key, w), ls = History.levelSeries(h.perfRows, w);
+      return ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null;
+    }, 6 * 3600 * 1000);
+  }
+  function wireTimes(root) { for (const el of (root || document).querySelectorAll(".tw:not([data-tw-on])")) { el.dataset.twOn = "1"; twShow(el); } }
+  async function twShow(el, win) {
+    const kind = el.dataset.tw, key = el.dataset.twKey, k0 = kind + ":" + key; S.twWin ||= {};
+    win = win || S.twWin[k0] || el.querySelector('[data-tw-win][aria-pressed="true"]')?.dataset.twWin || "6M"; S.twWin[k0] = win;
+    el.querySelectorAll("[data-tw-win]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.twWin === win)));
+    const body = el.querySelector(".tw-body"), ck = `${k0}|${win}|${today()}`;
+    if (_twHtml.has(ck)) { body.innerHTML = _twHtml.get(ck); return; }
+    if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
+    body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}…</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
+    try {
+      const [ind, mk] = await Promise.all([twSeries(kind, key), regimeData()]);
+      const R = ind ? Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }) : null;
+      const html = twHTML(R, win, kind, key); _twHtml.set(ck, html);
+      if (S.twWin[k0] !== win) return;
+      for (const x of document.querySelectorAll(".tw")) if (x.dataset.tw === kind && x.dataset.twKey === key) x.querySelector(".tw-body").innerHTML = html;
+    } catch (e) { if (FATAL.has(e?.code)) throw e; body.innerHTML = `<div class="small muted">The long price history didn't come back from FMP, so the past stretches can't be found right now.</div>`; }
+  }
+  document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-tw-win]"); if (!b) return; const el = b.closest(".tw"); if (el) twShow(el, b.dataset.twWin); });
+  function twHTML(R, win, kind, key) {
+    if (!R?.episodes?.length) return `<div class="small muted">There isn't enough price history to find past ${TW_LAB[win]} stretches like this one.</div>`;
+    const it = kind === "industry" ? "The industry" : key, its = kind === "industry" ? "The industry's" : key + "'s", lab = (k) => Regimes.wlabel(k, R.window).replace(/^It\b/, it).replace(/^Its\b/, its), lab2 = (k) => lab(k).replace(/^The industry's\b/, "its").replace(/^The industry\b/, "the industry"), HZ = [["1M", "1 month"], ["3M", "3 months"], ["6M", "6 months"], ["12M", "1 year"]];
+    const sg = (v, u = "%") => (isNum(num(v)) ? `<b class="${v >= 0 ? "up" : "down"}">${v > 0 ? "+" : ""}${v}${u}</b>` : `<span class="muted">not yet</span>`);
+    const ML = (d) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
+    const strip = `<div class="tw-base">${HZ.map(([h, l]) => { const b = R.base[h] || {}; return `<div class="tw-b"><span class="eyebrow">${l} later</span><span class="tw-bn"><b>${b.up ?? "—"}</b> of ${b.n ?? 5} higher</span><span class="small">median ${sg(b.median)}</span><span class="small muted">beat the S&amp;P 500 ${b.beat ?? "—"} of ${b.n ?? 5} · range ${isNum(num(b.worst)) ? `${b.worst > 0 ? "+" : ""}${b.worst}%` : "—"} to ${isNum(num(b.best)) ? `${b.best > 0 ? "+" : ""}${b.best}%` : "—"}</span></div>`; }).join("")}</div>`;
+    const nowC = `<div class="tw-now"><span class="eyebrow">The last ${TW_LAB[win]}, to ${esc(fmtShort(R.as_of))}</span><div class="tw-chips">${R.features.slice(0, 9).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, R.now[k]))}</b></span>`).join("")}</div></div>`;
+    const cards = R.episodes.map((e, i) => `<article class="rcard tw-ep" style="--k:${i}"><div class="tw-ep-h"><span class="tw-ep-n">${i + 1}</span><div><b>${ML(e.start)} → ${ML(e.end)}</b><div class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches since ${esc(String(R.from || "").slice(0, 4))}</div></div></div>
+        <div class="tw-then"><span class="eyebrow">Then</span>${["iw", "sw", "ddw", "ff", "cpi", "vix"].filter((k) => k in e.then).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, e.then[k]))}</b></span>`).join("")}</div>
+        <div class="tw-after"><span class="eyebrow">What came after</span><div class="tw-grid">${HZ.map(([h, l]) => `<div class="tw-cell"><span class="small muted">${l}</span>${sg(e.it[h])}<span class="small muted">S&amp;P ${isNum(num(e.spy[h])) ? `${e.spy[h] > 0 ? "+" : ""}${e.spy[h]}%` : "—"}</span></div>`).join("")}</div></div>
+        ${e.path?.length > 2 ? epPath(e.path, e.spy_path) : ""}<div class="small muted">Worst drop in the next 6 months: ${isNum(num(e.maxdd6)) ? `${e.maxdd6}%` : "—"} · most alike: ${e.alike.map((k) => esc(lab2(k))).join(", ")} · least alike: ${e.unlike.map((k) => esc(lab2(k))).join(", ")}</div></article>`).join("");
+    return `${strip}${nowC}<div class="rgrid tw-eps">${cards}</div>`;
+  }
+  /** The company's Performance section, with Times like this inside it. */
+  function coReturnsAll(co) { return addTo(coReturns(co), twBlock("company", co.sym, co.run ? coTimes(co) : "")); }
   /** A list of points, shown as a list (as cards when they're long) rather than run together with semicolons. */
   const ptList = (xs) => { const a = (xs || []).filter((x) => x != null && String(x) !== ""); return a.length ? `<ul class="pts">${a.map((x) => `<li>${x}</li>`).join("")}</ul>` : ""; };
   const pcx = (x, d = 1) => (isNum(num(x)) ? pct(x, true, d) : "—");
@@ -23344,7 +23807,7 @@ Return ONLY a JSON object:
       return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [run ? coLeanBlock(co) : "", coReturns(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coTimes(co) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
+    const secs = [run ? coLeanBlock(co) : "", coReturnsAll(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
       coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
@@ -24261,7 +24724,8 @@ Return ONLY a JSON object:
     const ratings = qs.length ? `<h3>Ratings, last ${qs.length} quarters</h3><div style="display:grid;gap:8px">${qs.map((q) => { const tot = RC.reduce((a, [k]) => a + (num(q[k]) || 0), 0) || 1;
       return `<div style="display:grid;grid-template-columns:70px minmax(0,1fr) 36px;gap:10px;align-items:center"><span class="mono small">${esc(q.date.slice(0, 7))}</span><div style="display:flex;height:16px;border-radius:3px;overflow:hidden">${RC.map(([k, l, c]) => (num(q[k]) > 0 ? `<i style="width:${(q[k] / tot) * 100}%;background:${c}" title="${l}: ${q[k]}"></i>` : "")).join("")}</div><span class="mono small">${tot}</span></div>`; }).join("")}
       <div class="legend">${RC.map(([k, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join("")}</div></div>` : "";
-    return sec("co-street", "Wall Street consensus", "", `${vs}${rb}<h3>The consensus</h3><div class="kpis">${K}</div>${ratings}${est}${at}`);
+    const year = window.Street ? `<h3>The last 12 months</h3>${streetHTML(Street.one({ sym: co.sym, rhist: f.rhist || [], actions: acts, ptrend: pt, px: co.px, today: today() }), { label: co.sym })}` : ratings + at;
+    return sec("co-street", "Wall Street consensus", "", `${vs}${rb}${year}<h3>The consensus</h3><div class="kpis">${K}</div>${est}`);
   }
   function coHealth(co) {
     const qy = co.quality || {}, f = co.data || {}, r = f.ratios || {}, t = f.ttm || {}, row = co.row || {}, ins = f.insider;
@@ -24378,7 +24842,7 @@ Return ONLY a JSON object:
     if (t.dataset.coRange) { S.coRange = t.dataset.coRange; renderCompany(); return; }
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }
     if (t.dataset.trkH) { S.trkH = t.dataset.trkH; if (S.tab === "companies") renderCompany(); else renderReport(); return; }
-    if (t.dataset.coRet && S.co) { S.coRet = t.dataset.coRet; const cur = $("co-returns"), tmp = document.createElement("div"); tmp.innerHTML = coReturns(S.co); const nx = tmp.firstElementChild;
+    if (t.dataset.coRet && S.co) { S.coRet = t.dataset.coRet; if (TW_WIN[t.dataset.coRet]) (S.twWin ||= {})["company:" + S.co.sym] = t.dataset.coRet; const cur = $("co-returns"), tmp = document.createElement("div"); tmp.innerHTML = coReturnsAll(S.co); const nx = tmp.firstElementChild;
       if (cur && nx) { cur.replaceWith(nx); wireCharts(nx); } return; }
     if (t.dataset.coPer) { S.coPer = t.dataset.coPer; renderCompany(); return; }
     if (t.dataset.dcfReset) { if (S.co?.dcfBase) { S.co.dcfP = { ...S.co.dcfBase }; renderCompany(); } return; }
@@ -24567,16 +25031,15 @@ Return ONLY a JSON object:
       if (avg < 60 && Math.max(...lens) < 140) continue;
       l.classList.add("cardlist"); li.forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9))));
     }
+    stackTables(scope); sheets(scope);
     for (const g of scope.querySelectorAll(".rgrid:not([data-dg])")) { g.dataset.dg = "1"; [...g.children].forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9)))); }
     for (const e of scope.querySelectorAll("p:not([data-dg]), li:not([data-dg]), div:not([data-dg]), blockquote:not([data-dg])")) {
       e.dataset.dg = "1";
       if (e.classList.contains("clamp-in") || e.closest(".clamp-in") || !e.closest(ZONE) || e.closest(SKIP) || e.closest(".panel-head") || e.querySelector(BLOCKS)) continue;
       const t = e.textContent; if (t.length < CLAMP_AT) continue;
-      const inner = d.createElement("span"); inner.className = "clamp-in"; while (e.firstChild) inner.appendChild(e.firstChild);
-      const b = d.createElement("button"); b.type = "button"; b.className = "more-btn"; b.setAttribute("aria-expanded", "false"); b.dataset.w = String(words(t));
-      b.innerHTML = `<span>Read all</span><small>${words(t)} words</small>`;
-      e.append(inner, b); e.classList.add("clamp");
+      emphasize(e);
     }
+    for (const p of scope.querySelectorAll("p.prose:not([data-em]), .prose > p:not([data-em]), .summary-text:not([data-em]), .st-read p:not([data-em]), .rcard p:not([data-em]), .cardlist > li:not([data-em])")) if (p.closest(ZONE) && p.textContent.length > 160) emphasize(p);
   }
   d.addEventListener("click", (ev) => {
     const b = ev.target.closest(".more-btn"); if (!b) return; ev.preventDefault();
@@ -24584,6 +25047,50 @@ Return ONLY a JSON object:
     b.innerHTML = open ? "<span>Show less</span>" : `<span>Read all</span><small>${b.dataset.w} words</small>`;
     if (!open && e.getBoundingClientRect().top < 0) e.scrollIntoView({ block: "nearest" });
   });
+  // Tables: every cell knows its column, so a phone can show each row as a card instead of scrolling sideways.
+  function stackTables(scope) {
+    for (const tr of scope.querySelectorAll("tbody tr:not([data-dg])")) {
+      tr.dataset.dg = "1"; const t = tr.closest("table"); if (!t || !t.closest(ZONE) || t.closest(".cx-mi, .cmdk")) continue;
+      if (t.closest("#macro, #co-macro, #fund-macro, #bond-macro, #bond-shocks, #cmp-macro, #cmp-macroind, #sensitivity")) t.classList.add("cardtable");
+      if (!t.__heads) t.__heads = [...t.querySelectorAll("thead tr:last-child th")].map((th) => th.textContent.replace(/\s+/g, " ").trim());
+      if (!t.__heads.length) continue; t.classList.add("stackable");
+      let i = 0; for (const td of tr.children) { td.dataset.label = t.__heads[i] || ""; if (td.textContent.length > 34 || td.querySelector("details, table, .chart")) td.classList.add("wide"); i += +td.colSpan || 1; }
+    }
+  }
+  // The sidebar: on a phone it is a bar naming the current section that opens into the full list.
+  const CHEV2 = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  function sheets(scope) {
+    for (const nav of scope.querySelectorAll(".sidenav:not([data-sheet])")) {
+      nav.dataset.sheet = "1"; const list = d.createElement("div"); list.className = "nav-list"; while (nav.firstChild) list.appendChild(nav.firstChild);
+      const b = d.createElement("button"); b.type = "button"; b.className = "nav-toggle"; b.setAttribute("aria-expanded", "false");
+      b.innerHTML = `<span class="nt-k">On this page</span><span class="nt-cur"></span>${CHEV2}`; nav.append(b, list); navLabel(nav);
+    }
+  }
+  function navLabel(nav) { const a = nav.querySelector("a.sub.on") || nav.querySelector("a.on"), c = nav.querySelector(".nt-cur"); if (c) c.textContent = a ? a.textContent.replace(/^\d+\s*/, "") : "Sections"; }
+  d.addEventListener("click", (ev) => {
+    const t = ev.target.closest(".nav-toggle");
+    if (t) { const nav = t.parentElement, open = !nav.classList.contains("open"); nav.classList.toggle("open", open); t.setAttribute("aria-expanded", String(open)); return; }
+    const a = ev.target.closest(".sidenav a"); if (a) { const nav = a.closest(".sidenav"); nav.classList.remove("open"); nav.querySelector(".nav-toggle")?.setAttribute("aria-expanded", "false"); setTimeout(() => navLabel(nav), 50); return; }
+    for (const nav of d.querySelectorAll(".sidenav.open")) if (!nav.contains(ev.target)) { nav.classList.remove("open"); nav.querySelector(".nav-toggle")?.setAttribute("aria-expanded", "false"); }
+  });
+  // Long text gets a little typography: its first sentence leads, figures with units stand out, turns are in italics.
+  const NUM_RE = /(?<![\w./\-−])([+\-−]?\$\d[\d,]*(?:\.\d+)?(?:\s?(?:[KMBT]\b|billion|million|trillion))?|[+\-−]\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|pts\b|points\b)?|\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|[KMBT]\b|billion\b|million\b|trillion\b))/g;
+  const TURN_RE = /\b(but|however|although|though|yet|despite|unless|instead|whereas)\b/gi;
+  const NOEMPH = "a, b, strong, i, em, code, button, .cite, .pill, .tick, mark, sup, sub, .num, .lead, svg, .more-btn";
+  function emphasize(root) {
+    if (root.dataset.em) return; root.dataset.em = "1";
+    const walker = d.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentElement?.closest(NOEMPH) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+    const nodes = []; for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    let led = false;
+    for (const n of nodes) {
+      let t = n.nodeValue; if (!t.trim()) continue;
+      let html = t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+      if (!led) { led = true; const m = html.match(/^([\s\S]{20,240}?[.!?])(\s+|$)/); if (m) html = `<span class="lead">${m[1]}</span>${html.slice(m[1].length)}`; }
+      html = html.replace(/(<span class="lead">[\s\S]*?<\/span>)|([^<]+)/g, (all, lead, plain) => lead ? lead : plain.replace(NUM_RE, '<b class="num">$1</b>').replace(TURN_RE, "<em>$1</em>"));
+      if (html === t) continue;
+      const tpl = d.createElement("template"); tpl.innerHTML = html; n.replaceWith(tpl.content);
+    }
+  }
   function stagger(root) { for (const l of root.querySelectorAll(".cardlist, .rgrid")) [...l.children].forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9)))); }
   const NUMS = ".kpi .v, .strip .v, .ov-kpi .v, .mval, .stat-big, .pf-value, .hz-num .v, .pf-stat-v, .memo-stat b, .prof .big b, .fcard .w, .retcard .rv, .rcard-prob b, .cx-mi-n b";
   function countUp(root) {
@@ -24653,7 +25160,7 @@ Return ONLY a JSON object:
   let tick = false;
   addEventListener("scroll", () => {
     if (tick) return; tick = true;
-    requestAnimationFrame(() => { tick = false; const max = html.scrollHeight - innerHeight, f = max > 0 ? Math.min(1, scrollY / max) : 0;
+    requestAnimationFrame(() => { tick = false; const max = html.scrollHeight - innerHeight, f = max > 0 ? Math.min(1, scrollY / max) : 0; for (const nv of d.querySelectorAll(".sidenav[data-sheet]")) if (nv.offsetParent) navLabel(nv);
       if (bar) bar.style.transform = `scaleX(${f.toFixed(4)})`; topBtn.classList.toggle("show", scrollY > 700); });
   }, { passive: true });
   addEventListener("resize", () => placeInd());

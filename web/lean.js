@@ -138,6 +138,8 @@ ${SCHEMA}`;
 
   /** Clean the model's answer; add code's tally and checks. */
   function cleanLean(raw, { res = null, today = "", known = null, inputs = INPUTS, alias = ALIAS, ind = null } = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const IK = inputs.map(([k]) => k), IL = Object.fromEntries(inputs);
     if (!raw || typeof raw !== "object") return null;
     const r = raw.lean && typeof raw.lean === "object" && raw.lean.calls ? raw.lean : raw;
@@ -248,6 +250,8 @@ Reply with ONLY this JSON:
  "overall": "one or two sentences: the biggest weakness across the calls"}`;
   }
   function cleanChallenge(raw) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     if (!raw || typeof raw !== "object") return null;
     const w = {};
     for (const h of HZ) { const x = raw.windows?.[h]; if (!x) continue; const r = lc(x.recommend);

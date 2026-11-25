@@ -19,9 +19,16 @@ The page is branded AdvisorMindOS: petrol canvas, one brass accent (`--accent`),
 Instrument Sans text, IBM Plex Mono numbers. The last `<script>` in `page.src.html` is the shell: it folds every
 `section.panel` from its `.panel-head` (state in localStorage, `data-fold-default="closed"` starts one folded), moves
 the tab indicator, runs the jump palette (Ctrl/Cmd K or /, Alt+1-5 for tabs), and animates sections the first time
-they appear. It also makes pages easy to digest: lists of long points become cards (`.cardlist`), text over 420
-characters shows four lines and "Read all" (`.clamp`), key numbers count up, and only a tab's first section and its
-verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
+they appear. It also makes pages easy to digest: lists of long points become cards (`.cardlist`), tables in macro
+sections become a card per row (`.cardtable`) and every table stacks into cards on a phone (`.stackable`; nothing scrolls
+sideways), long text gets light typography (`emphasize`: its first sentence leads, figures with units in bold, turns
+like "but" in italics; never a "Read all": the owner doesn't want text folded), key numbers count up, and only a tab's
+first section and its verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
+Every tab starts with performance, then the snapshot (verdict). Performance holds Times like this by window
+(`twBlock`, `Regimes.windowEpisodes`: the 5 past 1/3/6/12-month stretches most like the last one and what followed 1, 3,
+6 and 12 months later), with the older monthly view underneath. Wall Street sections show the last 12 months of ratings
+(`Street` in `web/street.js`, `streetSlot`/`streetHTML`): monthly rating mix, upgrades and downgrades, target moves, and
+a code-written read of the trend. Model output is saved whole (the cleaners no longer cut text); prompts keep their caps.
 Every tab starts with performance: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
 `groups`) set the order, and `wireSpy` puts the sections in that order and highlights from where they actually are.
 Points after a label render with `ptList` (a list, never "a; b; c"), and on-screen text is never cut (`showC`);

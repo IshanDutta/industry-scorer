@@ -445,6 +445,8 @@ Reply with ONLY this JSON:
    * Each revised horizon keeps where it came from; a daily history of the last 20 updates is kept.
    */
   function apply(res, upd, x, { today, via, tri = null, sources = [], sections = [], known = [] }) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const out = JSON.parse(JSON.stringify(res || {}));
     // The analysis keeps citing after today, so today's [D#] become lasting IDs (DU1, DU2, ...) with their source kept
     // in `refs` (the page adds them to the lead's sources); IDs already in the analysis, or known to the page, stay.

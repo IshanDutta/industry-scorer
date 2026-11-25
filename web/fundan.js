@@ -404,6 +404,8 @@ ${O.schemaFor(FUND_INPUTS).replace("the lead's verdict", "the fund write-up's ve
   const MAX_SIZE = 15;
   const CALLV = ["bullish", "slightly bullish", "neutral", "slightly bearish", "bearish"];
   function cleaner(idx) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     let dropped = 0;
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
     const t = (s, k = 900) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1"), k);

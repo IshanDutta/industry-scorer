@@ -35,6 +35,8 @@ Reply with ONLY this JSON:
 {"partners": [{"symbol": "TICKER", "name": "...", "role": "customer | supplier | channel | competitor", "metric": "capex | revenue | inventory | orders", "share": "how much of the industry's revenue or supply runs through them, if known (e.g. '~40% of data-center GPU demand'), else ''", "depends": ["TICKER"], "why": "1-2 sentences on how their decisions reach this industry's revenue or costs", "evidence": []}]}`;
   }
   function cleanChain(raw, doc, idx = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const inInd = new Set((doc.constituents || []).map((c) => String(c.symbol).toUpperCase()));
     const ours = (a) => (Array.isArray(a) ? a : []).map((x) => String(x).toUpperCase().trim()).filter((x) => inInd.has(x)).slice(0, 6);
     const seen = new Set();
@@ -107,6 +109,8 @@ Reply with ONLY this JSON:
   }
   const norm = (s) => String(s || "").toLowerCase().replace(/[“”"'’‘]/g, "").replace(/[^a-z0-9%$. ]+/g, " ").replace(/\s+/g, " ").trim();
   function cleanCalls(raw, transcripts) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const by = Object.fromEntries((transcripts || []).filter((t) => t.prev?.excerpt).map((t) => [String(t.symbol).toUpperCase(), t]));
     const strs = (a, k, m) => (Array.isArray(a) ? a : []).map((x) => trim(x, m)).filter(Boolean).slice(0, k);
     const verified = (q, text) => { const a = norm(q); return a.split(" ").length >= 8 && norm(text).includes(a) ? trim(q, 400) : ""; };

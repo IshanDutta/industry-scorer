@@ -527,7 +527,7 @@ Reply with JSON only, in this shape:
   function cleanWriteup(o, idx) {
     let dropped = 0;
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
-    const txt = (s, k = 1200) => String(s ?? "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1").trim().slice(0, k);
+    const txt = (s, k = 1200) => String(s ?? "").replace(/\[([A-Z]\d{1,3})\]/g, (m, id) => (known(id) ? m : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1").trim(); // kept whole
     const list = (a, k = 5) => (Array.isArray(a) ? a : []).slice(0, k).map((x) => (typeof x === "string" ? { text: txt(x, 500), ids: [] } : { text: txt(x?.text, 500), ids: (Array.isArray(x?.ids) ? x.ids : []).filter((id) => known(id) || (dropped++, false)) })).filter((x) => x.text);
     const fit = {}; for (const t of ["income", "conservative", "growth", "aggressive"]) { const x = o?.fit?.[t] || {}; const adj = Math.max(-5, Math.min(5, Math.round(n(x.adjust) || 0)));
       fit[t] = { fit: FITS.includes(lc(x.fit)) ? lc(x.fit) : null, adjust: adj, why: txt(x.why, 300) }; }

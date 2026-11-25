@@ -30,4 +30,20 @@ ok(R.episodes({ ind: { dates: days.slice(0, 300), values: ind.values.slice(0, 30
 const hp = R.historianPrompt("Gold", out, { today: "2026-10-30" }); ok(/"then"/.test(hp) && /Never invent a number/.test(hp), "historian prompt");
 const h = R.cleanHistorian({ episodes: [{ id: "E2", then: "b" }, { id: "E1", then: "a", after: "x" }], read: "r", closest: "E1" }, out);
 ok(h.episodes.length === 5 && h.episodes[0].then === "a" && h.episodes[1].then === "b" && h.months[0] === out.episodes[0].month && h.closest === "HE1", "historian answer matched to episodes by ID");
+// Times like this, by window
+{
+  const R2 = require("./regimes.js"), assert = require("assert");
+  const dates = [], values = [], sv = []; const d0 = new Date("2009-01-02T00:00:00Z"); let v = 100, s = 100;
+  for (let i = 0; i < 4200; i++) { const d = new Date(d0.getTime() + i * 864e5); if (d.getUTCDay() % 6 === 0) continue; dates.push(d.toISOString().slice(0, 10)); v *= 1 + 0.01 * Math.sin(i / 37) + 0.0003; s *= 1 + 0.006 * Math.sin(i / 53) + 0.0003; values.push(v); sv.push(s); }
+  const ind = { dates, values }, mk = { spy: { dates, values: sv } };
+  for (const m of [1, 3, 6, 12]) {
+    const W = R2.windowEpisodes({ ind, mk, months: m, today: dates[dates.length - 1] });
+    assert(W && W.episodes.length === 5, "five stretches for " + m);
+    const ds = W.episodes.map((e) => Date.parse(e.end)).sort((a, b) => a - b);
+    for (let i = 1; i < ds.length; i++) assert((ds[i] - ds[i - 1]) / (30.44 * 864e5) >= Math.max(m, 3) - 0.1, "stretches don't overlap");
+    assert(["1M", "3M", "6M", "12M"].every((h) => W.base[h].n >= 1), "follow-ons known");
+    assert(/over the (month|3 months|6 months|year)/.test(R2.wlabel("iw", m)));
+  }
+  console.log("window episodes ok");
+}
 console.log(fails ? fails + " FAILED" : "regimes tests passed"); process.exit(fails ? 1 : 0);

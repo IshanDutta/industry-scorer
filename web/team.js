@@ -213,6 +213,8 @@ Reply with ONLY JSON:
 Use 4-8 groups named for what they mean to this industry. 30-50 series. Keys must match the catalog exactly. Phrases must be specific to the series (never a lone generic word like 'manufacturing' or 'rates').`;
   }
   function cleanPlan(raw, cat) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const keys = new Set((cat?.items || []).map((i) => i.key));
     const tenors = new Set((cat?.items || []).filter((i) => i.kind === "treasury").map((i) => i.key.slice(9)));
     const out = []; const seen = new Set();
@@ -310,6 +312,8 @@ Cover EVERY indicator listed, in the same order.`;
    * without it, an article must be about the indicator (relevantTo).
    */
   function cleanIndicators(raw, idx, doc, rows, verify = null) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const { S, Ev, En } = makeCritic(idx, tickersOf(doc));
     const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
     const out = {}; let dropped = 0;
@@ -508,6 +512,8 @@ Sizes: 4-8 regulators, 0-8 policy items, 0-8 litigation items, 0-8 deals. Empty 
 
   // ------------------------------------------------------------------ critic
   function makeCritic(idx, tickers) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const tk = new Set([...tickers].map((t) => String(t).toUpperCase()));
     const alias = tickers.aliases || {};
     const S = (x, n = 600) => {
