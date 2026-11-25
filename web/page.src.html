@@ -3549,7 +3549,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     try {
       const rec = await secGet(sector);
       const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
-      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r.industry.twin?.date !== today()) have.push(n); }
+      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); const tw = r?.industry?.twin; if (r?.industry?.summary && !(tw?.date === today() && Object.keys(TW_WIN).every((k) => tw.windows?.[k]?.N))) have.push(n); }
       dr.of = have.length;
       if (!have.length) { S.notices = [{ kind: "info", text: `Every ${sector} industry already has today's Times like this.` }]; return; }
       dr.label = "Macro and market history (no Claude)";
