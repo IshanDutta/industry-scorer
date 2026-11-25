@@ -246,7 +246,8 @@
         situations: situations.filter((s) => s.refs.includes(x.id)).map((s) => s.id) }));
     for (const s of situations) { s.headlines = headlines.filter((h) => h.situations.includes(s.id)).map((h) => h.id); delete s.refs; }
     const tradeBy = Object.fromEntries((R.trade?.countries || []).map((c) => [lc(c.country), c]));
-    const nc0 = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
+    // Some rule-book fields come as {analysis, ...} (the last and next 12 months): read the text, never "[object Object]".
+    const nc0 = (t, k) => trim(String((t && typeof t === "object" ? t.analysis || t.text || t.summary || "" : t) || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
     const expBy = Object.fromEntries((R.trade?.exposure || []).map((e) => [lc(e.country), e]));
     // Everything the trade report says about one country, kept short enough for the prompt.
     const tradeDossier = (d, country) => { const e = expBy[lc(country)]; if (!d && !e) return {};

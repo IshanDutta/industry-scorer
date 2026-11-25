@@ -7932,7 +7932,8 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
         situations: situations.filter((s) => s.refs.includes(x.id)).map((s) => s.id) }));
     for (const s of situations) { s.headlines = headlines.filter((h) => h.situations.includes(s.id)).map((h) => h.id); delete s.refs; }
     const tradeBy = Object.fromEntries((R.trade?.countries || []).map((c) => [lc(c.country), c]));
-    const nc0 = (t, k) => trim(String(t || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
+    // Some rule-book fields come as {analysis, ...} (the last and next 12 months): read the text, never "[object Object]".
+    const nc0 = (t, k) => trim(String((t && typeof t === "object" ? t.analysis || t.text || t.summary || "" : t) || "").replace(/\s*\[[A-Z]{1,2}\d{1,5}(?:,\s*[A-Z]{1,2}\d{1,5})*\]/g, "").replace(/\s+([.,;:])/g, "$1"), k);
     const expBy = Object.fromEntries((R.trade?.exposure || []).map((e) => [lc(e.country), e]));
     // Everything the trade report says about one country, kept short enough for the prompt.
     const tradeDossier = (d, country) => { const e = expBy[lc(country)]; if (!d && !e) return {};
@@ -10147,7 +10148,9 @@ Reply with ONLY this JSON:
     const reports = Object.fromEntries(Object.entries(rec.reports || {}).map(([k, v]) => [k.replace(sl + "--", ""), v?.result]).filter(([, v]) => v));
     const books = Object.values(rec.regbooks || {}).filter((b) => b?.book).map((b) => ({ body: b.body, book: b.book }));
     const L = CO().lensInputs({ name: rec.name, saved_at: rec.saved_at, industry: rec.industry, agent: rec.agent, macro: rec.macro, reports, books, lead: rec.agent?.result || null }, [], [], rec.industry?.as_of || null);
-    const m = reports.macro || {}, t = (x, k) => cutW(x, k);
+    // Text is kept whole (up to 1,200 characters, or 4x the old cut) so the pages show it in full; FundMore.affairsText
+    // cuts each field back to its old length for the prompts (LENS_CUT), so what Claude reads doesn't change.
+    const m = reports.macro || {}, t = (x, k) => cutW(x, Math.max(1200, k * 4));
     return {
       // The industry's whole macro table (every indicator the macro planner chose, its numbers and the strategist's read
       // of each), what's moving and why, how the macro reaches it, what would flip it, and the releases ahead.
@@ -10190,7 +10193,7 @@ Reply with ONLY this JSON:
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 7, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 8, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
@@ -10874,19 +10877,21 @@ Reply with JSON only, in this shape:
     const w = (x) => pc(x, 0), mix = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${w(v / (Object.values(o).reduce((p, q) => p + q, 0) || 1))}`).join(", ") || "n/a";
     const val = (r) => `${r.value ?? "n/a"}${r.unit === "%" ? "%" : r.unit ? " " + r.unit : ""}${r.prior !== undefined && r.prior !== null ? ` (${r.prior_label || "prior"} ${r.prior}${r.unit === "%" ? "%" : ""})` : ""}${r.date ? `, ${r.date}` : ""}`;
     const cut = (t, k) => { t = String(t || ""); return t.length > k ? t.slice(0, t.lastIndexOf(" ", k)) + "…" : t; };
+    // The digests keep text whole for the pages; the prompt keeps the lengths it always had (Portfolio's cutW rule).
+    const cw = (t, k) => { t = String(t || ""); return t.length <= k ? t : t.slice(0, t.slice(0, k).lastIndexOf(" ")).replace(/[,;:]$/, "") + "…"; };
     const ch = (x) => [isNum(n(x.chg_1m)) ? `1M ${x.chg_1m > 0 ? "+" : ""}${x.chg_1m}%` : "", isNum(n(x.chg_3m)) ? `3M ${x.chg_3m > 0 ? "+" : ""}${x.chg_3m}%` : "", isNum(n(x.chg_1y)) ? `1Y ${x.chg_1y > 0 ? "+" : ""}${x.chg_1y}%` : ""].filter(Boolean).join(", ");
     const macro = [`## THE MACRO TABLE, FROM ITS INDUSTRIES' MACRO REPORTS (${A.n} industries, ${w(A.on)} of the fund; every indicator their macro planners chose, with each strategist's read)`,
       ...A.indicators.map((x) => `[${x.id}] ${x.label} (${x.group}): ${val(x)}${ch(x) ? `; ${ch(x)}` : ""}${x.estimate !== null && x.estimate !== undefined ? `; consensus ${x.estimate}` : ""}. In the macro tables of industries worth ${w(x.reach)} of the fund; relevant to ${w(x.read_by)}: ${mix(x.effects)}.${x.driver ? ` Driving it: ${cut(x.driver, 200)}` : ""}${x.next ? ` Next: ${cut(x.next, 120)}` : ""} Reads: ${x.reads.slice(0, nRd).map((r) => `${r.industry} (${pc(r.weight)}, ${r.relevance}, ${r.effect}): ${cut(r.why, 170)}`).join(" | ")}${x.reads.length > nRd ? ` (+${x.reads.length - nRd} more industries: ${mix(Object.fromEntries(Object.entries(x.reads.slice(nRd).reduce((o, r) => ((o[r.effect] = (o[r.effect] || 0) + r.weight), o), {}))))})` : ""}`),
-      A.moves.length ? `What's moving and why: ${A.moves.map((x) => `${x.label}${x.id ? ` [${x.id}]` : ""}: ${x.move} Driver: ${x.driver} So what (${x.so_whats[0].industry}): ${x.so_whats[0].so_what}`).join(" || ")}` : "",
-      A.flips.length ? `What would flip its industries' macro calls: ${A.flips.map((f) => `${f.industry}: ${f.trigger} (${f.mechanism})`).join("; ")}.` : "",
-      A.watchNext.length ? `Releases ahead: ${A.watchNext.map((x) => `${x.date} ${x.event}: ${x.why}`).join("; ")}.` : ""].filter(Boolean).join("\n");
+      A.moves.length ? `What's moving and why: ${A.moves.map((x) => `${x.label}${x.id ? ` [${x.id}]` : ""}: ${cw(x.move, 180)} Driver: ${cw(x.driver, 240)} So what (${x.so_whats[0].industry}): ${cw(x.so_whats[0].so_what, 200)}`).join(" || ")}` : "",
+      A.flips.length ? `What would flip its industries' macro calls: ${A.flips.map((f) => `${f.industry}: ${cw(f.trigger, 150)} (${cw(f.mechanism, 180)})`).join("; ")}.` : "",
+      A.watchNext.length ? `Releases ahead: ${A.watchNext.map((x) => `${x.date} ${cw(x.event, 140)}: ${cw(x.why, 180)}`).join("; ")}.` : ""].filter(Boolean).join("\n");
     const world = [`## WORLD EVENTS, FROM ITS INDUSTRIES' WORLD-EVENTS REPORTS`,
-      ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, nInd).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${x.summary || ""}${x.first_order ? ` First-order: ${x.first_order}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
+      ...A.world.map((x) => `[${x.id}] ${x.title} (${[x.category, x.region, x.status].filter(Boolean).join(", ")}): reaches ${w(x.reach)} of the fund; adverse for ${w(x.adverse)}, supportive for ${w(x.favorable)}; industries: ${x.industries.slice(0, nInd).map((r) => `${r.industry} ${pc(r.weight)} ${r.stance}`).join(", ")}. ${cw(x.summary, 280)}${x.first_order ? ` First-order: ${cw(x.first_order, 180)}` : ""}${x.channels?.length ? ` Channels: ${x.channels.join("; ")}.` : ""}${x.scenarios?.length ? ` Scenarios: ${x.scenarios.map((c) => `${c.probability ?? "?"}% ${c.name}: ${c.outcome || ""}`).join("; ")}.` : ""}${x.winners_held.length || x.losers_held.length ? ` Holdings named: winners ${x.winners_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}; losers ${x.losers_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ") || "none"}.` : ""}`)].join("\n");
     const trade = [`## TRADE, FROM ITS INDUSTRIES' TRADE MAPS AND COUNTRY DOSSIERS`, `Trade verdicts by fund weight: ${mix(A.trade_mix)}. ${A.tradeVerdicts.slice(0, nInd).map((v) => `${v.industry} (${pc(v.weight)}): ${v.rating || "n/a"}${v.health !== null && v.health !== undefined ? `, health ${v.health}/100` : ""}. ${v.headline || ""}`).join(" | ")}`,
-      ...A.trade.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}, threat ${c.threat || "n/a"}; its industries' revenue there about ${pc(c.rev)}${c.rev_est ? " (partly estimates)" : ""}, named by industries worth ${w(c.reach)} of the fund. ${c.headline || c.why || ""}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${r.risk} (${[r.likelihood, r.impact].filter(Boolean).join("/")})`).join("; ")}.` : ""}${c.deps?.length ? ` Depends on: ${c.deps.map((d) => `${d.input} (${d.criticality})`).join("; ")}.` : ""}${c.freeze ? ` If trade froze: ${c.freeze}` : ""}${c.exposed_held.length ? ` Holdings named most exposed: ${c.exposed_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
+      ...A.trade.map((c) => `[${c.id}] ${c.country}: ${c.importance} importance, ${c.stance}, threat ${c.threat || "n/a"}; its industries' revenue there about ${pc(c.rev)}${c.rev_est ? " (partly estimates)" : ""}, named by industries worth ${w(c.reach)} of the fund. ${c.headline ? cw(c.headline, 200) : cw(c.why, 180)}${c.risks?.length ? ` Risks: ${c.risks.map((r) => `${cw(r.risk, 110)} (${[r.likelihood, r.impact].filter(Boolean).join("/")})`).join("; ")}.` : ""}${c.deps?.length ? ` Depends on: ${c.deps.map((d) => `${cw(d.input, 70)} (${d.criticality})`).join("; ")}.` : ""}${c.freeze ? ` If trade froze: ${cw(c.freeze, 200)}` : ""}${c.exposed_held.length ? ` Holdings named most exposed: ${c.exposed_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
     const reg = [`## REGULATION, FROM ITS INDUSTRIES' RULE BOOKS AND LEGAL REPORTS`, `Regulatory verdicts by fund weight: ${mix(A.reg_mix)}. ${A.regVerdicts.slice(0, nInd).map((v) => `${v.industry} (${pc(v.weight)}): ${v.stance}${v.intensity ? `, ${v.intensity}` : ""}. ${v.headline || ""}`).join(" | ")}`,
-      ...A.rules.map((r) => `[${r.id}] ${r.name} (${r.body}; ${r.severity}, ${String(r.status).replace(/_/g, " ")}${r.effective ? `, effective ${r.effective}` : ""}): reaches ${w(r.reach)} of the fund (${r.industries.slice(0, Math.max(5, nInd)).map((x) => x.industry).join(", ")}). ${r.bottom_line || r.impact || ""}${r.numeric ? ` Numbers: ${r.numeric}` : ""}${r.next12 ? ` Next 12 months: ${r.next12}` : ""}${r.named_held.length ? ` Names holdings: ${r.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`),
-      ...A.items.map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status}${x.date ? `, ${x.date}` : ""}${x.direction ? `, ${x.direction}` : ""}): reaches ${w(x.reach)} of the fund. ${x.text || ""}${x.next ? ` Next: ${x.next}` : ""}${x.named_held.length ? ` Names holdings: ${x.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
+      ...A.rules.map((r) => `[${r.id}] ${r.name} (${r.body}; ${r.severity}, ${String(r.status).replace(/_/g, " ")}${r.effective ? `, effective ${r.effective}` : ""}): reaches ${w(r.reach)} of the fund (${r.industries.slice(0, Math.max(5, nInd)).map((x) => x.industry).join(", ")}). ${r.bottom_line ? cw(r.bottom_line, 260) : cw(r.impact, 200)}${r.numeric ? ` Numbers: ${cw(r.numeric, 130)}` : ""}${r.next12 ? ` Next 12 months: ${cw(r.next12, 160)}` : ""}${r.named_held.length ? ` Names holdings: ${r.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`),
+      ...A.items.map((x) => `[${x.id}] ${x.kind}: ${x.title} (${x.status}${x.date ? `, ${x.date}` : ""}${x.direction ? `, ${x.direction}` : ""}): reaches ${w(x.reach)} of the fund. ${cw(x.text, 280)}${x.next ? ` Next: ${cw(x.next, 140)}` : ""}${x.named_held.length ? ` Names holdings: ${x.named_held.map((h) => `${h.symbol} ${pc(h.weight)}`).join(", ")}.` : ""}`)].join("\n");
     return { macro, world, trade, reg };
   }
 
@@ -13855,7 +13860,7 @@ Return ONLY a JSON object:
  "investors": {"income": {"pick": "...", "runner_up": "...", "why": "2-3 sentences with numbers", "avoid": "which to avoid for this investor and why, one sentence"}, "conservative": {...}, "growth": {...}, "aggressive": {...}},
  "horizons": {"1M": {"pick": "...", "why": "one or two sentences"}, "3M": {...}, "6M": {...}, "12M": {...}},
  "dimensions": [{"key": "one of ${GROUP_KEYS.join(", ")}, plus \"events\" (what's ahead) and \"macro\" (the macro backdrop)", "pick": "...", "why": "two sentences with the numbers"}] (every dimension where at least two of them have data),
- "names": {"${syms[0]}": {"verdict": "buy | accumulate | hold | trim | avoid", "entry": "when or at what price to buy, tied to the price levels or a dated event", "role": "the job it does in a portfolio, one sentence", "edge": "its single biggest advantage over the others, with a number", "strengths": ["3-5 short points with numbers"], "weaknesses": ["3-5 short points with numbers"], "bull": "the bull case in 1-2 sentences", "bear": "the bear case in 1-2 sentences", "watch": ["2-4 things or dates to watch"], "changes_mind": "what would change the verdict"}, ...one entry per ticker},
+ "names": {"${syms[0]}": {"thesis": "one sentence, like the headline of an analyst's note on it: the investment case, what it hinges on and a number (for a name with no written analysis in the dossier, this is its only summary, so make it count)", "verdict": "buy | accumulate | hold | trim | avoid", "entry": "when or at what price to buy, tied to the price levels or a dated event", "role": "the job it does in a portfolio, one sentence", "edge": "its single biggest advantage over the others, with a number", "strengths": ["3-5 short points with numbers"], "weaknesses": ["3-5 short points with numbers"], "bull": "the bull case in 1-2 sentences", "bear": "the bear case in 1-2 sentences", "watch": ["2-4 things or dates to watch"], "changes_mind": "what would change the verdict"}, ...one entry per ticker},
  "together": {"pairing": "2-3 sentences: do they belong together (correlation, overlap, what each adds)?", "mix": {"${syms[0]}": 50, ...} (a suggested split for a balanced investor who wants to own some of these; whole percents summing to 100; 0 to leave one out)},
  "risks": ["3-5 risks that cut across the comparison"],
  "bottom_line": "3-4 sentences: what to do, for whom, and when to revisit"}`;
@@ -14172,7 +14177,7 @@ Return ONLY a JSON object:
     o.dimensions = (Array.isArray(raw.dimensions) ? raw.dimensions : []).filter((d) => (GROUPS[d?.key] || d?.key === "events" || d?.key === "macro") && pick(d.pick)).map((d) => ({ key: d.key, pick: pick(d.pick), why: str(d.why, 600) }));
     o.names = {};
     for (const s of syms) { const x = raw.names?.[s] || raw.names?.[s.toLowerCase()] || {};
-      o.names[s] = { verdict: LV.includes(x.verdict) ? x.verdict : null, entry: str(x.entry, 300), role: str(x.role, 300), edge: str(x.edge, 300), strengths: arr(x.strengths), weaknesses: arr(x.weaknesses), bull: str(x.bull, 500), bear: str(x.bear, 500), watch: arr(x.watch, 4, 200), changes_mind: str(x.changes_mind, 400) }; }
+      o.names[s] = { thesis: str(x.thesis, 400), verdict: LV.includes(x.verdict) ? x.verdict : null, entry: str(x.entry, 300), role: str(x.role, 300), edge: str(x.edge, 300), strengths: arr(x.strengths), weaknesses: arr(x.weaknesses), bull: str(x.bull, 500), bear: str(x.bear, 500), watch: arr(x.watch, 4, 200), changes_mind: str(x.changes_mind, 400) }; }
     const mix = {}; let tot = 0; for (const s of syms) { const v = Math.max(0, Math.round(n(raw.together?.mix?.[s]) || 0)); mix[s] = v; tot += v; }
     if (tot > 0) for (const s of syms) mix[s] = Math.round((mix[s] * 100) / tot);
     o.together = { pairing: str(raw.together?.pairing, 700), mix: tot > 0 ? mix : null };
@@ -19183,7 +19188,7 @@ Return ONLY a JSON object:
       const sl = bySlugName.get(lc(name));
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
-        if (c && c.saved_at === r.saved_at && c.dg?.v === 7) { out[lc(name)] = c.dg; continue; }
+        if (c && c.saved_at === r.saved_at && c.dg?.v === 8) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
         const rec = await runGet(sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
@@ -21406,7 +21411,7 @@ Return ONLY a JSON object:
   const ghId = (kind, sym) => (kind === "company" ? "co-" : "fd-") + String(sym).toUpperCase().replace(/[^A-Z0-9]/g, "_").slice(0, 60);
   const ghCan = async () => !JOB && !!PF_TRIGGER && !!S.mcp && !!(await outlookDb().catch(() => null));
   const ghOpen = (kind, sym) => (kind === "company" ? (S.co?.sym === sym ? S.co : null) : S.fund?.sym === sym ? S.fund : null);
-  const ghRender = (kind) => (kind === "company" ? S.co && renderCompany() : S.fund && renderFund());
+  const ghRender = (kind) => { if (kind === "company" ? S.co : S.fund) kind === "company" ? renderCompany() : renderFund(); if (S.tab === "compare" && S.cmp?.an) renderCompare(); };
   /** Start the analysis on GitHub. False when it can't (the caller then writes it here). */
   async function ghStart(kind, sym) {
     if (!(await ghCan())) return false;
@@ -21448,6 +21453,7 @@ Return ONLY a JSON object:
       const key = (kind === "company" ? "co:" : rec.bond ? "bondFull:" : "fundFull:") + sym, have = await idbGet(key).catch(() => null);
       if (have?.at && rec.at && have.at > rec.at) return; // what's here is newer (written here since)
       rec.via = "github"; rec.run_url = x.run_url || null; await idbPut(key, jsonSafe(rec)).catch(() => {});
+      try { cmpSavedIn(kind, String(sym).toUpperCase(), rec); } catch (e) { console.warn("compare saved in", e); }
       if (kind === "company") { if (rec.outlook) await saveOutlook("co_outlooks", sym, { sym, name: rec.name, industry: rec.industry, outlook: rec.outlook, history: rec.outlook_history || [] });
         const co = ghOpen(kind, sym); if (co) { co.thesis = rec; co.idx = rec.idx || co.idx; co.thesisErr = null; co.ghRun = null; renderCompany(); coTrack(co).catch(() => {}); } }
       else { const fd = ghOpen(kind, sym); if (fd) { if (rec.bond) fd.bondFull = rec; else { fd.full = rec; fd.fullWhy = []; } fd.fullErr = null; fd.ghRun = null; renderFund(); } }
@@ -22050,6 +22056,8 @@ Return ONLY a JSON object:
         kind = eodK === "fund" || fmpK === "fund" ? "fund" : fmpK || eodK; }
       if (!kind) { try { await fundRaw(sym); kind = "fund"; } catch { throw new Error(`neither FMP nor EODHD knows ${sym}`); } }
       x.s = kind === "fund" ? await cmpFund(sym, step) : await cmpStock(sym, ci, info, step);
+      // No written analysis yet: watch for one being written on GitHub (it comes into the line-up by itself).
+      if (!x.s.saved) ghCan().then((ok) => ok && ghWatch(kind === "fund" ? "fund" : "company", sym)).catch(() => {});
       if (!x.s.ser?.dates?.length) throw new Error(`no price history for ${sym}`);
       x.stage = "ready";
     } catch (e) { x.stage = "error"; x.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
@@ -22131,6 +22139,24 @@ Return ONLY a JSON object:
     c.err = "Open this page in Claude to run the comparison."; renderCompare();
   }
   /** The verdict written here: one Claude call (the Compare button without GitHub, and the GitHub job itself). */
+  /** A name's written analysis being written on GitHub right now (a company or fund request, queued or running). */
+  function cmpWriting(s) {
+    const x = S.ghJobs?.[ghId(s.kind === "fund" ? "fund" : "company", s.sym)], age = Date.now() - Date.parse(x?.started_at || x?.requested_at || 0);
+    return (x?.state === "queued" && age < 15 * 60000) || (x?.state === "running" && age < 3 * 3600000);
+  }
+  /** Write the missing company or fund analyses on GitHub ("*": every name in the line-up without one). */
+  async function cmpWrite(sym) {
+    const c = S.cmp, subs = (c?.an?.subs || []).filter((s) => (sym === "*" ? !s.saved : s.sym === sym) && !cmpWriting(s)); if (!subs.length) return;
+    if (!(await ghCan())) { c.note = "Writing an analysis needs GitHub: open it in the Companies or Funds tab to write it here instead."; renderCompare(); return; }
+    const started = []; for (const s of subs) if (await ghStart(s.kind === "fund" ? "fund" : "company", s.sym)) started.push(s.sym);
+    c.note = started.length ? `Writing ${started.join(", ")} on GitHub. It comes in here by itself; then press Compare again to use it.` : "GitHub didn't start it; try again in a minute.";
+    renderCompare();
+  }
+  /** A written analysis that just came in from GitHub: the line-up shows it, and the next Compare reads it. */
+  function cmpSavedIn(kind, sym, rec) {
+    const c = S.cmp, x = c?.subj?.[sym]; if (!x?.s) return;
+    x.s.saved = cmpSavedView(kind, rec); c.note = `${sym}'s written analysis is in. Press Compare to use it in the verdict.`; cmpRefresh();
+  }
   /**
    * Every ticker's industries' macro tables, world situations, trade maps and regulation as one text for the macro desk:
    * each indicator, situation, country and rule once, with every industry's read of it, instead of one copy per ticker
@@ -22285,14 +22311,16 @@ Return ONLY a JSON object:
       ${v?.bottom_line ? `<div class="coread"><span class="eyebrow">Bottom line</span><p>${esc(v.bottom_line)}</p></div>` : ""}${checks}`);
 
     // ---- the line-up
+    const missing = subs.filter((s) => !s.saved && !cmpWriting(s));
     const lineup = sec("cmp-lineup", "The line-up", "what each one is, and what the comparison reads for it", `<div class="cx-cards">${subs.map((s) => { const n0 = v?.names?.[s.sym] || {}, sv = s.saved;
       return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym, true)}<div style="min-width:0"><div class="cx-name ellip">${esc(s.name)}</div><div class="small muted ellip">${esc(s.kind === "fund" ? "Fund · " + s.sub : s.sub || "Stock")}</div></div></div>
         <div class="cx-px"><b class="mono">${isNum(s.px) ? fix(s.px, 2) : "—"}</b> <span class="${cls(s.chg)} small mono">${isNum(s.chg) ? pct(s.chg, true, 2) : ""}</span><span class="small muted" style="margin-left:auto">${s.kind === "fund" ? "assets" : "market cap"} ${cap(s.m.mcap)}</span></div>
         ${n0.verdict || n0.role ? `<div class="small">${n0.verdict ? `<span class="pill ${CMP_VERD[n0.verdict]}">${esc(n0.verdict)}</span> ` : ""}${esc(n0.role || "")}</div>` : ""}
-        <div class="cx-src">${sv ? `<span class="cx-badge on">${s.kind === "fund" ? "Fund" : "Company"} analysis · ${sv.via === "github" ? "GitHub" : "here"} · ${esc(ago(sv.at))}</span>` : `<span class="cx-badge">No written analysis yet</span>`}
+        <div class="cx-src">${sv ? `<span class="cx-badge on">${s.kind === "fund" ? "Fund" : "Company"} analysis · ${sv.via === "github" ? "GitHub" : "here"} · ${esc(ago(sv.at))}</span>` : cmpWriting(s) ? `<span class="cx-badge warn"><span class="pf-dot" style="display:inline-block;width:7px;height:7px;margin-right:5px"></span>Writing its ${s.kind === "fund" ? "fund" : "company"} analysis on GitHub</span>` : `<span class="cx-badge">No written analysis yet</span> <button class="chip" data-cmp-write="${esc(s.sym)}" title="Writes the full ${s.kind === "fund" ? "fund" : "company"} analysis on GitHub (a few minutes); the next comparison reads it">Write it</button>`}
           ${s.kind === "stock" ? (s.hasRun ? `<span class="cx-badge on">Industry report · ${esc(s.ind?.name || "")}${s.ind?.saved_at ? ` · ${esc(fmtShort(s.ind.saved_at))}` : ""}</span>` : `<span class="cx-badge">Industry not analyzed yet</span>`) : `<span class="cx-badge on">Look-through · ${pct(s.m.coverage, false, 0)} covered</span>`}
           ${s.outlook ? `<span class="cx-badge">Calls: ${esc(s.outlook.source)}</span>` : ""}</div>
-        ${sv?.headline ? `<div class="small cx-quote">${esc(stripCites(sv.headline))}</div>` : ""}</div>`; }).join("")}</div>`);
+        ${sv?.headline ? `<div class="small cx-quote">${esc(stripCites(sv.headline))}</div>` : n0.thesis ? `<div class="small cx-quote">${esc(stripCites(n0.thesis))} <span class="muted">(from this comparison)</span></div>` : ""}</div>`; }).join("")}</div>
+      ${missing.length > 1 ? `<div class="small muted">${missing.map((x) => esc(x.sym)).join(", ")} have no written analysis: the comparison reads their numbers, their industry reports and Wall Street on them. <button class="chip" data-cmp-write="*">Write all ${missing.length}</button></div>` : missing.length ? `<div class="small muted">${esc(missing[0].sym)} has no written analysis: the comparison reads its numbers, its industry report and Wall Street on it. "Write it" adds the full analysis, which the next comparison reads.</div>` : ""}`);
 
     // ---- by investor
     const inv = sec("cmp-investors", "Which one, for which investor", "the verdict's pick, with code's fit score for each (0-100)", `<div class="cx-inv">${Compare.TYPES.map((t) => { const x = v?.investors?.[t], R = fit[t], pick = x?.pick || R.ranked[0];
@@ -22391,7 +22419,7 @@ Return ONLY a JSON object:
         <div class="cx-mi-n">${chgChip("1M", x.chg_1m)}${chgChip("3M", x.chg_3m)}${chgChip("1Y", x.chg_1y)}${x.date || x.period ? `<span class="small muted mono">${esc(x.date || x.period)}</span>` : ""}</div>
         ${e0 ? `<div class="small cx-eod"><span class="pill neu">EODHD</span> ${e0.past ? `${esc(e0.past.type)} ${esc(e0.past.period)}: <b>${ev0(e0.past, "actual")}</b> vs est ${ev0(e0.past, "estimate")}, prev ${ev0(e0.past, "previous")} ${surpr(e0.past)}` : ""}${e0.next ? `${e0.past ? " · " : ""}next ${esc(fmtShort(e0.next.date))}${isNum(e0.next.estimate) ? ` (est ${ev0(e0.next, "estimate")})` : ""}` : ""}</div>` : ""}
         <div class="cx-mi-inl">${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return p0 || (dd && dd !== "neutral") ? `<span>${cmpTick(k)} ${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}">${esc(p0.effect || "—")}</span>` : ""}${dd && dd !== "neutral" ? ` <span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span>` : ""}</span>` : ""; }).join("")}</div>
-        ${x.driver ? `<div class="small muted cx-mi-d">${esc(trimC(stripCites(x.driver), 170))}</div>` : ""}${x.next ? `<div class="small cx-mi-d"><span class="muted">Next:</span> ${esc(trimC(stripCites(x.next), 130))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
+        ${x.driver ? `<div class="small muted cx-mi-d">${esc(stripCites(x.driver))}</div>` : ""}${x.next ? `<div class="small cx-mi-d"><span class="muted">Next:</span> ${esc(stripCites(x.next))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
         ${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<td class="cx-mi-t">${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}" title="${esc(`${p0.relevance || ""} relevance${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "—")}</span>${p0.relevance ? `<div class="small muted">${esc(p0.relevance)}</div>` : ""}` : `<span class="small muted">—</span>`}${dd && dd !== "neutral" ? `<div class="small"><span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("");
     // The calendar itself: what's been released lately against consensus, and what's scheduled next.
     const ePast = ECON.filter((x) => x.date < today() && isNum(x.actual)).slice(-18).reverse(), eNext = ECON.filter((x) => x.date >= today()).slice(0, 18);
@@ -22400,11 +22428,11 @@ Return ONLY a JSON object:
       ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>` : "";
     const macroInd = MA.indicators.length || econT ? sec("cmp-macroind", "Macro indicators", `${MA.indicators.length ? `the full macro tables of their industry reports (${MA.indicators.length} indicators) with each ticker's read, ` : ""}live US releases from EODHD`,
       `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
-      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call${subs.some((s0) => s0.bond) ? " (a bond fund: its rate and inflation read)" : ""}</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${r.bond ? ` <span class="muted">read by code through its duration</span>` : subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing|support/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(trimC(stripCites(r.headline || r.summary), 260))}</div>`).join("")}</div>` : ""}
+      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call${subs.some((s0) => s0.bond) ? " (a bond fund: its rate and inflation read)" : ""}</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${r.bond ? ` <span class="muted">read by code through its duration</span>` : subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing|support/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(stripCites(r.headline || r.summary))}</div>`).join("")}</div>` : ""}
       ${MA.indicators.length ? `<div class="tbl-wrap cx-mi"><table><thead><tr><th>Indicator · latest · change</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>` : `<div class="small muted">None of these tickers has an analyzed industry with a macro table yet.</div>`}
       ${econT}
-      ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(trimC(stripCites(m0.move), 160))}${m0.driver ? ` <span class="muted">Driver: ${esc(trimC(stripCites(m0.driver), 160))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(trimC(stripCites(m0.so_what), 160))}</span>` : ""}</div>`).join("")}</div>` : ""}
-      ${MA.flips.length ? `<h3>What would flip their macro calls</h3><ul class="memo-pts">${MA.flips.map((f0) => `<li class="small">${cmpTick(f0.sym)} <b>${esc(trimC(stripCites(f0.trigger), 140))}</b> — ${esc(trimC(stripCites(f0.mechanism), 180))}</li>`).join("")}</ul>` : ""}
+      ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(stripCites(m0.move))}${m0.driver ? ` <span class="muted">Driver: ${esc(stripCites(m0.driver))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(stripCites(m0.so_what))}</span>` : ""}</div>`).join("")}</div>` : ""}
+      ${MA.flips.length ? `<h3>What would flip their macro calls</h3><ul class="memo-pts">${MA.flips.map((f0) => `<li class="small">${cmpTick(f0.sym)} <b>${esc(stripCites(f0.trigger))}</b> — ${esc(stripCites(f0.mechanism))}</li>`).join("")}</ul>` : ""}
       <div class="small muted">Rows come from the macro tables of the industry reports behind each ticker (a fund's industries at its weights); a headwind or tailwind is that industry's own read of the indicator, faded when it matters less; "desk" is the macro desk's call on the ticker. The EODHD line is the latest official print against consensus.</div>`) : "";
 
     // ---- inside the funds: what each fund holds, the industries it's made of and their calls, and a bond fund's numbers
@@ -22428,8 +22456,8 @@ Return ONLY a JSON object:
     const worldC = MA.world.map((w) => { const d0 = dW(w.title);
       return `<div class="cx-sit"><div class="cx-evh"><b>${esc(w.title)}</b>${w.category ? `<span class="pill neu">${esc(w.category)}</span>` : ""}${w.region ? `<span class="small muted">${esc(w.region)}</span>` : ""}${w.deep ? `<span class="pill warn">deep dive</span>` : ""}</div>
         <div class="cx-imp">${syms.map((k) => { const p0 = w.per[k], dd = d0?.impact?.[k]; return `<span class="pill ${p0 ? STC(p0.stance) : "neu"}" title="${esc(dd?.why || "")}">${esc(k)} ${esc(p0?.stance || "—")}${dd && dd.direction !== "neutral" ? ` · ${IMPA[dd.direction]}` : ""}</span>`; }).join("")}</div>
-        ${w.status ? `<div class="small"><span class="muted">Status:</span> ${esc(trimC(stripCites(w.status), 200))}</div>` : ""}
-        ${d0?.outlook ? `<div class="small cx-dline"><b>Outlook:</b> ${esc(d0.outlook)}</div>` : w.near_term ? `<div class="small"><b>Near term:</b> ${esc(trimC(stripCites(w.near_term), 220))}</div>` : ""}
+        ${w.status ? `<div class="small"><span class="muted">Status:</span> ${esc(stripCites(w.status))}</div>` : ""}
+        ${d0?.outlook ? `<div class="small cx-dline"><b>Outlook:</b> ${esc(d0.outlook)}</div>` : w.near_term ? `<div class="small"><b>Near term:</b> ${esc(stripCites(w.near_term))}</div>` : ""}
         <details class="memo-more"><summary>Details, scenarios and what to watch</summary>${[["Now", w.now], ["Summary", w.summary], ["Trigger", w.trigger], ["First order", w.first_order]].filter(([, x]) => x).map(([l, x]) => `<p class="small"><b>${l}:</b> ${esc(stripCites(x))}</p>`).join("")}
           ${w.scenarios?.length ? `<div class="small"><b>Scenarios:</b><ul class="memo-pts">${w.scenarios.map((c0) => `<li>${esc(c0.name || "")}${isNum(num(c0.probability)) ? ` <b>${c0.probability}%</b>` : ""}${c0.outcome ? `: ${esc(stripCites(c0.outcome))}` : ""}</li>`).join("")}</ul></div>` : ""}
           ${w.watch?.length ? `<div class="small"><b>Watch:</b> ${esc(w.watch.map((x) => typeof x === "string" ? x : `${x.indicator || ""}${x.signal ? ": " + x.signal : ""}`).join(" · "))}</div>` : ""}
@@ -22437,11 +22465,11 @@ Return ONLY a JSON object:
           ${syms.filter((k) => d0?.impact?.[k]?.why).map((k) => `<div class="small">${cmpTick(k)} ${esc(d0.impact[k].why)}</div>`).join("")}</details></div>`; }).join("");
     const dT = (c) => (MD?.trade || []).find((x) => x.country.toLowerCase() === String(c).toLowerCase());
     const tradeT = MA.trade.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th>Importance</th><th>Threat</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.trade.map((c0) => { const d0 = dT(c0.country);
-        return `<tr><td class="wr"><b>${esc(c0.country)}</b>${c0.alliance ? ` <span class="small muted">${esc(c0.alliance)}</span>` : ""}${d0?.read ? `<div class="small cx-dline">${esc(d0.read)}</div>` : c0.headline ? `<div class="small muted">${esc(trimC(stripCites(c0.headline), 200))}</div>` : ""}</td><td class="small">${esc(c0.importance || "—")}</td><td><span class="pill ${/high|severe|critical/i.test(c0.threat) ? "neg" : /medium|moderate/i.test(c0.threat) ? "warn" : "neu"}">${esc(c0.threat || "—")}</span></td>
+        return `<tr><td class="wr"><b>${esc(c0.country)}</b>${c0.alliance ? ` <span class="small muted">${esc(c0.alliance)}</span>` : ""}${d0?.read ? `<div class="small cx-dline">${esc(d0.read)}</div>` : c0.headline ? `<div class="small muted">${esc(stripCites(c0.headline))}</div>` : ""}</td><td class="small">${esc(c0.importance || "—")}</td><td><span class="pill ${/high|severe|critical/i.test(c0.threat) ? "neg" : /medium|moderate/i.test(c0.threat) ? "warn" : "neu"}">${esc(c0.threat || "—")}</span></td>
           ${syms.map((k) => { const p0 = c0.per[k], dd = d0?.impact?.[k]; return `<td class="small">${p0 ? `${isNum(p0.rev) ? `<b>${pct(p0.rev, false, 1)}</b>${p0.est ? " est." : ""} of revenue` : "—"}<div><span class="pill ${STC(p0.stance)}">${esc(p0.stance || "—")}</span></div>` : `<span class="muted">—</span>`}${dd && dd.direction !== "neutral" ? `<div title="${esc(dd.why)}"><span class="pill ${IMPC[dd.direction]}">desk ${IMPA[dd.direction]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("")}</tbody></table></div>` : "";
     const regL = MA.rules.length || MA.items.length || MD?.regulation?.length ? `${MD?.regulation?.length ? `<div class="cx-cards">${MD.regulation.map((r0) => `<div class="box small"><b>${esc(r0.item)}</b>${r0.status ? ` <span class="muted">${esc(r0.status)}</span>` : ""}${chips(Object.fromEntries(syms.map((k) => [k, r0.impact[k]?.direction])))}${syms.filter((k) => r0.impact[k]?.why).map((k) => `<div>${cmpTick(k)} ${esc(r0.impact[k].why)}</div>`).join("")}</div>`).join("")}</div>` : ""}
-      ${MA.rules.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Rule</th><th>Status</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.rules.map((r0) => `<tr><td class="wr"><b>${esc(r0.body ? r0.body + ": " : "")}${esc(r0.name)}</b>${r0.bottom_line ? `<div class="small muted">${esc(trimC(stripCites(r0.bottom_line), 220))}</div>` : ""}</td><td class="small">${esc(r0.status || "")}${r0.effective ? ` · ${esc(r0.effective)}` : ""}</td>${syms.map((k) => `<td>${r0.per[k] ? `<span class="pill ${/crit|high/i.test(r0.per[k].severity) ? "neg" : /med/i.test(r0.per[k].severity) ? "warn" : "neu"}">${esc(r0.per[k].severity || "applies")}</span>` : `<span class="small muted">—</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
-      ${MA.items.length ? `<ul class="memo-pts">${MA.items.map((x) => `<li class="small"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.status ? ` (${esc(x.status)}${x.date ? ", " + esc(x.date) : ""})` : ""} ${syms.filter((k) => x.per[k]).map((k) => `${cmpTick(k)}${x.per[k].direction ? ` <span class="${/pos|favor|tail/i.test(x.per[k].direction) ? "pos-t" : /neg|advers|head/i.test(x.per[k].direction) ? "neg-t" : "muted"}">${esc(x.per[k].direction)}</span>` : ""}`).join(" ")}${x.next ? `<div class="muted">Next: ${esc(trimC(stripCites(x.next), 160))}</div>` : ""}</li>`).join("")}</ul>` : ""}` : "";
+      ${MA.rules.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Rule</th><th>Status</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.rules.map((r0) => `<tr><td class="wr"><b>${esc(r0.body ? r0.body + ": " : "")}${esc(r0.name)}</b>${r0.bottom_line ? `<div class="small muted">${esc(stripCites(r0.bottom_line))}</div>` : ""}</td><td class="small">${esc(r0.status || "")}${r0.effective ? ` · ${esc(r0.effective)}` : ""}</td>${syms.map((k) => `<td>${r0.per[k] ? `<span class="pill ${/crit|high/i.test(r0.per[k].severity) ? "neg" : /med/i.test(r0.per[k].severity) ? "warn" : "neu"}">${esc(r0.per[k].severity || "applies")}</span>` : `<span class="small muted">—</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+      ${MA.items.length ? `<ul class="memo-pts">${MA.items.map((x) => `<li class="small"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.status ? ` (${esc(x.status)}${x.date ? ", " + esc(x.date) : ""})` : ""} ${syms.filter((k) => x.per[k]).map((k) => `${cmpTick(k)}${x.per[k].direction ? ` <span class="${/pos|favor|tail/i.test(x.per[k].direction) ? "pos-t" : /neg|advers|head/i.test(x.per[k].direction) ? "neg-t" : "muted"}">${esc(x.per[k].direction)}</span>` : ""}`).join(" ")}${x.next ? `<div class="muted">Next: ${esc(stripCites(x.next))}</div>` : ""}</li>`).join("")}</ul>` : ""}` : "";
     const affairs = worldC || tradeT || regL ? sec("cmp-affairs", "Foreign affairs", "world situations, the trade map and regulation, from their industry reports, with each ticker's exposure",
       `${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT ? `<h3>The trade map</h3>${tradeT}` : ""}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
 
@@ -22469,7 +22497,7 @@ Return ONLY a JSON object:
         <span class="eyebrow">Wall Street</span>${ratings}${tgt}${moves}
         <span class="eyebrow">News sentiment, 30 days</span>${sentBar(se.s30)}${isNum(se.s90) ? `<div class="small muted">90 days ${se.s90 > 0 ? "+" : ""}${fix(se.s90, 2)}${se.n30 ? ` · ${se.n30} articles in 30 days` : ""}</div>` : ""}
         ${isNum(s0.m.short_pct) ? `<div class="small">Short interest <b>${pct(s0.m.short_pct, false, 1)}</b></div>` : ""}
-        ${(se.heads || []).length ? `<ul class="cx-heads small">${se.heads.slice(0, 3).map((h) => `<li>${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(trimC(h.title, 110))}</a>` : esc(trimC(h.title, 110))} <span class="muted">${esc(fmtShort(h.date))}</span></li>`).join("")}</ul>` : ""}
+        ${(se.heads || []).length ? `<ul class="cx-heads small">${se.heads.slice(0, 3).map((h) => `<li>${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)} <span class="muted">${esc(fmtShort(h.date))}</span></li>`).join("")}</ul>` : ""}
         ${d0 ? `<div class="cx-dread small"><p><b>Street:</b> ${esc(d0.street)}</p><p><b>Sentiment:</b> ${esc(d0.sentiment)}</p><p><b>Positioning:</b> ${esc(d0.positioning)}</p>${d0.surprise_risk ? `<p class="muted">${esc(d0.surprise_risk)}</p>` : ""}</div>` : ""}</div>`; }).join("")}</div>
       ${SD ? `${SD.pick ? `<div class="small"><b>The desk's pick:</b> ${cmpTick(SD.pick)} ${esc(SD.why)}</div>` : ""}${SD.contrarian ? `<div class="cx-checks small"><b>Where the crowd may be wrong:</b> ${esc(SD.contrarian)}</div>` : ""}${deskBy("street")}` : `<div class="small muted">The street and sentiment desk's read comes with the verdict.</div>`}`);
 
@@ -22496,11 +22524,11 @@ Return ONLY a JSON object:
       if (dup) return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name)}</b></div><div class="small muted">Same industry report as ${cmpTick(dup)}: the comparison between them comes down to the company numbers and written analyses.</div></div>`;
       return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name || s.sub || "—")}</b></div>
         ${I.outlook?.calls ? `<div class="cx-calls">${Outlook.HZ.map((h) => { const x = I.outlook.calls[h]?.call; return `<span><span class="eyebrow">${h}</span>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</span>`; }).join("")}</div>` : ""}
-        ${I.headline ? `<p class="small">${esc(trimC(stripCites(I.headline), 320))}</p>` : ""}
-        ${I.opportunity?.verdict ? `<div class="small"><span class="pill ${/yes|strong|attract/i.test(I.opportunity.verdict) ? "pos" : /no|avoid|unattract/i.test(I.opportunity.verdict) ? "neg" : "neu"}">opportunity: ${esc(I.opportunity.verdict)}</span> ${esc(trimC(stripCites(I.opportunity.headline || ""), 260))}</div>` : ""}
+        ${I.headline ? `<p class="small">${esc(stripCites(I.headline))}</p>` : ""}
+        ${I.opportunity?.verdict ? `<div class="small"><span class="pill ${/yes|strong|attract/i.test(I.opportunity.verdict) ? "pos" : /no|avoid|unattract/i.test(I.opportunity.verdict) ? "neg" : "neu"}">opportunity: ${esc(I.opportunity.verdict)}</span> ${esc(stripCites(I.opportunity.headline || ""))}</div>` : ""}
         ${(I.mix || []).length ? `<div class="cx-mix">${I.mix.slice(0, 6).map((x) => `<div class="cx-brow"><span class="small ellip">${esc(x.industry)}</span><div class="cx-track"><i style="width:${Math.min(100, x.weight * 250)}%;background:${cmpColor(s.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span>${x.call ? `<span class="pill ${CALLC(x.call)}" style="font-size:10.5px">${esc(x.call)}</span>` : ""}</div>`).join("")}</div>` : ""}
-        ${I.risks?.length ? `<div class="small"><b>Risks:</b> ${esc(I.risks.slice(0, 2).map((x) => trimC(stripCites(x), 170)).join(" · "))}</div>` : ""}
-        ${I.catalysts?.length ? `<div class="small"><b>Catalysts:</b> ${esc(I.catalysts.slice(0, 2).map((x) => trimC(stripCites(x), 170)).join(" · "))}</div>` : ""}
+        ${I.risks?.length ? `<div class="small"><b>Risks:</b> ${esc(I.risks.slice(0, 2).map((x) => stripCites(x)).join(" · "))}</div>` : ""}
+        ${I.catalysts?.length ? `<div class="small"><b>Catalysts:</b> ${esc(I.catalysts.slice(0, 2).map((x) => stripCites(x)).join(" · "))}</div>` : ""}
         ${!I.headline && !(I.mix || []).length ? `<div class="small muted">${s.kind === "stock" ? "Its industry hasn't been analyzed yet: the comparison uses its own numbers." : "None of its industries have been analyzed yet."}</div>` : ""}</div>`; }).join("")}</div>`);
 
     // ---- owning them together
@@ -23775,6 +23803,7 @@ Return ONLY a JSON object:
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
     if (t.dataset.cmpRun) { cmpRun(); return; }
+    if (t.dataset.cmpWrite) { cmpWrite(t.dataset.cmpWrite); return; }
     if (t.dataset.cmpDel) { cmpDel(t.dataset.cmpDel); return; }
     if (t.dataset.cmpQuick) { cmpAdd(t.dataset.cmpQuick); return; }
     if (t.dataset.cmpPeriod) { if (S.cmp) { S.cmp.period = t.dataset.cmpPeriod; renderCompare(); } return; }
