@@ -22,7 +22,7 @@
 # Sectors run side by side (DAILY_PARALLEL at once, default 4, started a minute apart so data pulls don't all hit
 # FMP together); inside each sector, several industries are refreshed at once.
 name: Daily update
-run-name: ${{ inputs.repair && 'Repair (every missing or cut-short part)' || inputs.refresh && 'After the repair, the strategist checks every repaired industry' || inputs.windows && 'Times like this (every industry, every window)' || inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
+run-name: ${{ inputs.repair && inputs.refresh && 'Rule books checked again, replaced and added to' || inputs.repair && 'Repair (every missing or cut-short part)' || inputs.refresh && 'After the repair, the strategist checks every repaired industry' || inputs.windows && 'Times like this (every industry, every window)' || inputs.lean_missing && 'Calls pass (1M-12M calls for every industry missing them)' || inputs.lean && 'The outlook (every industry, from every component)' || inputs.backfill && 'History pass (Times like this, calls re-graded)' || 'Daily update' }}
 
 on:
   workflow_dispatch:

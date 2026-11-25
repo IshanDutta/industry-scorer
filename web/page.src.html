@@ -3814,6 +3814,73 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   }
 
 
+  /**
+   * Rule books made fuller without rebuilding (GitHub, Daily update with repair=true and refresh=true; RbFix in
+   * web/rbfix.js): every claim the fact-check removed is checked again against a wider pack (the industry's company
+   * table and calendar, its matching news and call quotes, and for US federal agencies the Federal Register and the
+   * eCFR); what still can't be supported is rewritten on the same point from what the sources say; each rule gets up to
+   * 3 new sourced facts; every new sentence is fact-checked.
+   */
+  const httpCache = new Map();
+  async function httpJson(url) {
+    if (httpCache.has(url)) return httpCache.get(url);
+    const p = (async () => {
+      try {
+        if (window.__job_http) { const r = await window.__job_http(url); return r?.status === 200 && r.text ? JSON.parse(r.text) : null; }
+        const r = await fetch(url); return r.ok ? await r.json() : null;
+      } catch { return null; }
+    })();
+    httpCache.set(url, p); return p;
+  }
+  async function runRulebookPass(sector, { names = null, concurrency = 4 } = {}) {
+    if (busy() || !S.sample) return;
+    const dr = S.dailyRun = { sector, phase: "rulebooks", label: "Rule books: checking again, replacing and adding", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), repair: true };
+    const tot = { books: 0, restored: 0, replaced: 0, added: 0, removedBefore: 0, removedAfter: 0, frDocs: 0 };
+    try {
+      const rec = await secGet(sector);
+      const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
+      dr.of = list.length;
+      const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "quick", cache: false, retryCut: true }; if (JOB) opts.jobStep = step; return await sampleJson(prompt, opts); };
+      await pool(list, Math.max(1, concurrency), async (name) => {
+        if (JOB && S.jobStopped) return;
+        const sl = slug(name); dr.working.add(name);
+        try {
+          if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
+          const d = S.industries[sl]; if (!d) throw new Error("no industry data");
+          let nD = 0, nF = 0; const idD = () => "DA" + ++nD, idF = () => "FR" + ++nF;
+          const data = RbFix.dataItems(Team.companiesBlock(d, 30), S.agents[sl]?.calendar, idD);
+          const news = [...(S.research[sl]?.items || []), ...(S.tx[sl]?.items || []).map((t) => ({ ...t, title: t.title || `${t.symbol} ${t.period || ""} earnings call`, source: t.source || "earnings call" }))];
+          const keys = Object.keys(S.regbooks).filter((k) => k.startsWith(sl + "--") && S.regbooks[k]?.book?.rules?.length);
+          let changed = 0;
+          await pool(keys, 8, async (key) => {
+            const doc = S.regbooks[key], removed = (doc.checks || []).filter((c) => c.label === "unsupported");
+            tot.books++; tot.removedBefore += removed.length;
+            // The regulator's own documents, for US federal agencies: each rule's Federal Register documents and its eCFR part.
+            const fr = [];
+            if (RbFix.isUS(doc.body)) for (const r of (doc.book.rules || []).slice(0, 5)) {
+              const j = await httpJson(RbFix.frUrl(r, doc.body)); fr.push(...RbFix.frItems(j, idF).slice(0, 3));
+              for (const ref of RbFix.cfrRefs(`${r.citation || ""} ${r.what_this_is || ""}`).slice(0, 1)) { const e = await httpJson(RbFix.ecfrUrl(ref, r)); fr.push(...RbFix.ecfrItems(e, ref, idF).slice(0, 2)); }
+            }
+            tot.frDocs += fr.length;
+            const near = RbFix.related(news, removed, 16).filter((it) => !(doc.sources || []).some((x) => x.id === it.id));
+            const items = [...data, ...fr, ...near];
+            const out = await RbFix.enrich(doc, items, {
+              check: (p) => call(p, `Rule books, checked again: ${name}`),
+              enrich: (p) => call(p, `Rule books, replaced and added: ${name}`),
+            }, { subject: `the ${name} industry`, body: doc.body });
+            if (!out) { tot.removedAfter += removed.length; return; }
+            tot.restored += out.restored; tot.replaced += out.replaced; tot.added += out.added; tot.removedAfter += out.doc.fact_check.removed || 0;
+            if (out.restored || out.replaced || out.added) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
+          }, null);
+          if (changed) { dr.revised.push(name); await doFlush(name); } else dr.quiet.push(name);
+        } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
+        finally { dr.done.push(name); dr.working.delete(name); dr.label = `Rule books: ${dr.done.length} of ${dr.of} industries`; dropFromMemory(name); }
+      }, null);
+      S.notices = [{ kind: "info", text: `Rule books of ${sector}: ${tot.books} rule books in ${dr.revised.length} industries made fuller. Claims the fact-check had removed: ${tot.removedBefore}; ${tot.restored} now checked against the wider sources and put back, ${tot.replaced} replaced by a sourced sentence on the same point, ${tot.removedAfter} still out. ${tot.added} new sourced facts added. ${tot.frDocs} Federal Register and eCFR documents read.${dr.failed.length ? ` Failed: ${dr.failed.join(" | ")}.` : ""}` }];
+    } catch (e) { S.notices = [...S.notices, { kind: "err", text: `The rule-book pass stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
+    finally { S.dailyRun = null; renderAll(); }
+  }
+
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
   async function runSector(sector, { fresh = false, redoGaps = false, addNew = false } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
@@ -4601,6 +4668,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
     windows: (sector, opts) => { S.jobStopped = false; runWindowsPass(sector, opts || {}); return true; },
     repair: (sector, opts) => { S.jobStopped = false; runRepairPass(sector, opts || {}); return true; },
+    rulebooks: (sector, opts) => { S.jobStopped = false; runRulebookPass(sector, opts || {}); return true; },
     repairPlan: async (name) => { if (!(await loadInto(name))) return null; const w = repairPlan(name); dropFromMemory(name); return w; },
     stop: () => { S.jobStopped = true; const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
     status: () => { const r = S.sectorRun, dr = S.dailyRun;

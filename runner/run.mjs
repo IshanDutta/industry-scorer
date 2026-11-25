@@ -102,6 +102,12 @@ async function main() {
   page.on("dialog", (d) => d.accept());
   await page.exposeFunction("__job_sample", (id, payload) => sampler.ask(id, payload));
   await page.exposeFunction("__job_cancel", (id) => sampler.cancel(id));
+  // The rule-book pass reads the regulator's own documents: the Federal Register and the eCFR (free public APIs), nothing else.
+  await page.exposeFunction("__job_http", async (url) => {
+    if (!/^https:\/\/(www\.)?(federalregister\.gov|ecfr\.gov)\//.test(String(url))) return { status: 0, text: "" };
+    try { const r = await fetch(url, { signal: AbortSignal.timeout(20000), headers: { accept: "application/json", "user-agent": "industry-scorer (GitHub Actions)" } }); return { status: r.status, text: (await r.text()).slice(0, 2e6) }; }
+    catch { return { status: 0, text: "" }; }
+  });
   // What this session has spent so far, for the daily update's budget plan.
   await page.exposeFunction("__job_spent", () => Math.round((sampler.usage.usd - sampler.usdAtStart) * 10000) / 10000);
   await page.exposeFunction("__job_mcp_list", async (server) => { try { return { value: await mcp.listTools(server) }; } catch (e) { return { error: e }; } });
@@ -142,7 +148,9 @@ async function main() {
     if (!checkpoint) { console.error(`The daily update needs the sector's last full run: pass it with --resume (the exports branch keeps it as runs/${slug(sector)}.json.gz).`); process.exit(2); }
     log(`Daily update of ${sector} (quick model ${sampler.models.quick} for triage, ${sampler.models.default} for revisions, ${sampler.mode} mode)${env.JOB_WINDOWS === "1" || env.JOB_LEAN === "1" || env.JOB_BACKFILL === "1" || env.JOB_REPAIR === "1" || env.JOB_REFRESH === "1" ? "" : ", then Times like this for every window"}${env.JOB_REFRESH === "1" ? " (after a repair: the strategist's update of every repaired industry, from the completed reports)" : ""}`);
     const onlyNames = String(env.JOB_DAILY_ONLY || "").split(";").map((x) => x.trim()).filter(Boolean);
-    if (env.JOB_REPAIR === "1") { log(`Repair of ${sector}: every industry's missing or cut-short parts written again (sections, rule books with the new fact-check, the lead analysis, the historian), by the same analysts`);
+    if (env.JOB_REPAIR === "1" && env.JOB_REFRESH === "1") { log(`Rule books of ${sector}: every claim the fact-check removed checked again against the industry's data, its news and the regulator's own documents (Federal Register, eCFR); what still can't be sourced rewritten on the same point; new sourced facts added; all by ${sampler.models.quick}`);
+      await page.evaluate(([s, c, n]) => window.__industryScorer.rulebooks(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
+    else if (env.JOB_REPAIR === "1") { log(`Repair of ${sector}: every industry's missing or cut-short parts written again (sections, rule books with the new fact-check, the lead analysis, the historian), by the same analysts`);
       await page.evaluate(([s, c, n]) => window.__industryScorer.repair(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
     else if (env.JOB_WINDOWS === "1") { log(`Times like this for ${sector}: every industry, every window (1M, 3M, 6M, 1Y, 3Y, 5Y), with the historian's notes by ${sampler.models.default}`);
       await page.evaluate(([s, c, n]) => window.__industryScorer.windows(s, { concurrency: c, ...(n.length ? { names: n } : {}) }), [sector, Number(env.JOB_DAILY_INDUSTRIES || 4), onlyNames]); }
