@@ -3852,7 +3852,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           const news = [...(S.research[sl]?.items || []), ...(S.tx[sl]?.items || []).map((t) => ({ ...t, title: t.title || `${t.symbol} ${t.period || ""} earnings call`, source: t.source || "earnings call" }))];
           const keys = Object.keys(S.regbooks).filter((k) => k.startsWith(sl + "--") && S.regbooks[k]?.book?.rules?.length);
           let changed = 0;
-          await pool(keys, 8, async (key) => {
+          await pool(keys, 3, async (key) => {
             const doc = S.regbooks[key], removed = (doc.checks || []).filter((c) => c.label === "unsupported");
             tot.books++; tot.removedBefore += removed.length;
             // The regulator's own documents, for US federal agencies: each rule's Federal Register documents and its eCFR part.
@@ -3870,7 +3870,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
             }, { subject: `the ${name} industry`, body: doc.body });
             if (!out) { tot.removedAfter += removed.length; return; }
             tot.restored += out.restored; tot.replaced += out.replaced; tot.added += out.added; tot.removedAfter += out.doc.fact_check.removed || 0;
-            if (out.restored || out.replaced || out.added) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
+            if (out.restored || out.replaced || out.added || out.scrubbed) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
           }, null);
           if (changed) { dr.revised.push(name); await doFlush(name); } else dr.quiet.push(name);
         } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }

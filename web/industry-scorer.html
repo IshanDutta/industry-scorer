@@ -16324,8 +16324,8 @@ ${items.map(srcLine).join("\n\n") || "(none)"}
 
 Do two things:
 1. REPLACE: for each sentence taken out, write one sentence on the same point that the sources do support, citing them as [ID]. If the sources show it was wrong, write the correct version. If nothing in the sources speaks to that point, return "" for it.
-2. ADD: for each rule, up to 3 facts the entry doesn't already state, taken from the sources: its legal parameters (CFR section, effective or compliance date, comment deadline, threshold, penalty), recent agency actions with their dates, or which companies in the company table it hits and how much they weigh. One plain-English sentence each, citing [ID]. A dated agency action or deadline goes in "last_12_months" (past) or "next_events" (ahead) with its date.
-Rules: every figure, date, name and action must be in a source you cite; no opinions as fact; plain English; full sentences.
+2. ADD: for each rule, up to 3 facts about THAT rule the entry doesn't already state, taken from the regulator's documents (Federal Register, eCFR) or the regulator news: its legal parameters (CFR section, effective or compliance date, comment deadline, threshold, penalty), or the agency's recent actions on it with their dates. One plain-English sentence each, citing [ID] at the end. A dated agency action or deadline goes in "last_12_months" (past) or "next_events" (ahead) with its date. Skip a rule rather than add something that isn't about the rule itself (no share-price moves, no general company results).
+Rules: write the facts themselves, never about the sources (no "the source says", "not confirmed", "[ID] shows"); citations go at the end of the sentence; every figure, date, name and action must be in a source you cite; no opinions as fact; plain English; full sentences.
 Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions": [{"rule": 1, "section": "what_this_is | industry_impact | today | next_12_months | last_12_months | next_events", "text": "...", "date": "YYYY-MM-DD or empty", "evidence": ["FR2"]}]}`;
   }
 
@@ -16341,18 +16341,48 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
     const sourced = label === "verified" || label === "corrected";
     return { label, quote: sourced ? quote : "", source: sourced ? src : "", fix: label === "corrected" ? fix : "" };
   }
+  // A sentence that talks about its sources, hedges about them, or opens with a citation isn't rule-book text; nor is a
+  // share-price move offered as a regulatory fact.
+  const META = /\bsources?\s+(?:says?|shows?|states?|indicates?|confirms?|notes?)\b|\b(?:provided|retrieved)\s+(?:text|data|sources?|documents?)\b|\bnot\s+(?:explicitly\s+)?(?:confirmed|stated|specified|mentioned|available)\b|\bno\s+source\b|^\s*\[/i;
+  const PRICE = /\bshares?\s+(?:rose|fell|gained|lost|climbed|dropped|jumped|slid|rallied)\b|\b(?:demonstrat|show)(?:es|ing)\s+(?:investor|the financial strength)\b|\bis not the (?:smallest|largest)\b/i;
+  const bad = (t, add = false) => META.test(String(t || "")) || (add && PRICE.test(String(t || "")));
   const SECTION = { what_this_is: ["what_this_is", "law"], industry_impact: ["industry_impact", "analysis"], today: ["today", "analysis"], next_12_months: ["next_12_months.analysis", "analysis"] };
+
+  /** Take back what an earlier pass added or replaced that fails the guards (its sentence or item out of the book). */
+  function scrub(doc) {
+    if (!doc?.book?.rules || !Array.isArray(doc.checks)) return { doc, n: 0 };
+    const book = JSON.parse(JSON.stringify(doc.book)); let n = 0;
+    const drop = (text) => { const t = norm(text).replace(/\s*\[[^\]]*\]\.?$/, ""); let hit = false;
+      for (const r of book.rules) {
+        for (const f of ["what_this_is", "industry_impact", "today", "bottom_line"]) { const parts = RB.sentences(r[f] || ""); const k = parts.filter((p) => !norm(p).replace(/\s*\[[^\]]*\]\.?$/, "").startsWith(t.slice(0, 60))); if (k.length !== parts.length) { r[f] = k.join(" "); hit = true; } }
+        if (r.next_12_months) { const parts = RB.sentences(r.next_12_months.analysis || ""); const k = parts.filter((p) => !norm(p).startsWith(t.slice(0, 60))); if (k.length !== parts.length) { r.next_12_months.analysis = k.join(" "); hit = true; } }
+        for (const arr of [r.last_12_months, r.next_12_months?.events, r.examples]) if (Array.isArray(arr)) for (let i = arr.length - 1; i >= 0; i--) if (norm(arr[i]?.event || arr[i]?.what).startsWith(t.slice(0, 60))) { arr.splice(i, 1); hit = true; }
+      } return hit; };
+    const checks = [];
+    for (const c of doc.checks) {
+      // Additions stand only on the regulator's documents (FR#) or the book's own regulator news (R + letter + number).
+      if (c.added && (bad(c.text, true) || !/^(?:FR\d|R[A-Z]\d)/.test(String(c.source || "")))) { drop(c.text); n++; continue; }
+      if (c.label === "corrected" && c.fix && bad(c.fix, false)) { drop(c.fix); checks.push({ ...c, label: "unsupported", fix: "", quote: "", source: "" }); n++; continue; }
+      checks.push(c);
+    }
+    if (!n) return { doc, n };
+    const sum = { checked: checks.length, verified: 0, corrected: 0, background: 0, analysis: 0, removed: 0, pending: 0 };
+    for (const c of checks) sum[c.label === "unsupported" ? "removed" : c.label]++;
+    return { doc: { ...doc, book, checks, fact_check: sum }, n };
+  }
 
   /**
    * One rule book, fuller. doc: the saved rule book doc; items: the extra sources; calls: { check(prompt), enrich(prompt) }
    * (each returns parsed JSON). Returns { doc, restored, replaced, added, checked } or null when there was nothing to do.
    */
-  async function enrich(doc, items, calls, { subject, body, max = 80 } = {}) {
-    if (!doc?.book?.rules?.length || !Array.isArray(doc.checks)) return null;
+  async function enrich(doc0, items, calls, { subject, body, max = 80 } = {}) {
+    if (!doc0?.book?.rules?.length || !Array.isArray(doc0.checks)) return null;
+    const sc = scrub(doc0), doc = sc.doc;
     const removed = doc.checks.filter((c) => c.label === "unsupported");
-    if (!removed.length && !items.length) return null;
+    if (!removed.length && !items.length) return sc.n ? { doc, restored: 0, replaced: 0, added: 0, asked: 0, scrubbed: sc.n } : null;
     const book = JSON.parse(JSON.stringify(doc.book)), where = locate(doc.raw || doc.book);
     const pool = [...(doc.sources || []), ...items], idx = Object.fromEntries(pool.map((x) => [String(x.id).toUpperCase(), x]));
+    const own = new Set((doc.sources || []).filter((x) => x.kind !== "D").map((x) => String(x.id).toUpperCase()));
     const todo = removed.slice(0, max).map((c, i) => ({ id: "U" + (i + 1), text: c.text, check: c, at: where.get(ckey(c.text)) || null })).filter((x) => x.at);
     const checks = doc.checks.map((c) => ({ ...c }));
     const byText = new Map(checks.map((c) => [ckey(c.text), c]));
@@ -16377,9 +16407,9 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
     const en = await calls.enrich(enrichPrompt({ subject, body, book, failed, items: pool })); asked++;
     const reps = Object.fromEntries((en?.replacements || []).map((r) => [String(r?.id || "").toUpperCase(), one(r?.text)]));
     const cand = [];
-    for (const x of failed) if (reps[x.id]) cand.push({ id: "R" + (cand.length + 1), kind: x.at.kind, text: reps[x.id], x });
+    for (const x of failed) if (reps[x.id] && !bad(reps[x.id]) && norm(reps[x.id]) !== norm(x.text)) cand.push({ id: "R" + (cand.length + 1), kind: x.at.kind, text: reps[x.id], x });
     for (const a of (en?.additions || []).slice(0, 18)) {
-      const r = book.rules?.[Number(a?.rule) - 1]; const text = one(a?.text); if (!r || !text) continue;
+      const r = book.rules?.[Number(a?.rule) - 1]; const text = one(a?.text); if (!r || !text || bad(text, true)) continue;
       const sec = String(a.section || "").trim(), dated = sec === "last_12_months" || sec === "next_events";
       if (!dated && !SECTION[sec]) continue;
       cand.push({ id: "R" + (cand.length + 1), kind: dated ? "event" : SECTION[sec][1], text: dated && a.date ? `${text} (${a.date})` : text, add: { rule: r, sec, dated, date: String(a.date || "").slice(0, 10), text, evidence: (a.evidence || []).map((e) => String(e).toUpperCase()).filter((e) => idx[e]) } });
@@ -16393,6 +16423,8 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
       const got = Object.fromEntries((res?.results || []).map((r) => [String(r?.id || "").toUpperCase(), r]));
       for (const c of cand) {
         const j = judge(got[c.id], c.kind, idx, c.add ? ["verified", "corrected"] : undefined); if (j.label === "unsupported") continue;
+        if (c.add && !(idx[j.source]?.kind === "F" || own.has(j.source))) continue;
+        if (j.label === "corrected" && bad(j.fix, !!c.add)) continue;
         const text = j.label === "corrected" ? j.fix : c.text;
         if (c.x) { // a replacement: shown where the old sentence was; the log keeps the old one with what replaced it
           if (put(c.x, text)) { replaced++; Object.assign(byText.get(ckey(c.x.text)) || {}, { label: "corrected", fix: text, quote: j.quote, source: j.source }); }
@@ -16410,10 +16442,10 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
     const cited = new Set(checks.map((c) => c.source).filter(Boolean)); JSON.stringify(book).replace(/\[([A-Z]{1,2}\d{1,4}(?:,\s*[A-Z]{1,2}\d{1,4})*)\]/g, (m, g) => { g.split(/,\s*/).forEach((x) => cited.add(x)); return m; });
     for (const r of book.rules || []) for (const e of [...(r.last_12_months || []), ...(r.next_12_months?.events || [])]) for (const x of e.evidence || []) cited.add(String(x).toUpperCase());
     const keepNew = items.filter((x) => cited.has(String(x.id).toUpperCase()));
-    return { doc: { ...doc, book, checks, fact_check: sum, sources: [...(doc.sources || []), ...keepNew], enriched: { date: new Date().toISOString().slice(0, 10), restored, replaced, added } }, restored, replaced, added, asked };
+    return { doc: { ...doc, book, checks, fact_check: sum, sources: [...(doc.sources || []), ...keepNew], enriched: { date: new Date().toISOString().slice(0, 10), restored, replaced, added } }, restored, replaced, added, asked, scrubbed: sc.n };
   }
 
-  const RbFix = { isUS, cfrRefs, frUrl, frItems, ecfrUrl, ecfrItems, dataItems, related, locate, putSentence, putItem, checkPrompt, enrichPrompt, judge, enrich, ckey };
+  const RbFix = { scrub, bad, isUS, cfrRefs, frUrl, frItems, ecfrUrl, ecfrItems, dataItems, related, locate, putSentence, putItem, checkPrompt, enrichPrompt, judge, enrich, ckey };
   if (typeof module !== "undefined" && module.exports) module.exports = RbFix;
   else root.RbFix = RbFix;
 })(typeof window !== "undefined" ? window : globalThis);
@@ -18549,7 +18581,7 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
           const news = [...(S.research[sl]?.items || []), ...(S.tx[sl]?.items || []).map((t) => ({ ...t, title: t.title || `${t.symbol} ${t.period || ""} earnings call`, source: t.source || "earnings call" }))];
           const keys = Object.keys(S.regbooks).filter((k) => k.startsWith(sl + "--") && S.regbooks[k]?.book?.rules?.length);
           let changed = 0;
-          await pool(keys, 8, async (key) => {
+          await pool(keys, 3, async (key) => {
             const doc = S.regbooks[key], removed = (doc.checks || []).filter((c) => c.label === "unsupported");
             tot.books++; tot.removedBefore += removed.length;
             // The regulator's own documents, for US federal agencies: each rule's Federal Register documents and its eCFR part.
@@ -18567,7 +18599,7 @@ Reply with ONLY JSON: {"replacements": [{"id": "U1", "text": "..."}], "additions
             }, { subject: `the ${name} industry`, body: doc.body });
             if (!out) { tot.removedAfter += removed.length; return; }
             tot.restored += out.restored; tot.replaced += out.replaced; tot.added += out.added; tot.removedAfter += out.doc.fact_check.removed || 0;
-            if (out.restored || out.replaced || out.added) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
+            if (out.restored || out.replaced || out.added || out.scrubbed) { S.regbooks[key] = jsonSafe({ ...out.doc, checked_at: new Date().toISOString() }); changed++; }
           }, null);
           if (changed) { dr.revised.push(name); await doFlush(name); } else dr.quiet.push(name);
         } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
