@@ -52,7 +52,7 @@ const today = "2026-10-18";
   assert.deepStrictEqual(r.last_12_months.map((e) => e.date), ["2026-03-01", "2026-05-01"], "chronological, cited, not future");
   assert.strictEqual(r.next_12_months.events.length, 1);
   assert.deepStrictEqual(r.examples.map((e) => e.company), ["NVDA"], "company must be in the cited source and date near it");
-  assert(r.bottom_line.split(" ").length <= 36);
+  assert(!/…$/.test(r.bottom_line), "the bottom line is kept whole");
 
   // ---- fact-check: claims, labels, application
   const work = JSON.parse(JSON.stringify(book));

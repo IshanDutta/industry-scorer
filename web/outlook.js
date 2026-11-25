@@ -193,6 +193,8 @@ ${schemaFor(CO_INPUTS).replace("the lead's verdict", "the industry lead's verdic
 
   /** Clean the answer; add the tally and code's checks. */
   function clean(raw, { today = "", inputs = INPUTS } = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     if (!raw || typeof raw !== "object") return null;
     const IL = Object.fromEntries(inputs), IK = inputs.map(([k]) => k);
     const list = (a, n, k) => (Array.isArray(a) ? a : a ? [a] : []).slice(0, n).map((x) => trim(x, k)).filter(Boolean);

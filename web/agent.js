@@ -131,6 +131,8 @@ At most 5 evidence IDs per dimension.`;
 
   /** Critic: resolve citations, drop anything not retrieved, neutralize unsupported dimensions, cap overlay. */
   function critic(raw, pack, seenUrls) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const byId = Object.fromEntries((pack?.items || []).map((i) => [String(i.id).toUpperCase(), i]));
     const seen = new Set(seenUrls || []);
     const resolve = (e) => {

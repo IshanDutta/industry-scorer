@@ -161,6 +161,8 @@ Sizes: 4-10 situations (fewer when the news is quiet), up to 5 also_watching.`;
   }
   /** Shared situations (each with its industries), cleaned like Team.cleanScout. */
   function cleanScout(raw, idx, inds) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const nm = names(inds);
     const all = { name: "sector", constituents: inds.flatMap((i) => i.doc.constituents || []) };
     const sits = Array.isArray(raw?.situations) ? raw.situations : [];
@@ -420,6 +422,8 @@ One entry in "industries" for each of: ${batch.map((b) => b.ind.doc.name).join("
   function batches(list, n = BATCH) { const out = []; for (let k = 0; k < list.length; k += n) out.push(list.slice(k, k + n)); return out; }
   /** One row of the sector overview from an industry's finished run. */
   function overviewRow(name, doc, agent, scores) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const r = agent?.result || {};
     return { name, n: doc?.summary?.n_constituents, cap: doc?.summary?.total_market_cap, as_of: doc?.as_of,
       scores: Object.fromEntries(Object.entries(scores?.profiles || {}).map(([k, v]) => [k, isNum(v.total) ? Math.round(v.total) : null])),

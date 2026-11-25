@@ -406,6 +406,8 @@ Allowed revision fields: headline, thesis, summary, drivers, debates, scenarios,
    * sources, rule-book sources, indicators). seenUrls: URLs the tools returned.
    */
   function critic(raw, idx, doc, seenUrls, today = null, cal = null) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const tickers = new Set((doc.constituents || []).map((c) => String(c.symbol).toUpperCase()));
     const seen = new Set(seenUrls || []);
     const stats = { kept: 0, dropped: 0 };

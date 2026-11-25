@@ -225,6 +225,8 @@ The calls are about this fund's total return (price plus income) against holding
 
   /** The strategist's answer, cleaned: only ids the dossier has, known enums, scenarios priced by code, the 12M call checked. */
   function clean(raw, dz, m) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const idx = dz.idx || {}; let dropped = 0; raw = raw || {};
     const known = (id) => Object.prototype.hasOwnProperty.call(idx, id);
     const t = (s, k = 1200) => trim(String(s ?? "").replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (x, id) => (known(id) ? x : (dropped++, ""))).replace(/\s+([.,;:])/g, "$1"), k);

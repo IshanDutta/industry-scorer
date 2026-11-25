@@ -157,6 +157,8 @@ ${A_SCHEMA.replace("${SYM}", c.sym)}`;
 
   /** Clean call A: the applied components, and an outlook (the components are its evidence). */
   function cleanApply(raw, { today = "" } = {}) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     if (!raw || typeof raw !== "object") return null;
     const components = {};
     for (const e of Array.isArray(raw.components) ? raw.components : []) {
@@ -257,6 +259,8 @@ Reply with ONLY this JSON:
 {"rows": [{"id": "C1", "applies": "more | same | less | none", "effect": "up | down | mixed", "note": "one sentence for ${c.sym}"}]}`;
   }
   function cleanRows(raw, ids) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const ok = new Set(ids || []), out = {};
     for (const r of Array.isArray(raw?.rows) ? raw.rows : []) {
       const id = String(r?.id || "").toUpperCase().replace(/[^A-Z0-9]/g, ""); if (!id || (ids && !ok.has(id)) || out[id]) continue;

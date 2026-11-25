@@ -307,6 +307,9 @@ Sizes: 3-5 most_material, up to 10 timeline events (chronological), 2-5 winners 
 
   /** Normalize a rule book. idx: citable items by ID (pack + this body's sources). */
   function cleanBook(raw, idx, doc, ctx, T) {
+    const trim = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+    const words = (s) => String(s ?? "").replace(/\s+/g, " ").trim(); // saved text is kept whole
+
     const { S, Ev, Tk, A } = T.makeCritic(idx, T.tickersOf(doc));
     const names = new Set();
     const nameOf = Object.fromEntries((doc?.constituents || []).map((c) => [c.symbol, c.name]));
