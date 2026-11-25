@@ -921,6 +921,14 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
 .cx-prog { display: grid; gap: 5px; } .cx-prog-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
 .cx-prog-t { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 15%, var(--line)); overflow: hidden; }
 .cx-prog-t i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--pos))); transition: width 1.8s linear; }
+.cx-tcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 12px; margin-bottom: 6px; }
+.cx-tcard { border: 1px solid var(--line); border-top: 4px solid var(--tc, var(--accent)); border-radius: 14px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; background: linear-gradient(180deg, color-mix(in srgb, var(--tc, var(--accent)) 7%, var(--surface)), var(--surface) 70%); min-width: 0; }
+.cx-tcard p { margin: 0; line-height: 1.55; overflow-wrap: anywhere; } .cx-tcard .memo-pts { margin-top: 4px; }
+.cx-tallies { display: flex; flex-wrap: wrap; gap: 6px; }
+.cx-tl8 { font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--sunk); color: var(--muted); } .cx-tl8 b { font-family: var(--mono); color: var(--ink); }
+.cx-tl8.pos b { color: var(--pos); } .cx-tl8.neg b { color: var(--neg); } .cx-tl8.warn b { color: var(--c3); } .cx-tl8.faint { opacity: .75; }
+.cx-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 8px; }
+.cx-tfoot { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; } .cx-tfoot .chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
 .cx-mi-inl { display: none; }
 @media (max-width: 640px) {
   .cx-mi .cx-mi-t, .cx-mi thead th:not(:first-child) { display: none; }
@@ -9034,6 +9042,11 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
     for (const id of S.cmpCol || []) $(id)?.classList.add("cx-folded");
     if (el.__cmpWired) return; el.__cmpWired = true;
     el.addEventListener("click", (ev) => {
+      const j = ev.target.closest("[data-mi-jump]");
+      if (j) { const M = S.cmpMi || (S.cmpMi = {}); M.t = j.dataset.miJump; M.e = "exposed"; M.g = ""; M.s = ""; M.q = "";
+        el.querySelectorAll(".cx-mi-bar [data-mi-t]").forEach((b) => b.classList.toggle("cur", b.dataset.miT === M.t)); el.querySelectorAll(".cx-mi-bar [data-mi-e]").forEach((b) => b.classList.toggle("cur", b.dataset.miE === M.e));
+        el.querySelectorAll(".cx-mi-bar [data-mi-g], .cx-mi-bar [data-mi-s]").forEach((b) => b.classList.toggle("cur", (b.dataset.miG ?? b.dataset.miS) === "")); const q = $("cx-mi-q"); if (q) q.value = "";
+        cmpMiApply(); $("cx-mi-list")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       const t = ev.target.closest("[data-mi-g],[data-mi-t],[data-mi-e],[data-mi-s],[data-mi-all]");
       if (t) { const M = S.cmpMi || (S.cmpMi = {});
         if (t.dataset.miAll) { const open = t.dataset.miAll === "open"; for (const r of el.querySelectorAll(".cx-mi-row:not([hidden])")) { r.open = open; } return; }
@@ -9207,6 +9220,13 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
     const IMPC = { "strong positive": "pos2", positive: "pos", neutral: "neu", negative: "neg", "strong negative": "neg2" }, IMPA = { "strong positive": "▲▲", positive: "▲", neutral: "–", negative: "▼", "strong negative": "▼▼" };
     const deskBy = (d) => `<span class="cx-desk">${esc(Compare.DESKS[d].label)}</span>`;
 
+    // ---- one card per ticker at the top of What's ahead, Macro indicators and Foreign affairs: everything in the section
+    // read for that ticker (code's tally of the rows, and the desk's case for it when there's a verdict).
+    const tCards = (cards) => `<div class="cx-tcards">${cards}</div>`;
+    const tCard = (k, net, body) => `<div class="cx-tcard" style="--tc:${cmpColor(k)}"><div class="cx-rc-top">${cmpTick(k, true)}${net || ""}</div>${body}</div>`;
+    const NETC = { positive: "pos", negative: "neg", mixed: "warn", upside: "pos", downside: "neg", balanced: "warn" };
+    const tally = (pairs) => pairs.filter(([n0]) => n0).map(([n0, l, c0]) => `<span class="cx-tl8 ${c0}"><b>${n0}</b> ${l}</span>`).join("");
+    const listOf = (xs, cls0) => (xs.length ? `<ul class="memo-pts${cls0 ? " " + cls0 : ""}">${xs.map((x) => `<li>${x}</li>`).join("")}</ul>` : "");
     // ---- what's ahead: the events desk (or, on older verdicts, the macro desk); before a verdict, the calendars (code)
     const EV = DK.events || (MD?.events?.length ? { events: MD.events, months: [], paths: null, horizons: MD.horizons || {} } : null);
     const codeEv = (() => { const m = new Map(); for (const s0 of subs) for (const e of s0.events || []) { if (e.date > Horizon.addDays(today(), 120) || (e.importance && e.importance !== "high" && !(e.tickers || []).includes(s0.sym))) continue;
@@ -9221,9 +9241,18 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
         ${e.watch ? `<div class="small"><span class="muted">Watch:</span> ${esc(e.watch)}</div>` : ""}${chips(e.impact)}
         ${e.outcomes?.length ? `<div class="tbl-wrap"><table class="cx-outc"><thead><tr><th>If</th><th class="n">Odds</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${e.outcomes.map((y) => `<tr><td class="wr">${esc(y.if)}</td><td class="n">${y.odds ?? "—"}%</td>${syms.map((k) => `<td class="n mono ${mvCls(y.moves[k])}">${esc(y.moves[k] || "—")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
         ${e.why ? `<div class="small muted">${esc(e.why)}</div>` : ""}${e.play ? `<div class="small cx-play"><b>Play:</b> ${esc(e.play)}</div>` : ""}</div></div>`;
+    const aheadCards = EV?.events?.length || codeEv.length ? tCards(syms.map((k) => { const P0 = EV?.paths?.[k];
+      const evs = (EV?.events || []).filter((e) => e.date >= today() && e.impact?.[k] && e.impact[k] !== "neutral"), pos = evs.filter((e) => /positive/.test(e.impact[k])), neg = evs.filter((e) => /negative/.test(e.impact[k]));
+      const next = (EV?.events?.length ? evs : codeEv.filter((e) => e.who.includes(k)).map((e) => ({ date: e.date, event: e.title }))).slice(0, 3);
+      const wins = Object.entries(EV?.horizons || {}).filter(([, h]) => h?.pick === k).map(([h]) => h);
+      return tCard(k, P0?.skew ? `<span class="pill ${NETC[P0.skew]}">${esc(P0.skew)} skew</span>` : "", `
+        ${EV?.events?.length ? `<div class="cx-tallies">${tally([[pos.length, "events in its favor", "pos"], [neg.length, "against it", "neg"]])}${wins.length ? `<span class="cx-tl8 pos">the pick for <b>${wins.join(", ")}</b></span>` : ""}</div>` : ""}
+        ${P0?.path ? `<p class="small">${esc(stripCites(P0.path))}</p>` : `<p class="small muted">${EV ? "" : "The events desk walks its year when you press Compare. "}${next.length ? "The next dates on its calendar:" : "No dated events found for it."}</p>`}
+        ${P0?.biggest ? `<div class="small"><b>Biggest event:</b> ${esc(stripCites(P0.biggest))}</div>` : ""}
+        ${next.length ? `<div class="small"><span class="eyebrow">Coming up</span>${listOf(next.map((e) => `<b>${esc(fmtShort(e.date))}</b> ${esc(stripCites(e.event || ""))}${e.impact?.[k] ? ` <span class="pill ${IMPC[e.impact[k]]}">${IMPA[e.impact[k]]} ${esc(e.impact[k])}</span>` : ""}`))}</div>` : ""}`); }).join("")) : "";
     const ahead = sec("cmp-ahead", "What's ahead", EV ? "the next 12 months, event by event: what could happen, the odds, and what each outcome does to each" : "the next four months from each one's calendar (its industry's events, its own reports, macro releases)",
-      EV?.events?.length ? `${monthStrip}<div class="cx-tl">${EV.events.map(evRow).join("")}</div>${paths ? `<h3>Each one's path through the year</h3>${paths}` : ""}${deskBy(DK.events ? "events" : "macro")}`
-      : codeEv.length ? `<div class="cx-tl">${codeEv.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b>${e.est ? `<span class="small muted">est.</span>` : ""}</div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.title)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div><div class="cx-imp">${e.who.map((k) => cmpTick(k)).join("")}</div></div></div>`).join("")}</div>
+      EV?.events?.length ? `${aheadCards}${monthStrip}<div class="cx-tl">${EV.events.map(evRow).join("")}</div>${paths ? `<h3>Each one's path through the year</h3>${paths}` : ""}${deskBy(DK.events ? "events" : "macro")}`
+      : codeEv.length ? `${aheadCards}<div class="cx-tl">${codeEv.map((e) => `<div class="cx-ev"><div class="cx-evd"><b>${esc(fmtShort(e.date))}</b>${e.est ? `<span class="small muted">est.</span>` : ""}</div><div class="cx-evb"><div class="cx-evh"><b>${esc(e.title)}</b>${e.kind ? `<span class="pill neu">${esc(e.kind)}</span>` : ""}</div><div class="cx-imp">${e.who.map((k) => cmpTick(k)).join("")}</div></div></div>`).join("")}</div>
         <div class="small muted">Press Compare and the events desk walks each of these: the outcomes, their odds and what each does to each ticker.</div>` : `<div class="small muted">No dated events found for these tickers.</div>`);
 
     // ---- the full macro indicator table: every indicator its industries read, with each ticker's read (code), and the desk's
@@ -9277,8 +9306,19 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
     const econT = ePast.length || eNext.length ? `<details class="cx-fold"><summary><h3>US economic calendar <span class="small muted">EODHD · ${ePast.length} released lately, ${eNext.length} coming up</span></h3></summary><div class="two">
       ${ePast.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Released</th><th class="n">Actual</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${ePast.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono ${isNum(x.estimate) ? (x.actual > x.estimate ? "up" : x.actual < x.estimate ? "down" : "") : ""}"><b>${ev0(x, "actual")}</b></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div></details>` : "";
+    const macroCards = MA.indicators.length || MD ? tCards(syms.map((k) => { const s0 = subs.find((x) => x.sym === k), rows = MA.indicators.map((x) => ({ x, p: x.per[k] || {} }));
+      const cnt = (e) => rows.filter((r) => r.p.effect === e).length, top = (e) => rows.filter((r) => r.p.effect === e && r.p.relevance === "high").concat(rows.filter((r) => r.p.effect === e && r.p.relevance === "medium")).slice(0, 4);
+      const nm = MD?.names?.[k], tw = top("tailwind"), hw = top("headwind"), est = rows.filter((r) => r.p.est && r.p.effect !== "not exposed").length;
+      const sens = (s0?.sens || []).filter((y) => isNum(y.t) && Math.abs(y.t) >= 2).sort((a, b) => Math.abs(b.t) - Math.abs(a.t)).slice(0, 2);
+      return tCard(k, s0?.regime?.regime ? `<span class="pill ${REGC(s0.regime.regime)}">${esc(s0.regime.regime)}</span>` : "", `
+        <div class="cx-tallies">${tally([[cnt("tailwind"), "tailwinds", "pos"], [cnt("headwind"), "headwinds", "neg"], [cnt("neutral"), "neutral", "neu"], [cnt("not exposed"), "not exposed", "faint"]])}</div>
+        ${nm?.read ? `<p class="small">${esc(stripCites(nm.read))}</p>` : `<p class="small muted">${MD ? "" : "The macro desk's case for it comes with the verdict. "}From the table: ${hw.length ? `most exposed to ${hw.map((r) => esc(r.x.label)).join(", ")} (headwinds)` : "no high-relevance headwinds"}${tw.length ? `; helped by ${tw.map((r) => esc(r.x.label)).join(", ")}` : ""}.</p>`}
+        <div class="cx-two">${nm?.tailwinds?.length || tw.length ? `<div class="small"><span class="eyebrow pos-t">Tailwinds</span>${listOf(nm?.tailwinds?.length ? nm.tailwinds.map((x) => esc(stripCites(x))) : tw.map((r) => `${esc(r.x.label)} <span class="muted">${esc(r.p.relevance)}${r.p.est ? ", est." : ""}</span>`))}</div>` : ""}
+          ${nm?.headwinds?.length || hw.length ? `<div class="small"><span class="eyebrow neg-t">Headwinds</span>${listOf(nm?.headwinds?.length ? nm.headwinds.map((x) => esc(stripCites(x))) : hw.map((r) => `${esc(r.x.label)} <span class="muted">${esc(r.p.relevance)}${r.p.est ? ", est." : ""}</span>`), "cx-neg")}</div>` : ""}</div>
+        ${MD?.sensitivities?.[k] ? `<div class="small"><b>Sensitive to:</b> ${esc(stripCites(MD.sensitivities[k]))}</div>` : sens.length ? `<div class="small"><b>Measured:</b> ${sens.map((y) => `${esc(y.label)} → ${pct(y.effect, true, 2)} <span class="muted">(t ${fix(y.t, 1)})</span>`).join("; ")}</div>` : ""}
+        <div class="cx-tfoot"><button class="chip" data-mi-jump="${esc(k)}">See ${esc(k)}'s indicators</button>${est ? `<span class="small muted">${est} read by code (est.)</span>` : ""}</div>`); }).join("")) : "";
     const macroInd = MA.indicators.length || econT ? sec("cmp-macroind", "Macro indicators", `${MA.indicators.length ? `the full macro tables of their industry reports (${MA.indicators.length} indicators) with each ticker's read, ` : ""}live US releases from EODHD`,
-      `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
+      `${macroCards}${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
       ${MA.regimes.length ? `<h3>Each industry's macro call${subs.some((s0) => s0.bond) ? ` <span class="small muted">(a bond fund: its rate and inflation read)</span>` : ""}</h3><div class="cx-rcards">${[...MA.regimes.reduce((m, r) => { const k0 = r.bond ? "bond|" + r.sym : r.industry; const g0 = m.get(k0) || { r, who: [] }; g0.who.push(r); return m.set(k0, g0); }, new Map()).values()].map(({ r, who }) => `<div class="cx-rcard" style="--tc:${cmpColor(r.sym)}"><div class="cx-rc-top"><span class="cx-rc-who">${who.map((w) => `${cmpTick(w.sym)}${!w.bond && subs.find((s0) => s0.sym === w.sym)?.kind === "fund" ? ` <span class="small muted">${pct(w.weight, false, 0)} of it</span>` : ""}`).join(" ")}</span><span class="pill ${REGC(r.regime)}">${esc(r.regime || "—")}</span></div>
         <div><b>${esc(r.industry)}</b>${r.bond ? ` <span class="small muted">read by code through its duration</span>` : ""}</div>
         <p class="small">${esc(stripCites(r.headline || r.summary))}</p></div>`).join("")}</div>` : ""}
@@ -9335,8 +9375,20 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
         <div class="cx-mi-body">${r0.bottom_line ? `<p class="small">${esc(stripCites(r0.bottom_line))}</p>` : ""}${r0.effective ? `<p class="small"><b>Effective.</b> ${esc(r0.effective)}</p>` : ""}${r0.next12 ? `<p class="small"><b>Next 12 months.</b> ${esc(stripCites(r0.next12))}</p>` : ""}
           <div class="small muted">Severity is each ticker's industry's read of the rule; "not exposed": its industry's rule book doesn't cover it.</div></div></details>`).join("")}</div>` : ""}
       ${MA.items.length ? `<ul class="memo-pts">${MA.items.map((x) => `<li class="small"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.status ? ` (${esc(x.status)}${x.date ? ", " + esc(x.date) : ""})` : ""} ${syms.filter((k) => x.per[k]).map((k) => `${cmpTick(k)}${x.per[k].direction ? ` <span class="${/pos|favor|tail/i.test(x.per[k].direction) ? "pos-t" : /neg|advers|head/i.test(x.per[k].direction) ? "neg-t" : "muted"}">${esc(x.per[k].direction)}</span>` : ""}`).join(" ")}${x.next ? `<div class="muted">Next: ${esc(stripCites(x.next))}</div>` : ""}</li>`).join("")}</ul>` : ""}` : "";
+    const affCards = MA.world.length || MA.trade.length || MA.rules.length || MD?.affairs ? tCards(syms.map((k) => { const A0 = MD?.affairs?.[k];
+      const ws = MA.world.filter((w) => w.per[k]), adv = ws.filter((w) => STC(w.per[k].stance) === "neg"), sup = ws.filter((w) => STC(w.per[k].stance) === "pos");
+      const tr = MA.trade.filter((c0) => c0.per[k]).sort((a, b) => (num(b.per[k].rev) || 0) - (num(a.per[k].rev) || 0)), rl = MA.rules.filter((r0) => r0.per[k]), hi = rl.filter((r0) => /crit|high|severe/i.test(r0.per[k].severity || ""));
+      const it = MA.items.filter((x) => x.per[k]);
+      return tCard(k, A0?.net ? `<span class="pill ${NETC[A0.net]}">net ${esc(A0.net)}</span>` : "", `
+        <div class="cx-tallies">${tally([[adv.length, "adverse situations", "neg"], [sup.length, "supportive", "pos"], [tr.length, "trade partners", "neu"], [hi.length, "high-severity rules", "warn"], [it.length, "cases & deals", "neu"]])}</div>
+        ${A0?.read ? `<p class="small">${esc(stripCites(A0.read))}</p>` : `<p class="small muted">${MD ? "" : "The desk's foreign-affairs case for it comes with the verdict. "}${ws.length || tr.length || rl.length ? "From its industry reports, below." : "Its industry reports name no world situations, trade partners or rules for it."}</p>`}
+        ${adv.length ? `<div class="small"><span class="eyebrow neg-t">Against it</span>${listOf(adv.slice(0, 3).map((w) => `${esc(w.title)} <span class="muted">${esc(w.per[k].stance)}</span>`), "cx-neg")}</div>` : ""}
+        ${sup.length ? `<div class="small"><span class="eyebrow pos-t">For it</span>${listOf(sup.slice(0, 2).map((w) => `${esc(w.title)} <span class="muted">${esc(w.per[k].stance)}</span>`))}</div>` : ""}
+        ${tr.length ? `<div class="small"><b>Where it trades:</b> ${tr.slice(0, 4).map((c0) => `${esc(c0.country)}${isNum(num(c0.per[k].rev)) ? ` ${pct(c0.per[k].rev, false, 1)}${c0.per[k].est ? " est." : ""}` : ""} <span class="pill ${STC(c0.per[k].stance)}">${esc(c0.per[k].stance || "exposed")}</span>`).join(" · ")}</div>` : ""}
+        ${hi.length ? `<div class="small"><b>Rules that bite:</b> ${hi.slice(0, 3).map((r0) => esc(r0.name)).join("; ")}</div>` : ""}
+        ${A0?.watch ? `<div class="small cx-dline"><b>Watch:</b> ${esc(stripCites(A0.watch))}</div>` : ""}`); }).join("")) : "";
     const affairs = worldC || tradeT || regL ? sec("cmp-affairs", "Foreign affairs", "world situations, the trade map and regulation, from their industry reports, with each ticker's exposure",
-      `${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT ? `<h3>The trade map</h3>${tradeT}` : ""}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
+      `${affCards}${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
 
     // ---- macro scenarios and measured sensitivity, with the desk's case for each
     const facs = [...new Set(subs.flatMap((s0) => (s0.sens || []).map((x) => x.label)))];
@@ -9344,10 +9396,7 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
       <div class="small muted">Measured on the last year of daily returns: what each moved on a typical one-sigma day in each factor, holding the market fixed.</div>` : "";
     const scenT = MD?.scenarios?.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Odds</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MD.scenarios.map((x) => `<tr><td class="wr"><b>${esc(x.name)}</b><div class="small muted">${esc(x.what)}</div></td><td class="n">${x.probability ?? "—"}%</td>${syms.map((k) => { const m0 = x.impact[k] || {}; return `<td class="wr small"><b class="${mvCls(m0.move)}">${esc(m0.move || "—")}</b> ${esc(m0.why || "")}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>` : "";
     const macroS = scenT || sensT || MD ? sec("cmp-macro", "Macro scenarios & sensitivity", "what the big macro and world outcomes do to each, and what each has measurably moved with", `${scenT}${sensT ? `<h3>Measured macro sensitivity</h3>${sensT}` : ""}
-      ${MD ? `<div class="cx-cards">${syms.map((k) => `<div class="cx-card" style="--tc:${cmpColor(k)}"><div class="cx-card-top">${cmpTick(k)}</div><p class="small" style="margin:0">${esc(MD.names[k]?.read || "")}</p>
-        ${MD.names[k]?.tailwinds?.length ? `<div class="small"><span class="eyebrow pos-t">Tailwinds</span><ul class="memo-pts">${MD.names[k].tailwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
-        ${MD.names[k]?.headwinds?.length ? `<div class="small"><span class="eyebrow neg-t">Headwinds</span><ul class="memo-pts cx-neg">${MD.names[k].headwinds.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
-        ${MD.sensitivities?.[k] ? `<div class="small muted"><b>Sensitive to:</b> ${esc(MD.sensitivities[k])}</div>` : ""}</div>`).join("")}</div>${deskBy("macro")}` : `<div class="small muted">The macro desk's scenarios and reads come with the verdict.</div>`}`) : "";
+      ${MD ? deskBy("macro") : `<div class="small muted">The macro desk's scenarios come with the verdict.</div>`}`) : "";
 
     // ---- Wall Street & sentiment: code's numbers (ratings, targets, revisions, news sentiment, short interest) and the desk's read
     const sentBar = (v0) => isNum(v0) ? `<div class="cx-sent"><div class="cx-sent-t"><i style="left:${Math.max(0, Math.min(100, 50 + v0 * 50))}%"></i></div><b class="mono ${v0 > 0.05 ? "pos-t" : v0 < -0.05 ? "neg-t" : ""}">${v0 > 0 ? "+" : ""}${fix(v0, 2)}</b></div>` : `<span class="small muted">—</span>`;
@@ -9383,19 +9432,6 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
         : `<div class="small muted">${busy ? "Being written…" : "Comes with the verdict."}</div>`}
         ${sv?.verdict?.summary ? `<details class="memo-more"><summary>From its ${s.kind === "fund" ? "fund" : "company"} analysis</summary><p class="small">${esc(stripCites(sv.verdict.summary))}</p>${sv.risks.length ? `<p class="small"><b>Risks:</b> ${esc(sv.risks.slice(0, 4).map((x) => stripCites(x)).join(" · "))}</p>` : ""}</details>` : ""}</div>`; }).join("")}</div>`);
 
-    // ---- industry backdrop
-    const seenInd = {};
-    const indS = sec("cmp-industry", "Industry backdrop", "from your industry reports", `<div class="cx-cards">${subs.map((s) => { const I = s.ind || {}, dup = s.kind === "stock" && I.name && seenInd[I.name]; if (s.kind === "stock" && I.name && !dup) seenInd[I.name] = s.sym;
-      if (dup) return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name)}</b></div><div class="small muted">Same industry report as ${cmpTick(dup)}: the comparison between them comes down to the company numbers and written analyses.</div></div>`;
-      return `<div class="cx-card" style="--tc:${cmpColor(s.sym)}"><div class="cx-card-top">${cmpTick(s.sym)}<b class="ellip">${esc(I.name || s.sub || "—")}</b></div>
-        ${I.outlook?.calls ? `<div class="cx-calls">${Outlook.HZ.map((h) => { const x = I.outlook.calls[h]?.call; return `<span><span class="eyebrow">${h}</span>${x ? `<span class="pill ${Outlook.cls(x)}">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</span>`; }).join("")}</div>` : ""}
-        ${I.headline ? `<p class="small">${esc(stripCites(I.headline))}</p>` : ""}
-        ${I.opportunity?.verdict ? `<div class="small"><span class="pill ${/yes|strong|attract/i.test(I.opportunity.verdict) ? "pos" : /no|avoid|unattract/i.test(I.opportunity.verdict) ? "neg" : "neu"}">opportunity: ${esc(I.opportunity.verdict)}</span> ${esc(stripCites(I.opportunity.headline || ""))}</div>` : ""}
-        ${(I.mix || []).length ? `<div class="cx-mix">${I.mix.slice(0, 6).map((x) => `<div class="cx-brow"><span class="small ellip">${esc(x.industry)}</span><div class="cx-track"><i style="width:${Math.min(100, x.weight * 250)}%;background:${cmpColor(s.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span>${x.call ? `<span class="pill ${CALLC(x.call)}" style="font-size:10.5px">${esc(x.call)}</span>` : ""}</div>`).join("")}</div>` : ""}
-        ${I.risks?.length ? `<div class="small"><b>Risks:</b> ${esc(I.risks.slice(0, 2).map((x) => stripCites(x)).join(" · "))}</div>` : ""}
-        ${I.catalysts?.length ? `<div class="small"><b>Catalysts:</b> ${esc(I.catalysts.slice(0, 2).map((x) => stripCites(x)).join(" · "))}</div>` : ""}
-        ${!I.headline && !(I.mix || []).length ? `<div class="small muted">${s.kind === "stock" ? "Its industry hasn't been analyzed yet: the comparison uses its own numbers." : "None of its industries have been analyzed yet."}</div>` : ""}</div>`; }).join("")}</div>`);
-
     // ---- owning them together
     const mix = v?.together?.mix, mixItems = mix ? syms.filter((s) => mix[s] > 0).map((s) => ({ name: s, value: mix[s] })) : [];
     const tog = v?.together?.pairing || mixItems.length || v?.risks?.length ? sec("cmp-together", "Owning them together", "", `<div class="two">${mixItems.length ? `<div class="box"><h3>A split for a balanced investor</h3><div class="cx-split">${mixItems.map((x) => `<i style="flex:${x.value};background:${cmpColor(x.name)}" title="${esc(x.name)} ${x.value}%"></i>`).join("")}</div><div class="legend">${mixItems.map((x) => `<span><i style="background:${cmpColor(x.name)}"></i>${esc(x.name)} ${x.value}%</span>`).join("")}</div>${v.together.pairing ? `<p class="small">${esc(v.together.pairing)}</p>` : ""}</div>` : v?.together?.pairing ? `<div class="box"><p class="small">${esc(v.together.pairing)}</p></div>` : ""}
@@ -9405,8 +9441,8 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
       { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [insideF ? ["cmp-funds", "Inside the funds"] : null, ["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
       { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
-      { label: "Analysis", items: [["cmp-cases", "The case for each"], ["cmp-industry", "Industry backdrop"], tog ? ["cmp-together", "Owning them together"] : null] }];
-    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${indS}${tog}
+      { label: "Analysis", items: [["cmp-cases", "The case for each"], tog ? ["cmp-together", "Owning them together"] : null] }];
+    return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
   }
 
