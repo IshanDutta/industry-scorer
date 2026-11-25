@@ -25,13 +25,14 @@ sideways), long text gets light typography (`emphasize`: its first sentence lead
 like "but" in italics; never a "Read all": the owner doesn't want text folded), key numbers count up, and only a tab's
 first section and its verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
 Every tab starts with the snapshot (the numbers, with no prediction card), then Performance, then "Where it's going,
-and why" (the full calls and reasons) on the company and fund pages, then the rest. Performance holds Times like this by window
-(`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period buttons show (1M/3M/6M/1Y; the
-industry page has its own 1M-1Y buttons), with no buttons inside Times like this. It shows the 5 past stretches most like
-the last one, what followed 1, 3, 6 and 12 months later, an overlay chart (today's path with the tapped stretch laid over
-it, lined up at today), and per stretch "Then / What happened next / What's different now" (one historian call per
-window, `Regimes.windowHistorianPrompt`, kept in localStorage for the day; code writes the last two until it answers),
-with every measure then vs now. The older monthly view sits underneath. Wall Street sections show the last 12 months of ratings
+and why" (the full calls and reasons) on the company and fund pages, then the rest. Performance holds one chart (`ppBox`/`ppHTML`: company, fund and industry) with an S&P 500 toggle (`S.ppSpy`, remembered)
+and, right under it, Times like this by window (`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period
+buttons show (1M/3M/6M/1Y; the industry page has its own 1M-1Y buttons). The 5 past stretches most like the last one are a short
+list (start and end month and year, 3M and 1Y after); tapping one opens it and lays it over the Performance chart (`S.twOver`:
+the stretch from the same start, then what came after it, dashed, from today's level). Each opened stretch has "Then / What
+happened next / What's different now" (one historian call per window, `Regimes.windowHistorianPrompt`, kept in localStorage
+for the day; code writes the last two until it answers), every measure then vs now, and a chart with axes of the 12 months
+after (`twAfterChart`). The older monthly view sits underneath. Wall Street sections show the last 12 months of ratings
 (`Street` in `web/street.js`, `streetSlot`/`streetHTML`): monthly rating mix, upgrades and downgrades, target moves, and
 a code-written read of the trend. Model output is saved whole (the cleaners no longer cut text); prompts keep their caps.
 The sidebar order: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
