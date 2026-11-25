@@ -5165,7 +5165,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Where ${esc(co.sym)} is going</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
-    if (!l) return sec("co-lean", `Where ${co.sym} is going`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${co.writing ? "The calls are being made alongside the analysis." : `No calls yet. They're made from ${esc(co.sym)}'s own numbers and news, the industry's outlook and the industry lead's verdict (one call).`}</div>${indLine}</div>`);
+    if (!l) return sec("co-lean", `Where ${co.sym} is going, and why`, "", `<div class="callout lean-card">${head}${status}<div class="small muted">${co.writing ? "The calls are being made alongside the analysis." : `No calls yet. They're made from ${esc(co.sym)}'s own numbers and news, the industry's outlook and the industry lead's verdict (one call).`}</div>${indLine}</div>`);
     const W = (() => { try { return coWindowsPlus(co); } catch { return []; } })();
     const P0 = l.prior || null, PL = P0 ? null : coPrior(co);
     const nums = (h) => { const w = W.find((y) => y.h === h), ic = ind?.calls?.[h]?.call, sp = (P0 || PL)?.[h], mine = l.calls?.[h]?.call;
@@ -5181,7 +5181,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     if (l.mark?.px > 0 && ser?.closes?.length && ser.dates[ser.dates.length - 1] > (l.mark.date || "")) { const ri = Math.round((ser.closes[ser.closes.length - 1] / l.mark.px - 1) * 1000) / 10; since = `<div class="small">Since these calls (${esc(fmtDate(l.date))}): ${esc(co.sym)} is <b class="${ri >= 0 ? "pos-t" : "neg-t"}">${sgP(ri)}</b></div>`; }
     const st = coStale(co);
     const outOfStep = st.calls.length && !working ? `<div class="notice warn small stale-note"><span><b>Out of step with the industry:</b> since these calls, ${esc(st.calls.join("; "))}.</span><button class="sm primary" data-co-lean="1" ${can ? "" : "disabled"}>Update the calls (one call)</button></div>` : "";
-    return sec("co-lean", `Where ${co.sym} is going`, "", callsCard(l, { head, status: outOfStep + status + indLine, nums, since, history: (so?.history?.length || 0) > (rec?.outlook_history?.length || 0) ? so.history : rec?.outlook_history, verdict: "the write-up's verdict", verdictCall: rec.thesis?.verdict?.call }));
+    return sec("co-lean", `Where ${co.sym} is going, and why`, "", callsCard(l, { head, status: outOfStep + status + indLine, nums, since, history: (so?.history?.length || 0) > (rec?.outlook_history?.length || 0) ? so.history : rec?.outlook_history, verdict: "the write-up's verdict", verdictCall: rec.thesis?.verdict?.call }));
   }
 
 
@@ -7150,7 +7150,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   function fundGroups(fd) {
     return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"]] },
       { label: "Performance", items: [["fund-perf", "Returns & times like this"]] },
-      { label: "Our analysis", items: [["fund-thesis", "Analysis"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
+      { label: "Our analysis", items: [["fund-lean", "Where it's going, and why"], ["fund-thesis", "Analysis"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
       { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
       { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"], ["fund-peers", "Peer funds"]] },
       { label: "Wall Street & news", items: [["fund-street", "Wall Street"], ["fund-news", "News & sentiment"], ["fund-season", "Earnings season"]] },
@@ -7177,13 +7177,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const skipped = Object.entries(fd.fillSkip || {}); const skipNote = skipped.length ? `<div class="small muted">Couldn't fill: ${skipped.map(([k, w]) => `${esc(k)} (${esc(String(w).replace(/\.$/, ""))})`).join("; ")}.</div>` : "";
     const status = fd.full ? `<span class="small muted">Analysis written ${esc(ago(fd.full.at))}${fd.full.secs ? ` in ${fd.full.secs}s` : ""}${fd.full.dropped ? ` · ${fd.full.dropped} citation${fd.full.dropped === 1 ? "" : "s"} to nothing removed` : ""}.${fd.fullWhy?.length ? (fd.writing || fd.ghRun ? " Being brought up to date." : " Updated by itself when something material moves.") : " Still current."}</span>` : "";
     const btn = !fd.full && !fd.writing && !fd.ghRun && (S.sample || PF_TRIGGER) && L?.n ? `<button class="sm primary" data-fund-write="${esc(fd.sym)}" ${busy() ? "disabled" : ""}>Write ${esc(fd.sym)}'s analysis</button>` : "";
-    // ---- snapshot: the hero, our prediction
+    // ---- snapshot: the hero (the calls and why are in "Where it's going, and why")
     const lc12 = (h) => OL?.calls?.[h]?.call || "";
     const callStrip = (pfx) => `<div class="strip">${Outlook.HZ.map((h) => { const x = lc12(h); return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}${pfx}</span>${x ? `<span class="pill ${Outlook.cls(x)} lean-pill">${Outlook.SIGN[x] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x))}</span>` : "—"}</div>`; }).join("")}</div>`;
-    const pred = core.headline || core.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${core.verdict?.call ? `<span class="pill ${VC[core.verdict.call]}">${esc(core.verdict.call)}</span>` : ""}${core.vs_benchmark?.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)} vs ${esc(fd.bench.symbol)}</span>` : ""}${core.confidence ? `<span class="small muted">${esc(core.confidence)} confidence</span>` : ""}</div>
-      ${core.headline ? `<b class="headline">${fundCites(core.headline, idx)}</b>` : ""}${core.verdict?.summary ? `<div class="small">${fundCites(core.verdict.summary, idx)}</div>` : ""}
-      ${callStrip(OL?.provisional ? " (provisional)" : "")}<div class="small muted">The full analysis is next: <a href="#fund-lean">where it's going and why</a>, then <a href="#fund-thesis">the thesis</a>.</div></div>`
-      : `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span></div><div class="small muted">${fd.writing ? "Being written…" : S.sample ? "Not written yet." : "Open this page in Claude to have the analysis written."}</div>${callStrip(" (provisional)")}</div>`;
     // ---- snapshot: the company page's header, tiles and badges, on the fund
     const cl = fd.ser?.closes || [], last = cl[cl.length - 1], prev = cl[cl.length - 2], dchg = last > 0 && prev > 0 ? last / prev - 1 : NaN, g1 = fd.g1 || {}, LV0 = fd.lv;
     const slider = LV0 ? `<div class="rangebar" style="margin:0 2px 14px;height:24px"><div class="track" style="left:0;right:0;top:9px"></div><span class="mk px" style="left:${Math.max(0, Math.min(100, LV0.in_range * 100))}%;top:2px;height:20px"></span><span class="lab" style="left:0%;transform:none;top:22px">${fix(LV0.lo52, 2)}</span><span class="lab" style="left:100%;transform:translateX(-100%);top:22px">${fix(LV0.hi52, 2)}</span></div>` : "—";
@@ -7210,7 +7206,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <h1 style="font-size:26px">${esc(f.name)} <span class="mono muted" style="font-size:.6em">${esc(f.symbol)}</span></h1>
         ${fd.lv ? `<div class="mono"><span style="font-size:22px;font-weight:600">${fix(last ?? fd.lv.px, 2)}</span> ${isNum(dchg) ? `<span class="${dchg >= 0 ? "up" : "down"}">${dchg >= 0 ? "+" : ""}${fix(last - prev, 2)} (${pct(dchg, true, 2)})</span>` : ""} <span class="small muted">as of ${esc(fmtDate(fd.ser.dates[fd.ser.dates.length - 1]))}</span></div>` : ""}</div>
         <div class="actions"><button class="sm" data-fund-list="1">All funds</button><button class="sm" data-fund-refresh="${esc(f.symbol)}" ${busy() ? "disabled" : ""}>Fetch again</button>${btn}</div></div>
-      ${grid}${badges}${pred}${writing}${fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span></div>` : ""}${fill}${leftNote}${skipNote}${glance}
+      ${grid}${badges}${writing}${fd.fullErr ? `<div class="notice err"><span>The analysis didn't finish: ${esc(fd.fullErr)}</span></div>` : ""}${fill}${leftNote}${skipNote}${glance}
       <div class="small muted">${status ? status + " " : ""}Holdings from FMP${fd.raw.holdings[0]?.date ? ` (as of ${esc(fd.raw.holdings[0].date)})` : ""}; facts${fd.eodHoldings ? ", ETF holdings' industries" : ""} and asset mix from EODHD${f.eod_date ? ` (${esc(f.eod_date)})` : ""}; prices from FMP. Fetched ${esc(ago(fd.raw.fetched_at))}.</div></section>`;
     // ---- where it's going: the company page's outlook card, on the fund
     const W5 = (() => { try { return FundAn.windows(fd, today()); } catch { return []; } })(), PR = OL?.prior || null, PRnow = FundAn.prior(fd);
@@ -7228,8 +7224,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     // The calls are made and redone by themselves (fundAutoRefresh): no button, no "redo" prompt.
     const leanHead = `<div class="callout-head"><span class="eyebrow">Where ${esc(fd.sym)} is going</span>${OL?.date && !OL.provisional ? `<span class="small muted">as of ${esc(fmtDate(OL.date))}</span>` : ""}</div>`;
     const leanStatus = fd.leanBusy ? leanSteps(fd.leanStage) : fd.leanErr ? `<div class="notice err small">${esc(fd.leanErr)}</div>` : "";
-    const leanSec = OL ? sec("fund-lean", `Where ${fd.sym} is going`, "", callsCard(OL, { head: leanHead, status: leanStatus, nums: leanNums, since, history: fd.full?.outlook_history || [], verdict: "the fund write-up's verdict", verdictCall: core.verdict?.call || "" }))
-      : sec("fund-lean", `Where ${fd.sym} is going`, "", `<div class="callout lean-card">${leanHead}${leanStatus}<div class="small muted">${fd.writing ? "The calls are made right after the analysis." : "No calls yet: none of its industries has an outlook to start from."}</div></div>`);
+    const leanSec = OL ? sec("fund-lean", `Where ${fd.sym} is going, and why`, "", callsCard(OL, { head: leanHead, status: leanStatus, nums: leanNums, since, history: fd.full?.outlook_history || [], verdict: "the fund write-up's verdict", verdictCall: core.verdict?.call || "" }))
+      : sec("fund-lean", `Where ${fd.sym} is going, and why`, "", `<div class="callout lean-card">${leanHead}${leanStatus}<div class="small muted">${fd.writing ? "The calls are made right after the analysis." : "No calls yet: none of its industries has an outlook to start from."}</div></div>`);
     // ---- the analysis: thesis, calls, scenarios
     const hz = Portfolio.HZ.filter((h) => calls.horizons?.[h]).map((h) => { const x = calls.horizons[h], oc = OL?.calls?.[h]?.call, sp = (PR || PRnow)?.[h];
       return `<div class="box hz"><div class="dim-head"><b>${esc(Outlook.HZ_LABEL[h])}</b>${oc ? `<span class="pill ${Outlook.cls(oc)}">${Outlook.SIGN[oc] > 0 ? "▲" : "▼"} ${esc(Outlook.label(oc))}</span>` : ""}${x.vs_benchmark ? `<span class="pill ${VS[x.vs_benchmark]}">${esc(x.vs_benchmark)} vs ${esc(fd.bench.symbol)}</span>` : ""}</div>
@@ -7656,7 +7652,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       <div class="tbl-wrap"><table><thead><tr><th>Input</th><th>As of</th><th class="n">Age</th><th></th></tr></thead><tbody>${FR.map((r) => `<tr><td>${esc(r.what)}</td><td class="mono">${esc(r.date || "—")}</td><td class="n ${r.age > 14 ? "down" : ""}">${r.age === null ? "—" : r.age + "d"}</td><td class="small muted">${esc(r.note)}</td></tr>`).join("")}</tbody></table></div>
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls (code's starting point moving a full notch or clearly crossing zero, a move of a normal month or more, a big holding reporting, the write-up's inputs, or calls a week old) and redoes only that, by itself: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis. "Update my funds" on the fund list does the same for every fund you've analyzed.</div>`) : "";
-    const secs = [snap, thesisSec, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, tim)), riskSec, stressSec, tech, streetF, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    const secs = [snap, leanSec, thesisSec, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, tim)), riskSec, stressSec, tech, streetF, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
     if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Snapshot", items: [["bond-snap", "Verdict & calls"]] }, { label: "Performance", items: [["fund-perf", "Returns & times like this"]] }, { label: "Our analysis", items: [w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
         { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
         { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
@@ -11065,7 +11061,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [coSnapshot(co, t), coReturnsAll(co), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
+    const secs = [coSnapshot(co, t), coReturnsAll(co), run ? coLeanBlock(co) : "", run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
       coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
@@ -11609,7 +11605,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     return [
       { label: "Snapshot", items: [["co-snap", "Snapshot"]] },
       { label: "Performance", items: [["co-returns", "Performance"]] },
-      { label: "Our analysis", items: [it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
+      { label: "Our analysis", items: [it(run, "co-lean", "Where it's going, and why"), it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
       { label: "Returns & Risk", items: [it(co.perf, "co-perf", "Returns vs SPY"), it(co.g1, "co-risk", "Risk & Greeks")] },
       { label: "Analyst Consensus", items: [["co-street", "Wall Street"]] },
       { label: "Stress Test", items: [it(co.ep?.length, "co-stress", "Crises & booms")] },
@@ -11670,14 +11666,10 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       ${cell("Net margin", pct(num(r.netProfitMarginTTM), false))}</div>`;
     const vt = tier(g.vol, [0.15, 0.3], ["Low", "Moderate", "High"]), st = tier(g.sharpe, [0, 1, 2], ["Poor", "Fair", "Good", "Excellent"]);
     const badges = `<div class="tierbadges">${vt ? `<span class="pill ${vt === "Low" ? "pos" : vt === "High" ? "neg" : "warn"}">Volatility: ${vt} (${pct(g.vol, false, 0)})</span>` : ""}${st ? `<span class="pill ${st === "Poor" ? "neg" : st === "Fair" ? "neu" : "pos"}">Sharpe: ${st} (${fix(g.sharpe, 2)})</span>` : ""}${isNum(num(g.max_dd)) ? `<span class="pill ${g.max_dd < -0.3 ? "neg" : g.max_dd < -0.15 ? "warn" : "pos"}">Max drawdown 1Y: ${pct(g.max_dd, true, 0)}</span>` : ""}${isNum(num(g.alpha)) ? `<span class="pill ${g.alpha >= 0 ? "pos" : "neg"}"><span class="gk">α</span> ${pct(g.alpha)} a year</span>` : ""}</div>`;
-    // Our prediction, in one card: the verdict, the 12-month expectation and the four calls.
     const ck = co.thesis?.checks, HZC = { bullish: "pos", neutral: "neu", bearish: "neg" }, VC = { yes: "pos", conditional: "warn", no: "neg" };
     const mid = (x) => (x?.expected_move?.length ? x.expected_move.reduce((a, v) => a + v, 0) / x.expected_move.length : NaN);
-    const pred = t?.headline || t?.verdict?.call ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Our prediction</span>${t.verdict?.call ? `<span class="pill ${VC[t.verdict.call] || "neu"}">Opportunity: ${esc(t.verdict.call)}</span>` : ""}${t.street?.stance ? `<span class="pill ${t.street.stance === "more bullish" ? "pos" : t.street.stance === "more bearish" ? "neg" : "neu"}">${t.street.stance === "agree" ? "with the street" : esc(t.street.stance) + " than the street"}</span>` : ""}${co.writing ? `<span class="small muted">writing…</span>` : ""}</div>
-      ${t.headline ? `<b>${rich(t.headline)}</b>` : ""}
-      ${(() => { const ol = coOutlook(co); return ol ? `<div class="strip">${["1M", "3M", "6M", "12M"].map((h) => { const c = ol.calls?.[h]?.call; return `<div><span class="eyebrow">${esc(Outlook.HZ_LABEL[h])}</span>${c ? `<span class="pill ${Outlook.cls(c)}" style="justify-self:start">${Outlook.SIGN[c] > 0 ? "▲" : "▼"} ${esc(Outlook.label(c))}</span>` : "—"}</div>`; }).join("")}</div>` : `<div class="small muted">Where ${esc(co.sym)} is going over 1M-12M comes next: <a href="#co-lean">make the calls</a>.</div>`; })()}
-      <div class="small muted">The full analysis is next: <a href="#co-lean">where it's going and why</a>, then <a href="#co-thesis">the thesis</a>.</div></div>`
-      : co.ghRun ? ghNotice("company", co) : co.writing ? `<div class="notice info"><span><b>Our prediction is being written</b> on top of the ${esc(run?.name || "industry")} analysis (about a minute). Everything else on the page is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>` : "";
+    // The snapshot is the numbers; the calls and why are in "Where it's going, and why" right after Performance.
+    const pred = co.ghRun ? ghNotice("company", co) : co.writing ? `<div class="notice info"><span><b>The analysis is being written</b> on top of the ${esc(run?.name || "industry")} analysis (about a minute). Everything else on the page is already in.</span><button class="sm" data-co-stop="1">Stop</button></div>` : "";
     return `<section class="panel" id="co-snap"><div class="panel-head"><div style="display:grid;gap:2px"><span class="eyebrow">${esc([co.industry || co.hit?.industry, sector].filter(Boolean).join(" · "))}</span>
         <h1 style="font-size:26px">${esc(name)} <span class="mono muted" style="font-size:.6em">${esc(co.sym)}</span> ${p.exchange ? `<span class="badge">${esc(p.exchange)}</span>` : ""}</h1>
         <div class="mono"><span style="font-size:22px;font-weight:600">${isNum(co.px) ? fix(co.px, 2) : "—"}</span> ${isNum(chg) ? `<span class="${chg >= 0 ? "up" : "down"}">${isNum(chgD) ? `${chgD >= 0 ? "+" : ""}${fix(chgD, 2)} ` : ""}(${chg >= 0 ? "+" : ""}${fix(chg, 2)}%)</span>` : ""} <span class="small muted">${co.data?.ser?.dates?.length ? "as of " + esc(fmtDate(co.data.ser.dates[co.data.ser.dates.length - 1])) : ""}</span></div></div>
