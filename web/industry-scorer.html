@@ -18895,7 +18895,7 @@ Return ONLY a JSON object:
   }
 
   /** "Update everything from GitHub": where it's at, as a bar under the status line, while it runs. */
-  const SYNC_STAGES = [["starting", "Starting Times like this on GitHub", 2], ["github", "On GitHub: Times like this for every industry and every window (1M, 3M, 6M, 1Y), with the historian's notes", 20], ["copying", "Copying every updated sector into this page", 8]];
+  const SYNC_STAGES = [["starting", "Starting Times like this on GitHub", 2], ["github", "On GitHub: Times like this for every industry and every window (1M, 3M, 6M, 1Y, 3Y, 5Y), with the historian's notes", 20], ["copying", "Copying every updated sector into this page", 8]];
   function syncProgress() {
     let box = $("sync-prog"); const x = S.sync, on = syncPending();
     if (!on) { if (box) box.remove(); clearInterval(S.syncTick); S.syncTick = null; return; }
