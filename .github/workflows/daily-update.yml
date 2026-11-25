@@ -13,7 +13,9 @@
 #      the investor verdicts and the 1M-12M calls, changing only what the day changes;
 #   6. the drift guard orders a full rewrite from scratch when the industry has moved 2+ normal moves since the last
 #      one or when the strategist says it would now write the story differently (and, as upkeep, after 6 updates to the
-#      core story).
+#      core story);
+#   7. Times like this for every industry and every window (1M-5Y): code finds the five past stretches most like the
+#      last one, and the historian (Sonnet) writes notes only for windows whose stretches changed (the rest are reused).
 # The updated sector goes back to the exports branch, so "Pull from GitHub" in Industry Scorer gets it.
 # The full analysis is still the weekly "Sector run" (list the sectors in runner/weekly-sectors.txt).
 #
@@ -50,7 +52,7 @@ on:
         type: boolean
         default: false
       windows:
-        description: "Times like this only: for every industry and every window (1M, 3M, 6M, 1Y, 3Y, 5Y), the five past stretches most like the last one and what followed, with the historian's notes (started by the page's Update everything from GitHub; runs even while daily updates are paused)"
+        description: "Times like this only: for every industry and every window (1M, 3M, 6M, 1Y, 3Y, 5Y), the five past stretches most like the last one and what followed, with the historian's notes, without the rest of the daily update (the daily update does this too, at the end; runs even while daily updates are paused)"
         type: boolean
         default: false
       lean_missing:

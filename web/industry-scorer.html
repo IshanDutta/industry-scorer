@@ -17807,7 +17807,7 @@ Return ONLY a JSON object:
   /**
    * Times like this for every window (1M, 3M, 6M, 1Y, 3Y, 5Y), for every finished industry in a sector: the five past stretches
    * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
-   * the same stretches come back). Run on GitHub from "Update everything from GitHub"; saved on the run as `twin`.
+   * the same stretches come back). Run on GitHub at the end of every daily update (or alone with windows=true); saved on the run as `twin`.
    */
   async function runWindowsPass(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp) return;
@@ -17822,6 +17822,7 @@ Return ONLY a JSON object:
       const mk = await regimeData();
       const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "default", cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt, opts); };
       await pool(have, Math.max(1, concurrency), async (name) => {
+        if (JOB && S.jobStopped) return; // out of time on GitHub: what's done is saved
         const sl = slug(name); dr.working.add(name);
         try {
           if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
@@ -18552,7 +18553,7 @@ Return ONLY a JSON object:
     const db = await outlookDb();
     if (!S.mcp || !db) { pullFromGithub(); return; } // outside Claude: bring in what the page carries
     const at = new Date().toISOString();
-    S.sync = { ...(S.sync || {}), pending: true, state: "running", phase: "starting", requested_at: at, result: null, run_url: null, github_started_at: null, github_done_at: null, github_conclusion: null }; renderMeta();
+    S.sync = { ...(S.sync || {}), pending: true, state: "running", phase: "copying", requested_at: at, result: null, run_url: null, github_started_at: null, github_done_at: null, github_conclusion: null }; renderMeta();
     try {
       await db.doc("sync/github").set({ ...S.sync }).catch(() => {});
       await S.mcp.callTool(SYNC_SERVER, "fire_trigger", { trigger_id: SYNC_TRIGGER, text: "UPDATE" }, { cache: false });
@@ -18617,10 +18618,13 @@ Return ONLY a JSON object:
     cachePut: async (k, v) => { if (!JOB_CACHES.has(k) || !v?.runs) return 0; const cur = (await idbGet(k)) || { v: 1, runs: {} }; for (const [sl, e] of Object.entries(v.runs)) if (!cur.runs[sl] || String(e?.saved_at || "") >= String(cur.runs[sl].saved_at || "")) cur.runs[sl] = e; await idbPut(k, cur); return Object.keys(cur.runs).length; },
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
-    daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
+    // The daily update, then Times like this for every window (notes reused when the same stretches come back), unless
+    // the job was stopped for time or it's the history pass.
+    daily: (sector, opts) => { S.jobStopped = false; (async () => { const o = opts || {}; await runDaily(sector, o); const n0 = S.notices.slice();
+      if (!o.backfill && !S.jobStopped) { await runWindowsPass(sector, { names: o.names || null, concurrency: o.concurrency || 4 }); S.notices = [...n0, ...S.notices]; } })(); return true; },
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
-    windows: (sector, opts) => { runWindowsPass(sector, opts || {}); return true; },
-    stop: () => { const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
+    windows: (sector, opts) => { S.jobStopped = false; runWindowsPass(sector, opts || {}); return true; },
+    stop: () => { S.jobStopped = true; const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
     status: () => { const r = S.sectorRun, dr = S.dailyRun;
       if (dr) return { busy: true, phase: "daily " + dr.phase, label: dr.label, working: [...dr.working], calls: dr.calls, notices: [], errors: dr.failed.slice(-5), reuse: null, daily: { done: dr.done.length, of: dr.of, revised: dr.revised, quiet: dr.quiet, failed: dr.failed } };
       return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [], reuse: r?.reuse || S.lastReuse || null }; },
@@ -18895,16 +18899,17 @@ Return ONLY a JSON object:
   }
 
   /** "Update everything from GitHub": where it's at, as a bar under the status line, while it runs. */
-  const SYNC_STAGES = [["starting", "Starting Times like this on GitHub", 2], ["github", "On GitHub: Times like this for every industry and every window (1M, 3M, 6M, 1Y), with the historian's notes", 20], ["copying", "Copying every updated sector into this page", 8]];
+  // It only copies what GitHub already has: it starts nothing on GitHub.
+  const SYNC_STAGES = [["copying", "Copying what changed on GitHub into this page", 8]];
   function syncProgress() {
     let box = $("sync-prog"); const x = S.sync, on = syncPending();
     if (!on) { if (box) box.remove(); clearInterval(S.syncTick); S.syncTick = null; return; }
     if (!box) { box = document.createElement("div"); box.id = "sync-prog"; box.className = "sync-prog"; document.querySelector(".statusline")?.after(box); }
-    const ph = x.phase === "copying" ? 2 : x.phase === "github" ? 1 : 0, since = Date.parse((ph === 2 ? x.github_done_at : ph === 1 ? x.github_started_at : x.requested_at) || x.requested_at);
+    const ph = 0, since = Date.parse(x.requested_at);
     const tot = SYNC_STAGES.reduce((a, s0) => a + s0[2], 0), before = SYNC_STAGES.slice(0, ph).reduce((a, s0) => a + s0[2], 0), mins = Math.max(0, (Date.now() - since) / 60000);
     const inPh = Math.min(SYNC_STAGES[ph][2] * 0.95, mins), frac = Math.min(0.98, (before + inPh) / tot), left = Math.max(1, Math.round(tot - before - inPh));
-    box.innerHTML = `<div class="sync-h"><b>${esc(SYNC_STAGES[ph][1])}</b><span class="small muted">step ${ph + 1} of 3 · about ${left} min left · started ${esc(ago(x.requested_at))}${x.run_url ? ` · <a href="${esc(x.run_url)}" target="_blank" rel="noopener">watch it on GitHub</a>` : ""}</span></div>
-      <div class="sync-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div><div class="sync-steps">${SYNC_STAGES.map((s0, i) => `<span class="${i < ph ? "done" : i === ph ? "now" : ""}">${i < ph ? "✓ " : ""}${esc(s0[1].split(":")[0])}</span>`).join("")}</div>`;
+    box.innerHTML = `<div class="sync-h"><b>${esc(SYNC_STAGES[ph][1])}</b><span class="small muted">about ${left} min left · started ${esc(ago(x.requested_at))}</span></div>
+      <div class="sync-bar"><i style="transform:scaleX(${frac.toFixed(3)})"></i></div>`;
     if (!S.syncTick) S.syncTick = setInterval(() => syncProgress(), 5000);
   }
   function renderPicker() {
