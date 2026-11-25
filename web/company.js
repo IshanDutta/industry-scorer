@@ -267,7 +267,7 @@
       ind_est: isNum(c.revenue_share_estimate) ? c.revenue_share_estimate : null, ind_basis: trim(c.revenue_basis, 200) }));
     const rules = (run?.books || []).flatMap((b) => (b.book?.rules || []).map((r) => ({ body: b.body, ...r })))
       .sort((a, b) => (SEV[a.severity] ?? 3) - (SEV[b.severity] ?? 3) || (a.status === "in_force" ? -1 : 1)).slice(0, 10)
-      .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 90), name: trim(r.name, 160), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300),
+      .map((r, i) => ({ id: "R" + (i + 1), body: trim(r.body, 240), name: trim(r.name, 300), status: r.status, effective: trim(r.effective, 100), severity: r.severity, bottom_line: trim(r.bottom_line || r.industry_impact, 300),
         category: r.category || "", citation: trim(r.citation, 140), numeric: trim(r.numeric_value, 180), what: nc0(r.what_this_is, 300), impact: nc0(r.industry_impact, 340), last12: nc0(r.last_12_months, 200), today: nc0(r.today, 220), next12: nc0(r.next_12_months, 240) }));
     const k = R.kpi || {};
     const kpi = k.summary || k.cycle_position ? { cycle: k.cycle_position, cycle_text: trim(k.cycle_text, 300), pricing_power: k.pricing_power?.level, pricing_text: trim(k.pricing_power?.text, 300), who_has_it: trim(k.pricing_power?.who_has_it, 200),
@@ -290,7 +290,7 @@
     const regItems = [...(g.policy || []).map((x) => ({ kind: "policy", title: x.title, status: x.status, date: x.date, direction: x.direction, text: x.impact, names: x.names })),
       ...(g.litigation || []).map((x) => ({ kind: "litigation", title: x.case, status: x.status, date: x.date || x.next_date, text: x.stakes || x.exposure || x.impact || x.summary, parties: x.parties, next: x.next, names: x.names })),
       ...(g.deals || []).map((x) => ({ kind: "deal", title: x.title, status: x.status, date: x.date, text: x.rationale || x.impact, value: x.value, names: x.names }))].filter((x) => x.title).slice(0, 16)
-      .map((x, i) => ({ id: "L" + (i + 1), kind: x.kind, title: trim(x.title, 180), status: trim(x.status, 80), date: x.date ? String(x.date).slice(0, 10) : "", direction: x.direction || "", text: nc0(x.text, 360),
+      .map((x, i) => ({ id: "L" + (i + 1), kind: x.kind, title: trim(x.title, 300), status: trim(x.status, 240), date: x.date ? String(x.date).slice(0, 10) : "", direction: x.direction || "", text: nc0(x.text, 360),
         parties: nc0(x.parties, 160), next: nc0(x.next, 160), value: trim(x.value, 40), names: (x.names || []).slice(0, 8) }));
     const RV = R.regverdict || {};
     const regv = RV.stance || RV.headline ? { stance: RV.stance || "", intensity: RV.intensity || "", headline: nc0(RV.headline, 300), summary: nc0(RV.summary, 500),

@@ -870,7 +870,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
 .cx-months { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-bottom: 12px; }
 .cx-month { display: grid; gap: 2px; align-content: start; padding: 8px 10px; border-radius: 10px; background: var(--sunk); border-top: 3px solid var(--line); }
 .cx-month.high { border-top-color: var(--neg); } .cx-month.medium { border-top-color: var(--c3); } .cx-month.low { border-top-color: var(--pos); }
-.cx-month b { font-size: 12.5px; line-height: 1.3; } .cx-month .small { font-size: 11.5px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.cx-month b { font-size: 12.5px; line-height: 1.3; } .cx-month .small { font-size: 11.5px;  }
 .cx-ev.hi::before { border-color: var(--c3); background: color-mix(in srgb, var(--c3) 35%, var(--surface)); }
 .cx-outc td, .cx-outc th { padding: 4px 8px; font-size: 12.5px; }
 .cx-play { border-left: 2px solid var(--accent); padding-left: 8px; }
@@ -883,12 +883,49 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
 .cx-mi-n { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .cx-chg { font: 500 11.5px var(--mono); padding: 0 5px; border-radius: 4px; background: var(--sunk); }
 .cx-eod { display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline; }
+/* Compare: the macro indicator explorer, card grids, folding sections */
+#cmp section.panel > .panel-head { cursor: pointer; }
+#cmp section.panel > .panel-head h2::after { content: "▾"; font-size: 13px; color: var(--faint); margin-left: 8px; display: inline-block; transition: transform .15s; }
+#cmp section.panel.cx-folded > .panel-head h2::after { transform: rotate(-90deg); }
+#cmp section.panel.cx-folded > :not(.panel-head) { display: none !important; }
+.cx-rcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; }
+.cx-rcard { border: 1px solid var(--line); border-top: 3px solid var(--tc, var(--accent)); border-radius: 12px; padding: 12px 14px; display: grid; gap: 6px; align-content: start; background: var(--surface); min-width: 0; }
+.cx-rcard p { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
+.cx-rc-who { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.cx-rc-top { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.cx-mi-bar { position: sticky; top: 0; z-index: 4; display: grid; gap: 8px; padding: 10px 12px; background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--line); border-radius: 12px; }
+.cx-mi-bar input[type=search] { max-width: 420px; }
+.cx-fchips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cx-fchips .chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12.5px; padding: 3px 10px; }
+.cx-fchips .chip.cur { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.cx-mi-list { display: grid; gap: 6px; }
+.cx-mi-row { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.cx-mi-row[open] { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cx-mi-row > summary { list-style: none; cursor: pointer; padding: 10px 12px; }
+.cx-mi-row > summary::-webkit-details-marker { display: none; }
+.cx-mi-sum { display: grid; grid-template-columns: minmax(160px, 1.1fr) minmax(150px, 0.9fr) minmax(0, 2.2fr); gap: 6px 14px; align-items: center; }
+.cx-mi-name { display: grid; gap: 1px; min-width: 0; } .cx-mi-name b::before { content: "▸ "; color: var(--faint); } .cx-mi-row[open] .cx-mi-name b::before { content: "▾ "; }
+.cx-mi-val { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.cx-mi-reads { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.cx-mi-r { display: inline-flex; gap: 4px; align-items: center; } .cx-mi-r.dim { opacity: .35; }
+.cx-mi-sym { font: 600 11.5px var(--mono); color: var(--tc, var(--ink)); }
+.cx-mi-body { padding: 0 12px 12px 28px; display: grid; gap: 8px; } .cx-mi-body p { margin: 0; line-height: 1.55; }
+.cx-mi-why { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+.cx-ne { font-size: 11px; color: var(--faint); border: 1px dashed var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.pill.cx-est { background: transparent; border: 1px dashed currentColor; } .pill.cx-est sup { font-size: 8.5px; margin-left: 2px; opacity: .8; }
+.cx-rel { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--line); } .cx-rel.r-high { background: var(--ink); } .cx-rel.r-medium { background: var(--muted); } .cx-rel.r-low { background: var(--faint); opacity: .6; }
+.cx-mi-legend { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold > summary::-webkit-details-marker { display: none; } details.cx-fold > summary h3::before { content: "▸ "; color: var(--faint); } details.cx-fold[open] > summary h3::before { content: "▾ "; }
+@media (max-width: 760px) { .cx-fchips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; } .cx-fchips .chip, .cx-fchips .eyebrow { flex: none; } .cx-mi-sum { grid-template-columns: minmax(0, 1fr); } .cx-mi-body { padding-left: 12px; } .cx-mi-bar { position: static; } }
+.cx-progs { display: grid; gap: 10px; }
+.cx-prog { display: grid; gap: 5px; } .cx-prog-h { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; }
+.cx-prog-t { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--accent) 15%, var(--line)); overflow: hidden; }
+.cx-prog-t i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--pos))); transition: width 1.8s linear; }
 .cx-mi-inl { display: none; }
 @media (max-width: 640px) {
   .cx-mi .cx-mi-t, .cx-mi thead th:not(:first-child) { display: none; }
   .cx-mi .cx-mi-l { min-width: 0; max-width: none; }
   .cx-mi-inl { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
-  .cx-mi-d { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
 .cx-econ td { white-space: normal; } .cx-hold td { white-space: normal; }
 .cx-moves { display: grid; gap: 6px; }
@@ -5919,7 +5956,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       const sl = bySlugName.get(lc(name));
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
-        if (c && c.saved_at === r.saved_at && c.dg?.v === 8) { out[lc(name)] = c.dg; continue; }
+        if (c && c.saved_at === r.saved_at && c.dg?.v === 9) { out[lc(name)] = c.dg; continue; }
         if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
         const rec = await runGet(sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
@@ -8609,7 +8646,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const outlook = (sv?.outlook && cmpOut(sv.outlook.calls, "written analysis", sv.outlook.date)) || (so?.outlook?.calls && (!co.run || so.industry === co.run.name) && cmpOut(so.outlook.calls, "saved calls", so.outlook.date))
       || (co.run && cmpOut(coPrior(co), "from its industry"));
     const cl = f.ser?.closes || [];
-    return { affIn: co.run ? { industries: [{ industry: co.run.name, weight: 1 }], hold: [{ ticker: sym, weight: 1 }] } : null, sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
+    return { expo: Compare.geoExpo(f.segments?.geo?.items || []), affIn: co.run ? { industries: [{ industry: co.run.name, weight: 1 }], hold: [{ ticker: sym, weight: 1 }] } : null, sym, kind: "stock", name: co.name, sub: co.run?.name || industry || f.profile?.industry || "", sector: co.run?.industry?.sector || f.profile?.sector || hit?.sector || "",
       px: co.px, chg: cl.length > 1 && cl[cl.length - 2] > 0 ? cl[cl.length - 1] / cl[cl.length - 2] - 1 : NaN, logo: f.profile?.image || "",
       m, pillars, profiles, outlook, saved: sv, ind: cmpIndOf(co.run), ser: f.ser, holdings: [], hasRun: !!co.run, dz, street, sent, events, sens, aff,
       regime: co.lensIn?.macroInd ? { regime: co.lensIn.macroInd.regime, headline: co.lensIn.macroInd.headline } : null };
@@ -8683,6 +8720,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       ind: { name: `its industries (${pct(fd.cov?.covered, false, 0)} covered)`, saved_at: null, headline: "", outlook: lookCalls && Object.keys(lookCalls).length ? { calls: lookCalls } : null, mix, risks: [], catalysts: [], drivers: [] },
       ser: fd.ser, holdings: (fd.hold || []).map((h) => ({ ticker: h.ticker, weight: h.weight })), dz, street, sent, events, sens, regime: null, aff: fd.aff || null, bond,
       topShare: fd.raw?.holdFrom === "EODHD top holdings" ? (fd.raw.holdings || []).reduce((a, h) => a + (isNum(h.weight) ? h.weight : 0), 0) : null,
+      expo: (() => { const mx = f.mix || {}, us = num(mx.stock_us), non = num(mx.stock_nonus); return isNum(us) || isNum(non) ? { us: (us || 0) / (((us || 0) + (non || 0)) || 1), nonus: (non || 0) / (((us || 0) + (non || 0)) || 1) } : null; })(),
       affIn: (fd.cov?.industries || []).length ? { industries: fd.cov.industries.map((g) => ({ industry: g.industry, weight: g.weight })), hold: (fd.hold || []).filter((h) => h.ticker).slice(0, 80).map((h) => ({ ticker: h.ticker, weight: h.weight })) } : null,
       holdTop: (fd.hold || []).slice(0, 15).map((h) => ({ ticker: h.ticker, name: h.name, weight: fd.raw?.holdFrom === "EODHD top holdings" ? ((fd.raw.holdings || []).find((r) => r.ticker && r.ticker === h.ticker)?.weight ?? h.weight) : h.weight, industry: h.industry || "", call12: h.call12 || "", pe: num(h.pe), r1y: num(h.r1y), inTop50: !!h.inTop50 })),
       bondInd: fd.bond ? (fd.bondRuns?.indicators || []).map((x) => ({ label: x.label, value: num(x.value), unit: x.unit || "", prior: num(x.prior), prior_label: x.prior_label || "", date: x.date || "" })).filter((x) => x.label && isNum(x.value)) : [],
@@ -8862,7 +8900,10 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       const doc = { state: "queued", kind: "compare", symbol: syms.join(","), request: JSON.stringify(req), requested_at: at, started_at: null, done_at: null, result: null, path: null, run_url: null };
       (S.ghJobs ||= {})[id] = doc; renderCompare();
       try { await db.doc("pfjobs/" + id).set(doc); cmpWatch(syms);
-        await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "ANALYZE " + id }, { cache: false }); renderCompare(); return; }
+        await S.mcp.callTool(PF_SERVER, "fire_trigger", { trigger_id: PF_TRIGGER, text: "ANALYZE " + id }, { cache: false });
+        // Names with no written analysis: write them now, alongside (they come into the line-up when done).
+        if (c.an.subs.some((s0) => !s0.saved && !cmpWriting(s0))) cmpWrite("*").catch(() => {});
+        renderCompare(); return; }
       catch (e) { const code = e?.code, why = code === "not_granted" || code === "declined" ? "this page isn't allowed to use Claude Code Remote" : e?.message || code || String(e);
         S.ghJobs[id] = { ...doc, state: "failed", result: `couldn't start it on GitHub (${why})`, done_at: new Date().toISOString() }; await db.doc("pfjobs/" + id).set(S.ghJobs[id]).catch(() => {}); }
     }
@@ -8880,7 +8921,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const c = S.cmp, subs = (c?.an?.subs || []).filter((s) => (sym === "*" ? !s.saved : s.sym === sym) && !cmpWriting(s)); if (!subs.length) return;
     if (!(await ghCan())) { c.note = "Writing an analysis needs GitHub: open it in the Companies or Funds tab to write it here instead."; renderCompare(); return; }
     const started = []; for (const s of subs) if (await ghStart(s.kind === "fund" ? "fund" : "company", s.sym)) started.push(s.sym);
-    c.note = started.length ? `Writing ${started.join(", ")} on GitHub. It comes in here by itself; then press Compare again to use it.` : "GitHub didn't start it; try again in a minute.";
+    c.note = started.length ? "" : "GitHub didn't start the missing analyses; try again in a minute.";
     renderCompare();
   }
   /** A written analysis that just came in from GitHub: the line-up shows it, and the next Compare reads it. */
@@ -8950,6 +8991,62 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
   }
 
   // ------------------------------------------------------------- render: Compare tab
+  // ---- progress: GitHub doesn't report back while it runs, so the bar follows the measured stage times of a comparison
+  // (and of a company or fund analysis), snaps forward when the request starts running, and to 100% when it's in.
+  const CMP_STAGES = [["Starting on GitHub", 45], ["Loading your industry reports", 25], ["Reading the tickers", 50], ["Four desks at work", 85], ["Head of research writing the verdict", 60], ["Bringing it back here", 25]];
+  const AN_STAGES = [["Starting on GitHub", 45], ["Reading its data and industry report", 70], ["Writing the analysis", 150], ["Bringing it back here", 25]];
+  const LOCAL_STAGES = [["Four desks at work", 85], ["Head of research writing the verdict", 60]];
+  function progOf(stages, startIso, running) {
+    const total = stages.reduce((a, x) => a + x[1], 0); let el = Math.max(0, (Date.now() - Date.parse(startIso || 0)) / 1000);
+    if (!running) el = Math.min(el, stages[0][1] * 0.9); else el = Math.max(el, stages[0][1]);
+    let acc = 0, i = 0; for (; i < stages.length - 1 && el > acc + stages[i][1]; i++) acc += stages[i][1];
+    const over = el > total, pctv = over ? 0.96 : Math.min(0.96, el / total);
+    return { pct: pctv, label: over ? "Taking longer than usual: almost there" : stages[i][0], step: i + 1, of: stages.length, left: Math.max(0, Math.round((total - el) / 60 * 2) / 2) };
+  }
+  const progBar = (kind, startIso, running, title) => { const p0 = progOf(kind === "an" ? AN_STAGES : kind === "local" ? LOCAL_STAGES : CMP_STAGES, startIso, running);
+    return `<div class="cx-prog" data-prog-kind="${kind}" data-prog-start="${esc(startIso || "")}" data-prog-run="${running ? 1 : 0}"><div class="cx-prog-h"><b>${esc(title)}</b><span class="small muted cx-prog-l">${esc(p0.label)} · step ${p0.step} of ${p0.of}${p0.left ? ` · about ${p0.left} min left` : ""}</span></div><div class="cx-prog-t"><i style="width:${(p0.pct * 100).toFixed(1)}%"></i></div></div>`; };
+  /** Moves the bars along every two seconds while something is running, without redrawing the page. */
+  function cmpProgTick() {
+    if (S.cmpProgT) return;
+    S.cmpProgT = setInterval(() => { const bars = document.querySelectorAll("#cmp .cx-prog[data-prog-start]"); if (!bars.length) { clearInterval(S.cmpProgT); S.cmpProgT = null; return; }
+      for (const b of bars) { const k = b.dataset.progKind, p0 = progOf(k === "an" ? AN_STAGES : k === "local" ? LOCAL_STAGES : CMP_STAGES, b.dataset.progStart, b.dataset.progRun === "1");
+        b.querySelector(".cx-prog-t i").style.width = (p0.pct * 100).toFixed(1) + "%"; b.querySelector(".cx-prog-l").textContent = `${p0.label} · step ${p0.step} of ${p0.of}${p0.left ? ` · about ${p0.left} min left` : ""}`; } }, 2000);
+  }
+  /** Rows that say the same thing for several tickers (a shared industry), once each with every ticker: [{x, who}]. */
+  const cmpGroup = (rows, keyOf) => [...rows.reduce((m, x) => { const k = keyOf(x), g0 = m.get(k) || { x, who: [] }; if (!g0.who.some((w) => w.sym === x.sym)) g0.who.push(x); return m.set(k, g0); }, new Map()).values()];
+  /** The macro indicator explorer's filters (group, ticker, direction, source, search), applied in place. */
+  function cmpMiApply() {
+    const L = $("cx-mi-list"), M = S.cmpMi || {}; if (!L) return;
+    const q = lc(M.q || "").trim(); let shown = 0;
+    for (const r of L.querySelectorAll(".cx-mi-row")) {
+      let eff = {}, src = {}; try { eff = JSON.parse(r.dataset.eff || "{}"); src = JSON.parse(r.dataset.src || "{}"); } catch {}
+      const ks = M.t ? [M.t] : Object.keys(eff);
+      const okE = !M.e || ks.some((k) => (M.e === "exposed" ? eff[k] && eff[k] !== "not exposed" : eff[k] === M.e) && (!M.s || src[k] === M.s));
+      const okS = !M.s || ks.some((k) => src[k] === M.s && eff[k] !== "not exposed");
+      const ok = (!M.g || r.dataset.g === M.g) && (!q || (r.dataset.l || "").includes(q)) && okE && okS;
+      r.hidden = !ok; if (ok) shown++;
+      r.classList.toggle("focus", !!M.t); r.querySelectorAll(".cx-mi-r").forEach((x) => x.classList.toggle("dim", !!M.t && x.querySelector(".cx-mi-sym")?.textContent !== M.t));
+    }
+    const n0 = $("cx-mi-count"); if (n0) n0.textContent = `${shown} of ${L.children.length} shown`;
+  }
+  /** Compare's interactions, wired once: the explorer's filters, open rows kept across refreshes, sections that fold. */
+  function cmpWire(el) {
+    for (const id of S.cmpCol || []) $(id)?.classList.add("cx-folded");
+    if (el.__cmpWired) return; el.__cmpWired = true;
+    el.addEventListener("click", (ev) => {
+      const t = ev.target.closest("[data-mi-g],[data-mi-t],[data-mi-e],[data-mi-s],[data-mi-all]");
+      if (t) { const M = S.cmpMi || (S.cmpMi = {});
+        if (t.dataset.miAll) { const open = t.dataset.miAll === "open"; for (const r of el.querySelectorAll(".cx-mi-row:not([hidden])")) { r.open = open; } return; }
+        for (const [a, k] of [["miG", "g"], ["miT", "t"], ["miE", "e"], ["miS", "s"]]) if (a in t.dataset) M[k] = t.dataset[a];
+        t.parentElement.querySelectorAll(`[data-${t.dataset.miG !== undefined ? "mi-g" : t.dataset.miT !== undefined ? "mi-t" : t.dataset.miE !== undefined ? "mi-e" : "mi-s"}]`).forEach((b) => b.classList.toggle("cur", b === t));
+        cmpMiApply(); return; }
+      // A section's title folds it away (and back).
+      const h = ev.target.closest("section.panel > .panel-head"); if (h && !ev.target.closest("a,button,input,select")) { const sec0 = h.parentElement, col = (S.cmpCol ||= new Set());
+        sec0.classList.toggle("cx-folded"); if (sec0.classList.contains("cx-folded")) col.add(sec0.id); else col.delete(sec0.id); }
+    });
+    el.addEventListener("input", (ev) => { if (ev.target.id === "cx-mi-q") { (S.cmpMi ||= {}).q = ev.target.value; cmpMiApply(); } });
+    el.addEventListener("toggle", (ev) => { const r = ev.target; if (!r.classList?.contains("cx-mi-row")) return; const o = (S.cmpOpen ||= new Set()); if (r.open) o.add(r.dataset.miKey); else o.delete(r.dataset.miKey); }, true);
+  }
   function renderCompare() {
     const el = $("cmp"); if (!el || S.tab !== "compare") return;
     if (!S.cmp) { S.cmp = { syms: [], subj: {}, vCache: {}, period: "1Y", q: "", note: "" };
@@ -8958,7 +9055,7 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
       if (!S.fundList) idbGet("funds").then((l) => { S.fundList = l || []; renderCompare(); }).catch(() => {}); }
     const had = document.activeElement?.id === "cmp-q" ? { v: document.activeElement.value, a: document.activeElement.selectionStart } : null;
     el.innerHTML = cmpBar() + cmpView();
-    wireCharts(el); wireSpy(el);
+    wireCharts(el); wireSpy(el); cmpWire(el); cmpMiApply(); cmpProgTick();
     // A name typed and submitted takes the best suggestion; tickers go in as typed.
     $("cmp-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); const v = $("cmp-q").value.trim(), top = (S.cmpSugItems || [])[0];
       cmpAdd(/^[A-Za-z0-9.\-]{1,7}(\s*[,;\s]\s*[A-Za-z0-9.\-]{1,7})*$/.test(v) || !top ? v : top.symbol); });
@@ -9014,11 +9111,13 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     if (!an || an.subs.length < 2) return errNote + ld + (c.syms.length < 2 && !loading.length ? `<div class="cx-hero cx-intro"><div><span class="eyebrow">How it works</span><h2>Which is better, and for whom</h2><p class="small muted" style="max-width:70ch">Add two to four tickers: stocks, ETFs or mutual funds, in any mix. Each is read from your saved industry reports and from a company or fund analysis if one has already been written (here or on GitHub); code scores twelve dimensions on fixed scales and ranks them for income, conservative, growth and aggressive investors; then press Compare and the verdict is written on GitHub (one Claude call) and comes back here by itself.</p></div></div>` : "");
     const { subs, sc, fit, h2h, corr, ovl } = an, syms = subs.map((s) => s.sym), V = c.vCache[c.vKey], busy = c.busy === c.vKey, v = busy && c.partial ? c.partial : V?.v || null;
     if (v && !busy) Compare.reconcile(v, syms); // older verdicts: the overall pick must win at least one investor type
-    const writing = busy ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Writing the verdict</b>${c.stage ? ` (${esc(c.stage)})` : ""}: four desks, then the head of research, on ${subs.length} tickers' numbers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports (${Math.round((Date.now() - (c.start || Date.now())) / 1000)}s so far)${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
+    const writing = busy ? `<div class="notice info cx-writing cx-progs">${progBar("local", new Date(c.start || Date.now()).toISOString(), true, "Writing the verdict here")}<span class="small muted">${c.stage ? esc(c.stage) + " · " : ""}four desks, then the head of research, on ${subs.length} tickers, ${subs.filter((s) => s.saved).length} written analys${subs.filter((s) => s.saved).length === 1 ? "is" : "es"} and their industry reports${V ? "; the last verdict is shown until it's in" : ""}.</span></div>` : "";
     const err = c.err ? `<div class="notice err"><span>The verdict didn't finish: ${esc(c.err)}</span></div>` : "";
     // The GitHub request for this set: queued, running (with a link to the run), or failed.
     const J = cmpJob(syms), jRun = J && J.state !== "failed", jAge = J ? Math.round((Date.now() - Date.parse(J.started_at || J.requested_at || 0)) / 60000) : 0;
-    const ghNote = jRun ? `<div class="notice info cx-writing"><span class="cx-spin"></span><span><b>Comparing on GitHub</b>: ${J.state === "queued" ? "waiting for the task to start the run" : `four desks are reading ${subs.length} tickers' full dossiers, then the head of research writes the verdict`} (${jAge} min so far; usually 6-12). It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.${J.run_url ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
+    const anJobs = subs.filter((s0) => cmpWriting(s0)).map((s0) => ({ s0, x: S.ghJobs?.[ghId(s0.kind === "fund" ? "fund" : "company", s0.sym)] }));
+    const ghNote = jRun || anJobs.length ? `<div class="notice info cx-writing cx-progs">${jRun ? progBar("cmp", J.requested_at, J.state === "running", `Comparing ${syms.join(", ")} on GitHub`) : ""}${anJobs.map(({ s0, x }) => progBar("an", x.requested_at, x.state === "running", `Writing ${s0.sym}'s ${s0.kind === "fund" ? "fund" : "company"} analysis`)).join("")}
+      <span class="small muted">${jRun ? `It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.` : ""}${anJobs.length ? ` ${anJobs.map(({ s0 }) => s0.sym).join(", ")} ${anJobs.length === 1 ? "comes" : "come"} into the line-up when written; Compare again then to use ${anJobs.length === 1 ? "it" : "them"}.` : ""}${J?.run_url && jRun ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
       : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
     const canRun = !busy && !jRun && (S.sample || S.mcp);
     const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
@@ -9144,27 +9243,51 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
     const ev0 = (x, k) => (isNum(x?.[k]) ? `${fix(x[k], Math.abs(x[k]) >= 100 ? 0 : 2)}${x.unit === "%" ? "%" : x.scale ? esc(x.scale) : ""}` : "—");
     const surpr = (x) => (isNum(x?.actual) && isNum(x?.estimate) ? (x.actual > x.estimate ? `<span class="up">above est.</span>` : x.actual < x.estimate ? `<span class="down">below est.</span>` : "in line") : "");
     const chgChip = (l, v) => (isNum(num(v)) ? `<span class="cx-chg ${num(v) > 0 ? "up" : num(v) < 0 ? "down" : ""}">${l} ${num(v) > 0 ? "+" : ""}${fix(num(v), Math.abs(num(v)) >= 10 ? 1 : 2)}</span>` : "");
-    let lastG = "";
-    const indRows = MA.indicators.map((x) => { const d0 = dFor(x.label), e0 = econFor(x.label), g = x.group !== lastG ? `<tr class="cx-grp"><td colspan="${1 + syms.length}">${esc(x.group || "Other")}</td></tr>` : ""; lastG = x.group;
-      return `${g}<tr><td class="cx-mi-l"><div class="cx-mi-h"><b>${esc(x.label)}</b><span class="mono"><b>${fv(x.value, x.unit)}</b>${x.prior !== null && x.prior !== undefined && x.prior !== "" ? ` <span class="muted">from ${fv(x.prior, x.unit)}${x.prior_label ? " " + esc(x.prior_label) : ""}</span>` : ""}${isNum(num(x.estimate)) ? ` <span class="muted">· est ${fv(x.estimate, x.unit)}</span>` : ""}</span></div>
-        <div class="cx-mi-n">${chgChip("1M", x.chg_1m)}${chgChip("3M", x.chg_3m)}${chgChip("1Y", x.chg_1y)}${x.date || x.period ? `<span class="small muted mono">${esc(x.date || x.period)}</span>` : ""}</div>
-        ${e0 ? `<div class="small cx-eod"><span class="pill neu">EODHD</span> ${e0.past ? `${esc(e0.past.type)} ${esc(e0.past.period)}: <b>${ev0(e0.past, "actual")}</b> vs est ${ev0(e0.past, "estimate")}, prev ${ev0(e0.past, "previous")} ${surpr(e0.past)}` : ""}${e0.next ? `${e0.past ? " · " : ""}next ${esc(fmtShort(e0.next.date))}${isNum(e0.next.estimate) ? ` (est ${ev0(e0.next, "estimate")})` : ""}` : ""}</div>` : ""}
-        <div class="cx-mi-inl">${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return p0 || (dd && dd !== "neutral") ? `<span>${cmpTick(k)} ${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}">${esc(p0.effect || "—")}</span>` : ""}${dd && dd !== "neutral" ? ` <span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span>` : ""}</span>` : ""; }).join("")}</div>
-        ${x.driver ? `<div class="small muted cx-mi-d">${esc(stripCites(x.driver))}</div>` : ""}${x.next ? `<div class="small cx-mi-d"><span class="muted">Next:</span> ${esc(stripCites(x.next))}</div>` : ""}${d0 ? `<div class="small cx-dline">${esc(d0.read)}</div>` : ""}</td>
-        ${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<td class="cx-mi-t">${p0 ? `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}" title="${esc(`${p0.relevance || ""} relevance${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "—")}</span>${p0.relevance ? `<div class="small muted">${esc(p0.relevance)}</div>` : ""}` : `<span class="small muted">—</span>`}${dd && dd !== "neutral" ? `<div class="small"><span class="pill ${IMPC[dd]}">desk ${IMPA[dd]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("");
+    // Each row: one line with every ticker's read (its industry report's, else code's estimate, else "not exposed");
+    // tap it for what's driving it, what's next, the official print and why each ticker reads it that way.
+    const REGC = (x) => (/expan|recover|goldil|boom|easing|support/i.test(x || "") ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(x || "") ? "neg" : "warn");
+    const effPill = (p0) => (!p0 || p0.effect === "not exposed" ? `<span class="cx-ne" title="${esc(p0?.why || "No measured link and no business tied to it")}">not exposed</span>`
+      : `<span class="pill ${EFFC[p0.effect] || "neu"}${p0.relevance === "high" ? "" : " cx-soft"}${p0.est ? " cx-est" : ""}" title="${esc(`${p0.est ? "Code's estimate" : "Its industry report's read"}${p0.relevance ? ` · ${p0.relevance} relevance` : ""}${p0.why ? ": " + stripCites(p0.why) : ""}`)}">${esc(p0.effect || "neutral")}${p0.est ? "<sup>est</sup>" : ""}</span>`);
+    const relDot = (r) => (r ? `<i class="cx-rel r-${esc(r)}" title="${esc(r)} relevance"></i>` : "");
+    const miKey = (x) => String(x.key || lc(x.label));
+    const MI = S.cmpMi || (S.cmpMi = { g: "", t: "", e: "", s: "", q: "" }), openSet = S.cmpOpen || (S.cmpOpen = new Set());
+    const indRows = MA.indicators.map((x) => { const d0 = dFor(x.label), e0 = econFor(x.label), k0 = miKey(x);
+      const effs = Object.fromEntries(syms.map((k) => [k, x.per[k]?.effect || "not exposed"])), srcs = Object.fromEntries(syms.map((k) => [k, x.per[k]?.est ? "code" : "report"]));
+      return `<details class="cx-mi-row" data-mi-key="${esc(k0)}" data-g="${esc(x.group || "Other")}" data-l="${esc(lc(x.label + " " + (x.group || "")))}" data-eff="${esc(JSON.stringify(effs))}" data-src="${esc(JSON.stringify(srcs))}"${openSet.has(k0) ? " open" : ""}>
+        <summary><div class="cx-mi-sum"><div class="cx-mi-name"><b>${esc(x.label)}</b><span class="small muted">${esc(x.group || "Other")}${x.date || x.period ? ` · ${esc(x.date || x.period)}` : ""}</span></div>
+          <div class="cx-mi-val"><b class="mono">${fv(x.value, x.unit)}</b>${chgChip("1M", x.chg_1m)}${chgChip("3M", x.chg_3m)}${chgChip("1Y", x.chg_1y)}</div>
+          <div class="cx-mi-reads">${syms.map((k) => { const p0 = x.per[k], dd = d0?.impact?.[k]; return `<span class="cx-mi-r" style="--tc:${cmpColor(k)}"><b class="cx-mi-sym">${esc(k)}</b>${effPill(p0)}${p0?.effect !== "not exposed" ? relDot(p0?.relevance) : ""}${dd && dd !== "neutral" ? `<span class="pill ${IMPC[dd]}" title="the macro desk: ${esc(dd)}">desk ${IMPA[dd]}</span>` : ""}</span>`; }).join("")}</div></div></summary>
+        <div class="cx-mi-body">
+          <div class="small muted">${x.prior !== null && x.prior !== undefined && x.prior !== "" ? `From ${fv(x.prior, x.unit)}${x.prior_label ? " " + esc(x.prior_label) : ""}` : ""}${isNum(num(x.estimate)) ? ` · consensus ${fv(x.estimate, x.unit)}` : ""}</div>
+          ${e0 ? `<div class="small cx-eod"><span class="pill neu">EODHD</span> ${e0.past ? `${esc(e0.past.type)} ${esc(e0.past.period)}: <b>${ev0(e0.past, "actual")}</b> vs est ${ev0(e0.past, "estimate")}, prev ${ev0(e0.past, "previous")} ${surpr(e0.past)}` : ""}${e0.next ? `${e0.past ? " · " : ""}next ${esc(fmtShort(e0.next.date))}${isNum(e0.next.estimate) ? ` (est ${ev0(e0.next, "estimate")})` : ""}` : ""}</div>` : ""}
+          ${x.driver ? `<p class="small"><b>What's driving it.</b> ${esc(stripCites(x.driver))}</p>` : ""}${x.next ? `<p class="small"><b>What's next.</b> ${esc(stripCites(x.next))}</p>` : ""}
+          ${d0 ? `<p class="small cx-dline"><b>Macro desk.</b> ${esc(stripCites(d0.read))}${d0.now ? ` <span class="muted">(${esc(stripCites(d0.now))})</span>` : ""}</p>` : ""}
+          <div class="cx-mi-why"><span class="eyebrow">Why each reads it this way</span>${[...syms.reduce((m, k) => { const p0 = x.per[k] || {}, key = `${p0.effect}|${p0.relevance}|${p0.est ? 1 : 0}|${p0.why || ""}`; const g0 = m.get(key) || { p0, ks: [] }; g0.ks.push(k); return m.set(key, g0); }, new Map()).values()].map(({ p0, ks }) => `<div class="small">${ks.map((k) => `<b class="cx-mi-sym" style="--tc:${cmpColor(k)}">${esc(k)}</b>`).join(" ")} ${effPill(p0)}${p0?.relevance ? ` <span class="muted">${esc(p0.relevance)} relevance</span>` : ""} ${esc(stripCites(p0?.why || ""))}${p0?.effect && !p0.est ? ` <span class="muted">(${ks.length > 1 ? "their" : "its"} industry report)</span>` : ""}</div>`).join("")}</div>
+        </div></details>`; }).join("");
+    const miGroups = [...MA.indicators.reduce((m, x) => m.set(x.group || "Other", (m.get(x.group || "Other") || 0) + 1), new Map())];
+    const fchip = (attr, val, label, on) => `<button class="chip${on ? " cur" : ""}" data-${attr}="${esc(val)}">${label}</button>`;
+    const miBar = `<div class="cx-mi-bar"><input type="search" id="cx-mi-q" placeholder="Search ${MA.indicators.length} indicators…" value="${esc(MI.q)}" aria-label="Search indicators">
+      <div class="cx-fchips"><span class="eyebrow">Group</span>${fchip("mi-g", "", `All <span class="muted">${MA.indicators.length}</span>`, !MI.g)}${miGroups.map(([g, n0]) => fchip("mi-g", g, `${esc(g)} <span class="muted">${n0}</span>`, MI.g === g)).join("")}</div>
+      <div class="cx-fchips"><span class="eyebrow">For</span>${fchip("mi-t", "", "Everyone", !MI.t)}${syms.map((k) => fchip("mi-t", k, esc(k), MI.t === k)).join("")}
+        <span class="eyebrow" style="margin-left:8px">Show</span>${[["", "All"], ["exposed", "Exposed"], ["headwind", "Headwinds"], ["tailwind", "Tailwinds"]].map(([v0, l0]) => fchip("mi-e", v0, l0, MI.e === v0)).join("")}
+        <span class="eyebrow" style="margin-left:8px">Source</span>${[["", "All"], ["report", "Industry reports"], ["code", "Code estimates"]].map(([v0, l0]) => fchip("mi-s", v0, l0, MI.s === v0)).join("")}</div>
+      <div class="cx-fchips"><button class="chip" data-mi-all="open">Expand all</button><button class="chip" data-mi-all="close">Collapse all</button><span class="small muted" id="cx-mi-count"></span></div></div>`;
     // The calendar itself: what's been released lately against consensus, and what's scheduled next.
     const ePast = ECON.filter((x) => x.date < today() && isNum(x.actual)).slice(-18).reverse(), eNext = ECON.filter((x) => x.date >= today()).slice(0, 18);
-    const econT = ePast.length || eNext.length ? `<h3>US economic calendar <span class="small muted">EODHD · medium and high importance</span></h3><div class="two">
+    const econT = ePast.length || eNext.length ? `<details class="cx-fold"><summary><h3>US economic calendar <span class="small muted">EODHD · ${ePast.length} released lately, ${eNext.length} coming up</span></h3></summary><div class="two">
       ${ePast.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Released</th><th class="n">Actual</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${ePast.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono ${isNum(x.estimate) ? (x.actual > x.estimate ? "up" : x.actual < x.estimate ? "down" : "") : ""}"><b>${ev0(x, "actual")}</b></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}
-      ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>` : "";
+      ${eNext.length ? `<div class="tbl-wrap"><table class="cx-econ"><thead><tr><th>Coming up</th><th class="n">Est.</th><th class="n">Prev.</th></tr></thead><tbody>${eNext.map((x) => `<tr><td><b>${esc(x.type)}</b>${x.comparison ? ` <span class="muted">${esc(x.comparison)}</span>` : ""}<div class="small muted">${esc(fmtShort(x.date))}${x.time && x.time !== "00:00" ? " " + esc(x.time) + " UTC" : ""} · ${esc(x.period)}${x.importance === "high" ? ` · <span class="warn-t">high</span>` : ""}</div></td><td class="n mono">${ev0(x, "estimate")}</td><td class="n mono muted">${ev0(x, "previous")}</td></tr>`).join("")}</tbody></table></div>` : ""}</div></details>` : "";
     const macroInd = MA.indicators.length || econT ? sec("cmp-macroind", "Macro indicators", `${MA.indicators.length ? `the full macro tables of their industry reports (${MA.indicators.length} indicators) with each ticker's read, ` : ""}live US releases from EODHD`,
       `${MD?.regime ? `<div class="coread"><span class="eyebrow">The backdrop (macro desk)</span><p>${esc(MD.regime)}</p></div>` : ""}
-      ${MA.regimes.length ? `<div class="cx-regimes"><span class="eyebrow">Each industry's macro call${subs.some((s0) => s0.bond) ? " (a bond fund: its rate and inflation read)" : ""}</span>${MA.regimes.map((r) => `<div class="small">${cmpTick(r.sym)} <b>${esc(r.industry)}</b>${r.bond ? ` <span class="muted">read by code through its duration</span>` : subs.find((s0) => s0.sym === r.sym)?.kind === "fund" ? ` <span class="muted">${pct(r.weight, false, 0)} of it</span>` : ""}: <span class="pill ${/expan|recover|goldil|boom|easing|support/i.test(r.regime) ? "pos" : /contract|recess|stag|squeeze|restrict/i.test(r.regime) ? "neg" : "warn"}">${esc(r.regime || "—")}</span> ${esc(stripCites(r.headline || r.summary))}</div>`).join("")}</div>` : ""}
-      ${MA.indicators.length ? `<div class="tbl-wrap cx-mi"><table><thead><tr><th>Indicator · latest · change</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${indRows}</tbody></table></div>` : `<div class="small muted">None of these tickers has an analyzed industry with a macro table yet.</div>`}
+      ${MA.regimes.length ? `<h3>Each industry's macro call${subs.some((s0) => s0.bond) ? ` <span class="small muted">(a bond fund: its rate and inflation read)</span>` : ""}</h3><div class="cx-rcards">${[...MA.regimes.reduce((m, r) => { const k0 = r.bond ? "bond|" + r.sym : r.industry; const g0 = m.get(k0) || { r, who: [] }; g0.who.push(r); return m.set(k0, g0); }, new Map()).values()].map(({ r, who }) => `<div class="cx-rcard" style="--tc:${cmpColor(r.sym)}"><div class="cx-rc-top"><span class="cx-rc-who">${who.map((w) => `${cmpTick(w.sym)}${!w.bond && subs.find((s0) => s0.sym === w.sym)?.kind === "fund" ? ` <span class="small muted">${pct(w.weight, false, 0)} of it</span>` : ""}`).join(" ")}</span><span class="pill ${REGC(r.regime)}">${esc(r.regime || "—")}</span></div>
+        <div><b>${esc(r.industry)}</b>${r.bond ? ` <span class="small muted">read by code through its duration</span>` : ""}</div>
+        <p class="small">${esc(stripCites(r.headline || r.summary))}</p></div>`).join("")}</div>` : ""}
+      ${MA.indicators.length ? `<h3>Indicators <span class="small muted">every indicator their industry reports track, with each ticker's read · tap a row for the detail</span></h3>${miBar}<div class="cx-mi-list" id="cx-mi-list">${indRows}</div>
+        <div class="small muted cx-mi-legend"><span class="pill pos">tailwind</span> <span class="pill neg">headwind</span> from its industry report · <span class="pill neg cx-est">headwind<sup>est</sup></span> code's estimate from its measured sensitivity and revenue by region · <span class="cx-ne">not exposed</span> no measured link and no business tied to it · <i class="cx-rel r-high"></i><i class="cx-rel r-medium"></i><i class="cx-rel r-low"></i> relevance high, medium, low · desk ▲/▼ the macro desk's call</div>` : `<div class="small muted">None of these tickers has an analyzed industry with a macro table yet.</div>`}
       ${econT}
-      ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-moves">${MA.moves.map((m0) => `<div class="small">${cmpTick(m0.sym)} <b>${esc(m0.label)}</b>: ${esc(stripCites(m0.move))}${m0.driver ? ` <span class="muted">Driver: ${esc(stripCites(m0.driver))}</span>` : ""}${m0.so_what ? ` <span>So what: ${esc(stripCites(m0.so_what))}</span>` : ""}</div>`).join("")}</div>` : ""}
-      ${MA.flips.length ? `<h3>What would flip their macro calls</h3><ul class="memo-pts">${MA.flips.map((f0) => `<li class="small">${cmpTick(f0.sym)} <b>${esc(stripCites(f0.trigger))}</b> — ${esc(stripCites(f0.mechanism))}</li>`).join("")}</ul>` : ""}
-      <div class="small muted">Rows come from the macro tables of the industry reports behind each ticker (a fund's industries at its weights); a headwind or tailwind is that industry's own read of the indicator, faded when it matters less; "desk" is the macro desk's call on the ticker. The EODHD line is the latest official print against consensus.</div>`) : "";
+      ${MA.moves.length ? `<h3>What's moving and why</h3><div class="cx-rcards">${cmpGroup(MA.moves, (m0) => m0.label + "|" + m0.move).map(({ x: m0, who }) => `<div class="cx-rcard" style="--tc:${cmpColor(m0.sym)}"><div class="cx-rc-top"><span class="cx-rc-who">${who.map((w) => cmpTick(w.sym)).join(" ")}</span><b>${esc(m0.label)}</b></div><p class="small">${esc(stripCites(m0.move))}</p>${m0.driver ? `<p class="small muted"><b>Driver.</b> ${esc(stripCites(m0.driver))}</p>` : ""}${m0.so_what ? `<p class="small"><b>So what.</b> ${esc(stripCites(m0.so_what))}</p>` : ""}</div>`).join("")}</div>` : ""}
+      ${MA.flips.length ? `<h3>What would flip their macro calls</h3><div class="cx-rcards">${cmpGroup(MA.flips, (f0) => f0.trigger + "|" + f0.mechanism).map(({ x: f0, who }) => `<div class="cx-rcard" style="--tc:${cmpColor(f0.sym)}"><div class="cx-rc-top"><span class="cx-rc-who">${who.map((w) => cmpTick(w.sym)).join(" ")}</span><span class="small muted">${esc(f0.industry || "")}</span></div><p class="small"><b>${esc(stripCites(f0.trigger))}</b></p><p class="small">${esc(stripCites(f0.mechanism))}</p>${f0.watch ? `<p class="small muted"><b>Watch.</b> ${esc(stripCites(f0.watch))}</p>` : ""}</div>`).join("")}</div>` : ""}
+      `) : "";
 
     // ---- inside the funds: what each fund holds, the industries it's made of and their calls, and a bond fund's numbers
     const fundsIn = subs.filter((s0) => s0.kind === "fund");
@@ -9195,11 +9318,22 @@ button.cx-run { padding: 10px 20px; font-size: 15px; box-shadow: 0 8px 22px -10p
           ${w.developments?.length ? `<div class="small"><b>Latest:</b> ${esc(w.developments.map((x) => `${x.date || ""} ${stripCites(x.text || "")}`).join(" · "))}</div>` : ""}
           ${syms.filter((k) => d0?.impact?.[k]?.why).map((k) => `<div class="small">${cmpTick(k)} ${esc(d0.impact[k].why)}</div>`).join("")}</details></div>`; }).join("");
     const dT = (c) => (MD?.trade || []).find((x) => x.country.toLowerCase() === String(c).toLowerCase());
-    const tradeT = MA.trade.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th>Importance</th><th>Threat</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.trade.map((c0) => { const d0 = dT(c0.country);
-        return `<tr><td class="wr"><b>${esc(c0.country)}</b>${c0.alliance ? ` <span class="small muted">${esc(c0.alliance)}</span>` : ""}${d0?.read ? `<div class="small cx-dline">${esc(d0.read)}</div>` : c0.headline ? `<div class="small muted">${esc(stripCites(c0.headline))}</div>` : ""}</td><td class="small">${esc(c0.importance || "—")}</td><td><span class="pill ${/high|severe|critical/i.test(c0.threat) ? "neg" : /medium|moderate/i.test(c0.threat) ? "warn" : "neu"}">${esc(c0.threat || "—")}</span></td>
-          ${syms.map((k) => { const p0 = c0.per[k], dd = d0?.impact?.[k]; return `<td class="small">${p0 ? `${isNum(p0.rev) ? `<b>${pct(p0.rev, false, 1)}</b>${p0.est ? " est." : ""} of revenue` : "—"}<div><span class="pill ${STC(p0.stance)}">${esc(p0.stance || "—")}</span></div>` : `<span class="muted">—</span>`}${dd && dd.direction !== "neutral" ? `<div title="${esc(dd.why)}"><span class="pill ${IMPC[dd.direction]}">desk ${IMPA[dd.direction]}</span></div>` : ""}</td>`; }).join("")}</tr>`; }).join("")}</tbody></table></div>` : "";
+    // The trade map and the rule book: one line per country or rule with each ticker's exposure; tap for the detail.
+    const sevC = (x) => (/crit|high|severe/i.test(x || "") ? "neg" : /med|moder/i.test(x || "") ? "warn" : "neu");
+    const tradeT = MA.trade.length ? `<h3>The trade map <span class="small muted">${MA.trade.length} countries · tap one for the detail</span></h3><div class="cx-mi-list">${MA.trade.map((c0) => { const d0 = dT(c0.country);
+        return `<details class="cx-mi-row"><summary><div class="cx-mi-sum"><div class="cx-mi-name"><b>${esc(c0.country)}</b><span class="small muted">${[c0.alliance, c0.importance ? c0.importance + " importance" : "", c0.trajectory].filter(Boolean).map(esc).join(" · ")}</span></div>
+          <div class="cx-mi-val"><span class="pill ${sevC(c0.threat)}">${esc(c0.threat ? c0.threat + " threat" : "threat n/a")}</span></div>
+          <div class="cx-mi-reads">${syms.map((k) => { const p0 = c0.per[k], dd = d0?.impact?.[k]; return `<span class="cx-mi-r" style="--tc:${cmpColor(k)}"><b class="cx-mi-sym">${esc(k)}</b>${p0 ? `${isNum(p0.rev) ? `<span class="small mono">${pct(p0.rev, false, 1)}${p0.est ? "<sup>est</sup>" : ""}</span>` : ""}<span class="pill ${STC(p0.stance)}">${esc(p0.stance || "exposed")}</span>` : `<span class="cx-ne">not exposed</span>`}${dd && dd.direction !== "neutral" ? `<span class="pill ${IMPC[dd.direction]}" title="${esc(dd.why || "")}">desk ${IMPA[dd.direction]}</span>` : ""}</span>`; }).join("")}</div></div></summary>
+          <div class="cx-mi-body">${d0?.read ? `<p class="small cx-dline"><b>Macro desk.</b> ${esc(stripCites(d0.read))}</p>` : ""}${c0.headline ? `<p class="small">${esc(stripCites(c0.headline))}</p>` : ""}${c0.outlook ? `<p class="small"><b>Outlook.</b> ${esc(stripCites(c0.outlook))}</p>` : ""}
+            ${(c0.risks || []).length ? `<p class="small"><b>Risks.</b> ${(c0.risks || []).map((r) => esc(stripCites(typeof r === "string" ? r : r?.risk || ""))).filter(Boolean).join("; ")}</p>` : ""}
+            ${syms.some((k) => d0?.impact?.[k]?.why) ? `<div class="cx-mi-why">${syms.filter((k) => d0?.impact?.[k]?.why).map((k) => `<div class="small"><b class="cx-mi-sym" style="--tc:${cmpColor(k)}">${esc(k)}</b> ${esc(stripCites(d0.impact[k].why))}</div>`).join("")}</div>` : ""}
+            <div class="small muted">Revenue there is each ticker's industry's (reported, else estimated); "not exposed": its industry report doesn't name the country.</div></div></details>`; }).join("")}</div>` : "";
     const regL = MA.rules.length || MA.items.length || MD?.regulation?.length ? `${MD?.regulation?.length ? `<div class="cx-cards">${MD.regulation.map((r0) => `<div class="box small"><b>${esc(r0.item)}</b>${r0.status ? ` <span class="muted">${esc(r0.status)}</span>` : ""}${chips(Object.fromEntries(syms.map((k) => [k, r0.impact[k]?.direction])))}${syms.filter((k) => r0.impact[k]?.why).map((k) => `<div>${cmpTick(k)} ${esc(r0.impact[k].why)}</div>`).join("")}</div>`).join("")}</div>` : ""}
-      ${MA.rules.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Rule</th><th>Status</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MA.rules.map((r0) => `<tr><td class="wr"><b>${esc(r0.body ? r0.body + ": " : "")}${esc(r0.name)}</b>${r0.bottom_line ? `<div class="small muted">${esc(stripCites(r0.bottom_line))}</div>` : ""}</td><td class="small">${esc(r0.status || "")}${r0.effective ? ` · ${esc(r0.effective)}` : ""}</td>${syms.map((k) => `<td>${r0.per[k] ? `<span class="pill ${/crit|high/i.test(r0.per[k].severity) ? "neg" : /med/i.test(r0.per[k].severity) ? "warn" : "neu"}">${esc(r0.per[k].severity || "applies")}</span>` : `<span class="small muted">—</span>`}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : ""}
+      ${MA.rules.length ? `<h3>Rules and regulators <span class="small muted">${MA.rules.length} rules · tap one for the detail</span></h3><div class="cx-mi-list">${MA.rules.map((r0) => `<details class="cx-mi-row"><summary><div class="cx-mi-sum"><div class="cx-mi-name"><b>${esc(r0.name)}</b><span class="small muted">${esc(r0.body || "")}</span></div>
+        <div class="cx-mi-val"><span class="pill ${sevC(r0.severity)}">${esc(r0.severity || "n/a")}</span><span class="small muted">${esc(String(r0.status || "").replace(/_/g, " "))}</span></div>
+        <div class="cx-mi-reads">${syms.map((k) => `<span class="cx-mi-r" style="--tc:${cmpColor(k)}"><b class="cx-mi-sym">${esc(k)}</b>${r0.per[k] ? `<span class="pill ${sevC(r0.per[k].severity)}">${esc(r0.per[k].severity || "applies")}</span>` : `<span class="cx-ne">not exposed</span>`}</span>`).join("")}</div></div></summary>
+        <div class="cx-mi-body">${r0.bottom_line ? `<p class="small">${esc(stripCites(r0.bottom_line))}</p>` : ""}${r0.effective ? `<p class="small"><b>Effective.</b> ${esc(r0.effective)}</p>` : ""}${r0.next12 ? `<p class="small"><b>Next 12 months.</b> ${esc(stripCites(r0.next12))}</p>` : ""}
+          <div class="small muted">Severity is each ticker's industry's read of the rule; "not exposed": its industry's rule book doesn't cover it.</div></div></details>`).join("")}</div>` : ""}
       ${MA.items.length ? `<ul class="memo-pts">${MA.items.map((x) => `<li class="small"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.status ? ` (${esc(x.status)}${x.date ? ", " + esc(x.date) : ""})` : ""} ${syms.filter((k) => x.per[k]).map((k) => `${cmpTick(k)}${x.per[k].direction ? ` <span class="${/pos|favor|tail/i.test(x.per[k].direction) ? "pos-t" : /neg|advers|head/i.test(x.per[k].direction) ? "neg-t" : "muted"}">${esc(x.per[k].direction)}</span>` : ""}`).join(" ")}${x.next ? `<div class="muted">Next: ${esc(stripCites(x.next))}</div>` : ""}</li>`).join("")}</ul>` : ""}` : "";
     const affairs = worldC || tradeT || regL ? sec("cmp-affairs", "Foreign affairs", "world situations, the trade map and regulation, from their industry reports, with each ticker's exposure",
       `${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT ? `<h3>The trade map</h3>${tradeT}` : ""}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
