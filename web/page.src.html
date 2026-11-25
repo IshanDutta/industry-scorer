@@ -2486,8 +2486,16 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     S.calls++; if (S.sectorRun) { const r = S.sectorRun; r.calls = (r.calls || 0) + 1; r.byPhase[r.phase] = (r.byPhase[r.phase] || 0) + 1; }
     if (JOB) opts = { ...(opts || {}), jobStep: opts?.jobStep || (S.sectorRun ? S.sectorRun.phase : "single industry") };
     try { return await S.sample.json(prompt, opts); }
-    catch (e) { if (e?.code === "invalid_json" && e.text) { const v = RegBook.repairJson(e.text); if (v && typeof v === "object") return v; } throw e; }
+    catch (e) {
+      const cut = e?.code === "invalid_json" && /cut short/i.test(e?.message || "");
+      // An analyst's answer that ran out of room: ask once more (the second answer is usually complete) before keeping what came back.
+      if (cut && opts?.retryCut) { const o2 = { ...opts, retryCut: false }; if (JOB) o2.jobStep = (opts.jobStep || "") + " (asked again: the answer was cut short)"; return await sampleJson(prompt, o2); }
+      if (e?.code === "invalid_json" && e.text) { const v = RegBook.repairJson(e.text); if (v && typeof v === "object") { if (cut && !Array.isArray(v)) Object.defineProperty(v, "__cut", { value: true }); return v; } }
+      throw e;
+    }
   }
+  /** A KPI report whose answer was cut short: marked partial, or everything after unit economics empty. */
+  const kpiCut = (r) => !!r && (!!r.partial || (!(r.demand_drivers || []).length && !(r.supply_drivers || []).length && !(r.hot_segments || []).length && !(r.cool_segments || []).length && !String(r.pricing_power?.text || "").trim()));
   const STOP_CODES = new Set(["not_granted", "sampling_disabled", "rate_limited", "session_expired", "cancelled", "capability_disabled", "capability_removed", "not_declared"]);
   /** Score pillars from every report section (code, from the reports' structured fields). */
   function sectionScores(name, { withLead = true } = {}) {
@@ -2523,16 +2531,19 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const lim = S.sample.limits ? await S.sample.limits().catch(() => null) : null;
     const maxBytes = lim?.maxPromptBytes || 262144;
     const fit = (p) => { const b = new TextEncoder().encode(p); return b.length <= maxBytes - 2048 ? p : new TextDecoder().decode(b.slice(0, maxBytes - 4096)).replace(/\n[^\n]*$/, "") + "\n\n(Data cut to fit; reply with the JSON as instructed.)"; };
+    const cutSteps = new Set();
     const call = async (prompt, tier, entry, tools = null) => {
       const ctl = new AbortController(); ctls.add(ctl);
-      const opts = { signal: ctl.signal, modelTier: tier, onText: () => { if (entry.status !== "writing") { entry.status = "writing"; renderReport(); } } };
+      const opts = { signal: ctl.signal, modelTier: tier, retryCut: true, onText: () => { if (entry.status !== "writing") { entry.status = "writing"; renderReport(); } } };
       if (tools?.length) opts.tools = tools.slice(0, lim?.tools?.maxCount || tools.length);
       else opts.cache = false; // every answer is generated now, never replayed
-      try { return await sampleJson(fit(prompt), opts); }
+      try { const v = await sampleJson(fit(prompt), opts); if (v?.__cut) cutSteps.add(entry.key); return v; }
       finally { ctls.delete(ctl); }
     };
-    // Results live in memory for this page view only; nothing is written anywhere.
-    const save = (kind, result, extra = {}) => { S.reports[`${slug(name)}--${kind}`] = jsonSafe({ name, kind, as_of: today(), run_at: new Date().toISOString(), result, ...extra }); };
+    // Results live in memory for this page view only; nothing is written anywhere. A report from an answer that was
+    // cut short (even after asking again) is marked partial, so it shows as such and the daily update redoes it.
+    const save = (kind, result, extra = {}) => { const r = kind === "kpi" && cutSteps.has("kpi") && result && typeof result === "object" ? { ...result, partial: true } : result;
+      S.reports[`${slug(name)}--${kind}`] = jsonSafe({ name, kind, as_of: today(), run_at: new Date().toISOString(), result: r, ...extra }); };
     const step = async (key, label, fn) => {
       const entry = { key, label, status: "thinking", t0: Date.now() }; st.push(entry); renderReport();
       try { await fn(entry); entry.status = "done"; }
@@ -3393,10 +3404,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           const dft = Daily.drift(d, String(ag.run_at || "").slice(0, 10));
           const drift = dft ? { ...dft, updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null } : { updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null };
           const cands = backfill ? [] : Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
+          const kpiRedo = !backfill && kpiCut(rep(name, "kpi")?.result);
           const l0 = res.outlook, lAge = l0?.date ? (Date.parse(today()) - Date.parse(l0.date)) / 864e5 : Infinity;
           const st = backfill ? 2 : Daily.strength(x, tri, shock);
           day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length, strength: st, score: (isNum(x.z) ? Math.abs(x.z) * 10 : 0) + x.triggers.length + (tri?.material ? 5 : 0),
-            leanDue: !l0 || l0.provisional || lAge >= 7, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
+            leanDue: !l0 || l0.provisional || lAge >= 7, kpiRedo, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
           await doFlush(name);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
@@ -3432,7 +3444,10 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const pl = budget === Infinity ? { run: all, held: [], borrowed: 0 } : Daily.plan(all, budget, { stretch });
       dr.borrowed = pl.borrowed || 0;
       const chosen = {}; for (const c of pl.run) (chosen[c.industry] ||= []).push(c);
+      // Repairs first, outside the budget: a KPI analysis whose answer was cut short is written again in full.
+      for (const [n, v] of Object.entries(day)) if (v.kpiRedo && !(chosen[n] || []).some((c) => c.key === "kpi")) (chosen[n] ||= []).push({ industry: n, key: "kpi", label: Daily.SECTIONS.kpi.label, why: "repair: the last KPI analysis was cut short, so its pricing power, drivers and segments were missing", by: "code", importance: "high" });
       const heldBy = {}; for (const c of pl.held) (heldBy[c.industry] ||= []).push(c);
+      for (const k of Object.keys(heldBy)) heldBy[k] = heldBy[k].filter((c) => !(c.key === "kpi" && day[k]?.kpiRedo));
       dr.held = pl.held.map((c) => `${c.industry}: ${c.label}`);
       dr.budget = budget === Infinity ? null : Math.round(budget * 100) / 100;
 
@@ -4446,7 +4461,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const err = S.teamErrors[sl] || {};
     if (!S.research[sl] || !S.world?.items) out.push("research");
     const failed = (k) => !!(err[k] || (k === "world" && (err.scout || err.dive)) || (k === "macro" && (err.plan || err.indicators)));
-    for (const k of ["kpi", "world", "trade", "reg", "chain"]) if (!rep(name, k) && !failed(k)) out.push(k);
+    for (const k of ["kpi", "world", "trade", "reg", "chain"]) if ((!rep(name, k) || (k === "kpi" && kpiCut(rep(name, k).result))) && !failed(k)) out.push(k);
     if (!rep(name, "calls") && !failed("calls") && (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt)) out.push("calls");
     const m = rep(name, "macro"); if ((!m || m.result?.partial || !macroOf(name)?.rows?.length) && !failed("macro")) out.push("macro");
     const bodies = regBodies(name);
@@ -5480,7 +5495,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const errs = S.teamErrors[slug(d.name)] || {};
     const head = k ? `<div class="callout"><div class="callout-head"><span class="eyebrow">Where the cycle is</span>${toneChip(k.cycle_position)}${k.unit_economics?.operating_leverage ? `<span class="pill neu">operating leverage: ${esc(k.unit_economics.operating_leverage)}</span>` : ""}${k.pricing_power?.level ? `<span class="pill ${k.pricing_power.level === "strong" ? "pos" : k.pricing_power.level === "weak" ? "neg" : "neu"}">pricing power: ${esc(k.pricing_power.level)}</span>` : ""}</div>
         <p class="summary-text">${rich(k.summary)}</p>${k.cycle_text ? `<p class="prose muted">${rich(k.cycle_text)}</p>` : ""}</div>` : `<div class="notice ${errs.kpi ? "err" : "info"}">${errs.kpi ? "The industry KPI analyst didn't finish: " + esc(errs.kpi) : "The industry KPI analyst hasn't run for this industry yet."} The segment data below comes straight from company filings.</div>`;
-    const body = k ? `
+    const body = k ? `${kpiCut(k) ? `<div class="notice warn">This analysis was cut short when it was written: the analyst ran out of room part-way through, so pricing power, the demand and supply drivers and the hot and cool segments are missing below. The next daily update on GitHub writes it again in full.</div>` : ""}
       <h3>Demand metrics</h3>${metricCards(k.demand_metrics)}
       <h3>Profitability metrics</h3>${metricCards(k.profitability_metrics)}
       <div class="two"><div class="box"><h3>Unit economics</h3>${k.unit_economics?.incremental_margin ? `<div class="small"><b>Incremental margin:</b> ${rich(k.unit_economics.incremental_margin)}</div>` : ""}${para("", k.unit_economics?.text)}</div>
