@@ -13,6 +13,15 @@ The owner (Ishan) reads results on his phone. He wants plain wording, full text 
 long lists, interactive and easy-to-navigate layouts, and comparisons that are fast (3-5 minutes) and cheap without
 losing analysis.
 
+## The shell (AdvisorMindOS)
+
+The page is branded AdvisorMindOS: petrol canvas, one brass accent (`--accent`), Bricolage Grotesque headings,
+Instrument Sans text, IBM Plex Mono numbers. The last `<script>` in `page.src.html` is the shell: it folds every
+`section.panel` from its `.panel-head` (state in localStorage, `data-fold-default="closed"` starts one folded), moves
+the tab indicator, runs the jump palette (Ctrl/Cmd K or /, Alt+1-5 for tabs), and animates sections the first time
+they appear. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the
+`--t1`..`--t4` tokens (100/150/200/300ms), transform and opacity only, and honors reduced motion.
+
 ## Layout
 
 - `web/page.src.html`: the page (HTML, CSS, and most of the app code; about 10,000 lines). Edit this, never
