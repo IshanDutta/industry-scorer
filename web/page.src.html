@@ -3539,7 +3539,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   }
 
   /**
-   * Times like this for every window (1M, 3M, 6M, 1Y), for every finished industry in a sector: the five past stretches
+   * Times like this for every window (1M, 3M, 6M, 1Y, 3Y, 5Y), for every finished industry in a sector: the five past stretches
    * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
    * the same stretches come back). Run on GitHub from "Update everything from GitHub"; saved on the run as `twin`.
    */
@@ -5021,7 +5021,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
-          <div class="seg" role="group" aria-label="Window">${["1M", "3M", "6M", "1Y"].map((k) => `<button type="button" aria-pressed="${k === (S.indRet || "1Y")}" data-ind-ret="${k}">${k}</button>`).join("")}</div><div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
+          <div class="seg" role="group" aria-label="Window">${["1M", "3M", "6M", "1Y", "3Y", "5Y"].map((k) => `<button type="button" aria-pressed="${k === (S.indRet || "1Y")}" data-ind-ret="${k}">${k}</button>`).join("")}</div><div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
         ${note(ag, "performance")}
         <div class="strip" aria-label="SPY and rates">${strip}</div>
         <div class="kpis">${perfK}</div>${charts}${twBlock("industry", d.name, timesSection(d))}</section>
@@ -11144,7 +11144,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
    * window began. A picked stretch is drawn from the same start (solid), and what came after it is drawn from today's
    * level forward (dashed), as if today went the way it went then.
    */
-  const PP_AHEAD = { "1M": 63, "3M": 126, "6M": 189, "1Y": 252 };
+  const PP_AHEAD = { "1M": 63, "3M": 126, "6M": 189, "1Y": 252, "3Y": 252, "5Y": 252 };
   try { S.ppSpy = localStorage.getItem("ams.ppSpy") === "1"; } catch {}
   function ppSpyFor(from) {
     const b = S.bench?.spy; if (b?.dates?.length && b.dates[0] <= from) return b;
@@ -11167,8 +11167,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       return { name: key, sel, dates: fd.ser.dates.slice(i0), values: fd.ser.closes.slice(i0), win: TW_WIN[w] ? w : null, spy: fd.spy?.dates?.[0] <= fd.ser.dates[i0] ? fd.spy : ppSpyFor(fd.ser.dates[i0]),
         bench: fd.bser && fd.bench?.symbol && fd.bench.symbol !== "SPY" ? { name: fd.bench.symbol, ser: fd.bser } : null };
     }
-    const d = S.industries[slug(key)], idx = d?.index; if (!idx?.dates?.length) return null;
-    const w = S.indRet || "1Y", n = Math.min(idx.dates.length, Math.round(TW_WIN[w] * 21) + 1);
+    const d = S.industries[slug(key)], long = S.twIndSer?.[key], w = S.indRet || "1Y", need = Math.round(TW_WIN[w] * 21) + 1;
+    const idx = long?.dates?.length && (d?.index?.dates?.length || 0) < need ? { dates: long.dates, levels: long.values } : d?.index; if (!idx?.dates?.length) return null;
+    const n = Math.min(idx.dates.length, need);
     return { name: key, short: "The industry", sel: w, dates: idx.dates.slice(-n), values: idx.levels.slice(-n), win: w, spy: ppSpyFor(idx.dates[idx.dates.length - n]) };
   }
   const ppFuture = (last, n) => { const out = []; const t = new Date(last + "T00:00:00Z"); while (out.length < n) { t.setUTCDate(t.getUTCDate() + 1); const g = t.getUTCDay(); if (g && g !== 6) out.push(t.toISOString().slice(0, 10)); } return out; };
@@ -11212,8 +11213,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const ck = t.dataset.twClear; if (S.twOver) delete S.twOver[ck]; ppRedraw(ck); for (const el of document.querySelectorAll(".tw")) if (`${el.dataset.tw}:${el.dataset.twKey}` === ck) twSync(el);
   });
   // ------------------------------------------------------------- times like this, by window (inside Performance)
-  const TW_WIN = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 }, _twHtml = new Map();
-  const TW_LAB = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year" };
+  const TW_WIN = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12, "3Y": 36, "5Y": 60 }, _twHtml = new Map();
+  const TW_LAB = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year", "3Y": "3 years", "5Y": "5 years" };
   /** Performance's "Times like this": pick a window, see the five past stretches most like it and what came after. The
    * older monthly view (with the historian's notes) stays underneath, whole. */
   function twBlock(kind, key, old = "") {
@@ -11235,7 +11236,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       let w = exchangeWeights(cons.map((c) => ({ exchange: c.exchange || c.exchangeShortName, market_cap: c.market_cap || c.marketCap })));
       if (!Object.keys(w).length) w = { NASDAQ: 0.5, NYSE: 0.5 };
       const h = await fetchHistory(key, w), ls = History.levelSeries(h.perfRows, w);
-      return ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null;
+      const out = ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null; if (out) (S.twIndSer ||= {})[key] = out; return out;
     }, 6 * 3600 * 1000);
   }
   /** One industry's Times like this for every window, with the historian's notes (reused when the same stretches come back). */
@@ -11264,7 +11265,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const body = el.querySelector(".tw-body"), ck = `${k0}|${win}|${today()}`;
     if (_twHtml.has(ck)) { body.innerHTML = _twHtml.get(ck); twSync(el); return; }
     const pre = kind === "industry" ? S.industries[slug(key)]?.twin : null, preW = pre?.windows?.[win];
-    if (preW?.R && pre.date >= Horizon.addDays(today(), -3)) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; twSync(el); ppRedraw(k0); return; }
+    if (preW?.R && pre.date >= Horizon.addDays(today(), -(kind === "industry" && !S.mcp ? 30 : 3))) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; twSync(el); ppRedraw(k0); return; }
     if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
     body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}…</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
     try {
@@ -11272,6 +11273,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       const R = ind ? Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }) : null;
       const draw = (N) => { _twState.set(ck, { R, N, win, kind, key }); const html = twHTML(R, win, kind, key, N); _twHtml.set(ck, html);
         if (S.twWin[k0] !== win) return; for (const x of document.querySelectorAll(".tw")) if (x.dataset.tw === kind && x.dataset.twKey === key) { x.querySelector(".tw-body").innerHTML = html; twSync(x); } ppRedraw(k0); };
+      // An industry's notes come from GitHub (the windows pass, on the API): reused when its stretches are the same ones.
+      const preN = kind === "industry" && preW?.N?.ends && R?.episodes?.length && preW.N.ends.join() === R.episodes.map((e) => e.end).join() ? preW.N : null;
+      if (kind === "industry") { draw(preN || "github"); return; }
       const N0 = twNoteGet(ck); draw(N0 || (R?.episodes?.length && S.sample ? "pending" : null));
       if (!N0 && R?.episodes?.length && S.sample) draw(await twNarrate(kind, key, R, ck));
     } catch (e) { if (FATAL.has(e?.code)) throw e; body.innerHTML = `<div class="small muted">The long price history didn't come back from FMP, so the past stretches can't be found right now.</div>`; }
@@ -11332,7 +11336,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const ML = (d) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
     const strip = `<div class="tw-base">${HZ.map(([h, l]) => { const b = R.base[h] || {}; return `<div class="tw-b"><span class="eyebrow">${l} later</span><span class="tw-bn"><b>${b.up ?? "—"}</b> of ${b.n ?? 5} higher</span><span class="small">median ${sg(b.median)}</span><span class="small muted">beat the S&amp;P 500 ${b.beat ?? "—"} of ${b.n ?? 5} · range ${isNum(num(b.worst)) ? `${b.worst > 0 ? "+" : ""}${b.worst}%` : "—"} to ${isNum(num(b.best)) ? `${b.best > 0 ? "+" : ""}${b.best}%` : "—"}</span></div>`; }).join("")}</div>`;
     const nowC = `<div class="tw-now"><span class="eyebrow">The last ${TW_LAB[win]}, to ${esc(fmtShort(R.as_of))}</span><div class="tw-chips">${R.features.slice(0, 9).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, R.now[k]))}</b></span>`).join("")}</div></div>`;
-    const pend = N === "pending", NN = pend ? null : N, nb = (i) => NN?.episodes?.[i] || null;
+    const gh = N === "github", pend = N === "pending", NN = pend || gh ? null : N, nb = (i) => NN?.episodes?.[i] || null;
     const sgn = (v, u = "%") => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${v}${u}` : "n/a");
     const after = (e) => { const r = e.it, sp = e.spy, ok = ["1M", "3M", "6M", "12M"].filter((h) => isNum(num(r[h])));
       if (!ok.length) return "";
@@ -11352,7 +11356,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <div class="tw-after"><span class="eyebrow">What came after</span><div class="tw-grid">${HZ.map(([h, l]) => `<div class="tw-cell"><span class="small muted">${l}</span>${sg(e.it[h])}<span class="small muted">S&amp;P ${isNum(num(e.spy[h])) ? `${e.spy[h] > 0 ? "+" : ""}${e.spy[h]}%` : "—"}</span></div>`).join("")}</div>
         ${twAfterChart(e, it)}</div>
         <div class="small"><b>Most alike:</b> ${e.alike.map((k) => esc(lab(k))).join(", ")} · <b>least alike:</b> ${e.unlike.map((k) => esc(lab(k))).join(", ")}</div>${every(e)}</div></details>`; }).join("");
-    return `<div class="tw-list">${rows}</div>${strip}${read}<details class="tw-nowd"><summary>The last ${TW_LAB[win]}, measured</summary>${nowC}</details>`;
+    return `${gh ? `<div class="small muted tw-ghnote">The historian's notes on each stretch are written on GitHub for every industry and window: they arrive with Update everything from GitHub. What came after and every measure are below already.</div>` : ""}<div class="tw-list">${rows}</div>${strip}${read}<details class="tw-nowd"><summary>The last ${TW_LAB[win]}, measured</summary>${nowC}</details>`;
   }
   /** The company's Performance section, with Times like this inside it. */
   function coReturnsAll(co) { return addTo(coReturns(co), twBlock("company", co.sym, co.run ? coTimes(co) : "")); }
