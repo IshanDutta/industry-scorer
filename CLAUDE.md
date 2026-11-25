@@ -52,7 +52,7 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
   - Risk: ratios against the S&P 500 with VaR and CVaR in dollars, who carries the risk (covariance risk shares), how the holdings move together (correlations), and a stress test through past crises with "if the market fell".
   - What it owns: sectors against the S&P 500 (SPY's sector weights), regions (funds' country weights, else their holdings'
     countries, else their names), valuation and quality through the companies it owns (P/E, P/B, P/S, ROE, margins, debt, size;
-    each fund read through its own holdings), the companies inside and how much the funds overlap, the industries as a circle (tap a slice for its card) with our calls (from the saved runs' digests, `pfIndLoad`).
+    each fund read through its own holdings), the companies inside and how much the funds overlap, the industries as a circle (sectors inside, every industry outside, nothing lumped as "other"; tap a slice or name to go to it) with our calls (from the saved runs' digests, `pfIndLoad`).
   - Income and costs; Wall Street on its biggest companies.
   - Prices are read from mid-2007 for the stress test. `pfLoad` also reads the 60 biggest companies inside the funds and each
     fund's 25 biggest (`pfInfo`: FMP profile and ratios, kept a week) so industries, regions and valuation are placed company by company. The old Analysis tab (`pfFundTab`, the fund pipeline) is no longer shown.
