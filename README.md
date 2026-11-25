@@ -6,3 +6,4 @@ Analyzes US industries (their 50 largest companies) for four investor types, wit
 - `runner/` — the overnight job: analyzes every industry in a sector on your own API keys. **Setup and use: [runner/README.md](runner/README.md).**
 - `.github/workflows/sector-run.yml` — runs the job on GitHub Actions (Actions → Sector run → Run workflow).
 - `Industry_Scorer.md` — how everything works.
+- `CLAUDE.md`: how the code fits together, how to build and test it, and the decisions behind the Compare tab (read first when working in Claude Code).
