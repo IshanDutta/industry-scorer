@@ -24,7 +24,7 @@
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const day = (s) => String(s ?? "").slice(0, 10);
   function addDays(d, k) { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); }
-  const trim = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+  const trim = (s, n) => { const t = String(s ?? "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s+\S*$/, "") : t; };
   const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
   const norm = (s) => ` ${String(s || "").toLowerCase().replace(/&amp;/g, "&").replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/(\d)\.(\d)/g, "$1\u0000$2").replace(/[^a-z0-9%$&/\u0000]+/g, " ").replace(/\u0000/g, ".").replace(/\s+/g, " ").trim()} `;
   // Generic words that never identify a series on their own.

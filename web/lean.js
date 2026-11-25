@@ -11,7 +11,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k - 1) + "…" : s; };
+  const trim = (s, k) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > k ? s.slice(0, k).replace(/\s+\S*$/, "") : s; };
   const lc = (s) => String(s ?? "").toLowerCase().trim();
   const HZ = ["1M", "3M", "6M", "12M"];
   const HZ_LABEL = { "1M": "Next month", "3M": "Next 3 months", "6M": "Next 6 months", "12M": "Next 12 months" };

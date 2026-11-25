@@ -117,7 +117,7 @@ tr.self td { background: var(--sunk); }
 .fcard.pos { border-left: 3px solid var(--pos); } .fcard.neg { border-left: 3px solid var(--neg); } .fcard.neu { border-left: 3px solid var(--line); } .fcard.warn { border-left: 3px solid var(--warn-ink); }
 .fcard .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .fcard .w { font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
-.fcard .nm { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fcard .nm { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
 .fcard .row { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .fmix { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; }
 @media (max-width: 760px) { .fmix { grid-template-columns: 1fr; } }
@@ -372,7 +372,7 @@ a.cite { cursor: pointer; } a.cite:hover { text-decoration: underline; }
 .pf-wbar { position: relative; height: 6px; background: var(--line); border-radius: 3px; }
 .pf-wbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 3px; }
 .pf-wbar s { position: absolute; top: -3px; width: 2px; height: 12px; background: var(--ink); opacity: 0.7; }
-.ellip { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ellip { overflow-wrap: anywhere; min-width: 0; }
 .pf-empty { text-align: center; justify-items: center; padding: 36px 16px; }
 .pf-goals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 8px; }
 .pf-goalcard { display: grid; gap: 2px; text-align: left; border-radius: 10px; padding: 10px 12px; background: var(--sunk); }
@@ -603,7 +603,7 @@ input, select, textarea { color-scheme: dark; }
 .pfe-tk { display: grid; gap: 1px; min-width: 0; }
 .pfe-tkin { font: 700 17px var(--mono); text-transform: uppercase; letter-spacing: .01em; padding: 2px 0; border-bottom: 1px dashed transparent; }
 .pfe-tkin:focus { border-bottom-color: var(--accent); }
-.pfe-nm { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 1.3em; }
+.pfe-nm { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; min-height: 1.3em; }
 .pfe-w { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 8px; align-items: center; }
 .pfe-w .pfe-field { grid-column: 1 / -1; }
 .pfe-wbar { height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; } .pfe-wbar i { display: block; height: 100%; border-radius: 2px; transition: width .2s; }
@@ -734,7 +734,7 @@ button.sm { padding: 5px 10px; font-size: 13px; }
 .sug { position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / .3); max-height: 340px; overflow-y: auto; padding: 4px; }
 .sug-item { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; }
 .sug-item:hover, .sug-item.on { background: var(--sunk); } .sug-item.on { box-shadow: inset 2px 0 0 var(--accent); }
-.sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .sug-foot { padding: 6px 10px; }
+.sug-name { overflow-wrap: anywhere; } .sug-foot { padding: 6px 10px; }
 .co-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0; } .co-chip { cursor: pointer; border: 1px solid var(--line); background: var(--surface); }
 .co-chip:hover { border-color: var(--accent); } .co-ind > summary { font-size: 14.5px; }
 button.linkbtn { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; } button.linkbtn:hover { text-decoration: underline; }
@@ -787,7 +787,7 @@ a.btnlink:hover { border-color: var(--accent); }
 .cx-chip { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line)); background: color-mix(in srgb, var(--tc) 9%, var(--sunk)); }
 .cx-chip > i { width: 10px; height: 10px; border-radius: 50%; background: var(--tc); flex: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc) 25%, transparent); }
 .cx-chip b { font: 700 15px var(--mono); }
-.cx-chip .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cx-chip .muted { overflow-wrap: anywhere; min-width: 0; }
 .cx-chip.cx-empty { border-style: dashed; border-color: var(--line); background: transparent; color: var(--faint); justify-content: center; font-size: 13px; }
 .cx-x { margin-left: auto; border: 0; background: transparent; color: var(--muted); padding: 0 4px; font-size: 18px; line-height: 1; }
 .cx-x:hover { color: var(--neg); }
@@ -1698,7 +1698,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   <div class="appbar-in">
     <a class="brand" href="#top" aria-label="AdvisorMindOS, back to top"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><path class="m-leg" d="M6.5 26 16 7l9.5 19" fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path class="m-line" d="M10.2 19.8l3.6-2.7 3.1 1.9 5.6-5.3" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><circle class="m-apex" cx="16" cy="6.6" r="2.7"/><circle class="m-tip" cx="22.6" cy="13.7" r="1.9"/></svg><span class="word">AdvisorMind<span class="os">OS</span></span></a>
     <div class="tabs-wrap"><nav class="tabs" id="tabs" aria-label="View"></nav><i class="tab-ind" id="tab-ind" aria-hidden="true"></i></div>
-    <div class="bar-tools"><button type="button" class="jump" id="jump-open" aria-label="Jump to a tab, section, industry or ticker (Ctrl K or /)" aria-keyshortcuts="Control+K /" title="Jump to (Ctrl K or /)"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button></div>
+    <div class="bar-tools"><button type="button" class="jump" id="jump-open" aria-label="Jump to a tab, section, industry or ticker (Ctrl K or /)" aria-keyshortcuts="Control+K /" title="Jump to (Ctrl K or /)"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><span>Jump to</span><kbd>Ctrl K</kbd></button></div>
   </div>
   <i class="readbar" id="readbar" aria-hidden="true"></i>
 </header>
@@ -1760,7 +1760,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
 
   // ------------------------------------------------------------- helpers
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Text on screen never shows an ellipsis: text saved cut short ends at its last complete sentence (NoEll, web/noell.js).
+  const esc = (s) => NoEll.clean(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   /** A 1M-12M call as a pill (five levels; old three-level calls read as "slightly"), and its 1-10 conviction. */
   const callPill = (c, style = "") => `<span class="pill ${Calls.cls(c)}"${style ? ` style="${style}"` : ""}>${esc(Calls.label(c))}</span>`;
   const convTag = (x) => { const n = Calls.conviction(x?.conviction); return isNum(n) ? `<span class="small muted conv"${x.conviction_why ? ` title="${esc(x.conviction_why)}"` : ""}>conviction <b>${n}</b>/10</span>` : ""; };
@@ -4870,7 +4871,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const pend = syncPending(), mins = pend ? Math.max(1, Math.round((Date.now() - Date.parse(S.sync.requested_at)) / 60000)) : 0;
     const lastSync = S.sync?.done_at ? `${S.sync.state === "failed" ? "Last try failed" : "Last updated"} ${ago(S.sync.done_at)}: ${S.sync.result || ""}` : "";
     const have = S.carried?.newest ? `This page has GitHub's runs up to ${fmtDate(S.carried.newest)}${S.carried.commit ? ` (commit ${S.carried.commit})` : ""}.` : "";
-    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub… ${mins} min` : S.pulling ? `Saving GitHub's runs here${S.pullProgress ? ` (${S.pullProgress.i} of ${S.pullProgress.n})` : "…"}` : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
+    const pull = S.ready ? `<button class="sm primary" data-pull-all="1" ${busy() || S.pulling || pend ? "disabled" : ""} title="${esc([have, lastSync, "Copies every sector and industry from GitHub's newest runs into this page and saves them here. Nothing changes until you press it again."].filter(Boolean).join(" "))}">${pend ? `Getting the latest from GitHub ${mins} min` : S.pulling ? `Saving GitHub's runs here${S.pullProgress ? ` (${S.pullProgress.i} of ${S.pullProgress.n})` : ""}` : "⟳ Update everything from GitHub"}</button>${S.sync?.state === "failed" && !pend ? `<span class="small" style="color:var(--neg)" title="${esc(S.sync.result || "")}">last update failed</span>` : S.carried?.newest ? `<span class="small muted" title="${esc(lastSync)}">GitHub runs to ${esc(fmtShort(S.carried.newest))}</span>` : ""}` : "";
     $("meta").innerHTML = [conn, eod, ai, sw, pull].filter(Boolean).join("");
     syncProgress();
   }
@@ -4919,12 +4920,12 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const sec = S.sector, pull = sec ? S.sectorPull[sec] : null, org = pull?.org;
     const typedSector = f ? Universe.normalizeSector(S.filter, sectors.length ? sectors : Universe.SECTORS) : null;
     const chips = sectors.length ? `<div class="sector-chips" role="group" aria-label="Sectors">${sectors.map((x) => `<button class="sm chip ${x === sec ? "cur" : ""}" data-sector="${esc(x)}" aria-pressed="${x === sec}">${esc(x)}${Universe.ETF[x] ? ` <span class="mono muted">${Universe.ETF[x]}</span>` : ""}</button>`).join("")}</div>`
-      : S.industriesError ? full(esc(S.industriesError), "notice err") : S.ready && !S.mcp ? full("The sector and industry lists come from your FMP connector, which isn't available in this view.") : full("Loading sectors from FMP…");
+      : S.industriesError ? full(esc(S.industriesError), "notice err") : S.ready && !S.mcp ? full("The sector and industry lists come from your FMP connector, which isn't available in this view.") : full("Loading sectors from FMP");
     let body = "";
     if (typedSector && typedSector !== sec) body += `<button class="pick" data-sector="${esc(typedSector)}"><span>Open the <b>${esc(typedSector)}</b> sector</span><span class="when">${esc(S.filter.trim())}</span></button>`;
     if (savedNames.length && !sec) body += `<div class="group-label eyebrow">Saved in this browser · opens instantly</div>${savedNames.map(btn).join("")}`;
     if (sec) {
-      if (pull?.loading && !org) body += full(`Pulling every actively traded ${esc(sec)} company from FMP…`);
+      if (pull?.loading && !org) body += full(`Pulling every actively traded ${esc(sec)} company from FMP`);
       else if (pull?.error && !org) body += full(`Couldn't pull ${esc(sec)}: ${esc(pull.error)} <button class="sm" data-sector="${esc(sec)}">Try again</button>`, "notice err");
       else if (org) {
         const rows = org.industries.filter((x) => !f || x.industry.toLowerCase().includes(f));
@@ -4947,7 +4948,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <div class="picker-list">${body}</div>
       ${(S.saved || []).length ? `<div class="small muted">${S.saved.length} run${S.saved.length === 1 ? "" : "s"} saved in this browser (the ${KEEP} most recent are kept). <button class="sm" id="clear-saved" ${busy() ? "disabled" : ""}>Delete saved runs</button></div>` : ""}
       <label class="check"><input type="checkbox" id="us-only" ${usOnly() ? "checked" : ""} ${busy() ? "disabled" : ""}> Count US-headquartered companies only (leaves out foreign companies listed in the US, like TSM and ASML)</label>
-      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling || syncPending() ? "disabled" : ""}>${syncPending() ? "Getting the latest from GitHub…" : S.pulling ? "Bringing in the runs…" : "Update everything from GitHub"}</button> copies every sector and industry from GitHub's newest runs into this page and saves them here, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Nothing changes until you press it again. Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
+      <div class="small muted">Ran sectors on GitHub? <button class="sm" id="pull-github" ${busy() || S.pulling || syncPending() ? "disabled" : ""}>${syncPending() ? "Getting the latest from GitHub" : S.pulling ? "Bringing in the runs" : "Update everything from GitHub"}</button> copies every sector and industry from GitHub's newest runs into this page and saves them here, finished or not (an unfinished one opens where it stopped; Resume finishes it here). Nothing changes until you press it again. Or <button class="sm" id="import-results" ${busy() ? "disabled" : ""}>Import results files</button><input type="file" id="import-file" accept=".json,.gz,application/json,application/gzip" multiple hidden></div>`;
     $("close-picker")?.addEventListener("click", () => { S.pickerOpen = false; S.filter = ""; renderPicker(); });
     $("clear-saved")?.addEventListener("click", async () => { if (!confirm("Delete every run saved in this browser, and the track record of their calls? What's on screen stays until you leave.")) return; for (const x of S.saved || []) { await idbDel("run:" + x.slug); await idbDel("calls:" + x.slug); } await idbDel("index"); await idbDel("last"); S.saved = []; S.savedAt = {}; S.restored = null; renderAll(); });
     const input = $("pick-filter");
@@ -4970,7 +4971,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       : rec?.finished_at ? `<button data-sector-view="${esc(sec)}" class="primary">Open the overview (${esc(ago(rec.finished_at))})</button>${added.length ? `<button class="primary" data-sector-add="${esc(sec)}" ${dis} title="${esc(added.join(", "))}">Add the ${added.length} industr${added.length === 1 ? "y" : "ies"} not analyzed yet</button>` : ""}<button data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} again</button>`
       : `<button class="primary" data-sector-run="${esc(sec)}" ${dis}>Analyze all ${n} industries</button>`;
     const gh = `https://github.com/${GH_REPO}`;
-    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched; tick "add_new" there to analyze only the industries a finished sector doesn't have yet. When it's done: <button class="sm" data-pull-sector="${esc(sec)}" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling === sec ? "Pulling…" : `Pull ${esc(sec)} from GitHub`}</button> (the copy last brought into this page), or for the very latest, <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
+    const ghRow = `<div class="small muted">On GitHub, with your API key: <a class="btnlink" href="${gh}/actions/workflows/run-${slug(sec)}.yml" target="_blank" rel="noopener">Run ${esc(sec)} on GitHub</a> then press "Run workflow" there. It continues an unfinished run and reuses what earlier sectors researched; tick "add_new" there to analyze only the industries a finished sector doesn't have yet. When it's done: <button class="sm" data-pull-sector="${esc(sec)}" ${busy() || S.pulling ? "disabled" : ""}>${S.pulling === sec ? "Pulling" : `Pull ${esc(sec)} from GitHub`}</button> (the copy last brought into this page), or for the very latest, <a class="btnlink" href="${gh}/raw/exports/runs/${slug(sec)}.json.gz" target="_blank" rel="noopener">Download latest results</a> and bring the file in with Import results files (in the industry picker).</div>`;
     return `<div class="sector-run"><div><b>Analyze every ${esc(sec)} industry with one click.</b> <span class="small muted">Each industry gets the full report it gets on its own: its data, scores, KPI and earnings-call analysts, customers and suppliers, macro, world events, trade relations, rule books, regulatory verdict and lead strategist. What the industries share is researched once for the whole sector (the macro series and what's driving them, the world situations and their facts, each country's relationship with the US, each regulator's rules and their fact-check), and each industry's analysts then write what it means for that industry. About ${est.sector.toLocaleString()} Claude calls instead of about ${est.single.toLocaleString()} running them one by one, on your own Claude usage. Keep this page open while it runs (it keeps going in a background tab); progress is saved after every step, and reopening the page carries on.</span></div>
       <div class="actions">${btns}</div>${rec?.done?.H?.length ? callsFresh(sec, rec) : ""}${ghRow}</div>`;
   }
@@ -4980,7 +4981,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const sec = S.sectorView, sr = S.sectorRun?.sector === sec ? S.sectorRun : null, rec = sr?.rec || S.sectorRec[sec];
     const icon = { thinking: "◌", writing: "✎", done: "✓", failed: "✕" };
     const notices = S.notices.map((x) => `<div class="notice ${x.kind}">${esc(x.text)}</div>`).join("");
-    if (!rec) return `<section class="hero"><span class="eyebrow">Sector run</span><h1>${esc(sec)}</h1>${notices}${sr ? `<div class="notice info"><span><b>Starting</b> · ${esc(sr.label)}…</span><button data-stop-sector="1">Stop</button></div>` : `<div class="muted">Nothing analyzed for this sector yet. Open it from the list above and choose "Analyze all".</div>`}</section>`;
+    if (!rec) return `<section class="hero"><span class="eyebrow">Sector run</span><h1>${esc(sec)}</h1>${notices}${sr ? `<div class="notice info"><span><b>Starting</b> · ${esc(sr.label)}</span><button data-stop-sector="1">Stop</button></div>` : `<div class="muted">Nothing analyzed for this sector yet. Open it from the list above and choose "Analyze all".</div>`}</section>`;
     const N = rec.names.length, live = rec.names.filter((n) => !rec.skip?.[n]).length, dn = rec.done || {};
     const cnt = (k) => (Array.isArray(dn[k]) ? dn[k].length : 0);
     const phaseIdx = sr ? SEC_PHASES.findIndex((p) => p[0] === sr.phase) : -1;
@@ -4991,10 +4992,10 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const working = sr ? [...sr.runs.values()].flatMap((r) => (r.team || []).slice(r.phase === "data" ? 0 : -6).map((t) => ({ ...t, label: `${r.name}: ${t.label}` }))) : [];
     const dataNow = sr ? [...sr.runs.values()].filter((r) => r.phase === "data").map((r) => ({ status: "thinking", label: `${r.name}: ${r.label}` })) : [];
     const team = sr ? (working.length || dataNow.length ? [...dataNow, ...working] : sr.team.slice(-14)) : [];
-    const steps = team.length ? `<div class="steps team">${team.map((t) => `<span class="${t.status}">${icon[t.status] || "·"} ${esc(t.label)} <span class="muted">${t.status === "done" ? `done in ${t.secs}s` : t.status === "failed" ? esc(t.error || "failed") : t.status === "writing" ? "writing…" : "reading the data…"}${t.note ? " · " + esc(t.note) : ""}</span></span>`).join("")}</div>` : "";
+    const steps = team.length ? `<div class="steps team">${team.map((t) => `<span class="${t.status}">${icon[t.status] || "·"} ${esc(t.label)} <span class="muted">${t.status === "done" ? `done in ${t.secs}s` : t.status === "failed" ? esc(t.error || "failed") : t.status === "writing" ? "writing" : "reading the data"}${t.note ? " · " + esc(t.note) : ""}</span></span>`).join("")}</div>` : "";
     const est = sectorEstimate(live);
     const calls = rec.calls || 0;
-    const run = sr ? `<div class="notice info"><span><b>Analyzing every ${esc(sec)} industry</b> · ${esc(sr.label)}…</span><button data-stop-sector="1">Stop</button>
+    const run = sr ? `<div class="notice info"><span><b>Analyzing every ${esc(sec)} industry</b> · ${esc(sr.label)}</span><button data-stop-sector="1">Stop</button>
         <span class="small muted" style="flex-basis:100%">${calls.toLocaleString()} Claude calls so far (about ${est.sector.toLocaleString()} expected for ${live} industries; one at a time would be about ${est.single.toLocaleString()}). Keep this page open; it keeps going in a background tab. Progress is saved after every step: if the page closes, reopening it carries on by itself.</span>${phases}${steps}</div>`
       : !rec.finished_at ? `<div class="notice warn"><span><b>This sector run stopped before it finished</b> (saved ${esc(ago(rec.updated_at || rec.started_at))}). Resume finishes only what's left; everything done is kept.</span><button class="primary" data-sector-run="${esc(sec)}" ${!S.mcp || !S.sample || busy() ? "disabled" : ""}>Resume</button>${phases}</div>`
       : `<div class="small muted">Finished ${esc(ago(rec.finished_at))} · ${live} industries · ${calls.toLocaleString()} Claude calls${rec.job?.cost ? ` by the overnight job (${esc(rec.job.cost.model)}, ${rec.job.cost.mode === "batch" ? "batch prices" : "standard prices"}): about $${Number(rec.job.cost.usd).toFixed(2)} of API usage${rec.job.cost.cached_results ? `, ${rec.job.cost.cached_results} answers reused` : ""}` : ` (one at a time would have been about ${est.single.toLocaleString()})`}. Open an industry for its full report. <button class="sm" data-sector-run="${esc(sec)}" ${!S.mcp || !S.sample || busy() ? "disabled" : ""}>Analyze all again</button></div>`;
@@ -5091,8 +5092,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const r = S.run; if (!r || r.name !== S.selected) return "";
     const isAgent = r.phase === "agent" || r.phase === "reg" || r.phase === "lead";
     const icon = { thinking: "◌", writing: "✎", done: "✓", failed: "✕" };
-    const team = isAgent && r.team?.length ? `<div class="steps team">${r.team.map((t) => `<span class="${t.status}">${icon[t.status] || "·"} ${esc(t.label)} <span class="muted">${t.status === "done" ? `done in ${t.secs}s` : t.status === "failed" ? esc(t.error || "failed") : t.status === "writing" ? "writing…" : "reading the data…"}${t.note ? " · " + esc(t.note) : ""}</span></span>`).join("")}</div>` : "";
-    return `<div class="notice info"><span><b>${r.phase === "lead" ? "The lead strategist is writing the verdict on" : r.phase === "reg" ? "Building the regulatory rule books for" : isAgent ? "The analyst team is writing the report on" : r.phase === "research" ? "Researching" : "Analyzing"} ${esc(r.name)}</b> · ${esc(r.label)}…</span>
+    const team = isAgent && r.team?.length ? `<div class="steps team">${r.team.map((t) => `<span class="${t.status}">${icon[t.status] || "·"} ${esc(t.label)} <span class="muted">${t.status === "done" ? `done in ${t.secs}s` : t.status === "failed" ? esc(t.error || "failed") : t.status === "writing" ? "writing" : "reading the data"}${t.note ? " · " + esc(t.note) : ""}</span></span>`).join("")}</div>` : "";
+    return `<div class="notice info"><span><b>${r.phase === "lead" ? "The lead strategist is writing the verdict on" : r.phase === "reg" ? "Building the regulatory rule books for" : isAgent ? "The analyst team is writing the report on" : r.phase === "research" ? "Researching" : "Analyzing"} ${esc(r.name)}</b> · ${esc(r.label)}</span>
       <button id="stop-run">${isAgent ? "Stop the team" : "Stop"}</button>
       <span class="small muted" style="flex-basis:100%">${r.phase === "lead" ? "Everything else is done. The lead strategist reads every report, every rule book and the regulatory verdict, writes the thesis, builds bull/base/bear scenarios section by section and decides whether it's a real opportunity, writes each investor type's verdict section by section, then an investment-committee reviewer checks it against all of it and against its own numbers. Four long calls, a few minutes." : r.phase === "reg" ? "One body at a time, most impactful first: a year of news searched per body, one rule-book agent and one fact-check each. Each rule book appears as soon as it's checked; the overall verdict is written once all of them are in. A few minutes per body, on your own Claude usage." : isAgent ? "Specialist agents, two at a time, on your own Claude usage. Each section appears as soon as its agent finishes; the rule books follow, and the lead strategist writes the verdict last." : "Everything is fetched live. It keeps running at full speed in a background tab or another window. Progress is saved in this browser after every step: if the page is closed, reopening it picks up where it stopped, by itself."}</span>
       ${!isAgent ? `<div class="progress"><i style="width:${Math.round(r.frac * 100)}%"></i></div>` : ""}
@@ -5109,10 +5110,22 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     return "";
   }
 
+  // Every whole text an industry holds, so a copy saved cut short (a calendar item, a daily note) shows the original.
+  let fullKey = "";
+  function fullIndexFor(name) {
+    const sl = slug(name), ag = S.agents[sl], k = `${sl}|${ag?.run_at || ""}|${ag?.daily_at || ""}|${Object.keys(S.reports).length}`;
+    if (k === fullKey) return; fullKey = k;
+    const out = [], walk = (o, depth = 0) => { if (depth > 12 || o == null) return; if (typeof o === "string") { if (o.length >= 40) out.push(o); } else if (Array.isArray(o)) o.forEach((x) => walk(x, depth + 1)); else if (typeof o === "object") for (const x of Object.values(o)) walk(x, depth + 1); };
+    for (const [rk, r] of Object.entries(S.reports)) if (rk.startsWith(sl + "--")) walk(r);
+    walk(ag); walk(S.research[sl]); walk(S.tx[sl]);
+    for (const [bk, b] of Object.entries(S.regbooks)) if (bk.startsWith(sl + "--")) walk(b);
+    try { NoEll.setFull(out); } catch (e) { console.warn("full text index", e); }
+  }
   function renderReport() {
     checkpoint();
     const el = $("report");
     if (!S.selected) { el.innerHTML = S.outsideClaude ? `<div class="notice info">Open this page in Claude to analyze industries.</div>` : S.sectorView ? sectorPanel() : ""; return; }
+    fullIndexFor(S.selected);
     const d = current();
     const notices = [
       S.outsideClaude ? `<div class="notice info">Open this page in Claude to load and analyze industries.</div>` : "",
@@ -5312,7 +5325,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   function wireReportButtons() {
     $("run-full")?.addEventListener("click", () => analyze(S.selected));
     $("resume-run")?.addEventListener("click", () => resume(S.selected));
-    $("stop-run")?.addEventListener("click", () => { if (!S.run) return; S.run.cancel = true; for (const c of S.run.ctls || []) c.abort(); const b = $("stop-run"); if (b) { b.disabled = true; b.textContent = "Stopping…"; } });
+    $("stop-run")?.addEventListener("click", () => { if (!S.run) return; S.run.cancel = true; for (const c of S.run.ctls || []) c.abort(); const b = $("stop-run"); if (b) { b.disabled = true; b.textContent = "Stopping"; } });
   }
 
   const TONE = { 2: ["Strong tailwind", "t2"], 1: ["Tailwind", "t1"], 0: ["Neutral", "t0"], "-1": ["Headwind", "tm1"], "-2": ["Strong headwind", "tm2"] };
@@ -5528,7 +5541,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     }
     const working = S.leanBusy && slug(S.leanBusy) === slug(name || "");
     // Once made, the calls are redone by the scheduled passes, never from a button here.
-    const btn = l && !l.provisional && !working ? "" : `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call on a digest of every component (about a minute)">${working ? "Making the calls…" : "Make the calls now"}</button>`;
+    const btn = l && !l.provisional && !working ? "" : `<button class="${!l || l.provisional ? "primary " : ""}sm" data-lean-now="1" ${!S.sample || busy() || S.leanBusy ? "disabled" : ""} title="One Claude call on a digest of every component (about a minute)">${working ? "Making the calls" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(S.leanStage) : S.leanErr && slug(S.leanErr.name) === slug(name || "") ? `<div class="notice err small">${esc(S.leanErr.text)}</div>` : "";
     const by = !l || l.provisional ? "" : l.made_by === "github" || (!l.made_by && r.outlook && !r.outlook.provisional && r.outlook.date === l.date && r.outlook.headline === l.headline) ? "made on GitHub" : "made here";
     const head = `<div class="callout-head"><span class="eyebrow">Where it's going${l?.provisional ? " (provisional)" : ""}</span>${l?.date && !l.provisional ? `<span class="small muted">as of ${esc(fmtDate(l.date))} · ${by}</span>` : l?.provisional ? `<span class="small muted">not made yet: the next calls pass on GitHub makes it, or press the button</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
@@ -5555,7 +5568,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const working = co.leanBusy;
     const can = S.sample && !co.writing && !working && co.run;
     // Once made, the calls are redone by themselves when the page opens and they're out of step (coAutoRefresh).
-    const btn = l && !working ? "" : `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers and news, the industry's outlook and the lead's verdict">${working ? "Making the calls…" : "Make the calls now"}</button>`;
+    const btn = l && !working ? "" : `<button class="${!l ? "primary " : ""}sm" data-co-lean="1" ${can ? "" : "disabled"} title="One Claude call on the company's numbers and news, the industry's outlook and the lead's verdict">${working ? "Making the calls" : "Make the calls now"}</button>`;
     const status = working ? leanSteps(co.leanStage) : co.leanErr ? `<div class="notice err small">${esc(co.leanErr)}</div>` : "";
     const head = `<div class="callout-head"><span class="eyebrow">Where ${esc(co.sym)} is going</span>${l?.date ? `<span class="small muted">as of ${esc(fmtDate(l.date))}</span>` : ""}<span style="margin-left:auto">${btn}</span></div>`;
     const indLine = ind ? `<div class="small"><span class="muted">The ${esc(co.run.name)} industry${ind.provisional ? " (provisional)" : ""}:</span> ${Outlook.HZ.filter((h) => ind.calls?.[h]).map((h) => `${h} <span class="${Outlook.cls(ind.calls[h].call)}-t">${esc(ind.calls[h].call)}</span>`).join(" · ")}</div>` : "";
@@ -5633,7 +5646,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${x.sections?.length ? `<div class="small muted">Driven by: ${x.sections.map((k) => esc(SCN_L[k] || k)).join(", ")}</div>` : ""}
         ${ck && !ck.ok && ck.issues?.length ? `<div class="notice warn small">Doesn't add up: ${esc(ck.issues.join("; "))}.</div>` : ""}
         ${ck && ck.covered === false ? `<div class="notice warn small">Leaves out: ${[...(ck.missing_events || []), ...(ck.missing_standing || [])].map((id) => `${esc(id)} ${esc(IDX[id]?.title || "")}`).join("; ")}${ck.missing_sections?.length ? `${ck.missing_events?.length || ck.missing_standing?.length ? "; " : ""}no read for ${ck.missing_sections.map((k) => esc(SCN_L[k] || k)).join(", ")}` : ""}.</div>` : ""}</div>`; };
-    const trimTxt = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1) + "…" : String(t));
+    const trimTxt = (t, n) => String(t ?? "");
     const hzRows = Brain.SCN_SECTIONS.map(([k, l]) => `<tr><td><b>${esc(l)}</b></td>${Brain.HORIZONS.map(([h]) => `<td class="wr">${r.horizons?.[h]?.section_reads?.[k] ? rich(r.horizons[h].section_reads[k]) : `<span class="muted">—</span>`}</td>`).join("")}</tr>`).join("");
     const hasReads = Brain.HORIZONS.some(([h]) => Object.keys(r.horizons?.[h]?.section_reads || {}).length);
     const cal = ag.calendar;
@@ -5862,7 +5875,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         <td><span class="pill ${STANCE_CLS[c.stance] || "neu"}">${esc(c.stance)}</span></td><td><span class="pill ${TRAJ_CLS[c.trajectory] || "neu"}">${esc(c.trajectory)}</span></td>
         <td>${threatPill(c.threat, c.threat_note)}</td>
         <td class="n">${revCell(c)}</td><td class="wr small">${rich(c.why)} ${cites(c.evidence)}${c.threat && c.threat !== "none" && c.threat_note ? `<div class="small"><b>Security:</b> ${rich(c.threat_note)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>
-      <div class="small muted">Share of revenue: from the filings where companies report that country (revenue-weighted across the ${map[0]?.exposure?.reporting ?? "—"} largest companies that report a geographic split); "≈ … est." is the analyst's estimate where they don't.${(t.regions || []).length ? ` Revenue reported only by region, with no country split: ${t.regions.map((r) => `${esc(r.region)} ${pct(r.share, false, 0)}`).join(", ")}.` : ""}</div>` : "";
+      <div class="small muted">Share of revenue: from the filings where companies report that country (revenue-weighted across the ${map[0]?.exposure?.reporting ?? "—"} largest companies that report a geographic split); "≈  est." is the analyst's estimate where they don't.${(t.regions || []).length ? ` Revenue reported only by region, with no country split: ${t.regions.map((r) => `${esc(r.region)} ${pct(r.share, false, 0)}`).join(", ")}.` : ""}</div>` : "";
     const dive = (c, i) => { const m = map.find((x) => x.country === c.country) || {}; const e = m.exposure || {};
       return `<details class="dive" id="${cslug(c.country)}" ${i === 0 ? "open" : ""}><summary><span class="mono small">${m.rank || ""}</span> <b>${esc(c.country)}</b> <span class="pill ${STANCE_CLS[m.stance] || "neu"}">${esc(m.stance || "")}</span> <span class="pill ${TRAJ_CLS[m.trajectory] || "neu"}">${esc(m.trajectory || "")}</span>${c.security?.threat_level && c.security.threat_level !== "none" ? " " + threatPill(c.security.threat_level) : ""} <span class="small muted">${rich(c.headline)}</span></summary>
       <div class="dive-body">
@@ -5941,7 +5954,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       return `<div class="book fallback"><div class="notice warn">The rule book didn't build (${esc(fail)}). Nothing below is verified; try again to build it from live sources. <button class="sm" data-reg-build="${esc(key)}" ${can ? "" : "disabled"}>Try again</button></div>${refb.rules.map(ruleCard).join("")}</div>`;
     }
     const Q = S.regQueue[slug(d.name)];
-    if (Q?.active === key) return `<div class="book-gate"><span class="pill warn">Building now</span><span class="small muted">${Q.attempt > 1 ? "Second try: " : ""}${esc(Q.phase)}…</span></div>`;
+    if (Q?.active === key) return `<div class="book-gate"><span class="pill warn">Building now</span><span class="small muted">${Q.attempt > 1 ? "Second try: " : ""}${esc(Q.phase)}</span></div>`;
     const pos = Q ? Q.order.indexOf(key) - Math.max(0, Q.order.indexOf(Q.active)) : -1;
     if (Q && pos > 0) return `<div class="book-gate"><span class="pill neu">Queued</span><span class="small muted">${pos === 1 ? "Next up." : `${pos - 1} ahead of it.`}</span></div>`;
     if (S.run && S.run.name === d.name && S.run.phase !== "reg") return `<div class="book-gate"><span class="pill neu">Queued</span><span class="small muted">Starts after the analyst team finishes.</span></div>`;
@@ -5975,7 +5988,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       : `<div class="gate"><div class="small">${built} of ${bodies.length} rule books built${failedN ? `; ${failedN} couldn't be built from live sources after two tries` : ""}. Each covers the body's 5 most material binding instruments (laws, rules, rates, tariffs, quotas, subsidies, fines, approvals) with seven sections each, from a year of news on that body, and every numeric or cited sentence is fact-checked.</div>
       <div class="actions">${failedN ? `<button data-reg-all="1" ${can ? "" : "disabled"}>Retry the failed rule books</button>` : ""}${built ? `<button data-reg-verdict="1" ${can ? "" : "disabled"}>Rewrite the verdict</button><button data-reg-rebuild="1" ${can ? "" : "disabled"}>Rebuild all rule books</button>` : `<button class="primary" data-reg-rebuild="1" ${can ? "" : "disabled"}>Build the rule books</button>`}</div></div>`;
     return `<h3>Regulatory bodies that matter</h3><div class="small muted">Most impactful first. Their rule books build automatically, one body at a time in this order, after the analyst team finishes; the overall verdict is written from all of them.</div>
-      ${regVerdictCard(d) || (Q || teamBusy ? `<div class="callout verdict-card"><div class="callout-head"><span class="eyebrow">Overall regulatory verdict</span><span class="small muted">${Q?.verdict ? "Writing now from all the rule books…" : `Waiting for all ${bodies.length} rule books`}</span></div></div>` : "")}${gate}
+      ${regVerdictCard(d) || (Q || teamBusy ? `<div class="callout verdict-card"><div class="callout-head"><span class="eyebrow">Overall regulatory verdict</span><span class="small muted">${Q?.verdict ? "Writing now from all the rule books" : `Waiting for all ${bodies.length} rule books`}</span></div></div>` : "")}${gate}
       <div class="rbodies">${bodies.map((b, i) => `<div class="rbody" id="rb-${esc(RegBook.bodyKey(b.name))}">
         <div class="rbody-head"><span class="rank">${i + 1}</span><b>${esc(b.name)}</b>${b.jurisdiction ? `<span class="pill neu">${esc(b.jurisdiction)}</span>` : ""}</div>
         ${para("", b.why)}
@@ -6176,7 +6189,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     return `<details class="box rt" open><summary><b>Red team</b> <span class="small muted">an independent ${rt.stance === "short" ? "short seller" : "contrarian long"} argued against this verdict; the review answered each point</span></summary>
       <div class="rt-thesis"><span class="eyebrow">Their case</span><p class="small">${rich(rt.thesis)}</p></div>
       <div class="rt-h"><h4>Their ${rt.arguments.length} arguments, and the review's answer</h4></div><div class="rgrid">${args}</div>
-      ${rt.premortem.length ? `<div class="rt-h"><h4>Pre-mortem: if this verdict goes badly wrong, most likely because…</h4></div><div class="rgrid">${pm}</div>` : ""}
+      ${rt.premortem.length ? `<div class="rt-h"><h4>Pre-mortem: if this verdict goes badly wrong, most likely because</h4></div><div class="rgrid">${pm}</div>` : ""}
       ${rt.kill_criteria.length ? `<div class="rt-h"><h4>What would prove the verdict wrong</h4></div><div class="rgrid">${plain(rt.kill_criteria)}</div>` : ""}
       ${rt.blind_spots.length ? `<div class="rt-h"><h4>Blind spots raised</h4></div><div class="rgrid">${plain(rt.blind_spots)}</div>` : ""}</details>`;
   }
@@ -6364,17 +6377,17 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const sl = slug(d.name), log = S.track[sl] || [];
     if (!log.length) return sec("track", "Track record", "", `<div class="small muted">Every lead verdict is logged with the prices it was made at. From the next trading day, each 1M, 3M, 6M and 12M call is scored automatically against what the industry actually did, with its alpha vs SPY and the sector ETF, and the strategist sees its own record.</div>`);
     autoTrack(d.name, d.sector);
-    const btn = `<button class="sm" id="track-check" ${S.trackBusy || S.sweep?.busy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl || S.sweep?.busy ? "Updating…" : "Update now"}</button>`;
+    const btn = `<button class="sm" id="track-check" ${S.trackBusy || S.sweep?.busy || !S.mcp || busy() ? "disabled" : ""}>${S.trackBusy === sl || S.sweep?.busy ? "Updating" : "Update now"}</button>`;
     const at = log.map((e) => e.eval?.at).filter(Boolean).sort().pop();
     return sec("track", "Track record", `${log.length} verdict${log.length === 1 ? "" : "s"} logged${at ? ` · prices to ${esc(fmtShort(at))}` : ""}`,
-      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}<span class="small muted">${S.trackBusy === sl || S.sweep?.busy ? "Scoring the calls with the latest prices…" : "Updates by itself with the latest prices each day this page is open."}</span></div>${trackView(log, { journal: (() => { const r = S.agents[sl]?.result; return (r?.daily_history || []).map((h, i) => (i === 0 && r.daily ? { ...h, sources: r.daily.sources } : h)); })() })}`);
+      `<div class="actions" style="justify-content:flex-start;align-items:center">${btn}<span class="small muted">${S.trackBusy === sl || S.sweep?.busy ? "Scoring the calls with the latest prices" : "Updates by itself with the latest prices each day this page is open."}</span></div>${trackView(log, { journal: (() => { const r = S.agents[sl]?.result; return (r?.daily_history || []).map((h, i) => (i === 0 && r.daily ? { ...h, sources: r.daily.sources } : h)); })() })}`);
   }
   /** The sector's track record: every call on every industry in it, together. */
   function sectorTrackBlock(sec, names) {
     const st = S.secTrack[sec];
     if (!st || (st.at !== today() && !st.busy)) setTimeout(() => loadSectorTrack(sec, names), 0);
     const entries = st?.entries || [];
-    const head = `<div class="panel-head"><h2>Track record: every call in ${esc(sec)}</h2><span class="small muted">${entries.length} verdict${entries.length === 1 ? "" : "s"} across ${new Set(entries.map((e) => e.industry)).size} industries, scored automatically${st?.busy ? ` · updating with the latest prices (${st.done || 0} of ${st.of} industries)…` : ""}</span></div>`;
+    const head = `<div class="panel-head"><h2>Track record: every call in ${esc(sec)}</h2><span class="small muted">${entries.length} verdict${entries.length === 1 ? "" : "s"} across ${new Set(entries.map((e) => e.industry)).size} industries, scored automatically${st?.busy ? ` · updating with the latest prices (${st.done || 0} of ${st.of} industries)` : ""}</span></div>`;
     if (!entries.length) return `<section class="panel" id="sector-track">${head}<div class="small muted">${st?.busy ? "" : "No calls logged for this sector yet."}</div></section>`;
     // Which industries' calls have earned the most alpha so far
     const by = {}; for (const e of entries) for (const [h, v] of Object.entries(e.eval?.horizons || {})) if (isNum(num(v.call_alpha)) && e.horizons[h]?.call !== "neutral") (by[e.industry] ||= []).push(v.call_alpha);
@@ -6995,7 +7008,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     let mapped = Portfolio.mapHoldings(raw.holdings, eodH, ci.cos, tickInd);
     const need = Portfolio.needProfiles(mapped, maxProfiles).filter((t) => !tickInd[t]);
     if (need.length && S.mcp) {
-      onStep(`Looking up ${need.length} compan${need.length === 1 ? "y" : "ies"} no saved industry or EODHD places…`);
+      onStep(`Looking up ${need.length} compan${need.length === 1 ? "y" : "ies"} no saved industry or EODHD places`);
       for (const t of need) { const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: t }), []))?.[0]; tickInd[t] = p ? { industry: p.industry || "", sector: p.sector || "", at: today() } : { industry: "", at: today() }; }
       await idbPut("tickInd", tickInd).catch(() => {});
       mapped = Portfolio.mapHoldings(raw.holdings, eodH, ci.cos, tickInd);
@@ -7018,7 +7031,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       if (sl) {
         const r = ci.runs[sl], c = cache.runs[sl];
         if (c && c.saved_at === r.saved_at && c.dg?.v === 9) { out[lc(name)] = c.dg; continue; }
-        if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)…`);
+        if (++opened % 5 === 1) onStep(`Reading your saved industry runs (${opened} so far)`);
         const rec = await runGet(sl).catch(() => null); if (!rec?.industry?.summary) continue;
         const sec = rec.industry.sector; if (sec && !(sec in secRows)) secRows[sec] = (S.sectorRec[sec] || (await secGet(sec).catch(() => null)))?.rows || null;
         let row = secRows[sec]?.[rec.name] || null, secs = {};
@@ -7077,7 +7090,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   async function fundAnalyze(fd, { quiet = false } = {}) {
     const step = (t) => { if (!quiet) { fd.step = t; renderFund(); } };
     const ci = await coIndex(), qi = await quantIndex();
-    step("Matching the holdings to your saved industries…");
+    step("Matching the holdings to your saved industries");
     const { mapped, eodHoldings } = await fundMap(fd.raw, ci, step);
     const facts = Portfolio.facts(fd.sym, fd.raw.info, fd.raw.eod);
     if (fd.pf) Object.assign(facts, { type: "Portfolio", category: "Your portfolio", family: "", description: fd.raw.info?.[0]?.description || "" });
@@ -7086,17 +7099,17 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const bench = Portfolio.benchmark(facts, sectors);
     // The benchmark's holdings, matched the same way (no fill for its own gaps).
     let bcov = null, bnote = "";
-    try { step(`Reading the benchmark (${bench.symbol})…`); const braw = await fundRaw(bench.symbol); const bm = await fundMap(braw, ci, step); bcov = Portfolio.coverage(bm.mapped, ci.runs, { now: today(), quant: qi }); }
+    try { step(`Reading the benchmark (${bench.symbol})`); const braw = await fundRaw(bench.symbol); const bm = await fundMap(braw, ci, step); bcov = Portfolio.coverage(bm.mapped, ci.runs, { now: today(), quant: qi }); }
     catch (e) { if (FATAL.has(e?.code)) throw e; bnote = e?.message || String(e); }
     const names = [...new Set([...cov.industries, ...(bcov?.industries || [])].filter((g) => g.status !== "not_analyzed").map((g) => g.industry))];
     const digests = await fundDigests(names, ci, step);
     Object.assign(fd, { facts, mapped, cov, bcov, bnote, digests, eodHoldings, bench, flags: Portfolio.crossCheck(mapped, Portfolio.eodTop(fd.raw.eod)),
       look: Portfolio.lookThrough(cov, digests), act: bcov ? Portfolio.active(cov, bcov, digests) : null });
     await fundFacts(fd);
-    if (!fd.ser || !quiet) { step("Reading the fund's price history since 2007…"); await fundPrices(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; }); }
+    if (!fd.ser || !quiet) { step("Reading the fund's price history since 2007"); await fundPrices(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; }); }
     await fundHistoryFacts(fd);
     if (fd.netDone) { await fundNet(fd).catch(() => {}); await fundPeers(fd).catch(() => {}); }
-    if (BondAn.isBond(fd.raw)) { step("Reading the Treasury curve and the runs' rate outlook…"); await bondPrep(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; console.warn("bond prep", e); }); } else fd.bond = null;
+    if (BondAn.isBond(fd.raw)) { step("Reading the Treasury curve and the runs' rate outlook"); await bondPrep(fd).catch((e) => { if (FATAL.has(e?.code)) throw e; console.warn("bond prep", e); }); } else fd.bond = null;
     fundCard(fd);
     fd.stage = "ready";
   }
@@ -7431,7 +7444,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const sym = String(q || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!sym) return;
     S.tab = "funds"; S.fundQuery = "";
     S.fund?.ctl?.abort();
-    const fd = S.fund = { sym, stage: "loading", step: "Reading the fund from FMP and EODHD…", err: null };
+    const fd = S.fund = { sym, stage: "loading", step: "Reading the fund from FMP and EODHD", err: null };
     renderAll(); window.scrollTo?.(0, 0);
     try {
       fd.raw = await fundRaw(sym, { refresh });
@@ -7511,7 +7524,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const tally = (k) => res.filter((x) => x.action === k).length, redone = res.filter((x) => /redid|rewrote/.test(x.action));
     const sum = last ? `Last update ${esc(ago(last.at))}: ${res.length} fund${res.length === 1 ? "" : "s"} checked${redone.length ? `, ${redone.length} redone (${esc(redone.map((x) => x.sym).join(", "))})` : ""}${tally("failed") ? `, ${tally("failed")} failed` : ""}${redone.some((x) => x.flips?.length) ? `; calls changed: ${esc(redone.filter((x) => x.flips?.length).map((x) => `${x.sym} ${x.flips.join(", ")}`).join("; "))}` : ""}.` : "Not run yet.";
     return `<div class="actions" style="align-items:center"><button class="sm${!dr && last?.date !== today() ? " primary" : ""}" data-fund-daily="1" ${busy() || !S.mcp ? "disabled" : ""} title="For every fund you've analyzed: fresh prices, holdings' news and earnings (code), then redo only what moved since its calls">Update my funds</button>
-      ${dr ? `<span class="small">Checking ${dr.done + 1 > dr.n ? dr.n : dr.done + 1} of ${dr.n}${dr.now ? `: <b>${esc(dr.now)}</b>${dr.step ? ` (${esc(dr.step)})` : ""}` : ""}…</span><button class="sm" data-fund-daily-stop="1">Stop</button>` : `<span class="small muted">${sum}</span>`}</div>`;
+      ${dr ? `<span class="small">Checking ${dr.done + 1 > dr.n ? dr.n : dr.done + 1} of ${dr.n}${dr.now ? `: <b>${esc(dr.now)}</b>${dr.step ? ` (${esc(dr.step)})` : ""}` : ""}</span><button class="sm" data-fund-daily-stop="1">Stop</button>` : `<span class="small muted">${sum}</span>`}</div>`;
   }
   const CALLC = (c) => (/bull/.test(c) ? "pos" : /bear/.test(c) ? "neg" : "neu");
   const pts = (v, d = 1) => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${Number(v).toFixed(d)}%` : "—");
@@ -7534,7 +7547,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const indL = rows.length ? `<div class="small" style="display:grid;gap:3px"><span class="eyebrow">What its biggest industries' reports say${keys.length === 1 ? `: ${esc(FundAn.IND_READ_LABEL[keys[0]])}` : ""}</span>${rows.map((y) => `<div><b>${esc(y.industry)}</b> <span class="mono muted">${pct(y.weight, false, 1)}</span>${keys.length > 1 ? ` · ${esc(FundAn.IND_READ_LABEL[y.k])}` : ""}${y.kind === "quant" ? " · code-only" : ""}: ${esc(y.text)}</div>`).join("")}</div>` : "";
     const ours = has ? `<div style="margin-top:${indL ? 6 : 0}px"><span class="eyebrow">For ${esc(fd.sym)}</span>${x.text ? `<p style="margin:2px 0">${fundCites(x.text, idx)}</p>` : ""}${x.points?.length ? `<ul class="dlist small">${x.points.slice(0, 3).map((y) => `<li>${fundCites(y, idx)}</li>`).join("")}</ul>` : ""}</div>` : "";
     if (!indL && !ours) return "";
-    return `<div class="coread${has ? "" : " pending"}" data-read="${esc(key)}">${indL}${ours || (indL ? "" : `<p class="small muted">${writing ? "Being written…" : "Comes with the analysis."}</p>`)}</div>`;
+    return `<div class="coread${has ? "" : " pending"}" data-read="${esc(key)}">${indL}${ours || (indL ? "" : `<p class="small muted">${writing ? "Being written" : "Comes with the analysis."}</p>`)}</div>`;
   }
 
 
@@ -7633,7 +7646,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const thesis = core.thesis || hz ? `${core.thesis ? core.thesis.split(/\n+/).map((pp) => `<p class="prose">${fundCites(pp, idx)}</p>`).join("") : ""}
       ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
       ${core.strategy ? `<div class="small"><b>How it's run:</b> ${fundCites(core.strategy, idx)}</div>` : ""}
-      ${hz ? `<h3>What drives each window</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written…" : "Not written yet."}</div>`;
+      ${hz ? `<h3>What drives each window</h3><div class="hz-grid hz2">${hz}</div>` : ""}${scen}${issues}` : `<div class="small muted">${fd.writing ? "Being written" : "Not written yet."}</div>`;
     const thesisSec = sec("fund-thesis", "Analysis", "six analysts at once on the fund's dossier; every claim cites it", thesis);
     // ---- scores and fit: the company page's scorecard, on the fund, against its benchmark on the same scorecard
     const PK = FundMore.TYPES, PL = (k) => Score.PILLAR_LABELS[k] || k, BC = fd.benchCard, bsym = esc(fd.bench.symbol);
@@ -7653,7 +7666,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           <div class="meter"><i class="m-${g}" style="width:${isNum(v.total) ? Math.round(v.total) : 0}%"></i></div>
           <span class="small muted">Metrics ${isNum(v.fund) ? Math.round(v.fund) : "—"} · industries' report sections ${isNum(v.backdrop) ? Math.round(v.backdrop) : "—"}${fit?.fit ? ` · analysis ${v.overlay > 0 ? "+" : ""}${v.overlay}` : ""}</span>
           <div class="strip" style="grid-template-columns:repeat(2,minmax(0,1fr))">${keyNums[t].map(([l, x]) => `<div style="padding:6px 8px"><span class="eyebrow" style="font-size:10px">${esc(l)}</span><span class="mono small"><b>${x}</b></span></div>`).join("")}</div>
-          ${fit?.fit ? `<div class="row small" style="display:flex;flex-wrap:wrap;gap:4px"><b>${esc(fit.fit)} fit</b>${fit.conviction ? `<span class="muted">· ${esc(fit.conviction)} conviction</span>` : ""}${fit.vs_benchmark ? `<span class="pill ${VSB[fit.vs_benchmark]}">${esc(fit.vs_benchmark)} than ${bsym}</span>` : ""}</div>${fit.why ? `<span class="verdict">${fundCites(fit.why, idx)}</span>` : ""}` : fd.writing ? `<span class="small muted">The analysis's read is being written…</span>` : ""}
+          ${fit?.fit ? `<div class="row small" style="display:flex;flex-wrap:wrap;gap:4px"><b>${esc(fit.fit)} fit</b>${fit.conviction ? `<span class="muted">· ${esc(fit.conviction)} conviction</span>` : ""}${fit.vs_benchmark ? `<span class="pill ${VSB[fit.vs_benchmark]}">${esc(fit.vs_benchmark)} than ${bsym}</span>` : ""}</div>${fit.why ? `<span class="verdict">${fundCites(fit.why, idx)}</span>` : ""}` : fd.writing ? `<span class="small muted">The analysis's read is being written</span>` : ""}
           ${fit?.case_for || fit?.case_against ? `<div class="small" style="display:grid;gap:2px">${fit.case_for ? `<div><span class="up">＋</span> ${fundCites(fit.case_for, idx)}</div>` : ""}${fit.case_against ? `<div><span class="down">－</span> ${fundCites(fit.case_against, idx)}</div>` : ""}</div>` : ""}
           ${v.lifts.length || v.holds.length ? `<div class="small" style="display:grid;gap:4px">${v.lifts.length ? `<div><b>Lifts it:</b> ${v.lifts.map((x) => chip(x, "pos")).join(" ")}</div>` : ""}${v.holds.length ? `<div><b>Holds it back:</b> ${v.holds.map((x) => chip(x, "neg")).join(" ")}</div>` : ""}</div>` : ""}
           ${pl ? `<div class="small" style="border-top:1px dashed var(--line);padding-top:6px"><b>Plan:</b> ${isNum(size) ? `<b class="mono">${fix(size, 1)}%</b> of a portfolio${size === 0 ? " (don't own it)" : ""}` : ""}${pl.entry ? ` · ${fundCites(pl.entry, idx)}` : ""} · <a href="#fund-plan">trade plan</a></div>` : ""}
@@ -7797,21 +7810,21 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const heldChips = (xs, c = "warn") => (xs || []).slice(0, 8).map((h) => `<span class="pill ${c}" title="${pct(h.weight, false, 2)} of the fund">${esc(h.symbol)} ${pct(h.weight, false, 1)}</span>`).join(" ");
     const vsI = (v) => (v ? `<span class="small muted">${v === "same" ? "same as its industries" : v === "opposite" ? "opposite to its industries" : `${esc(v)} than its industries`}</span>` : "");
     const ln = (l, v) => (v ? `<div><b>${l}:</b> ${esc(stripCites(v))}</div>` : "");
-    const ourPend = `<span class="small muted" style="white-space:normal">${fd.writing ? "being written…" : fd.full ? "comes with the next rewrite" : "comes with the analysis"}</span>`;
+    const ourPend = `<span class="small muted" style="white-space:normal">${fd.writing ? "being written" : fd.full ? "comes with the next rewrite" : "comes with the analysis"}</span>`;
     // Macro: the company page's macro section, on the fund: the full macro table from its industries' macro reports,
     // how the macro reaches the fund, what's moving and why, and how the fund suffers when it turns (measured).
     const macroSec = L?.n ? (() => { const M = ctx.macro, MO = WP.macro_overall, ST = fd.stress, iRead = readsBy(WP.indicators), fRead = new Map((M?.factors || []).map((x) => [idx[x.id], x]));
       const p1 = (x) => (isNum(num(x)) ? `<span class="${x >= 0 ? "up" : "down"}">${x > 0 ? "+" : ""}${(x * 100).toFixed(1)}%</span>` : "—");
       const effPill = (e) => `<span class="pill ${e === "tailwind" ? "pos" : e === "headwind" ? "neg" : "neu"}">${esc(e)}</span>`;
       const effMix = (o) => Object.entries(o || {}).sort((q1, q2) => q2[1] - q1[1]).map(([k, v]) => `<span class="pill ${k === "tailwind" ? "pos" : k === "headwind" ? "neg" : "neu"}">${esc(k)} ${pct(v, false, 0)}</span>`).join(" ");
-      const own = `<div class="box"><div class="dim-head"><b>Macro for ${esc(fd.sym)}</b>${MO?.regime ? fEff(MO.regime) : M?.regime ? fEff(M.regime) : ""}</div>${MO?.summary ? `<p class="small" style="margin:0">${fundCites(MO.summary, idx)}</p>` : M?.headline ? `<p class="small" style="margin:0"><b>${fundCites(M.headline, idx)}</b></p>` : `<div class="small muted">${fd.writing ? "Being written…" : "Comes with the analysis."}</div>`}
+      const own = `<div class="box"><div class="dim-head"><b>Macro for ${esc(fd.sym)}</b>${MO?.regime ? fEff(MO.regime) : M?.regime ? fEff(M.regime) : ""}</div>${MO?.summary ? `<p class="small" style="margin:0">${fundCites(MO.summary, idx)}</p>` : M?.headline ? `<p class="small" style="margin:0"><b>${fundCites(M.headline, idx)}</b></p>` : `<div class="small muted">${fd.writing ? "Being written" : "Comes with the analysis."}</div>`}
         ${MO?.most_important ? `<div class="small"><b>What matters most:</b> ${fundCites(MO.most_important, idx)}</div>` : ""}
         ${M?.horizons ? `<div class="hcards">${Portfolio.HZ.filter((h) => M.horizons[h]).map((h) => `<div class="hcard"><div class="dim-head"><b>${h}</b>${fEff(M.horizons[h].call)}</div><p class="small" style="margin:0">${fundCites(M.horizons[h].why, idx)}</p></div>`).join("")}</div>` : ""}${M?.flip ? `<div class="small muted"><b>What would flip it:</b> ${fundCites(M.flip, idx)}</div>` : ""}</div>`;
       const worst = ST?.scenarios?.slice().sort((x, y) => x.fund - y.fund)[0];
-      const pain = `<div class="box cool"><div class="dim-head"><b>How ${esc(fd.sym)} suffers when the macro turns</b>${worst ? `<span class="pill neg">worst: ${esc(worst.name)} ${pct(worst.fund)}</span>` : ""}</div>${MO?.pain ? `<p class="small" style="margin:0">${fundCites(MO.pain, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written…" : "The read comes with the analysis; the stress test below is code."}</div>`}
+      const pain = `<div class="box cool"><div class="dim-head"><b>How ${esc(fd.sym)} suffers when the macro turns</b>${worst ? `<span class="pill neg">worst: ${esc(worst.name)} ${pct(worst.fund)}</span>` : ""}</div>${MO?.pain ? `<p class="small" style="margin:0">${fundCites(MO.pain, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written" : "The read comes with the analysis; the stress test below is code."}</div>`}
         ${ST?.rows?.length ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${ST.rows.filter((r) => r.bad).slice(0, 3).map((r) => `<div>${esc(r.label)}: a bad month (${esc(r.bad.label)}) ${p1(r.bad.fund)}, a severe one (${esc(r.severe.label)}) ${p1(r.severe.fund)}</div>`).join("")}</div>` : ""}</div>`;
       const CH = [["demand", "Demand"], ["cost", "Costs"], ["capital", "Capital & valuation"], ["regulatory", "Policy & regulation"]];
-      const chans = AF && CH.some(([k]) => AF.channels[k]?.length || MO?.channels?.[k]) ? `<h3>How the macro reaches ${esc(fd.sym)}</h3><div class="two">${CH.filter(([k]) => AF.channels[k]?.length || MO?.channels?.[k]).map(([k, l]) => `<div class="box"><h3>${l}</h3>${MO?.channels?.[k] ? `<p class="small" style="margin:0"><b>${esc(fd.sym)}:</b> ${fundCites(MO.channels[k], idx)}</p>` : `<p class="small muted" style="margin:0">${fd.writing ? "Being written…" : ""}</p>`}${(AF.channels[k] || []).map((c) => `<p class="small muted" style="margin:4px 0 0"><b>${esc(c.industry)}</b> <span class="mono">${pct(c.weight, false, 1)}</span>: ${esc(stripCites(c.text))}</p>`).join("")}</div>`).join("")}</div>` : "";
+      const chans = AF && CH.some(([k]) => AF.channels[k]?.length || MO?.channels?.[k]) ? `<h3>How the macro reaches ${esc(fd.sym)}</h3><div class="two">${CH.filter(([k]) => AF.channels[k]?.length || MO?.channels?.[k]).map(([k, l]) => `<div class="box"><h3>${l}</h3>${MO?.channels?.[k] ? `<p class="small" style="margin:0"><b>${esc(fd.sym)}:</b> ${fundCites(MO.channels[k], idx)}</p>` : `<p class="small muted" style="margin:0">${fd.writing ? "Being written" : ""}</p>`}${(AF.channels[k] || []).map((c) => `<p class="small muted" style="margin:4px 0 0"><b>${esc(c.industry)}</b> <span class="mono">${pct(c.weight, false, 1)}</span>: ${esc(stripCites(c.text))}</p>`).join("")}</div>`).join("")}</div>` : "";
       // The stress test (code): each factor's measured hit, and combined shocks.
       const stress = ST?.rows?.length ? `<h3>Stress test: how ${esc(fd.sym)} moves when the macro moves</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Factor</th><th class="n">Per standard shock</th><th class="n">Its industries</th><th class="n">A bad month</th><th class="n">${esc(fd.sym)}</th><th class="n">A severe month</th><th class="n">${esc(fd.sym)}</th><th>Read</th></tr></thead><tbody>${ST.rows.map((r) => { const rd = fRead.get(`Fund: ${r.label}`);
           return `<tr><td><b>${esc(r.label)}</b><div class="small muted">${esc(r.shock_label)}</div></td><td class="n">${p1(r.effect)}<div class="small muted">${esc(Sensitivity.strength(r.t))}</div></td><td class="n muted">${p1(r.ind_effect)}</td><td class="n mono">${r.bad ? esc(r.bad.label) : "—"}</td><td class="n"><b>${r.bad ? p1(r.bad.fund) : "—"}</b>${r.bad && isNum(num(r.bad.ind)) ? `<div class="small muted">industries ${p1(r.bad.ind)}</div>` : ""}</td><td class="n mono">${r.severe ? esc(r.severe.label) : "—"}</td><td class="n"><b>${r.severe ? p1(r.severe.fund) : "—"}</b></td>
@@ -7955,7 +7968,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const LV = fd.levels, plan = LV || calls.plans ? sec("fund-plan", "Trade plan", "price levels from the fund's own chart, and a plan per investor type", `${R("plan", "calls")}
       ${LV ? `<div class="kpis">${[kpi("Last", fix(LV.last, 2)), kpi("50-day / 200-day", `${fix(LV.sma50, 2)} · ${fix(LV.sma200, 2)}`, `${pct(LV.last / LV.sma200 - 1)} vs the 200-day`), kpi("3-month swing", `${fix(LV.swing_low, 2)} – ${fix(LV.swing_high, 2)}`), kpi("52-week range", `${fix(LV.low52, 2)} – ${fix(LV.high52, 2)}`, `${pct(LV.last / LV.high52 - 1)} from the high`)].join("")}</div>` : ""}
       ${calls.plans && Object.keys(calls.plans).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Investor</th><th class="n">Size</th><th>Entry</th><th>Hedge</th><th>Review</th></tr></thead><tbody>${["income", "conservative", "growth", "aggressive"].filter((k) => calls.plans[k]).map((k) => { const x = calls.plans[k];
-        return `<tr><td><b>${k[0].toUpperCase() + k.slice(1)}</b></td><td class="n">${isNum(num(x.size_pct)) ? fix(Math.min(FundAn.MAX_SIZE, Math.max(0, x.size_pct)), 1) + "%" : "—"}</td><td class="wr small">${fundCites(x.entry, idx)}</td><td class="wr small">${fundCites(x.hedge, idx)}</td><td class="wr small">${fundCites(x.review, idx)}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="small muted">${fd.writing ? "The plans are being written…" : "The plans come with the analysis."}</div>`}`) : "";
+        return `<tr><td><b>${k[0].toUpperCase() + k.slice(1)}</b></td><td class="n">${isNum(num(x.size_pct)) ? fix(Math.min(FundAn.MAX_SIZE, Math.max(0, x.size_pct)), 1) + "%" : "—"}</td><td class="wr small">${fundCites(x.entry, idx)}</td><td class="wr small">${fundCites(x.hedge, idx)}</td><td class="wr small">${fundCites(x.review, idx)}</td></tr>`; }).join("")}</tbody></table></div>` : `<div class="small muted">${fd.writing ? "The plans are being written" : "The plans come with the analysis."}</div>`}`) : "";
     // ---- timeframe patterns: the company page's panel, on the fund's prices
     let tech = "";
     if (fd.tech3) { const save = S.coTf; S.coTf = S.fundTf || "D"; try { tech = coTech({ tech: fd.tech3, pm: fd.pm, sym: fd.sym }).replace('id="co-tech"', 'id="fund-tech"').replace(/data-co-tf=/g, "data-fund-tf="); } catch { tech = ""; } S.coTf = save;
@@ -7965,7 +7978,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <div class="kpis">${[kpi("Buy ratings, weighted", pct(ST2.buy_share, false, 0), "of analysts on the biggest holdings"), kpi("Upside to consensus targets", pct(ST2.upside), "weighted, from the holdings file's prices", cls(num(ST2.upside)))].join("")}</div>
       <div class="chart"><h3>Upside to the consensus target, by holding</h3>${barsChart(ST2.rows.filter((r) => isNum(num(r.upside))).slice(0, 15).map((r) => ({ label: r.ticker, a: r.upside * 100 })), { fmtY: (v) => v.toFixed(0) + "%", height: 170 })}</div>
       <div class="tbl-wrap"><table><thead><tr><th>Holding</th><th class="n">Weight</th><th>Consensus</th><th class="n">Buy / hold / sell</th><th class="n">Target</th><th class="n">Upside</th></tr></thead><tbody>${ST2.rows.map((r) => `<tr><td><span class="tick">${esc(r.ticker)}</span></td><td class="n">${pct(r.weight, false, 2)}</td><td>${esc(r.consensus || "—")}</td><td class="n">${r.buy} / ${r.hold} / ${r.sell}</td><td class="n">${fix(r.target, 2)}</td><td class="n ${cls(num(r.upside))}">${pct(r.upside)}</td></tr>`).join("")}</tbody></table></div>`)
-      : fd.netDone ? "" : sec("fund-street", "Wall Street on its holdings", "", `<div class="small muted">${S.mcp ? "Reading the analysts' ratings and targets for the biggest holdings…" : "Open this page in Claude to read the analysts' views."}</div>`);
+      : fd.netDone ? "" : sec("fund-street", "Wall Street on its holdings", "", `<div class="small muted">${S.mcp ? "Reading the analysts' ratings and targets for the biggest holdings" : "Open this page in Claude to read the analysts' views."}</div>`);
     const streetF = ST2?.rows?.length ? addTo(street, `<h3>Wall Street over the last 12 months</h3>${streetSlot(ST2.rows.slice().sort((a, b) => num(b.weight) - num(a.weight)).map((r) => ({ sym: r.ticker, w: r.weight })), { what: "holdings", coverage: ST2.on, label: fd.sym })}`) : street;
     // ---- news and sentiment
     // ---- news and sentiment: its holdings' measured sentiment, its industries' news flow (the industry runs), the headlines
@@ -7981,7 +7994,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const TC = { helps: "pos", hurts: "neg", mixed: "warn" };
       const ours = NWR?.summary ? `<div class="callout"><div class="callout-head"><span class="eyebrow">The news, for ${esc(fd.sym)}</span>${NWR.tone ? `<span class="pill ${NWR.tone === "positive" ? "pos" : NWR.tone === "negative" ? "neg" : "neu"}">${esc(NWR.tone)}</span>` : ""}</div><div class="small">${fundCites(NWR.summary, idx)}</div>
         ${NWR.themes?.length ? `<div class="fcards" style="margin-top:6px">${NWR.themes.map((x) => `<div class="fcard ${TC[x.effect] || "neu"}"><b>${esc(x.theme)}</b><div class="row">${fEff(x.effect)}${x.holdings.map((h) => `<span class="chip-s">${esc(h)}</span>`).join("")}</div><div class="small">${fundCites(x.why, idx)}</div></div>`).join("")}</div>` : ""}
-        ${NWR.watch ? `<div class="small muted"><b>Watch:</b> ${fundCites(NWR.watch, idx)}</div>` : ""}</div>` : `<div class="small muted">${fd.writing ? "The news read is being written…" : "Our read of the news comes with the analysis."}</div>`;
+        ${NWR.watch ? `<div class="small muted"><b>Watch:</b> ${fundCites(NWR.watch, idx)}</div>` : ""}</div>` : `<div class="small muted">${fd.writing ? "The news read is being written" : "Our read of the news comes with the analysis."}</div>`;
       const hmax = Math.max(...NL.rows.map((r) => r.weight), 0.0001);
       const bar = (v) => (isNum(num(v)) ? `<div style="position:relative;height:8px;background:var(--sunk);border-radius:4px;min-width:90px"><i style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)"></i><i style="position:absolute;top:0;bottom:0;border-radius:4px;${v >= 0 ? `left:50%;width:${Math.min(50, v * 50).toFixed(1)}%;background:var(--pos)` : `right:50%;width:${Math.min(50, -v * 50).toFixed(1)}%;background:var(--neg)`}"></i></div>` : "");
       const htab = NL.rows.length ? `<h3>Each holding's sentiment</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>30 days</th><th class="n">7d</th><th class="n">90d</th><th class="n">Change</th><th class="n">vs its industry</th><th class="n">Articles 30d</th></tr></thead><tbody>${NL.rows.map((r) => `<tr><td><button class="linkbtn tick" data-co="${esc(r.ticker)}">${esc(r.ticker)}</button><div class="small muted">${esc(showC(r.industry || "", 30))}</div></td><td class="n">${pct(r.weight, false, 1)}<div class="meter" style="margin-top:3px"><i style="width:${(100 * r.weight / hmax).toFixed(0)}%;background:var(--accent)"></i></div></td>
@@ -7996,7 +8009,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const heads = NL.heads.length ? `<h3>Headlines on its holdings</h3>${NL.cover.length ? `<div class="small muted">Most covered: ${NL.cover.map(([t, k]) => `<span class="chip-s">${esc(t)} ${k}</span>`).join(" ")}</div>` : ""}${(() => { const li = (x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}${x.summary ? `<div class="small muted">${esc(showC(stripCites(x.summary), 200))}</div>` : ""}<span class="src"><span class="idtag">${esc(x.id)}</span><span class="mono">${esc(x.date)}</span>${x.symbol ? `<span class="tk">${esc(x.symbol)}${x.weight ? ` ${pct(x.weight, false, 1)}` : ""}</span>` : ""}${esc(x.source || "")}${x.from === "industry run" ? ` · via the ${esc(x.industry)} run` : ""}</span></li>`;
         return `<ul class="newslist">${NL.heads.slice(0, 12).map(li).join("")}</ul>${NL.heads.length > 12 ? `<details><summary class="small">${NL.heads.length - 12} more headlines</summary><ul class="newslist">${NL.heads.slice(12).map(li).join("")}</ul></details>` : ""}`; })()}` : "";
       return sec("fund-news", "News & sentiment", `its ${NL.rows.length} biggest holdings and ${NL.flow.length} industries`, `${tiles}${ours}${IND("news")}${chart}${movers}${htab}${flow}${heads}`); })()
-      : fd.netDone ? "" : sec("fund-news", "News & sentiment", "", `<div class="small muted">${S.mcp ? "Reading the news and sentiment on its biggest holdings…" : "Open this page in Claude to read the news."}</div>`);
+      : fd.netDone ? "" : sec("fund-news", "News & sentiment", "", `<div class="small muted">${S.mcp ? "Reading the news and sentiment on its biggest holdings" : "Open this page in Claude to read the news."}</div>`);
     // ---- distributions
     const DV = fd.dist, dist = DV ? sec("fund-dist", "Distributions", "what the fund has paid out", `${R("dist", "context")}${DV.paying ? `<div class="kpis">${[kpi("Trailing yield", pct(DV.yield, false, 2), `${fix(DV.annual, 2)} a share a year`), kpi("Frequency", esc(DV.freq || "—")), kpi("5-year growth", pct(DV.cagr5), "a year", cls(num(DV.cagr5))), kpi("Next ex-date", esc(DV.next?.ex || "—"), DV.next ? fix(DV.next.amt, 4) : "")].join("")}</div>
       ${DV.by_year?.length ? `<div class="chart"><h3>Paid per share, by year</h3>${barsChart(DV.by_year.map((y) => ({ label: String(y.year), a: y.total })), { fmtY: (v) => fix(v, 2), colorA: "var(--pos)", height: 170 })}</div>` : ""}
@@ -8013,7 +8026,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${calls.scenarios && Object.keys(calls.scenarios).length ? `<div class="small">Our 12-month scenarios for ${esc(fd.sym)}: ${["bull", "base", "bear"].filter((k) => calls.scenarios[k]).map((k) => `${k} ${isNum(calls.scenarios[k].probability) ? calls.scenarios[k].probability + "%" : "?"}`).join(" · ")} (<a href="#fund-thesis">in the analysis</a>).</div>` : ""}` : ""}
       ${DB.length ? `<h3>The debates, for ${esc(fd.sym)}</h3><div class="debates">${DB.map((d) => { const y = dRead.get(d.id);
         return `<div class="box"><div class="dim-head"><b>${esc(d.q)}</b><span class="small muted">${esc(d.industry)} · ${pct(d.weight, false, 1)}${d.lean ? ` · industry leans <span class="pill ${SIDE[d.lean] || "neu"}">${esc(d.lean)}</span>` : ""}</span>${y?.side ? `<span class="small">${esc(fd.sym)}: <span class="pill ${SIDE[y.side] || "neu"}">${esc(y.side)}</span></span>` : ""}</div>
-          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written…" : fd.full ? "Comes with the next rewrite." : "Comes with the analysis."}</div>`}
+          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : `<div class="small muted">${fd.writing ? "Being written" : fd.full ? "Comes with the next rewrite." : "Comes with the analysis."}</div>`}
           <details class="small"><summary>The bull and bear case</summary><p style="margin:4px 0"><b>Bull:</b> ${esc(d.bull)}</p><p style="margin:4px 0"><b>Bear:</b> ${esc(d.bear)}</p>${d.resolves ? `<p class="muted" style="margin:4px 0">Settled by: ${esc(d.resolves)}</p>` : ""}</details></div>`; }).join("")}</div>` : ""}`) : "";
     // ---- KPIs & cycle: its industries' KPI analysts, weighted
     const CY = fd.cycle, cyR = ctx.cycle, tal = (o) => Object.entries(o || {}).filter(([, w]) => w > 0.005).map(([k, w]) => `<span class="chip-s">${esc(k)} <b>${pct(w, false, 0)}</b></span>`).join(" ") || `<span class="muted">—</span>`;
@@ -8100,7 +8113,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     if (!items.length) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
     const pending = q.trim().length >= 2 && S.mcp && !_fundLive.has(q.trim().toLowerCase());
     box.innerHTML = items.map((x, i) => `<div class="sug-item${i === S.fundSugI ? " on" : ""}" role="option" id="fund-sug-${i}" aria-selected="${i === S.fundSugI}" data-sug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span><span class="small muted">${x.src === "recent" ? "recent" : esc(x.type || "")}</span></div>`).join("")
-      + (pending ? `<div class="sug-foot small muted">Searching FMP for mutual funds…</div>` : "");
+      + (pending ? `<div class="sug-foot small muted">Searching FMP for mutual funds</div>` : "");
     box.hidden = false; inp.setAttribute("aria-expanded", "true"); inp.setAttribute("aria-activedescendant", S.fundSugI >= 0 ? `fund-sug-${S.fundSugI}` : "");
   }
   function bindFundSearch() {
@@ -8175,14 +8188,14 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const syms = pfSyms(p), key = syms.join(",");
     const need = Horizon.addDays(pfStart(p), -10);
     if (!force && S.pfData?.key === key && S.pfData.day === today() && (S.pfData.from || "") <= need) return;
-    S.pfLoading = "Reading prices, quotes and facts…"; S.pfErr = null; renderPortfolio();
+    S.pfLoading = "Reading prices, quotes and facts"; S.pfErr = null; renderPortfolio();
     try {
       const back = "2007-06-01", st = Horizon.addDays(pfStart(p), -10), from = st < back ? st : back, series = {};
       await pool([...syms, "SPY"], 4, async (sym) => { series[sym] = await trackSeries(sym, from).catch(() => null); }, null);
       const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
       const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
       // Funds: their holdings and sector weights (the fund page's own fetch, kept 20 hours).
-      const funds = {}, fsec = {}, fpe = {}, fexp = {}, fctry = {}, fval = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
+      const funds = {}, fsec = {}, fpe = {}, fexp = {}, fctry = {}, fval = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings"; renderPortfolio();
       await pool(syms.filter((s) => info[s]?.type === "etf" || info[s]?.type === "fund"), 2, async (sym) => { const raw = await fundRaw(sym).catch(() => null); if (!raw) return;
         funds[sym] = (raw.holdings || []).filter((h) => h.ticker || h.name).map((h) => ({ ticker: h.ticker || "", name: h.name, weight: h.weight }));
         const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name; if (isNum(num(f.expense))) fexp[sym] = num(f.expense);
@@ -8212,8 +8225,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const okT = (t) => t && /^[A-Z][A-Z0-9.\-]{0,6}$/.test(t), lt = { ...info };
       const want = [...new Set([...PMode.lookThrough(p.holdings.map((h) => ({ ...h, weight: num(h.weight) || 0 })), funds).rows.map((r) => r.ticker).filter(okT).slice(0, 60),
         ...Object.values(funds).flatMap((fh) => fh.slice().sort((a, b) => num(b.weight) - num(a.weight)).slice(0, 25).map((h) => h.ticker).filter(okT))])].filter((t) => !lt[t]).slice(0, 150), ltRows = want.map((ticker) => ({ ticker }));
-      if (ltRows.length) { let k = 0; S.pfLoading = `Reading the companies inside the funds (0 of ${ltRows.length})…`; renderPortfolio();
-        await pool(ltRows, 4, async (r) => { lt[r.ticker] = await pfInfo(r.ticker).catch(() => ({})); if (++k % 10 === 0) { S.pfLoading = `Reading the companies inside the funds (${k} of ${ltRows.length})…`; renderPortfolio(); } }, null); }
+      if (ltRows.length) { let k = 0; S.pfLoading = `Reading the companies inside the funds (0 of ${ltRows.length})`; renderPortfolio();
+        await pool(ltRows, 4, async (r) => { lt[r.ticker] = await pfInfo(r.ticker).catch(() => ({})); if (++k % 10 === 0) { S.pfLoading = `Reading the companies inside the funds (${k} of ${ltRows.length})`; renderPortfolio(); } }, null); }
       // A fund's P/E through what it holds, where the saved runs didn't give one (a third of the fund or more read).
       for (const [sym, fh] of Object.entries(funds)) { if (fpe[sym] > 0) continue; let w = 0, inv = 0, tw = 0; for (const h of fh) { const x = num(h.weight); tw += x || 0; const pe = num(lt[h.ticker]?.pe); if (pe > 0 && x > 0) { w += x; inv += x / pe; } } if (inv > 0 && tw > 0 && w / tw >= 0.33) fpe[sym] = w / inv; }
       // The S&P 500's own sector weights (SPY), kept a week: what the portfolio's sectors are compared with.
@@ -8257,7 +8270,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   const avatar = (t) => `<span class="pf-av" style="background:${tickColor(t)}">${esc(String(t).slice(0, 4))}</span>`;
   function renderPortfolio() {
     const el = $("pf"); if (!el || S.tab !== "portfolios") return;
-    if (!S.pfStore || !S.pfInit) { if (!S.pfStore) el.innerHTML = `<div class="small muted">Opening your portfolios…</div>`; S.pfInit = true; pfStore().then(() => { renderPortfolio(); pfLoad(); pfAnaRestore(); }); if (!S.pfStore) return; }
+    if (!S.pfStore || !S.pfInit) { if (!S.pfStore) el.innerHTML = `<div class="small muted">Opening your portfolios</div>`; S.pfInit = true; pfStore().then(() => { renderPortfolio(); pfLoad(); pfAnaRestore(); }); if (!S.pfStore) return; }
     const st = S.pfStore, p = pfActive(), tab = PF_TABS.some(([k]) => k === S.pfTab) ? S.pfTab : "overview";
     const D = S.pfData && S.pfData.key === pfSyms(p).join(",") ? S.pfData : null;
     const hs = pfHoldings(p, D), pos = pfPositions(p, hs, D), mv = PMode.marketValues({ ...p, holdings: hs }), total = pos?.total > 0 ? pos.total : mv.reduce((a, h) => a + (h.marketValue || 0), 0);
@@ -8270,7 +8283,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         <div class="pf-value mono">${esc(usd(total))}</div>
         <div class="pf-tags">${isNum(num(day)) && D ? `<span class="pf-tag ${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${pct(day, true, 2)} today</span>` : ""}${isNum(gain) ? `<span class="pf-tag ${gain >= 0 ? "up" : "down"}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${pct(gain / pos.cost, true, 1)}) unrealized</span>` : ""}<span class="pf-tag">${hs.length} holdings</span>${A ? `<span class="pf-tag">analyzed ${esc(fmtDate(A.day))}</span>` : ""}</div></div>
       <div class="pf-hero-side">${g ? `<button class="pf-gradebtn" data-pf="tab-changes" title="Open what to change">${gradeBadge(g, 72)}<span><b>Grade ${esc(g.letter)}</b><span class="small muted">${Math.round(g.score)}/100 for a ${esc(A.goalFull.label.toLowerCase())} goal</span></span></button>` : ""}
-        <div class="pf-actions"><button class="primary" data-pf="analyze" ${running ? "disabled" : ""}>${running ? "Analyzing…" : A ? "Analyze again" : "Analyze"}</button><button data-pf="goals-edit">Edit</button><button data-pf="rebal">Rebalance<i class="dirty-dot" data-dot="rebal" title="A rebalance not recorded yet" hidden></i></button>
+        <div class="pf-actions"><button class="primary" data-pf="analyze" ${running ? "disabled" : ""}>${running ? "Analyzing" : A ? "Analyze again" : "Analyze"}</button><button data-pf="goals-edit">Edit</button><button data-pf="rebal">Rebalance<i class="dirty-dot" data-dot="rebal" title="A rebalance not recorded yet" hidden></i></button>
           <details class="pf-more"><summary>More</summary><div><button class="sm" data-pf="dup">Duplicate</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch prices again</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete portfolio</button>` : ""}</div></details></div></div></section>`;
     const tabs = `<nav class="pf-tabs" role="tablist">${PF_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? "on" : ""}" data-pf="tab-${k}">${l}${k === "edit" ? `<i class="dirty-dot" data-dot="edit" title="Edits not saved yet" hidden></i>` : ""}${k === "changes" && g ? ` <span class="pf-mini ${GRADE_CLS(g.letter)}">${esc(g.letter)}</span>` : k === "changes" && running ? ' <span class="pf-dot"></span>' : ""}</button>`).join("")}</nav>`;
     const notes = `${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}`;
@@ -8296,7 +8309,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     for (const h of hs) {
       const w = num(h.weight) / tot;
       if (pfIsStock(h)) { add(h.ticker, h.name || h.ticker, w)?.via.push("held"); continue; }
-      step(`Looking inside ${h.ticker}…`);
+      step(`Looking inside ${h.ticker}`);
       let raw = null; try { raw = await fundRaw(h.ticker); } catch (e) { if (FATAL.has(e?.code)) throw e; }
       const H = (raw?.holdings || []).filter((x) => isNum(x.weight) && x.weight > 0), sw = H.reduce((a, x) => a + x.weight, 0);
       if (!H.length || !sw) { add(h.ticker, h.name || h.ticker, w)?.via.push("held"); continue; }
@@ -8330,7 +8343,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const fp = (p.holdings || []).map((h) => `${h.ticker}:${num(h.weight)}`).join(",");
     if (S.fund && !S.fund.pf) S.fundUser = S.fund;
     if (cur && cur.fp === fp && !refresh && cur.stage !== "error") { S.fund = cur; if (write && cur.stage === "ready" && !cur.writing) fundWriteAuto(cur, { force: true }); return cur; }
-    const fd = (S.pfFd[p.id] = { sym: pfSymOf(p), pf: p.id, fp, stage: "loading", step: "Looking through your holdings…", err: null, t0: Date.now() });
+    const fd = (S.pfFd[p.id] = { sym: pfSymOf(p), pf: p.id, fp, stage: "loading", step: "Looking through your holdings", err: null, t0: Date.now() });
     S.fund = fd; renderPortfolio();
     try { fd.raw = await pfRaw(p, (t) => { fd.step = t; if (S.fund === fd) renderPortfolio(); }); await fundAnalyze(fd); }
     catch (e) { fd.stage = "error"; fd.err = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
@@ -8347,7 +8360,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const fd = S.pfFd?.[p.id];
     if (!fd) return `<section class="panel"><div class="panel-head"><h2>Analyze ${esc(p.name)}</h2></div><p class="prose">Your portfolio gets the fund page's full analysis: each fund looked through to the stocks inside it, every industry they sit in read from its own report, Wall Street on the biggest names, the news, the macro, world events, trade and rules that reach it, and where it's going over 1, 3, 6 and 12 months. Press <b>Analyze</b> above.</p></section>`;
     if (S.fund !== fd && S.tab === "portfolios") { if (S.fund && !S.fund.pf) S.fundUser = S.fund; S.fund = fd; }
-    if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.step || "Working…")}</span></div><div class="skel" style="height:220px"></div>`;
+    if (fd.stage === "loading") return `<div class="notice info"><span>${esc(fd.step || "Working")}</span></div><div class="skel" style="height:220px"></div>`;
     if (fd.stage === "error") return `<div class="notice err"><span>Couldn't analyze ${esc(p.name)}: ${esc(fd.err)}.</span><button class="sm" data-pf="fund-retry">Try again</button></div>`;
     return pfWords(fundView(fd), fd, p);
   }
@@ -8380,7 +8393,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   }
   function pfAnalysisView(p, hs, D, total, pos, opts = {}) {
     if (!hs.length) return `<section class="panel pf-empty"><h2>No holdings yet</h2><p class="muted">Add stocks, ETFs or mutual funds, by weight or dollar amount.</p><button class="primary" data-pf="tab-edit">Add holdings</button></section>`;
-    if (!D) return `<section class="panel"><div class="small muted">${S.pfLoading ? "Loading…" : S.mcp ? "Press Fetch again to load prices." : ""}</div></section>`;
+    if (!D) return `<section class="panel"><div class="small muted">${S.pfLoading ? "Loading" : S.mcp ? "Press Fetch again to load prices." : ""}</div></section>`;
     const per = S.pfPeriod || "1Y", ser = D.series, last = (ser.SPY?.dates || []).slice(-1)[0] || today(), from = PMode.periodStart(last, per);
     const start = p.totalInvestment > 0 ? p.totalInvestment : 10000, evs = p.rebalanceEvents || [];
     const lineup = pfLineup(p, hs, from), nv = PMode.nav(ser, lineup, { from, start, events: evs, calendar: ser.SPY?.dates || null }), m = nv.dates.length > 5 ? PMode.metrics(nv, ser.SPY) : null;
@@ -8679,7 +8692,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${g?.headline ? `<p class="small">${esc(g.headline)}</p>` : !g && dig ? `<p class="small muted">No saved run for this industry yet: open it on the Industries tab to analyze it.</p>` : ""}
         <div class="small muted">${r.names.map((x) => `${esc(x.ticker)} ${pct(x.w, false, 1)}`).join(" · ")}</div></div>`; };
     const cards = secList.map((sx) => { const big = sx.rows.filter((r) => r.weight >= 0.01); return big.length ? `<h3 class="pfx-sech">${esc(sx.sector)} <span class="small muted">${pfPc(sx.weight, 1)}${sx.rows.length > big.length ? ` · ${sx.rows.length - big.length} smaller industr${sx.rows.length - big.length === 1 ? "y" : "ies"} in the list above` : ""}</span></h3><div class="pfx-inds">${big.map(card).join("")}</div>` : ""; }).join("");
-    const indSec = indA.rows.length ? sec("pfx-ind", "Its industries and where we think they're going", `${pfPc(indA.placed, 0)} of the money placed in an industry${dig ? "" : " · reading your saved industry runs…"}`, `${mix ? `<div class="pfx-tiles small3">${tile("In industries we expect to rise", pfPc(mix.up, 0), "of the money with a 12-month call", "pos")}${tile("In industries we expect to fall", pfPc(mix.down, 0), "", mix.down > 0.25 ? "neg" : "")}${tile("Weighted 12-month expectation", pfPP(mix.expected), `${pfPc(mix.covered, 0)} of the money has a call`)}</div>` : ""}
+    const indSec = indA.rows.length ? sec("pfx-ind", "Its industries and where we think they're going", `${pfPc(indA.placed, 0)} of the money placed in an industry${dig ? "" : " · reading your saved industry runs"}`, `${mix ? `<div class="pfx-tiles small3">${tile("In industries we expect to rise", pfPc(mix.up, 0), "of the money with a 12-month call", "pos")}${tile("In industries we expect to fall", pfPc(mix.down, 0), "", mix.down > 0.25 ? "neg" : "")}${tile("Weighted 12-month expectation", pfPP(mix.expected), `${pfPc(mix.covered, 0)} of the money has a call`)}</div>` : ""}
       ${indDonut}${cards}<div class="small muted">Inside ring: sectors. Outside ring: every industry, in its sector's color. Tap a slice or a name to go to it; open a sector to see all of its industries.</div>`) : "";
     // ---- income and costs
     const incSec = sec("pfx-inc", "Income and costs", `on today's value of ${esc(usd(total))}`, `<div class="pfx-tiles small3">${tile("Dividends a year", usd(incT), `yield ${pfPc(income.yield, 2)}${pos?.cost > 0 ? ` · ${pfPc(incT / pos.cost, 2)} on what you paid` : ""}`, "pos")}${tile("Fund fees a year", feeCov > 0 ? usd(feeT) : "—", isNum(fees.ratio) ? `${pfPc(fees.ratio, 2)} on the funds · ${pfPc(total > 0 ? feeT / total : NaN, 2)} on everything` : "")}${tile("Fees per $10,000 in funds", isNum(fees.ratio) ? usd(fees.ratio * 10000) + "/yr" : "—", isNum(fees.ratio) ? `${usd(fees.ratio * 10000 * 10)} over 10 years at today's size` : "")}</div>
@@ -8840,7 +8853,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           const sug = (S.pfSug || []).find((x) => String(x.symbol).toUpperCase() === t); r.name = sug?.name || ""; r.asset_type = ""; r.sector = "";
           const row = inp.closest(".pfe-row"), av = row?.querySelector(".pfe-av"), nm = row?.querySelector(".pfe-nm"), bar = row?.querySelector(".pfe-wbar i");
           if (av) { av.textContent = t ? t.slice(0, 4) : "?"; av.style.setProperty("--c", t ? tickColor(t) : "var(--line)"); }
-          if (nm) nm.textContent = trimC(r.name || (t ? "" : "Search a stock, ETF or fund"), 34);
+          if (nm) nm.textContent = r.name || (t ? "" : "Search a stock, ETF or fund");
           if (bar) bar.style.background = t ? tickColor(t) : "var(--accent)"; }
         else if (k === "weight") r.weight = v === "" ? "" : pfeN(v) || 0;
         else if (k === "dollar") { const tot = pfeN(S.pfDraft.totalInvestment); r.weight = v === "" ? "" : tot > 0 ? Math.round(((pfeN(v) || 0) / tot) * 1000) / 10 : 0; }
@@ -9017,12 +9030,12 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   async function pfAnalyze(input, { step = () => {}, run = { cancel: false } } = {}) {
     const d = { ...recGoalDefaults(), ...(input.goal || {}) }, goal = recGoalOf(d);
     const ci = await coIndex(), qi = await quantIndex();
-    step("Reading every industry run…");
+    step("Reading every industry run");
     const names = [...new Set([...Object.values(ci.runs).map((r) => r.name), ...Object.values(qi).map((r) => r.name)])], digests = await fundDigests(names, ci, step);
     if (Object.keys(digests).length < 8) throw new Error(`Only ${Object.keys(digests).length} industries are analyzed: run more industries (or a sector) first, so there is a distribution to choose from.`);
     const curve = await recCurve();
     // 1. Industry distribution.
-    step("Setting the target industry distribution from the runs' convictions…");
+    step("Setting the target industry distribution from the runs' convictions");
     const rows = EtfStrat.conviction(EtfStrat.industryRows(digests, goal), goal, { now: today() });
     const capW = rows.reduce((s, r) => s + r.mkt * r.z, 0), bondShare = goal.bondsOk ? clamp2(goal.bonds[0] + (goal.bonds[1] - goal.bonds[0]) * (0.5 - capW * 0.6) + (num(curve?.month3) >= 4 && goal.type !== "aggressive" ? 0.03 : 0), goal.bonds[0], goal.bonds[1]) : 0;
     const tgt = EtfStrat.targetIndustries(rows, goal, 1 - bondShare), sleeve = EtfStrat.bondSleeve(goal, curve, bondShare), byRow = new Map(rows.map((r) => [r.name, r]));
@@ -9030,17 +9043,17 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const picksBy = {}, coScore = {}, rankedInd = new Set(); let k = 0;
     const rankInto = async (name) => { if (rankedInd.has(name)) return null; rankedInd.add(name); const dg = digests[String(name).toLowerCase()]; if (!dg) return null; const cx = await recCompanies(dg);
       for (const r of cx.rank || []) { const v = num(r.by_profile?.[goal.type]) ?? num(r.composite); if (isNum(v)) coScore[r.symbol] = v; } return cx; };
-    for (const h of tgt.held) { const cx = await rankInto(h.name); if (cx) picksBy[h.name] = EtfStrat.pickCompanies(cx.rank, goal, { k: (goal.style || EtfStrat.STYLE[goal.type]).perInd, best: cx.best, avoid: cx.avoid, thin: cx.thin, cons: cx.cons }); step("Picking the best companies in each industry…", ++k, tgt.held.length); }
+    for (const h of tgt.held) { const cx = await rankInto(h.name); if (cx) picksBy[h.name] = EtfStrat.pickCompanies(cx.rank, goal, { k: (goal.style || EtfStrat.STYLE[goal.type]).perInd, best: cx.best, avoid: cx.avoid, thin: cx.thin, cons: cx.cons }); step("Picking the best companies in each industry", ++k, tgt.held.length); }
     const T = EtfStrat.companyTargets(tgt.held, picksBy);
     // 3. Today's holdings: what each one is, its look-through.
     const held0 = []; k = 0;
     for (const h of (input.holdings || []).filter((x) => x.ticker && num(x.weight) > 0)) {
       const i = await pfInfo(h.ticker).catch(() => ({})); held0.push({ ticker: h.ticker, name: h.name || i.name || "", weight: num(h.weight), asset_type: i.type || h.asset_type || "stock", industry: i.industry || ci.cos?.[h.ticker]?.industry || "", sector: i.sector || "", lastDiv: i.lastDiv, price: num(h.price) });
-      step("Reading what you hold…", ++k, (input.holdings || []).length); }
+      step("Reading what you hold", ++k, (input.holdings || []).length); }
     const wSum = held0.reduce((a, h) => a + h.weight, 0) || 1; for (const h of held0) h.weight = (h.weight / wSum) * 100;
     // 4. Every ETF that holds the target companies (reverse lookup), plus the curated funds.
     const look = Object.entries(T).sort((a, b) => b[1] - a[1]).slice(0, 100).map(([s]) => s), exps = {}; k = 0;
-    await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies…", ++k, look.length); }, run);
+    await pool(look, 3, async (s) => { exps[s] = await recExposure(s).catch((e) => { if (FATAL.has(e?.code)) throw e; return []; }); step("Finding every ETF that holds the target companies", ++k, look.length); }, run);
     const disc = EtfStrat.discover(exps, T, { exclude: goal.excludeSyms }), heldSec = new Set(tgt.held.map((h) => h.sector)), heldInd = new Set(tgt.held.map((h) => h.name));
     const curated = EtfRec.UNIVERSE.filter((e) => !e.intl || goal.intl).filter((e) => !EtfRec.isBroadIndex(e.symbol)).filter((e) => (e.kind === "sector" && heldSec.has(e.sector)) || ((e.kind === "ind" || e.kind === "theme") && e.industries.some((x) => heldInd.has(x)))
       || (e.kind === "div" && (goal.divOk || goal.type === "income" || goal.type === "conservative")) || (e.kind === "style" && ["QUAL", "USMV", "SPLV", "MTUM", "COWZ", "QQQ", "VUG", "VTV", "SCHG"].includes(e.symbol))
@@ -9053,7 +9066,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     // What you hold stays a candidate (never collapsed into a cheaper copy), so fixing it can keep it.
     for (const h of held0) if (h.asset_type !== "stock") pool0.set(h.ticker, { ...(pool0.get(h.ticker) || { symbol: h.ticker }), via: "your portfolio" });
     const all = [...pool0.values()], info = {}, out = {}; k = 0;
-    await pool(all, 4, async (c) => { info[c.symbol] = await recInfo(c.symbol).catch(() => null); step("Screening the candidate ETFs…", ++k, all.length); }, run);
+    await pool(all, 4, async (c) => { info[c.symbol] = await recInfo(c.symbol).catch(() => null); step("Screening the candidate ETFs", ++k, all.length); }, run);
     const ok = all.filter((c) => { c.e ||= EtfRec.BY.get(c.symbol) || { symbol: c.symbol, kind: "disc", industries: [], intl: false };
       // Broad-market and size index funds are never recommended, not even to keep (what you hold is still graded).
       if (EtfRec.isBroadIndex(c.symbol, info[c.symbol])) { out[c.symbol] = "a broad-market or size index fund (never recommended)"; return false; }
@@ -9061,12 +9074,12 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       if (c.e.kind === "disc" && info[c.symbol]?.assetClass && !/equity/i.test(info[c.symbol].assetClass)) { out[c.symbol] = info[c.symbol].assetClass; return false; } return true; });
     // 5. Holdings, prices, views.
     const mapped = {}, series = {}; k = 0; const stockC = ok.filter((c) => !EtfRec.isBond(c.e)), fundsHeld = held0.filter((h) => h.asset_type !== "stock" && !stockC.some((c) => c.symbol === h.ticker));
-    await pool([...stockC.map((c) => c.symbol), ...fundsHeld.map((h) => h.ticker)], 3, async (s) => { mapped[s] = await recMapped(s, ci).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }); step("Reading each ETF's full holdings and matching them to industries…", ++k, stockC.length + fundsHeld.length); }, run);
+    await pool([...stockC.map((c) => c.symbol), ...fundsHeld.map((h) => h.ticker)], 3, async (s) => { mapped[s] = await recMapped(s, ci).catch((e) => { if (FATAL.has(e?.code)) throw e; return null; }); step("Reading each ETF's full holdings and matching them to industries", ++k, stockC.length + fundsHeld.length); }, run);
     const syms = [...new Set([...ok.map((c) => c.symbol), "SPY", "AGG", ...held0.map((h) => h.ticker)])]; k = 0;
-    await pool(syms, 4, async (s) => { series[s] = await recSeries(s).catch(() => null); step("Reading seven years of prices…", ++k, syms.length); }, run);
+    await pool(syms, 4, async (s) => { series[s] = await recSeries(s).catch(() => null); step("Reading seven years of prices", ++k, syms.length); }, run);
     if (run.cancel) throw new Error("stopped");
     if (!series.SPY?.dates?.length) throw new Error("no SPY prices came back");
-    step("Valuing every candidate on the industry and bond views…");
+    step("Valuing every candidate on the industry and bond views");
     let cands = ok.map((c) => { const i = info[c.symbol] || {}, isBond = EtfRec.isBond(c.e), q = EtfRec.quantFacts(series[c.symbol], series.SPY) || {}, yld = i.lastDiv > 0 && i.price > 0 ? i.lastDiv / i.price : NaN;
       if (isBond) { const v = EtfRec.bondView(c.e, { curve, ttmYield: yld, expense: num(i.expenseRatio) / 100 }); return { ...c, info: i, q, isBond, bucket: EtfStrat.bucketOf(c.e), v, mu: v.expected, yield: isNum(v.yield) ? v.yield : yld, expense: num(i.expenseRatio) / 100 || 0 }; }
       const m = mapped[c.symbol]; if (!m?.length) return null;
@@ -9089,7 +9102,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       if (twin && c.via !== "your portfolio") (twin.twins ||= []).push(c.symbol); else keepC.push(c); }
     cands = keepC;
     // 6. The mixes: from scratch (three), and from today's holdings with a turnover penalty.
-    step("Choosing the ETF mixes: tracking the target, least overlap, risk under the ceiling…"); await new Promise((r) => setTimeout(r, 30));
+    step("Choosing the ETF mixes: tracking the target, least overlap, risk under the ceiling"); await new Promise((r) => setTimeout(r, 30));
     const R0 = EtfRec.aligned(series, cands.map((c) => c.symbol), series.SPY.dates, 756), C = EtfRec.covariance(R0); if (!C) throw new Error("not enough common price history");
     const target = { industries: Object.fromEntries(tgt.held.map((h) => [h.name, h.target])), buckets: sleeve.buckets, companies: T };
     const sels = { recommended: EtfStrat.mix(cands, target, C.cov, goal), simpler: EtfStrat.mix(cands, target, C.cov, goal, { maxN: goal.minN }), conviction: EtfStrat.mix(cands, target, C.cov, goal, { beta: 8, gamma: 0.3, delta: 0.4 }) };
@@ -9124,11 +9137,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       res.grades.current = EtfStrat.grade({ ach: current.ach, conv: convOf(current.vec.ind), quality: qualOf(current.ach.allStocks), vol: current.vol, cost: current.cost, yield: current.yield, bonds: current.bonds, mktExp, maxOverlap: current.maxOverlap }, goal); }
     res.opps = EtfStrat.opportunities(rows, tgt, picksBy, goal, { today: today(), etfFor: (ind) => cands.filter((c) => !c.isBond && (c.vec.ind[ind] || 0) > 0.15).sort((a, b) => b.vec.ind[ind] - a.vec.ind[ind]).slice(0, 3).map((c) => ({ symbol: c.symbol, purity: c.vec.ind[ind] })) });
     // The full case for every ETF any version holds: returns, risk, drawdowns, rolling windows, holdings, industries.
-    step("Measuring every chosen ETF against the S&P 500…");
+    step("Measuring every chosen ETF against the S&P 500");
     res.deep = {}; for (const [i, c] of cands.entries()) if (Object.values(sels).some((s) => s?.w?.[i] > 0)) { res.deep[c.symbol] = EtfDeep.profile(c, c.stats || EtfDeep.stats(series[c.symbol], series.SPY), byRow);
       res.deep[c.symbol].quality = c.quality; res.deep[c.symbol].rivals = sleeves.filter((s) => s.funds.some((f) => f.symbol === c.symbol)).map((s) => ({ industry: s.industry, funds: s.funds })); }
     // The whole portfolio: track record, where the risk comes from, projections, scenarios, what it owns underneath.
-    step("Testing every mix through history and simulating where it could go…"); await new Promise((r) => setTimeout(r, 20));
+    step("Testing every mix through history and simulating where it could go"); await new Promise((r) => setTimeout(r, 20));
     const amount = num(input.total) > 0 ? num(input.total) : num(d.amount) || 10000, muS = PfDeep.RF + PfDeep.ERP + 0.8 * (mktExp - PfDeep.RF - PfDeep.ERP);
     const viewMu = (vec) => { let vs = 0, vw = 0; for (const [ind, w] of Object.entries(vec?.ind || {})) { const r = byRow.get(ind); if (r && isNum(r.exp12)) { vs += w * r.exp12 / 100; vw += w; } } const prior = PfDeep.RF + PfDeep.ERP; return vw > 0 ? prior + Math.min(0.8, vw * 0.8) * (vs / vw - prior) : prior; };
     res.pf = { amount, muS, versions: {} };
@@ -9147,7 +9160,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       res.cardDetail = PfDeep.gradeDetail(current, rows, { coScore, fundVecs, picks: new Set(Object.keys(T)) });
     }
     // The opportunities desk: the strongest cases across every industry run, with companies and ETFs to play them.
-    step("Finding the best opportunities across every industry…");
+    step("Finding the best opportunities across every industry");
     const tOf = new Map(tgt.held.map((h) => [h.name, h.target])), haveOf = current?.vec?.ind || {};
     const desk = PfDeep.opportunities(rows, { goal, today: today(), have: (nm) => haveOf[nm] || 0, target: (nm) => tOf.get(nm) || 0,
       etfsFor: (nm) => cands.filter((c) => !c.isBond && !EtfRec.isBroadIndex(c.symbol, c.info) && (c.vec?.ind?.[nm] || 0) > 0.15).sort((a, b) => b.vec.ind[nm] - a.vec.ind[nm]).slice(0, 3)
@@ -9161,7 +9174,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       o.picks = (pk?.picks || []).slice(0, 5).map((p) => ({ symbol: p.symbol, name: p.name || p.c?.name || "", profile: p.profile, strategist: !!p.strategist, c: { pe: p.c?.pe, ntm_growth: p.c?.ntm_growth, rev_growth: p.c?.rev_growth, ret_1Y: p.c?.ret_1Y, excess_1Y: p.c?.excess_1Y, div_yield: p.c?.div_yield } })); }
     res.desk = desk;
     // Macro & foreign affairs: each industry report's own macro, world, trade, regulation, cycle and history, weighted by what each side holds.
-    step("Reading what every industry report says: macro, world events, trade, regulation…");
+    step("Reading what every industry report says: macro, world events, trade, regulation");
     res.intel = {}; const newKey = sels.improved ? "improved" : "recommended";
     try { if (current) res.intel.current = PfIntel.build({ ind: current.vec.ind, stocks: current.ach.allStocks || [], digests, today: today() });
       const ach = res.views[newKey]?.ach; if (ach) res.intel[newKey] = PfIntel.build({ ind: Object.fromEntries(ach.industries.filter((x) => x.got > 0).map((x) => [x.name, x.got])), stocks: ach.allStocks || [], digests, today: today() });
@@ -9290,9 +9303,9 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   function anaView(p, A, job) {
     const run = S.pfAnaRun?.pid === p.id ? S.pfAnaRun : null, gh = job && /queued|running/.test(job.state || "") ? job : null;
     const elapsed = (iso) => { const m = Math.round((Date.now() - Date.parse(iso || 0)) / 60000); return m < 1 ? "just now" : m + " min ago"; };
-    const status = run ? `<section class="panel pf-run"><div class="pf-spin"></div><div><b>Analyzing here…</b><div class="small muted">${esc(run.step || "")}${run.n ? ` (${run.done}/${run.n})` : ""}</div>${run.n ? `<div class="meter" style="margin-top:6px"><i style="width:${Math.round((run.done / run.n) * 100)}%;background:var(--accent)"></i></div>` : ""}</div><button class="sm" data-pf="ana-stop">Stop</button></section>`
+    const status = run ? `<section class="panel pf-run"><div class="pf-spin"></div><div><b>Analyzing here</b><div class="small muted">${esc(run.step || "")}${run.n ? ` (${run.done}/${run.n})` : ""}</div>${run.n ? `<div class="meter" style="margin-top:6px"><i style="width:${Math.round((run.done / run.n) * 100)}%;background:var(--accent)"></i></div>` : ""}</div><button class="sm" data-pf="ana-stop">Stop</button></section>`
       : gh ? `<section class="panel pf-run"><div class="pf-spin"></div><div><b>${gh.state === "queued" ? "Sent to GitHub" : "Running on GitHub"}</b><div class="small muted">${gh.state === "queued" ? `requested ${esc(elapsed(gh.requested_at))}: Claude is starting the workflow` : `started ${esc(elapsed(gh.started_at || gh.requested_at))}: about 10–20 minutes; the result appears here by itself`}${gh.run_url ? ` · <a href="${esc(gh.run_url)}" target="_blank" rel="noopener">the run</a>` : ""}</div></div>${(() => { const c = S.pfCheck?.[p.id], mins = c ? Math.round((Date.now() - c.at) / 60000) : 0;
-        return `<div style="display:grid;gap:4px;justify-items:end"><button class="sm" data-pf="ana-fetch" ${c?.state === "asking" ? "disabled" : ""} title="Ask Claude to copy the result now">${c?.state === "asking" ? "Asking…" : "Check now"}</button>${c ? `<span class="small ${c.state === "failed" ? "" : "muted"}" style="${c.state === "failed" ? "color:var(--neg)" : ""};max-width:260px;text-align:right">${c.state === "failed" ? esc(c.why) : c.state === "asked" ? (mins < 4 ? "Claude is fetching it: usually 1–3 minutes" : `asked ${mins} min ago and nothing came back: the task may be waiting for your approval (Scheduled tasks → “Industry Scorer: analyze a portfolio on GitHub” → turn on Automatically approve)`) : ""}</span>` : ""}</div>`; })()}</section>`
+        return `<div style="display:grid;gap:4px;justify-items:end"><button class="sm" data-pf="ana-fetch" ${c?.state === "asking" ? "disabled" : ""} title="Ask Claude to copy the result now">${c?.state === "asking" ? "Asking" : "Check now"}</button>${c ? `<span class="small ${c.state === "failed" ? "" : "muted"}" style="${c.state === "failed" ? "color:var(--neg)" : ""};max-width:260px;text-align:right">${c.state === "failed" ? esc(c.why) : c.state === "asked" ? (mins < 4 ? "Claude is fetching it: usually 1–3 minutes" : `asked ${mins} min ago and nothing came back: the task may be waiting for your approval (Scheduled tasks → “Industry Scorer: analyze a portfolio on GitHub” → turn on Automatically approve)`) : ""}</span>` : ""}</div>`; })()}</section>`
       : job?.state === "failed" ? `<div class="notice err"><span>GitHub: ${esc(job.result || "the analysis failed")}${job.run_url ? ` (<a href="${esc(job.run_url)}" target="_blank" rel="noopener">the run</a>)` : ""}</span></div>` : "";
     const go = `<section class="panel pf-cta"><div><span class="eyebrow">Step 2</span><h2>${A ? "Analyze again" : "Grade this portfolio"}</h2><p class="small muted">It grades what you hold against what every industry run says ${(() => { const d = recGoalDraft(); const t = EtfRec.getAggressivenessTier(d.aggressiveness).label.toLowerCase(); return `${/^[aeiou]/.test(t) ? "an" : "a"} ${esc(t)} ${esc((EtfRec.UG.OBJECTIVE_LABELS[d.primaryObjective]?.label || "balanced").toLowerCase())}`; })()} portfolio should own, then recommends ETFs: the fewest changes that fix it, and the best mix from scratch.</p></div>
       <div class="actions">${S.mcp && S.pfGithub !== false ? `<button class="primary" data-pf="ana-github" ${run || gh ? "disabled" : ""}>Analyze on GitHub</button><button data-pf="ana-here" ${run || gh ? "disabled" : ""}>Run it here instead</button>` : `<button class="primary" data-pf="ana-here" ${run || !S.mcp ? "disabled" : ""}>Analyze</button>`}</div>
@@ -9353,7 +9366,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${o.picks.length ? `<div class="small" style="margin-top:4px"><b>Best companies:</b> ${o.picks.map((p) => `<button class="linkbtn tick" data-co="${esc(p.symbol)}">${esc(p.symbol)}</button>${isNum(num(p.profile)) ? ` <span class="muted">${Math.round(p.profile)}</span>` : ""}${p.strategist ? " ★" : ""}`).join(" · ")}</div>` : ""}
         ${o.events.length ? `<div class="small muted" style="margin-top:4px">${o.events.map((e) => `<b class="mono">${esc(fmtDate(e.date))}</b> ${esc(e.title)}`).join(" · ")}</div>` : ""}</div>`; };
     return `<section class="panel"><div class="panel-head"><h2>Opportunities</h2><span class="small muted">the strongest cases across all ${A.rows.length} industry runs, and how to play them (never through broad index funds)</span></div>
-      ${X?.headline ? `<p style="font-size:17px;margin:0"><b>${wr(X.headline)}</b></p>` : W.desk === undefined && A.writing ? `<div class="notice info"><span>The opportunities desk is writing its briefs…</span></div>` : ""}
+      ${X?.headline ? `<p style="font-size:17px;margin:0"><b>${wr(X.headline)}</b></p>` : W.desk === undefined && A.writing ? `<div class="notice info"><span>The opportunities desk is writing its briefs</span></div>` : ""}
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(440px,100%),1fr));gap:10px">${order.map(card).join("")}</div></section>`;
   }
   const zc2 = (z) => (isNum(z) ? `<span class="${z > 0.15 ? "up" : z < -0.15 ? "down" : ""}">${z > 0 ? "+" : ""}${z.toFixed(2)}</span>` : "—");
@@ -9419,7 +9432,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const head = `<section class="panel iv-head"><div class="panel-head"><div><span class="eyebrow">Through every industry report</span><h2>Macro & foreign affairs</h2></div>${seg}</div>
       <p class="small muted" style="margin:0">Nothing here is written for this page: it is each industry run's own macro, world-events, trade, regulation, KPI and history analysis, weighted by what the portfolio holds in each industry.</p>
       <nav class="iv-jump ana-nav">${INTEL_SECS.map(([id, l]) => `<button class="${id === cur ? "on" : ""}" data-pf="intel-go-${id}">${l}</button>`).join("")}</nav></section>`;
-    if (I === "loading") return head + `<section class="panel"><div class="pf-run" style="border:0;padding:0"><div class="pf-spin"></div><div class="small muted">Reading the industry reports behind this portfolio…</div></div></section>`;
+    if (I === "loading") return head + `<section class="panel"><div class="pf-run" style="border:0;padding:0"><div class="pf-spin"></div><div class="small muted">Reading the industry reports behind this portfolio</div></div></section>`;
     if (!I) return head + `<section class="panel"><div class="small muted">None of this portfolio's industries has a saved run yet: run them (or their sectors) and come back.</div></section>`;
     const L = I.look || {}, AF = I.aff || {}, st = (t) => esc(stripCites(t || "")), cut = (t) => esc(stripCites(t || ""));
     const wP = (w) => `<span class="mono muted">${pct(w, false, w < 0.1 ? 1 : 0)}</span>`;
@@ -9584,14 +9597,14 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   /** Run the analysis in this page. */
   async function pfAnaHere(p) {
     if (!S.mcp || S.pfAnaRun) return;
-    const run = { pid: p.id, cancel: false, step: "Starting…", done: 0, n: 0 }; S.pfAnaRun = run; (S.pfAnaErr ||= {})[p.id] = null; S.pfTab = "analysis";
+    const run = { pid: p.id, cancel: false, step: "Starting", done: 0, n: 0 }; S.pfAnaRun = run; (S.pfAnaErr ||= {})[p.id] = null; S.pfTab = "analysis";
     let last = 0; const step = (t, done, n) => { if (S.pfAnaRun !== run) return; Object.assign(run, { step: t }, done !== undefined ? { done, n } : { done: 0, n: 0 }); const now = Date.now(); if (now - last > 250 || done === n) { last = now; renderPortfolio(); } };
     renderPortfolio();
     try {
       await pfLoad(); const D = S.pfData, hs = pfHoldings(p, D), pos = pfPositions(p, hs, D);
       const input = { name: p.name, total: pos?.total > 0 ? pos.total : p.totalInvestment, goal: { ...recGoalDraft() }, holdings: hs.map((h) => { const r = pos?.rows?.find((x) => x.ticker === h.ticker); return { ticker: h.ticker, name: h.name, weight: isNum(num(r?.weightNow)) ? r.weightNow : num(h.weight) || 0, price: h.price }; }) };
       const res = await pfAnalyze(input, { step, run });
-      res.write = {}; (S.pfAna ||= {})[p.id] = res; S.recKey = res.current ? "improved" : "recommended"; step("The strategists are writing it up…");
+      res.write = {}; (S.pfAna ||= {})[p.id] = res; S.recKey = res.current ? "improved" : "recommended"; step("The strategists are writing it up");
       const key = S.recKey; res.writing = { [key]: true }; renderPortfolio();
       res.write[key] = await pfWriteUp(res, key).catch((e) => { if (FATAL.has(e?.code)) throw e; res.writeErr = e?.message || String(e); return null; }); res.writing = {};
       if (!res.write[key]) delete res.write[key];
@@ -9884,7 +9897,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         <div class="memo-grid">${M.sections.map(card).join("")}</div>
         ${M.action_plan.length ? `<div class="memo-block"><h3>The action plan</h3><ol class="memo-plan">${M.action_plan.map((a2, i) => `<li><span class="n">${i + 1}</span><div><div class="memo-plan-top"><b>${esc(a2.step)}</b>${a2.when ? `<span class="pill ${WHEN[a2.when] || "neu"}">${esc(a2.when)}</span>` : ""}</div><div class="small">${wm(a2.detail)}</div></div></li>`).join("")}</ol></div>` : ""}
         ${M.watch.length ? `<div class="memo-block"><h3>What to watch</h3><div class="memo-watch">${M.watch.map((w) => `<div><span class="memo-date">${esc(/^\d{4}-\d{2}-\d{2}$/.test(w.date) ? fmtDate(w.date) : w.date)}</span><b>${wm(w.what)}</b><span class="small muted">${wm(w.why)}</span></div>`).join("")}</div></div>` : ""}</section>`; }
-    else if (res.writing?.[key]) out.memo = sec("rec-memo", "The investment memo", "", `<div class="notice info"><span>The chief strategist is writing the memo…</span></div>`);
+    else if (res.writing?.[key]) out.memo = sec("rec-memo", "The investment memo", "", `<div class="notice info"><span>The chief strategist is writing the memo</span></div>`);
     // Track record
     const s = A.track, c = cur?.track;
     if (s) { const Hs = res.hist || {}, n1 = PfDeep.nav(Hs, A.holdings, Hs.SPY), n0 = cur ? PfDeep.nav(Hs, cur.holdings, Hs.SPY) : null, from = s.growth?.from;
@@ -9936,7 +9949,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const writing = res.writing?.[key];
     // Summary
     const head = sec("rec-sum", `${LBL[key]}${res.grades?.[key] ? ` · grade ${esc(res.grades[key].letter)}` : ""}`, `built ${esc(fmtDate(res.day))} from ${res.rows.length} industry runs · ${res.discovered} ETFs found holding the target companies · ${res.screened.passed} screened in · ${cands.length} compared`, `${tabs}
-      ${A?.headline ? `<p style="font-size:19px;margin:12px 0 6px"><b>${wr(A.headline)}</b></p>` : writing ? `<div class="notice info"><span>The strategists are writing the analysis (allocation, selection, risks and opportunities)…</span></div>` : S.sample ? `<button class="sm" data-pf="rec-write">Have the strategists write it up</button>` : ""}${res.writeErr && !A ? `<div class="notice warn"><span>${esc(res.writeErr)}</span></div>` : ""}
+      ${A?.headline ? `<p style="font-size:19px;margin:12px 0 6px"><b>${wr(A.headline)}</b></p>` : writing ? `<div class="notice info"><span>The strategists are writing the analysis (allocation, selection, risks and opportunities)</span></div>` : S.sample ? `<button class="sm" data-pf="rec-write">Have the strategists write it up</button>` : ""}${res.writeErr && !A ? `<div class="notice warn"><span>${esc(res.writeErr)}</span></div>` : ""}
       ${A?.thesis ? `<div class="prose">${String(A.thesis).split(/\n+/).map((p) => `<p>${wr(p)}</p>`).join("")}</div>` : ""}
       <div class="kpis" style="margin-top:10px">${[kpi("Expected a year", pct(vw.mu, false), `blend of market prior and the runs' views · industries alone imply ${pct(ex12, false)}`), kpi("Volatility", pct(sel.vol, false), `ceiling ${pct(goal.vol, false, 0)}`), kpi("Yield", pct(vw.yield, false, 2), `about ${usd(total * vw.yield)} a year`), kpi("Cost", pct(vw.cost, false, 2), `${usd(total * vw.cost)} a year`),
         kpi("Industries", String(res.tgt.held.length), `${res.tgt.avoided.length} avoided`), kpi("Target companies", String(Object.keys(res.T).length), `captures ${pct(ach.capture, false, 0)}`), kpi("Off target", pct(ach.tracking, false, 1), "of the portfolio sits in other industries than planned"), kpi("Bonds", pct(vw.bonds, false, 0), `band ${pct(goal.bonds[0], false, 0)}–${pct(goal.bonds[1], false, 0)}`)].join("")}</div>
@@ -10289,7 +10302,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     if (!items.length) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
     const pending = q.trim().length >= 1 && S.mcp && !_cmpLive.has(q.trim().toLowerCase());
     box.innerHTML = items.map((x, i) => `<div class="sug-item${i === S.cmpSugI ? " on" : ""}" role="option" id="cmp-sug-${i}" aria-selected="${i === S.cmpSugI}" data-csug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span><span class="small muted">${esc(x.src === "yours" ? "your fund" : x.type || "")}</span></div>`).join("")
-      + (pending ? `<div class="sug-foot small muted">Searching FMP and EODHD…</div>` : "");
+      + (pending ? `<div class="sug-foot small muted">Searching FMP and EODHD</div>` : "");
     box.hidden = false; inp.setAttribute("aria-expanded", "true");
   }
   /**
@@ -10309,7 +10322,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const pending = q && S.mcp && !_cmpLive.has(lc(q));
       if (!items.length && !pending) { box.hidden = true; inp.setAttribute("aria-expanded", "false"); return; }
       box.innerHTML = items.map((x, i) => { const kd = SUG_KIND(x); return `<div class="sug-item tb-item${i === at ? " on" : ""}" role="option" aria-selected="${i === at}" data-tsug="${esc(x.symbol)}"><span class="tick">${esc(x.symbol)}</span><span class="sug-name">${esc(x.name || "")}</span>${kd ? `<span class="tb-kind k-${kd.toLowerCase()}">${kd}</span>` : "<span></span>"}</div>`; }).join("")
-        + (pending ? `<div class="sug-foot small muted"><span class="tb-spin"></span>Searching stocks, ETFs and mutual funds…</div>` : "");
+        + (pending ? `<div class="sug-foot small muted"><span class="tb-spin"></span>Searching stocks, ETFs and mutual funds</div>` : "");
       box.hidden = false; inp.setAttribute("aria-expanded", "true");
     };
     const pick = (i) => { const x = items[i]; if (!x) return; box.hidden = true; inp.setAttribute("aria-expanded", "false"); onPick?.(x.symbol, { ...x, kind: SUG_KIND(x) }); };
@@ -10352,7 +10365,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   /** Load one ticker into the comparison (once; kept while the tab is open). */
   async function cmpLoad(sym) {
     const c = S.cmp; if (c.subj[sym]?.stage === "ready" || c.subj[sym]?.stage === "loading") return;
-    const x = c.subj[sym] = { stage: "loading", step: "Finding it…", err: null, s: null }; renderCompare();
+    const x = c.subj[sym] = { stage: "loading", step: "Finding it", err: null, s: null }; renderCompare();
     const step = (t) => { x.step = t; renderCompare(); };
     try {
       if (!S.mcp) throw new Error("open this page in Claude to look tickers up");
@@ -10502,7 +10515,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       // the same dossier, which on the API is cached after the first half starts, so the second reads it at a tenth of the price.
       const enc = new TextEncoder();
       const deskAsk = (d, dz, part) => { const mark = JOB && part ? CACHE_MARK : "", bare = enc.encode(Compare.deskPrompt(d, "", syms, today(), { part, mark })).length, room = lim - bare - 2000;
-        const b = enc.encode(dz), t = b.length <= room ? dz : new TextDecoder().decode(b.slice(0, Math.max(0, room - 200))).replace(/\n[^\n]*$/, "") + "\n(…cut to fit)";
+        const b = enc.encode(dz), t = b.length <= room ? dz : new TextDecoder().decode(b.slice(0, Math.max(0, room - 200))).replace(/\n[^\n]*$/, "") + "\n(cut to fit)";
         return sampleJson(Compare.deskPrompt(d, t, syms, today(), { part, mark }), { modelTier: "complex", cache: false, signal: ctl.signal, jobStep: `Compare ${d} desk${part ? " (" + part + ")" : ""}` }); };
       await Promise.all(Compare.DESK_KEYS.map(async (d) => {
         try { const dz = Compare.deskDossier(d, ready, { extra: d === "events" || d === "macro" ? econ : "", combined: d === "macro" ? combined : "" }), parts = Compare.DESK_PARTS[d];
@@ -10609,7 +10622,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const quick = !c.syms.length ? `<div class="cx-quick small muted">Try: ${[["AAPL,MSFT", "AAPL vs MSFT"], ["XOM,CVX", "XOM vs CVX"], ["SPY,QQQ", "SPY vs QQQ"], ["KO,PEP,MDLZ", "KO, PEP, MDLZ"]].map(([v, l]) => `<button class="chip" data-cmp-quick="${v}">${l}</button>`).join(" ")}</div>` : "";
     return `<section class="cx-bar"><div class="cx-bar-head"><div><span class="eyebrow">Compare</span><h2>Head to head, up to ${CMP_MAX} tickers</h2></div><span class="small muted">Stocks or funds · built on your industry reports and any analysis already written · one Claude call for the verdict</span></div>
       <div class="cx-chips">${chips}${empty}</div>
-      ${c.syms.length < CMP_MAX ? `<form id="cmp-form" class="co-form"><div class="sug-wrap"><input type="search" id="cmp-q" placeholder="Ticker or name: NVDA, Apple, Vanguard Growth, FXAIX…" aria-label="Add a ticker" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="cmp-sug" aria-expanded="false" value="${esc(c.q || "")}"><div id="cmp-sug" class="sug" role="listbox" hidden></div></div><button class="primary" type="submit">Add</button></form>` : ""}
+      ${c.syms.length < CMP_MAX ? `<form id="cmp-form" class="co-form"><div class="sug-wrap"><input type="search" id="cmp-q" placeholder="Ticker or name: NVDA, Apple, Vanguard Growth, FXAIX" aria-label="Add a ticker" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="cmp-sug" aria-expanded="false" value="${esc(c.q || "")}"><div id="cmp-sug" class="sug" role="listbox" hidden></div></div><button class="primary" type="submit">Add</button></form>` : ""}
       ${c.note ? `<div class="small warn-t">${esc(c.note)}</div>` : ""}${quick}</section>`;
   }
   const cmpTick = (s, big = false) => `<span class="cx-tk${big ? " big" : ""}" style="--tc:${cmpColor(s)}">${esc(s)}</span>`;
@@ -10658,7 +10671,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <span class="small muted">${jRun ? `It comes in here by itself${V ? "; the last verdict is shown until then" : ""}.` : ""}${anJobs.length ? ` ${anJobs.map(({ s0 }) => s0.sym).join(", ")} ${anJobs.length === 1 ? "comes" : "come"} into the line-up when written; Compare again then to use ${anJobs.length === 1 ? "it" : "them"}.` : ""}${J?.run_url && jRun ? ` <a href="${esc(J.run_url)}" target="_blank" rel="noopener">See the run</a>` : ""}</span></div>`
       : J?.state === "failed" && !(V?.at > (J.done_at || "")) ? `<div class="notice err"><span>The GitHub comparison didn't finish: ${esc(J.result || "no reason given")}.</span></div>` : "";
     const canRun = !busy && !jRun && (S.sample || S.mcp);
-    const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub…" : busy ? "Comparing…" : `Compare ${syms.join(" vs ")}`}</button>`;
+    const runBtn = `<button class="primary cx-run" data-cmp-run="1" ${canRun ? "" : "disabled"}>${jRun ? "Comparing on GitHub" : busy ? "Comparing" : `Compare ${syms.join(" vs ")}`}</button>`;
     const noClaude = !v && !busy && !jRun ? `<div class="cx-cta"><div><b>Ready to compare.</b> <span class="small muted">${S.sample || S.mcp ? "On GitHub, four desks read every ticker's full dossier at once (what's ahead, event by event; the macro tables and foreign affairs; Wall Street and sentiment; the fundamentals), then a head of research weighs their findings and code's numbers and writes the verdict." : "Open this page in Claude to run the comparison; code's numbers are below."}</span></div>${runBtn}</div>` : "";
     // Your saved goals (Portfolios tab), when there are any: that investor type is marked.
     const userType = (() => { try { const g = JSON.parse(localStorage.getItem("portfolio_user_goals") || "null"); return g?.primaryObjective ? EtfRec.UG.fromAnswers({ ...EtfRec.UG.DEFAULT, ...g })?.type || null : null; } catch { return null; } })();
@@ -10820,7 +10833,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         </div></details>`; }).join("");
     const miGroups = [...MA.indicators.reduce((m, x) => m.set(x.group || "Other", (m.get(x.group || "Other") || 0) + 1), new Map())];
     const fchip = (attr, val, label, on) => `<button class="chip${on ? " cur" : ""}" data-${attr}="${esc(val)}">${label}</button>`;
-    const miBar = `<div class="cx-mi-bar"><input type="search" id="cx-mi-q" placeholder="Search ${MA.indicators.length} indicators…" value="${esc(MI.q)}" aria-label="Search indicators">
+    const miBar = `<div class="cx-mi-bar"><input type="search" id="cx-mi-q" placeholder="Search ${MA.indicators.length} indicators" value="${esc(MI.q)}" aria-label="Search indicators">
       <div class="cx-fchips"><span class="eyebrow">Group</span>${fchip("mi-g", "", `All <span class="muted">${MA.indicators.length}</span>`, !MI.g)}${miGroups.map(([g, n0]) => fchip("mi-g", g, `${esc(g)} <span class="muted">${n0}</span>`, MI.g === g)).join("")}</div>
       <div class="cx-fchips"><span class="eyebrow">For</span>${fchip("mi-t", "", "Everyone", !MI.t)}${syms.map((k) => fchip("mi-t", k, esc(k), MI.t === k)).join("")}
         <span class="eyebrow" style="margin-left:8px">Show</span>${[["", "All"], ["exposed", "Exposed"], ["headwind", "Headwinds"], ["tailwind", "Tailwinds"]].map(([v0, l0]) => fchip("mi-e", v0, l0, MI.e === v0)).join("")}
@@ -10917,7 +10930,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
 
     // ---- macro scenarios and measured sensitivity, with the desk's case for each
     const facs = [...new Set(subs.flatMap((s0) => (s0.sens || []).map((x) => x.label)))];
-    const sensT = facs.length ? `<div class="tbl-wrap"><table><thead><tr><th>A one-sigma move in…</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${facs.map((f0) => `<tr><td>${esc(f0)}</td>${subs.map((s0) => { const x = (s0.sens || []).find((y) => y.label === f0); return `<td class="n ${cls(x?.effect)}" title="${x && isNum(x.t) ? "t " + fix(x.t, 1) : ""}">${x ? pct(x.effect, true, 2) : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
+    const sensT = facs.length ? `<div class="tbl-wrap"><table><thead><tr><th>A one-sigma move in</th>${syms.map((k) => `<th class="n">${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${facs.map((f0) => `<tr><td>${esc(f0)}</td>${subs.map((s0) => { const x = (s0.sens || []).find((y) => y.label === f0); return `<td class="n ${cls(x?.effect)}" title="${x && isNum(x.t) ? "t " + fix(x.t, 1) : ""}">${x ? pct(x.effect, true, 2) : "—"}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>
       <div class="small muted">Measured on the last year of daily returns: what each moved on a typical one-sigma day in each factor, holding the market fixed.</div>` : "";
     const scenT = MD?.scenarios?.length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Scenario</th><th class="n">Odds</th>${syms.map((k) => `<th>${cmpTick(k)}</th>`).join("")}</tr></thead><tbody>${MD.scenarios.map((x) => `<tr><td class="wr"><b>${esc(x.name)}</b><div class="small muted">${esc(x.what)}</div></td><td class="n">${x.probability ?? "—"}%</td>${syms.map((k) => { const m0 = x.impact[k] || {}; return `<td class="wr small"><b class="${mvCls(m0.move)}">${esc(m0.move || "—")}</b> ${esc(m0.why || "")}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div>` : "";
     const macroS = scenT || sensT || MD ? sec("cmp-macro", "Macro scenarios & sensitivity", "what the big macro and world outcomes do to each, and what each has measurably moved with", `${scenT}${sensT ? `<h3>Measured macro sensitivity</h3>${sensT}` : ""}
@@ -10955,7 +10968,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         ${n0 ? `<div class="two"><div><span class="eyebrow pos-t">Strengths</span><ul class="memo-pts">${n0.strengths.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div><div><span class="eyebrow neg-t">Weaknesses</span><ul class="memo-pts cx-neg">${n0.weaknesses.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div></div>
         <div class="two"><div class="memo-side bull"><span class="eyebrow">Bull</span><p class="small">${esc(n0.bull)}</p></div><div class="memo-side bear"><span class="eyebrow">Bear</span><p class="small">${esc(n0.bear)}</p></div></div>
         ${n0.watch.length ? `<div class="small"><b>Watch:</b> ${n0.watch.map(esc).join(" · ")}</div>` : ""}${n0.changes_mind ? `<div class="small muted"><b>Changes the verdict:</b> ${esc(n0.changes_mind)}</div>` : ""}`
-        : `<div class="small muted">${busy ? "Being written…" : "Comes with the verdict."}</div>`}
+        : `<div class="small muted">${busy ? "Being written" : "Comes with the verdict."}</div>`}
         ${sv?.verdict?.summary ? `<details class="memo-more"><summary>From its ${s.kind === "fund" ? "fund" : "company"} analysis</summary><p class="small">${esc(stripCites(sv.verdict.summary))}</p>${sv.risks.length ? `<p class="small"><b>Risks:</b> ${esc(sv.risks.slice(0, 4).map((x) => stripCites(x)).join(" · "))}</p>` : ""}</details>` : ""}</div>`; }).join("")}</div>`);
 
     // ---- owning them together
@@ -11055,7 +11068,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     for (const t of need) {
       const c = await idbGet("scr:live:" + t).catch(() => null);
       if (c?.at && ageDays(c.at) < 1 && c.rows?.length) { L.rows[t] = c.rows; continue; }
-      S.scrLoading = { label: `Finding US ${SCR_TL[t]}s on FMP…`, p: 0.05 }; scrLoadTick();
+      S.scrLoading = { label: `Finding US ${SCR_TL[t]}s on FMP`, p: 0.05 }; scrLoadTick();
       let got = await fmp("search", { endpoint: "search-company-screener", isActivelyTrading: true, limit: 5000, ...SCR_Q[t] });
       got = (got || []).filter((r) => r?.symbol && (t === "fund" ? r.isFund && !r.isEtf && /^[A-Z]{4}X$/.test(r.symbol) : t === "etf" ? r.isEtf && /^[A-Z]{1,5}$/.test(r.symbol) : !r.isEtf && !r.isFund && /^[A-Z]{1,5}(\.[A-Z])?$/.test(r.symbol)));
       const rows = got.map((r) => Screener.row(r, t)), by = Object.fromEntries(rows.map((o) => [o.s, o]));
@@ -11128,7 +11141,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   function renderScreener() {
     const el = $("scr"); if (!el || S.tab !== "screener") return;
     const s = scrState();
-    if (!S.scrData && !S.scrLoading && !S.scrErr) { S.scrLoading = { label: "Getting the screener ready…", p: 0.02 }; scrEnsure().catch((e) => { S.scrLoading = null; S.scrErr = errText(e); renderScreener(); }); }
+    if (!S.scrData && !S.scrLoading && !S.scrErr) { S.scrLoading = { label: "Getting the screener ready", p: 0.02 }; scrEnsure().catch((e) => { S.scrLoading = null; S.scrErr = errText(e); renderScreener(); }); }
     if (!el.__scr) { el.__scr = 1; el.addEventListener("click", scrClick); el.addEventListener("input", scrInput); el.addEventListener("change", scrChange); el.addEventListener("submit", scrSubmit); }
     if (!S.scrSaved && !S.scrSavedAsk) { S.scrSavedAsk = true; scrSavedList().then(() => renderScreener()).catch(() => {}); }
     el.innerHTML = `${scrHead()}<div class="scr${s.side ? " side-open" : ""}"><aside class="scr-side" id="scr-side" aria-label="Criteria">${scrSide()}</aside><div class="scr-main" id="scr-main">${scrMain()}</div></div>`;
@@ -11207,7 +11220,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <button class="pfe-ghost" data-scr-export="1" ${all.length ? "" : "disabled"}>Export</button>
       <button class="primary sm scr-cmp" data-scr-cmp="1" ${s.sel.length >= 2 ? "" : "disabled"} title="Tick 2 to ${CMP_MAX} rows to compare them">Compare${s.sel.length ? ` <span class="mono">${s.sel.length}</span>` : ""}</button></div>`;
     const sorts = `<div class="scr-sorts"><span class="pfe-lab">Sorted by</span>${R.like && !sortsShown.length ? `<span class="scr-sortchip">how alike</span>` : ""}${sortsShown.map((x, i) => C(x.c) ? `<span class="scr-sortchip">${i ? `<span class="muted">then</span> ` : ""}${esc(C(x.c).long || C(x.c).label)}<button data-scr-sdir="${i}" title="Change direction">${x.d > 0 ? "low to high ↑" : "high to low ↓"}</button><button class="scr-x" data-scr-srm="${i}" aria-label="Stop sorting by ${esc(C(x.c).label)}">×</button></span>` : "").join("")}
-      <select data-scr-sadd aria-label="Add a sort"><option value="">${sortsShown.length || R.like ? "Then by…" : "Sort by…"}</option>${colOpts.filter((c) => !sortsShown.some((x) => x.c === c.id)).map((c) => `<option value="${c.id}">${esc(c.long || c.label)}</option>`).join("")}</select></div>`;
+      <select data-scr-sadd aria-label="Add a sort"><option value="">${sortsShown.length || R.like ? "Then by" : "Sort by"}</option>${colOpts.filter((c) => !sortsShown.some((x) => x.c === c.id)).map((c) => `<option value="${c.id}">${esc(c.long || c.label)}</option>`).join("")}</select></div>`;
     const like = R.like ? `<div class="scr-likebar"><span class="pfe-av" style="--c:${tickColor(R.like.s)}">${esc(R.like.s.slice(0, 4))}</span><div><b>Most like ${esc(R.like.s)}</b><span class="small muted">${esc(R.like.n || "")}${R.like.cat ? " · " + esc(R.like.cat) : ""}. Ranked by what they hold, their risk and return${R.like.t === "stock" ? ", size and valuation" : " and cost"}; your criteria still apply.</span></div><button class="pfe-ghost" data-scr-unlike="1">Show all again</button></div>` : "";
     const miss = Object.entries(R.missing || {}).filter(([, n]) => n > 0).map(([k, n]) => { const c = Screener.CRIT[k];
       return `<div class="scr-note"><span><b>${esc(c.label)}</b> isn't known yet for ${n.toLocaleString()} of these, so they're left out.</span>${live ? `<button class="pfe-ghost" data-scr-fillall="${k}">Fill in ${Math.min(n, 1500).toLocaleString()} (about ${Math.max(1, Math.ceil(Math.min(n, 1500) * 0.7 / 60))} min)</button>` : ""}</div>`; }).join("");
@@ -11330,7 +11343,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   }
   function companyList() {
     const ci = S.coIdx;
-    if (!ci) { setTimeout(() => coIndex().then(() => renderCompany()), 0); return `<div class="small muted">Gathering the companies in your saved industries…</div>`; }
+    if (!ci) { setTimeout(() => coIndex().then(() => renderCompany()), 0); return `<div class="small muted">Gathering the companies in your saved industries</div>`; }
     const bySector = {};
     for (const r of Object.values(ci.runs)) (bySector[r.sector || "Other"] ||= []).push(r);
     const secs = Object.keys(bySector).sort((a, b) => (a === "Consumer Defensive" ? -1 : b === "Consumer Defensive" ? 1 : a.localeCompare(b)));
@@ -11381,7 +11394,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     for (const k of ["g", "margin", "tg", "wacc"]) { const v = $("dcf-" + k + "-v"); if (v) v.textContent = (co.dcfP[k] * 100).toFixed(1) + "%"; }
     const o = $("dcf-out"); if (o) o.innerHTML = dcfOut(co, CoFacts.dcf(co.dcfP));
   }
-  const trimC = (t, k) => (String(t).length > k ? String(t).slice(0, k - 1) + "…" : String(t));
+  const trimC = (t, k) => (String(t).length > k ? String(t).slice(0, k).replace(/\s+\S*$/, "") : String(t)); // prompts only: cut at a word, no mark
   /** Text for the screen: whole. The length argument stays so call sites read the same; the reader expands long text instead. */
   const showC = (t) => String(t ?? "");
   // ------------------------------------------------------------- Wall Street over the last 12 months (every tab)
@@ -11404,7 +11417,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   /** A place in a section where the last year of ratings is drawn once it has loaded. */
   function streetSlot(items, { what = "", coverage = NaN, label = "" } = {}) {
     const xs = items.filter((x) => x?.sym).slice(0, 10); if (!xs.length) return "";
-    return `<div class="st-slot" data-st="${esc(xs.map((x) => x.sym).join(","))}" data-stw="${xs.map((x) => (isNum(num(x.w)) ? num(x.w) : 1)).join(",")}" data-st-what="${esc(what)}" data-st-cov="${isNum(num(coverage)) ? coverage : ""}" data-st-label="${esc(label)}"><div class="small muted">Reading 12 months of analyst ratings${xs.length > 1 ? ` for ${xs.length} names` : ""}…</div><div class="skel" style="height:140px;margin-top:8px"></div></div>`;
+    return `<div class="st-slot" data-st="${esc(xs.map((x) => x.sym).join(","))}" data-stw="${xs.map((x) => (isNum(num(x.w)) ? num(x.w) : 1)).join(",")}" data-st-what="${esc(what)}" data-st-cov="${isNum(num(coverage)) ? coverage : ""}" data-st-label="${esc(label)}"><div class="small muted">Reading 12 months of analyst ratings${xs.length > 1 ? ` for ${xs.length} names` : ""}</div><div class="skel" style="height:140px;margin-top:8px"></div></div>`;
   }
   /** Fill every slot under root (on any tab); the drawn block is kept so a redraw of the page doesn't flicker. */
   function wireStreet(root) {
@@ -11596,7 +11609,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const pre = kind === "industry" ? S.industries[slug(key)]?.twin : null, preW = pre?.windows?.[win];
     if (preW?.R && pre.date >= Horizon.addDays(today(), -(kind === "industry" && !S.mcp ? 30 : 3))) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; twSync(el); ppRedraw(k0); return; }
     if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
-    body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}…</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
+    body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
     try {
       const [ind, mk] = await Promise.all([twSeries(kind, key), regimeData()]);
       const R = ind ? Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }) : null;
@@ -11677,7 +11690,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const rows = R.episodes.map((e, i) => { const most = NN?.closest === "W" + (i + 1), r12 = e.it["12M"], r3 = e.it["3M"];
       return `<details class="tw-row${most ? " tw-closest" : ""}" data-i="${i}"><summary><span class="tw-rk mono">${i + 1}</span><span class="tw-rt"><b class="tw-ep-t">${ML(e.start)} – ${ML(e.end)}</b><span class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches${most ? ` · <b class="tw-most">most like today</b>` : ""}</span></span>
         <span class="tw-mini"><span><span class="small muted">3M after</span> ${sg(r3)}</span><span><span class="small muted">1Y after</span> ${sg(r12)}</span></span><span class="tw-ovtag">On the chart</span><svg class="tw-chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
-        <div class="tw-detail">${nb(i)?.then ? `<p class="tw-p"><b>Then.</b> ${esc(nb(i).then)}</p>` : pend ? `<p class="tw-p small muted">The historian is writing what was going on then…</p>` : ""}
+        <div class="tw-detail">${nb(i)?.then ? `<p class="tw-p"><b>Then.</b> ${esc(nb(i).then)}</p>` : pend ? `<p class="tw-p small muted">The historian is writing what was going on then</p>` : ""}
         <p class="tw-p"><b>What happened next.</b> ${esc(nb(i)?.after || after(e))}</p>
         <p class="tw-p"><b>What's different now.</b> ${esc(nb(i)?.different || diff(e))}</p>
         ${nb(i)?.lesson ? `<div class="tw-lesson">${esc(nb(i).lesson)}</div>` : ""}
@@ -11849,7 +11862,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const r = t?.reads?.[key], ir = IND_READ[key] && co.indReads?.[key];
     const indL = ir ? `<div class="small muted" style="margin-top:6px"><b>The industry report (${IND_READ[key]}):</b> ${esc(ir.replace(/\b(income|conservative|growth|aggressive): /g, (m, k) => `${k[0].toUpperCase() + k.slice(1)}: `))}</div>` : "";
     if (r) return `<div class="coread" data-read="${key}"><span class="eyebrow">Our read</span><p>${rich(r)}</p>${indL}</div>`;
-    if (co.writing) return `<div class="coread pending" data-read="${key}"><span class="eyebrow">Our read</span><p class="muted">Being written…</p>${indL}</div>`;
+    if (co.writing) return `<div class="coread pending" data-read="${key}"><span class="eyebrow">Our read</span><p class="muted">Being written</p>${indL}</div>`;
     return indL ? `<div class="coread pending" data-read="${key}">${indL}</div>` : "";
   }
   const withRead = (co, t, html) => {
@@ -11871,7 +11884,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     if (co.stage === "finding" || co.stage === "data") {
       const sk = (h) => `<section class="panel"><div class="skel" style="width:30%;height:18px"></div>${Array.from({ length: h }, (_, i) => `<div class="skel" style="width:${90 - i * 12}%"></div>`).join("")}</section>`;
       const skRet = `<section class="panel" id="co-returns"><div class="skel" style="width:20%;height:18px"></div><div class="retgrid">${RET_P.map(() => `<div class="skel" style="height:56px;margin:0;border-radius:10px"></div>`).join("")}</div><div class="skel" style="height:230px;border-radius:10px"></div></section>`;
-      return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
+      return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
     const secs = [coSnapshot(co, t), coReturnsAll(co), run ? coLeanBlock(co) : "", run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
@@ -11910,7 +11923,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const sc = ["bull", "base", "bear"].filter((k) => t.scenarios?.[k]).map((k) => { const s = t.scenarios[k], c = ck?.scenarios?.find((x) => x.k === k);
       return `<tr><td><b>${k}</b></td><td class="n">${isNum(s.probability) ? s.probability + "%" : "—"}</td><td class="n">${rng(s.eps_change)}</td><td class="n">${s.pe?.length ? s.pe.map((x) => fix(x, 1)).join("–") : "—"}</td><td class="n">${s.price_target?.length ? s.price_target.map((x) => fix(x, 0)).join("–") : "—"}</td><td class="n ${cls(num(c?.move))}">${c && isNum(num(c.move)) ? pcx(c.move, 0) : "—"}</td><td class="wr small">${rich(s.narrative)}</td></tr>`; }).join("");
     const math = ck && isNum(num(ck.expected_return)) ? `<div class="kpis">${kpi("Expected 12M return", pcx(ck.expected_return, 1), "probability-weighted, from the scenarios", cls(num(ck.expected_return)))}${kpi("Upside (bull)", pcx(ck.upside, 0))}${kpi("Downside (bear)", pcx(ck.downside, 0))}${t.valuation?.fair_value?.length ? kpi("Fair value", t.valuation.fair_value.map((x) => fix(x, 0)).join("–"), isNum(co.px) ? `vs ${fix(co.px, 2)} now` : "") : ""}</div>` : "";
-    return sec("co-thesis", `Analysis${writing ? " · writing…" : ""}`, co.thesis ? `written ${esc(ago(co.thesis.at))}${co.thesis.secs ? ` in ${co.thesis.secs}s` : ""} on the ${esc(fmtShort(co.thesis.industry_run_at || ""))} industry run${co.thesis.thesis?.confidence ? ` · ${esc(co.thesis.thesis.confidence)} confidence` : ""}` : "",
+    return sec("co-thesis", `Analysis${writing ? " · writing" : ""}`, co.thesis ? `written ${esc(ago(co.thesis.at))}${co.thesis.secs ? ` in ${co.thesis.secs}s` : ""} on the ${esc(fmtShort(co.thesis.industry_run_at || ""))} industry run${co.thesis.thesis?.confidence ? ` · ${esc(co.thesis.thesis.confidence)} confidence` : ""}` : "",
       `${ghNotice("company", co)}${writing ? `<div class="notice info"><span>Still writing (${el}s); sections fill in as they arrive.</span><button class="sm" data-co-stop="1">Stop</button></div>` : ""}
       ${co.thesisErr && !writing ? `<div class="notice warn small">${esc(co.thesisErr)}</div>` : ""}
       ${t.headline ? `<div class="headline">${rich(t.headline)}</div>` : ""}
@@ -11978,7 +11991,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   }
   /** The drivers, exposures, moat, management, risks and catalysts (the second half of the write-up). */
   function coDrivers(co, t) {
-    if (!t || !(t.drivers?.length || t.risks?.length || t.exposures)) return co.writing ? sec("co-drivers", "Drivers, moat, risks and catalysts", "", `<div class="small muted">Being written…</div>`) : mentionsFor(co, "rest") ? sec("co-drivers", "Drivers, moat, risks and catalysts", "", mentionsFor(co, "rest")) : "";
+    if (!t || !(t.drivers?.length || t.risks?.length || t.exposures)) return co.writing ? sec("co-drivers", "Drivers, moat, risks and catalysts", "", `<div class="small muted">Being written</div>`) : mentionsFor(co, "rest") ? sec("co-drivers", "Drivers, moat, risks and catalysts", "", mentionsFor(co, "rest")) : "";
     const drv = (t.drivers || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry driver</th><th>The industry view</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${t.drivers.map((d) => `<tr><td class="wr"><b>${esc(d.driver)}</b></td><td class="wr small">${rich(d.industry_view)}</td><td><span class="pill ${d.effect === "stronger" ? "warn" : d.effect === "opposite" ? "neg" : "neu"}">${esc(d.effect)}</span></td><td class="wr small">${rich(d.why)} ${cites(d.evidence)}</td></tr>`).join("")}</tbody></table></div>` : "";
     const ex = t.exposures || {};
     const exList = (title, list, fmt) => (list?.length ? `<div class="box"><h3>${title}</h3><ul class="dlist small">${list.map(fmt).join("")}</ul></div>` : "");
@@ -12015,7 +12028,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
         <div class="big"><b>${isNum(tt) ? Math.round(tt) : "—"}</b><span class="g ${g === "—" ? "none" : g}">${g}</span></div>
         <div class="meter"><i class="m-${g}" style="width:${isNum(tt) ? Math.round(tt) : 0}%"></i></div>
         <span class="small muted">Company ${isNum(num(v.quant)) ? Math.round(v.quant) : "—"} · industry backdrop ${isNum(num(v.sections)) ? Math.round(v.sections) : "—"}${v.overlay ? ` · analysis ${v.overlay > 0 ? "+" : ""}${v.overlay}` : t?.fit ? " · analysis 0" : ""}</span>
-        ${fit?.fit ? `<span class="small"><b>${esc(fit.fit)} fit</b>${fit.conviction ? ` · ${esc(fit.conviction)} conviction` : ""}</span>${fit.why ? `<span class="verdict">${rich(fit.why)}</span>` : ""}` : co.writing ? `<span class="small muted">The analysis's read is being written…</span>` : ""}
+        ${fit?.fit ? `<span class="small"><b>${esc(fit.fit)} fit</b>${fit.conviction ? ` · ${esc(fit.conviction)} conviction` : ""}</span>${fit.why ? `<span class="verdict">${rich(fit.why)}</span>` : ""}` : co.writing ? `<span class="small muted">The analysis's read is being written</span>` : ""}
         ${drivers(p)}
         ${fit?.how_to_own ? `<span class="small"><b>How to own it:</b> ${rich(fit.how_to_own)}</span>` : t?.lens?.plans?.[p] ? `<span class="small"><b>Plan:</b> ${isNum(num(t.lens.plans[p].size_pct)) ? fix(t.lens.plans[p].size_pct, 1) + "% size" : ""}${t.lens.plans[p].stop ? `, stop ${fix(t.lens.plans[p].stop, 2)}` : ""} · <a href="#co-plan">trade plan</a></span>` : ""}
         ${fit?.watch ? `<span class="small"><b>Watch:</b> ${rich(fit.watch)}</span>` : ""}
@@ -12041,11 +12054,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   /** What to show in the company's column before (or without) its read. */
   function lensNote(co, t) {
     if (t?.lens) return "";
-    if (co.writing) return `<div class="small muted">${esc(co.sym)}'s read on each row is being written…</div>`;
+    if (co.writing) return `<div class="small muted">${esc(co.sym)}'s read on each row is being written</div>`;
     if (co.thesis) return `<div class="small muted">This analysis was written before ${esc(co.sym)} got its own read on each row of the industry report; the next rewrite adds it.</div>`;
     return "";
   }
-  const pend = (co, t) => (t?.lens ? `<span class="muted">—</span>` : co.writing ? `<span class="muted">writing…</span>` : `<span class="muted">—</span>`);
+  const pend = (co, t) => (t?.lens ? `<span class="muted">—</span>` : co.writing ? `<span class="muted">writing</span>` : `<span class="muted">—</span>`);
   /** Macro, for this company: its regime and calls, how it has actually moved with the macro, and every indicator in the industry's macro table. */
   /** How the company's measured move compares with its industry's: more, less or opposite (code). */
   function sensWord(c, i) {
@@ -12105,7 +12118,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       ${groups.map((g) => { const rs = sortRows(all.filter((r) => r.group === g)); return rs.length ? `<div class="ind-group"><span class="eyebrow">${esc(g)}</span>${rs.map(card).join("")}</div>` : ""; }).join("")}` : "";
     // The industry's macro strategist: how macro reaches it, what's moving, what would flip it, and the releases ahead; with the company's own channels.
     const CH = [["demand", "Demand"], ["cost", "Costs"], ["capital", "Capital & valuation"], ["regulatory", "Policy & regulation"]];
-    const chans = CH.some(([k]) => m?.channels?.[k]?.text || L?.channels?.[k]) ? `<h3>How the macro reaches ${esc(co.sym)}</h3><div class="two">${CH.filter(([k]) => m?.channels?.[k]?.text || L?.channels?.[k]).map(([k, l]) => `<div class="box"><h3>${l}</h3>${L?.channels?.[k] ? `<p class="small" style="margin:0"><b>${esc(co.sym)}:</b> ${rich(L.channels[k])}</p>` : co.writing ? `<p class="small muted" style="margin:0">Being written…</p>` : ""}${m?.channels?.[k]?.text ? `<p class="small muted" style="margin:4px 0 0"><b>Industry:</b> ${esc(stripCites(m.channels[k].text))}</p>` : ""}</div>`).join("")}</div>${L?.flip ? `<div class="small"><b>What would flip the macro call for ${esc(co.sym)}:</b> ${rich(L.flip)}</div>` : ""}` : "";
+    const chans = CH.some(([k]) => m?.channels?.[k]?.text || L?.channels?.[k]) ? `<h3>How the macro reaches ${esc(co.sym)}</h3><div class="two">${CH.filter(([k]) => m?.channels?.[k]?.text || L?.channels?.[k]).map(([k, l]) => `<div class="box"><h3>${l}</h3>${L?.channels?.[k] ? `<p class="small" style="margin:0"><b>${esc(co.sym)}:</b> ${rich(L.channels[k])}</p>` : co.writing ? `<p class="small muted" style="margin:0">Being written</p>` : ""}${m?.channels?.[k]?.text ? `<p class="small muted" style="margin:4px 0 0"><b>Industry:</b> ${esc(stripCites(m.channels[k].text))}</p>` : ""}</div>`).join("")}</div>${L?.flip ? `<div class="small"><b>What would flip the macro call for ${esc(co.sym)}:</b> ${rich(L.flip)}</div>` : ""}` : "";
     const rowsBy = Object.fromEntries(all.map((r) => [r.id, r]));
     const moves = (m?.moves || []).length ? `<h3>What's moving and why</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Indicator</th><th>Move</th><th>What's driving it</th><th>What it means for the industry</th><th>For ${esc(co.sym)}</th></tr></thead><tbody>${m.moves.map((mv) => { const y = li[mv.id];
       return `<tr><td><span class="idtag">${esc(mv.id)}</span> <b>${esc(rowsBy[mv.id]?.label || "")}</b></td><td class="wr small">${esc(stripCites(mv.move || ""))}</td><td class="wr small">${mv.driver ? esc(stripCites(mv.driver)) : `<span class="muted">no news found</span>`}${mv.situation ? `<div><span class="lever">${esc(mv.situation)}</span></div>` : ""}</td><td class="wr small">${esc(stripCites(mv.so_what || ""))}</td><td class="wr small">${y ? `${effPill(y.effect)} ${y.why ? rich(y.why) : ""}` : pend(co, t)}</td></tr>`; }).join("")}</tbody></table></div>` : "";
@@ -12197,7 +12210,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const card = (k) => { const x = P[k], ip = IP[k], fit = t?.fit?.[k];
       return `<div class="box"><div class="dim-head"><b>${esc(Score.PROFILES[k].label)}</b>${fit?.fit ? `<span class="pill ${fit.fit === "strong" || fit.fit === "good" ? "pos" : fit.fit === "poor" ? "neg" : "neu"}">${esc(fit.fit)} fit</span>` : ""}</div>
         ${x ? `<div class="strip" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div><span class="eyebrow">Size</span><span class="v">${isNum(num(x.size_pct)) ? fix(x.size_pct, 1) + "%" : "—"}</span><span class="small muted">of a portfolio</span></div><div><span class="eyebrow">Stop</span><span class="v">${x.stop ? fix(x.stop, 2) : "—"}</span><span class="small muted">${x.stop && isNum(co.px) ? pct(x.stop / co.px - 1) + " from here" : ""}</span></div></div>
-          ${x.entry ? `<div class="small"><b>Entry:</b> ${rich(x.entry)}</div>` : ""}${x.hedge ? `<div class="small"><b>Hedge:</b> ${rich(x.hedge)}</div>` : ""}${x.review ? `<div class="small muted"><b>Review:</b> ${rich(x.review)}</div>` : ""}` : `<div class="small muted">${co.writing ? "Being written…" : "—"}</div>`}
+          ${x.entry ? `<div class="small"><b>Entry:</b> ${rich(x.entry)}</div>` : ""}${x.hedge ? `<div class="small"><b>Hedge:</b> ${rich(x.hedge)}</div>` : ""}${x.review ? `<div class="small muted"><b>Review:</b> ${rich(x.review)}</div>` : ""}` : `<div class="small muted">${co.writing ? "Being written" : "—"}</div>`}
         ${ip ? `<div class="small muted">Industry plan: ${isNum(num(ip.size)) ? fix(ip.size, 1) + "% size" : ""}${isNum(num(ip.stop_pct)) ? `, stop ${pct(ip.stop_pct)}` : ""}${ip.entry ? ` · ${esc(stripCites(ip.entry))}` : ""}</div>` : ""}</div>`; };
     const lv = PL ? `<div class="small"><b>Levels:</b> ${[["last", PL.last], ["50-day", PL.sma50], ["200-day", PL.sma200], ["3M swing low", PL.swing_low], ["3M swing high", PL.swing_high], ["52-week low", PL.low52], ["52-week high", PL.high52], ["1-month 1.5σ stop", PL.stop_1m]].filter(([, v]) => isNum(v)).map(([l, v]) => `<span class="numchip">${l} ${fix(v, 2)}</span>`).join(" ")}${isNum(b) ? ` <span class="numchip">beta hedge: short ${fix(b, 2)} of SPY per $1</span>` : ""}</div>` : "";
     return sec("co-plan", "Trade plan", `for each kind of investor, on ${esc(co.sym)}'s own price levels`, `<div class="two">${PROFILE_KEYS.map(card).join("")}</div>${lv}${lensNote(co, t)}`);
@@ -12221,9 +12234,9 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       ${isNum(bI) ? `<div class="small muted">"At its beta" is code: the industry's move × ${esc(co.sym)}'s beta to its industry (${fix(bI, 2)}, daily returns over the last year${isNum(num(co.betaInd?.corr)) ? `, correlation ${fix(co.betaInd.corr, 2)}` : ""}).${isNum(evInd) && isNum(evBeta) ? ` Probability-weighted: the industry ${evInd > 0 ? "+" : ""}${evInd}%, ${esc(co.sym)} at its beta ${evBeta > 0 ? "+" : ""}${evBeta}%.` : ""} The ${esc(co.sym)} column is the write-up's own read, which can differ for company reasons.</div>` : ""}` : "";
     const db = (In.debates || []).length ? `<h3>The industry's debates, for ${esc(co.sym)}</h3><div style="display:grid;gap:8px">${In.debates.map((d) => { const y = L.debates?.[d.id];
       return `<div class="box"><div class="dim-head"><b>${esc(d.question)}</b>${d.lean ? `<span class="small muted">industry leans <span class="pill ${SIDE[lc(d.lean)] || "neu"}">${esc(d.lean)}</span></span>` : ""}${y ? `<span class="small">${esc(co.sym)}: <span class="pill ${SIDE[y.side] || "neu"}">${esc(y.side)}</span></span>` : ""}</div>
-        ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : `<div class="small muted">${co.writing ? "Being written…" : ""}</div>`}
+        ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : `<div class="small muted">${co.writing ? "Being written" : ""}</div>`}
         <details class="small"><summary>The bull and bear case</summary><p style="margin:4px 0"><b>Bull:</b> ${esc(stripCites(d.bull))}</p><p style="margin:4px 0"><b>Bear:</b> ${esc(stripCites(d.bear))}</p>${d.resolves_with ? `<p class="muted" style="margin:4px 0">Resolves with: ${esc(stripCites(d.resolves_with))}</p>` : ""}</details></div>`; }).join("")}</div>` : "";
-    const cm = (L.change_mind || []).length || (In.changeMind || []).length ? `<h3>What would change the call</h3><div class="two"><div class="box"><b>For ${esc(co.sym)}</b><ul class="dlist small">${(L.change_mind || []).map((x) => `<li>${rich(x)}</li>`).join("") || `<li class="muted">${co.writing ? "Being written…" : "—"}</li>`}</ul></div><div class="box"><b>For the industry</b><ul class="dlist small">${(In.changeMind || []).map((x) => `<li>${esc(stripCites(x))}</li>`).join("")}</ul></div></div>` : "";
+    const cm = (L.change_mind || []).length || (In.changeMind || []).length ? `<h3>What would change the call</h3><div class="two"><div class="box"><b>For ${esc(co.sym)}</b><ul class="dlist small">${(L.change_mind || []).map((x) => `<li>${rich(x)}</li>`).join("") || `<li class="muted">${co.writing ? "Being written" : "—"}</li>`}</ul></div><div class="box"><b>For the industry</b><ul class="dlist small">${(In.changeMind || []).map((x) => `<li>${esc(stripCites(x))}</li>`).join("")}</ul></div></div>` : "";
     const rt = In.redteam ? `<details><summary class="small"><b>The industry's red team</b> argued the ${esc(In.redteam.stance || "other")} side</summary><p class="small">${esc(stripCites(In.redteam.thesis))}</p>${In.redteam.kill.length ? `<div class="small"><b>Kill criteria:</b> ${ptList(In.redteam.kill.map((x) => esc(stripCites(x))))}</div>` : ""}${In.redteam.blind.length ? `<div class="small"><b>Blind spots:</b> ${ptList(In.redteam.blind.map((x) => esc(stripCites(x))))}</div>` : ""}</details>` : "";
     if (!dims && !sc && !db && !cm) return "";
     return sec("co-scen", "Scenarios & debates", `the ${esc(co.run.name)} lead strategist's work, applied to ${esc(co.sym)}`, `${dims}${sc}${db}${cm}${rt}${t?.lens ? "" : lensNote(co, t)}`);
@@ -12289,7 +12302,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       ${y?.channel || y?.risk || y?.freeze ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${rich(y.channel)}</div>` : ""}${y.risk ? `<div><b>Risk:</b> ${rich(y.risk)}</div>` : ""}${y.freeze ? `<div><b>If trade froze:</b> ${rich(y.freeze)}</div>` : ""}</div>` : ""}
       ${dossier(c)}</div>`; }).join("");
     const top = `${TV ? `<div class="small"><b>The industry's trade verdict:</b> <span class="pill ${TV.rating === "manageable" ? "neu" : /severe|high|critical/.test(TV.rating) ? "neg" : "warn"}">${esc(TV.rating)}</span>${TV.health !== null ? ` <span class="muted">health ${esc(String(TV.health))}/100 (${esc(TV.band)})</span>` : ""} ${esc(TV.headline)}</div>` : ""}
-      ${TO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${TO.risk ? `<span class="pill ${RK[TO.risk] || "neu"}">${esc(TO.risk)} trade risk</span>` : ""}</div>${TO.summary ? `<p class="small" style="margin:0">${rich(TO.summary)}</p>` : ""}${TO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(TO.biggest)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(TO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s trade read is being written…</div>` : ""}`;
+      ${TO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${TO.risk ? `<span class="pill ${RK[TO.risk] || "neu"}">${esc(TO.risk)} trade risk</span>` : ""}</div>${TO.summary ? `<p class="small" style="margin:0">${rich(TO.summary)}</p>` : ""}${TO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(TO.biggest)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(TO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s trade read is being written</div>` : ""}`;
     // Code: where the company's revenue sits against the industry's. The industry's share is the filings figure where
     // companies name the country, else the trade analyst's estimate (a filings 0 for a country no company names is "not
     // reported", not 0). A company that reports only regions gets one row per region: its region total against the
@@ -12350,7 +12363,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const our = RO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${RO.stance ? `<span class="pill ${STC[RO.stance] || "neu"}">${esc(RO.stance)}</span>` : ""}${RO.vs_peers ? `<span class="pill ${PEER[RO.vs_peers] || "neu"}">${esc(RO.vs_peers)} vs peers</span>` : ""}</div>
       ${RO.summary ? `<p class="small" style="margin:0">${rich(RO.summary)}</p>` : ""}${RO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(RO.biggest)}</div>` : ""}
       ${RO.timeline?.length ? `<div class="small"><b>Dated steps ahead for ${esc(co.sym)}:</b><ul class="dlist">${RO.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date.length === 7 ? x.date : fmtShort(x.date))}</b> ` : ""}${rich(x.event)}${x.why ? ` <span class="muted">${rich(x.why)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}
-      ${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(RO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s regulatory read is being written…</div>` : "";
+      ${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(RO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s regulatory read is being written</div>` : "";
     const indMore = V ? `<details class="small"><summary>The industry's regulation and legal report</summary><div style="display:grid;gap:6px;margin-top:6px">${ln("Summary", V.summary)}
       ${V.most_material.length ? `<div><b>Most material:</b><ul class="dlist">${V.most_material.map((x) => `<li><b>${esc(x.body)}</b> ${esc(x.rule)} <span class="muted">${esc(x.why)}</span></li>`).join("")}</ul></div>` : ""}
       ${V.timeline.length ? `<div><b>Timeline:</b><ul class="dlist">${V.timeline.map((x) => `<li><span class="mono">${esc(fmtShort(x.date))}</span> ${x.body ? `<b>${esc(x.body)}</b> ` : ""}${esc(x.event)}</li>`).join("")}</ul></div>` : ""}
@@ -12780,7 +12793,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <div class="strip">${[["Price now", isNum(co.px) ? fix(co.px, 2) : "—", ""], ["Street target", cs?.target ? fix(cs.target, 2) : "—", cs?.target && isNum(co.px) ? pct(cs.target / co.px - 1) : ""]].map(([l, v, d]) => `<div><span class="eyebrow">${l}</span><span class="v">${v}</span><span class="small muted">${d}</span></div>`).join("")}</div>
       ${sv.eps_view ? `<div class="small"><b>Our EPS versus consensus:</b> ${sv.eps_view.fy1 ? `next fiscal year <span class="pill ${IVC[sv.eps_view.fy1] || "neu"}">${esc(sv.eps_view.fy1)}</span>` : ""} ${sv.eps_view.fy2 ? `the year after <span class="pill ${IVC[sv.eps_view.fy2] || "neu"}">${esc(sv.eps_view.fy2)}</span>` : ""} ${sv.eps_view.why ? rich(sv.eps_view.why) : ""}</div>` : ""}
       ${(sv.differences || []).length ? `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Where we differ</th><th>The street assumes</th><th>We assume</th><th>Why</th></tr></thead><tbody>${sv.differences.map((d) => `<tr><td class="wr"><b>${esc(d.topic)}</b></td><td class="wr small">${rich(d.street)}</td><td class="wr small">${rich(d.ours)}</td><td class="wr small">${rich(d.why)}</td></tr>`).join("")}</tbody></table></div>` : ""}</div>`
-      : co.writing ? `<div class="small muted">Comparing the analysis with the street…</div>` : co.thesis ? `<div class="small muted">This analysis was written before it compared itself with the street; the next rewrite adds it.</div>` : "";
+      : co.writing ? `<div class="small muted">Comparing the analysis with the street</div>` : co.thesis ? `<div class="small muted">This analysis was written before it compared itself with the street; the next rewrite adds it.</div>` : "";
     const rb = cs?.low && cs?.high ? `<h3>Price targets</h3>${rangeBar(cs.low, cs.high, [{ v: cs.low, label: `Low ${fix(cs.low, 0)}` }, { v: cs.high, label: `High ${fix(cs.high, 0)}` }, { v: cs.target, label: `Consensus ${fix(cs.target, 0)}`, top: true }, ...(cs.median && Math.abs(cs.median - cs.target) / cs.target > 0.01 ? [{ v: cs.median, label: `Median ${fix(cs.median, 0)}` }] : []), { v: co.px, label: `Price ${fix(co.px, 2)}`, cls: "px", top: true }, ...(sv?.our_target ? [{ v: sv.our_target, label: `Ours ${fix(sv.our_target, 0)}`, cls: "px" }] : [])])}
       <div class="small muted">Implied ${pct(cs.target / co.px - 1)} to the consensus target; ${pct(cs.low / co.px - 1, true, 0)} to the lowest and ${pct(cs.high / co.px - 1, true, 0)} to the highest.</div>` : "";
     const rh = f.rhist || [], qs = rh.filter((x) => ["01", "04", "07", "10"].includes(x.date.slice(5, 7))).slice(0, 4), RC = [["sb", "Strong buy", "var(--pos)"], ["b", "Buy", "color-mix(in srgb, var(--pos) 60%, var(--surface))"], ["h", "Hold", "var(--bench)"], ["s", "Underperform", "color-mix(in srgb, var(--neg) 60%, var(--surface))"], ["ss", "Sell", "var(--neg)"]];
@@ -12829,7 +12842,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     let geo = "", seg = "";
     if (co.run && (co.seg?.length || co.geo?.length)) {
     const tt = co.thesis?.thesis || co.partial, LS = tt?.lens?.segments || {}, LG = tt?.lens?.regions || {};
-    const waiting = co.writing ? `<span class="muted">being analyzed…</span>` : `<span class="muted">—</span>`;
+    const waiting = co.writing ? `<span class="muted">being analyzed</span>` : `<span class="muted">—</span>`;
     const TEMPC = { hot: "pos", cool: "neg", neutral: "neu" }, OUTC = { tailwind: "pos", headwind: "neg", neutral: "neu" };
     geo = (co.geo || []).length ? `<h3>Its revenue on the industry's trade map</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Region</th><th class="n">Share</th><th class="n">y/y</th><th>Trade-map countries it covers</th><th>What the industry analysis means here</th></tr></thead><tbody>${co.geo.map((g, i) => { const y = LG["G" + (i + 1)];
       const dos = (name) => (co.lensIn?.countries || []).find((x) => lc(x.country) === lc(name));
@@ -12876,7 +12889,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     if (t.dataset.sectorAdd) { runSector(t.dataset.sectorAdd, { addNew: true }); return; }
     if (t.dataset.sectorFresh) { if (!confirm(`Start the ${t.dataset.sectorFresh} run over from scratch? Saved progress for this sector run is discarded (finished industries stay saved until they're redone).`)) return; runSector(t.dataset.sectorFresh, { fresh: true }); return; }
     if (t.dataset.sectorView) { if (busy() && S.sectorRun?.sector !== t.dataset.sectorView) return; (async () => { if (_saveName) await flush(); if (S.selected) forget(S.selected); S.selected = null; S.sectorView = t.dataset.sectorView; if (!(S.sectorView in S.sectorRec)) S.sectorRec[S.sectorView] = (await secGet(S.sectorView).catch(() => null)) || null; S.pickerOpen = false; window.scrollTo({ top: 0, behavior: "auto" }); renderAll(); })(); return; }
-    if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping…"; return; }
+    if (t.dataset.stopSector) { const r = S.sectorRun; if (!r) return; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of [...(r.runs?.values() || []), ...(S.run ? [S.run] : [])]) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } t.disabled = true; t.textContent = "Stopping"; return; }
     if (t.dataset.ssort) { const k = t.dataset.ssort; S.secSort = { key: k, dir: S.secSort?.key === k ? -S.secSort.dir : (k === "name" ? 1 : -1) }; renderReport(); return; }
     if (t.dataset.sector) { openSector(t.dataset.sector); return; }
     if (t.dataset.cmpRun) { cmpRun(); return; }
@@ -13172,7 +13185,17 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
 
   // ---------------------------------------------------------------- first sight of a section: rise in, a few at a time
   let seen = new Set(), lastTab = null, booted = false;
+  // The last guard: no ellipsis mark anywhere on screen, whatever drew the text (labels, modules, attributes).
+  const ELL = "\u2026";
+  function noMarks(root) {
+    if (!root || !(root.textContent || "").includes(ELL) && !root.querySelector?.(`[title*="${ELL}"],[placeholder*="${ELL}"],[aria-label*="${ELL}"]`)) return;
+    const w = d.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.nodeValue.includes(ELL) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) });
+    const ns = []; for (let n = w.nextNode(); n; n = w.nextNode()) ns.push(n);
+    for (const n of ns) n.nodeValue = window.NoEll ? NoEll.strip(n.nodeValue) : n.nodeValue.split(ELL).join("");
+    for (const el of root.querySelectorAll(`[title*="${ELL}"],[placeholder*="${ELL}"],[aria-label*="${ELL}"]`)) for (const a of ["title", "placeholder", "aria-label"]) { const v = el.getAttribute(a); if (v && v.includes(ELL)) el.setAttribute(a, window.NoEll ? NoEll.strip(v) : v.split(ELL).join("")); }
+  }
   function decorate() {
+    noMarks(d.querySelector(".wrap") || d.body);
     const fresh = [];
     for (const p of d.querySelectorAll("section.panel")) {
       if (!p.querySelector(":scope > .panel-head[data-fold]") || !p.dataset.foldKey) enhance(p);

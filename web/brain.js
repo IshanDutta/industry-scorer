@@ -26,7 +26,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const pct = (x, d = 1) => (isNum(x) ? (x * 100).toFixed(d) + "%" : "n/a");
   const num = (x, d = 1) => (isNum(x) ? x.toFixed(d) : "n/a");
   const PROFILES = ["income", "conservative", "growth", "aggressive"];

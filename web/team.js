@@ -27,7 +27,7 @@
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const v = (x) => (x === null || x === undefined ? NaN : Number(x));
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const pct = (x, d = 1) => (isNum(v(x)) ? (v(x) * 100).toFixed(d) + "%" : "n/a");
   const spct = (x, d = 0) => (isNum(v(x)) ? (v(x) >= 0 ? "+" : "") + (v(x) * 100).toFixed(d) + "%" : "n/a");
   const num = (x, d = 1) => (isNum(v(x)) ? v(x).toFixed(d) : "n/a");

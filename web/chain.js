@@ -13,7 +13,7 @@
 (function (root) {
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const n = (x) => (x === null || x === undefined || x === "" ? NaN : Number(x));
   const ROLES = ["customer", "supplier", "channel", "competitor"];
 

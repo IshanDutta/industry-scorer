@@ -23,7 +23,7 @@
   const OVERLAY_CAP = 5;
 
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
   const day = (s) => String(s ?? "").slice(0, 10);
   function normUrl(u) {
     try { const x = new URL(String(u)); return (x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/+$/, "") + x.search).toLowerCase(); }
@@ -45,7 +45,7 @@
         inputSchema: { type: "object", properties: { symbols: { type: "array", items: { type: "string" } }, days: { type: "number", description: "1-90, default 60" } }, required: ["symbols"] },
         async execute(input) {
           const s = syms(input.symbols); if (!s.length) throw new Error("Pass at least one ticker.");
-          step(`Extra news search: ${s.slice(0, 4).join(", ")}${s.length > 4 ? "…" : ""}`);
+          step(`Extra news search: ${s.slice(0, 4).join(", ")}${s.length > 4 ? ` and ${s.length - 4} more` : ""}`);
           const d = Math.min(Math.max(Number(input.days) || 60, 1), 90);
           const rows = await fmp("news", { endpoint: "search-stock-news", symbols: s, from_date: addDays(ctx.today, -d), to_date: ctx.today, limit: 50 });
           return remember(rows.slice(0, 50).map((r) => ({ date: day(r.publishedDate), symbol: r.symbol, site: r.site, title: trim(r.title, 180), summary: trim(r.text, 220), url: r.url })));

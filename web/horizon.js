@@ -17,7 +17,7 @@
   "use strict";
   const isNum = (x) => typeof x === "number" && Number.isFinite(x);
   const Calls = typeof module !== "undefined" && module.exports ? require("./calls.js") : root.Calls;
-  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const trim = (s, n) => { s = String(s ?? "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n).replace(/\s+\S*$/, "") : s; };
 
   const HORIZONS = [["1M", 1], ["3M", 3], ["6M", 6], ["12M", 12]];
   /** The rules for the statistical anchor and the view vs the S&P 500 (the horizon step and the daily update share them). */
@@ -119,14 +119,15 @@
    */
   function buildCalendar(doc, ctx) {
     const today = ctx.today, R = ctx.reports || {};
+    const whole = (x) => String(x ?? "").replace(/\s+/g, " ").trim(); // saved whole: the page shows calendar items in full
     const events = [], standing = [];
     const ev = (o) => {
       const dates = [...new Set((o.dates || []).map(normDate).filter((d) => d && d >= today))].sort();
       if (!dates.length) return;
       const w = windowOf(dates[0], today); if (!w) return;
-      events.push({ ...o, dates, raw_dates: o.raw_dates || o.dates, window: w, title: trim(o.title, 160), detail: trim(o.detail, 260), refs: (o.refs || []).slice(0, 4) });
+      events.push({ ...o, dates, raw_dates: o.raw_dates || o.dates, window: w, title: whole(o.title), detail: whole(o.detail), refs: (o.refs || []).slice(0, 4) });
     };
-    const st = (o) => standing.push({ ...o, title: trim(o.title, 160), detail: trim(o.detail, 420), refs: (o.refs || []).slice(0, 4) });
+    const st = (o) => standing.push({ ...o, title: whole(o.title), detail: whole(o.detail), refs: (o.refs || []).slice(0, 4) });
     // Economic calendar: central-bank decisions, elections, major data
     for (const s of ctx.econ || []) ev({ section: "macro", kind: s.kind, title: `${s.country} ${s.event}`, detail: s.dates.length > 1 ? `${s.dates.length} dates in the next 12 months` : "", importance: s.importance, dates: s.dates });
     // The largest companies' earnings
