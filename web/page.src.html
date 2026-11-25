@@ -1448,6 +1448,18 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 @media (max-width: 640px) { .pfx-ov { grid-template-columns: minmax(0, 1fr) 48px; } .pfx-ov .pfx-btrack, .pfx-ov .small { grid-column: 1 / -1; } }
 .pfx-indr { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
 .pfx-indh { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.pfx-donut { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 18px; align-items: center; margin: 4px 0 14px; }
+@media (max-width: 640px) { .pfx-donut { grid-template-columns: minmax(0, 1fr); } .pfx-donut svg { max-width: 240px; margin: 0 auto; } }
+.pfx-donut svg { width: 100%; height: auto; display: block; }
+.pfx-sl { cursor: pointer; transition: opacity var(--t2) var(--out); } .pfx-donut svg:hover .pfx-sl:not(:hover) { opacity: .55; }
+.pfx-dn1 { font: 700 30px var(--mono); fill: var(--ink); } .pfx-dn2 { font: 500 11px var(--body); fill: var(--muted); }
+.pfx-dleg { display: grid; gap: 4px; }
+.pfx-dl { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 8px; border: 0; background: transparent; color: var(--ink); font: 500 13px var(--body); text-align: left; }
+button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; } .pfx-dl b { text-align: right; } .pfx-dl.none { color: var(--muted); }
+.pfx-dl .pill { font-size: 11px; }
+.pfx-indw { margin-left: auto; }
+.pfx-flash { animation: pfxflash 900ms var(--out); } @keyframes pfxflash { 0% { box-shadow: 0 0 0 2px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .pfx-flash { animation: none; } }
 .pfx-indm { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 10px; align-items: center; } .pfx-indm b { text-align: right; }
 .pfx-indc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pfx-indr p { margin: 0; line-height: 1.5; }
@@ -8392,10 +8404,20 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     // ---- industries and our calls
     const CC = (c) => (!c ? "" : /up|bull|rise|higher|outperform/i.test(c) ? "pos" : /down|bear|fall|lower|under/i.test(c) ? "neg" : "neu");
     const indMax = indA.rows[0]?.weight || 1;
+    // The industries as a circle: the 11 biggest, the rest together, and what isn't placed yet.
+    const indCol = (i) => PALETTE[i % PALETTE.length], indTop = indA.rows.slice(0, 11), indRest = indA.rows.slice(11).reduce((a, r) => a + r.weight, 0), unplaced = Math.max(0, 1 - (indA.placed || 0)); // shares of the whole portfolio, the same numbers as the cards
+    const slices = [...indTop.map((r, i) => ({ name: r.industry, v: r.weight, c: indCol(i), r })), ...(indRest > 0.0005 ? [{ name: `${indA.rows.length - 11} other industries`, v: indRest, c: "var(--line-2)" }] : []), ...(unplaced > 0.0005 ? [{ name: "Not placed yet", v: unplaced, c: "var(--sunk)", none: true }] : [])];
+    const sTot = Math.max(1, slices.reduce((a, x) => a + x.v, 0));
+    const ring = (() => { let a0 = -Math.PI / 2; const R = 92, r0 = 58, C = 100, pt = (rad, a) => `${(C + rad * Math.cos(a)).toFixed(2)} ${(C + rad * Math.sin(a)).toFixed(2)}`;
+      return slices.map((x, i) => { const f = x.v / sTot, a1 = a0 + Math.min(f, 0.9999) * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
+        const d = `M ${pt(R, a0)} A ${R} ${R} 0 ${big} 1 ${pt(R, a1)} L ${pt(r0, a1)} A ${r0} ${r0} 0 ${big} 0 ${pt(r0, a0)} Z`; a0 = a1;
+        return `<path class="pfx-sl" d="${d}" fill="${x.c}" stroke="var(--surface)" stroke-width="1.5"${x.r ? ` data-ind-go="${i}"` : ""}><title>${esc(x.name)}: ${pfPc(x.v / sTot, 1)}</title></path>`; }).join(""); })();
+    const CPILL = (r) => { const g = dig?.[String(r.industry).toLowerCase()], c = g?.lean?.["12M"] || g?.calls?.["12M"]?.call; return c ? `<span class="pill ${CC(c)}">12M ${esc(String(c))}</span>` : ""; };
+    const indDonut = `<div class="pfx-donut"><svg viewBox="0 0 200 200" role="img" aria-label="The money in each industry">${ring}<text x="100" y="96" text-anchor="middle" class="pfx-dn1">${indA.rows.length}</text><text x="100" y="116" text-anchor="middle" class="pfx-dn2">industries</text></svg>
+      <div class="pfx-dleg">${slices.map((x, i) => `<${x.r ? `button type="button" data-ind-go="${i}"` : "div"} class="pfx-dl${x.none ? " none" : ""}"><i style="background:${x.c}"></i><span class="pfx-dn">${esc(x.name)}</span>${x.r ? CPILL(x.r) : ""}<b class="mono">${pfPc(x.v / sTot, 1)}</b></${x.r ? "button" : "div"}>`).join("")}</div></div>`;
     const indSec = indA.rows.length ? sec("pfx-ind", "Its industries and where we think they're going", `${pfPc(indA.placed, 0)} of the money placed in an industry${dig ? "" : " · reading your saved industry runs…"}`, `${mix ? `<div class="pfx-tiles small3">${tile("In industries we expect to rise", pfPc(mix.up, 0), "of the money with a 12-month call", "pos")}${tile("In industries we expect to fall", pfPc(mix.down, 0), "", mix.down > 0.25 ? "neg" : "")}${tile("Weighted 12-month expectation", pfPP(mix.expected), `${pfPc(mix.covered, 0)} of the money has a call`)}</div>` : ""}
-      <div class="pfx-inds">${indA.rows.slice(0, 15).map((r) => { const g = dig?.[String(r.industry).toLowerCase()], c12 = g?.lean?.["12M"] || g?.calls?.["12M"]?.call, sc = g?.scores ? Object.values(g.scores).map(num).filter(isNum) : [];
-        return `<div class="pfx-indr"><div class="pfx-indh"><button class="linkbtn" data-open-industry="${esc(r.industry)}"><b>${esc(r.industry)}</b></button><span class="small muted">${esc(r.sector || "")}</span></div>
-          <div class="pfx-indm"><span class="pfx-btrack one"><i style="width:${(r.weight / indMax) * 100}%"></i></span><b class="mono">${pfPc(r.weight, 1)}</b></div>
+      ${indDonut}<div class="pfx-inds">${indA.rows.slice(0, 15).map((r, ri) => { const g = dig?.[String(r.industry).toLowerCase()], c12 = g?.lean?.["12M"] || g?.calls?.["12M"]?.call, sc = g?.scores ? Object.values(g.scores).map(num).filter(isNum) : [];
+        return `<div class="pfx-indr" id="pfx-ind-${ri}"><div class="pfx-indh"><i class="pfx-dot" style="background:${ri < 11 ? indCol(ri) : "var(--line-2)"}"></i><button class="linkbtn" data-open-industry="${esc(r.industry)}"><b>${esc(r.industry)}</b></button><span class="small muted">${esc(r.sector || "")}</span><b class="mono pfx-indw">${pfPc(r.weight, 1)}</b></div>
           <div class="pfx-indc">${!g ? "" : ["1M", "3M", "6M", "12M"].map((h0) => { const c = g?.lean?.[h0] || g?.calls?.[h0]?.call; return `<span class="pill ${CC(c)}" title="${h0}">${h0} ${c ? esc(String(c)) : "—"}</span>`; }).join("")}${isNum(num(g?.expected12)) ? `<span class="small">12M expected <b class="mono">${pfPP(g.expected12)}</b></span>` : ""}${sc.length ? `<span class="small muted">score ${Math.round(Math.max(...sc))}</span>` : ""}</div>
           ${g?.headline ? `<p class="small">${esc(g.headline)}</p>` : !g && dig ? `<p class="small muted">No saved run for this industry yet: open it on the Industries tab to analyze it.</p>` : ""}
           <div class="small muted">${r.names.map((x) => `${esc(x.ticker)} ${pct(x.w, false, 1)}`).join(" · ")}</div></div>`; }).join("")}</div>`) : "";
@@ -8418,6 +8440,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       { label: "History", items: [it(evList, "pf-events", "Rebalances")] }];
     return `<div class="shell">${sideNav(groups)}<div class="stream">${glance}${perf}${detSec}${ddSec}${rollSec}${attr}${riskSec}${rcSec}${corrSec}${stressSec}${allocSec}${valSec}${lookSec}${indSec}${incSec}${streetSec}${evList}</div></div>`;
   }
+  document.addEventListener("click", (ev) => { const t = ev.target.closest("[data-ind-go]"); if (!t || !t.closest("#pfx-ind")) return; const c = $("pfx-ind-" + t.dataset.indGo); if (!c) return;
+    c.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }); c.classList.remove("pfx-flash"); void c.offsetWidth; c.classList.add("pfx-flash"); });
   /** A small price line for a holding's card: the last year. */
   function pfSpark(ser, w = 120, h = 34) {
     const c = ser?.closes || [], k = Math.min(c.length, 253); if (k < 10) return ""; const v = c.slice(-k), lo = Math.min(...v), hi = Math.max(...v), up = v[v.length - 1] >= v[0];
