@@ -1330,6 +1330,26 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .dirty-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 .dirty-dot[hidden] { display: none; }
 .rb-t { display: inline-flex; align-items: center; gap: 6px; }
+.rb .pfe-cols, .rb-row { grid-template-columns: 40px minmax(150px, 1.2fr) minmax(190px, 1.1fr) minmax(130px, auto) 34px; }
+.rb-tkline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rb-tick { font: 700 17px var(--mono); letter-spacing: .01em; }
+.rb-wbar { position: relative; }
+.rb-wbar i { position: absolute; left: 0; top: 0; } .rb-wbar i.now { background: var(--faint); opacity: .45; }
+.rb-act { display: flex; justify-content: flex-end; }
+.rb-trade { display: inline-grid; justify-items: end; gap: 1px; padding: 5px 10px; border-radius: 9px; font-size: 13px; line-height: 1.25; }
+.rb-trade .mono { font-size: 11.5px; opacity: .8; }
+.rb-trade.buy { color: var(--gA); background: var(--gA-bg); } .rb-trade.sell { color: var(--gF); background: var(--gF-bg); } .rb-trade.hold { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+.rb-gone { opacity: .72; } .rb-gone .pfe-av { filter: grayscale(.8); }
+.rb-keep:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tb-kind.k-new { color: var(--gA); background: var(--gA-bg); } .tb-kind.k-gone { color: var(--gF); background: var(--gF-bg); }
+.rb-addrow { background: transparent; border: 1.5px dashed color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.rb-av-add { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.rb-addbtn { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+@media (max-width: 700px) {
+  .rb-row { grid-template-columns: 40px minmax(0, 1fr) auto 34px; grid-template-areas: "av tk act rm" "w w w w"; }
+  .rb-row .rb-act { grid-area: act; }
+  .rb-addrow { grid-template-areas: "av tk tk tk" "w w act act"; } .rb-addrow > span:last-child { display: none; }
+}
 .rb-x { width: 28px; height: 28px; padding: 0; border-radius: 8px; font-size: 16px; line-height: 1; color: var(--muted); }
 .rb-x:hover:not(:disabled) { color: var(--neg); border-color: var(--neg); }
 .rb-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -7944,15 +7964,43 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   }
   function pfDots() { const p = pfActive(); if (!p) return;
     document.querySelectorAll("[data-dot=rebal]").forEach((x) => (x.hidden = !pfRebalDirty(p))); document.querySelectorAll("[data-dot=edit]").forEach((x) => (x.hidden = !pfDraftDirty(p))); }
+  /** The rebalance sheet, in the editor's style: a row per holding with its target, today's weight and the trade. */
   function pfRebalView(p, hs, total, pos) {
-    const tg = S.pfRebal.targets, tr = PMode.rebalanceTrades(pfNow(hs, pos), tg, total), sum = Object.values(tg).reduce((a, x) => a + (num(x) || 0), 0);
-    const rm = S.pfRebal.removed || {}, dirty = pfRebalDirty(p);
-    return `<section class="panel" id="pf-rebal"><div class="panel-head"><h2>Rebalance${dirty ? ` <i class="dirty-dot" title="Changes not recorded yet"></i>` : ""}</h2><span class="small muted">${dirty ? "changes not recorded yet · " : ""}set target weights, add or remove holdings; the order sheet follows</span></div>
-      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Current</th><th>Target</th><th>Action</th><th class="n">Amount</th><th class="n">Shares</th></tr></thead><tbody>${tr.map((t) => `<tr><td><b class="tick">${esc(t.ticker)}</b></td><td class="n">${t.current.toFixed(1)}%</td><td>${rm[t.ticker] ? `<span class="pill neg">removing</span> <button class="sm" data-pf="rb-keep-${esc(t.ticker)}">Keep it</button>` : `<span class="rb-t"><input data-pft="${esc(t.ticker)}" type="number" step="0.1" min="0" value="${num(tg[t.ticker]) || 0}" style="width:80px"> %<button class="rb-x" data-pf="rb-rm-${esc(t.ticker)}" aria-label="Remove ${esc(t.ticker)}" title="Remove ${esc(t.ticker)}">×</button></span>`}${S.pfRebal.added?.[t.ticker] ? ` <span class="pill pos">new</span>` : ""}</td>
-        <td><span class="pill ${t.action === "BUY" ? "pos" : t.action === "SELL" ? "neg" : "neu"}">${t.action}</span></td><td class="n">${t.action === "HOLD" ? "—" : `$${Math.abs(Math.round(t.deltaUsd)).toLocaleString()}`}</td><td class="n">${isNum(num(t.shares)) && t.action !== "HOLD" ? fix(Math.abs(t.shares), 2) : "—"}</td></tr>`).join("")}</tbody></table></div>
-      <form class="rb-add" id="rb-add-form" autocomplete="off"><input id="rb-add-q" type="search" list="rb-sug" placeholder="Add a stock, ETF or fund: ticker or name" aria-label="Add a holding" spellcheck="false"><input id="rb-add-w" type="number" step="0.1" min="0" placeholder="Target %" aria-label="Target weight for the new holding" style="width:110px"><button class="sm primary" type="submit">Add</button></form>
-      <div class="actions" style="align-items:center"><button class="sm" data-pf="rb-equal">Equal weight</button><button class="sm" data-pf="rb-norm">Normalize to 100%</button><span class="small ${Math.abs(sum - 100) < 0.05 ? "up" : "down"}">Targets add to ${sum.toFixed(1)}%</span><span style="margin-left:auto"></span><button class="sm" data-pf="rb-cancel">Close</button><button class="sm primary" data-pf="rb-apply" ${Math.abs(sum - 100) < 0.5 ? "" : "disabled"}>Record the rebalance</button></div>
-      <div class="small muted">Current is today's weight (the targets drift as prices move). Δ value = total value × (target − current) / 100: positive is a BUY, negative a SELL. Recording it sets the new weights and pins today's date on the performance chart.</div></section>`;
+    const R = S.pfRebal, tg = R.targets, tr = PMode.rebalanceTrades(pfNow(hs, pos), tg, total), sum = Object.values(tg).reduce((a, x) => a + (Number(x) || 0), 0);
+    const rm = R.removed || {}, dirty = pfRebalDirty(p), ok = Math.abs(sum - 100) < 0.05, left = 100 - sum;
+    const ico = (d) => `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+    const I = { plus: ico('<path d="M12 5v14M5 12h14"/>'), x: ico('<path d="M18 6 6 18M6 6l12 12"/>'), eq: ico('<path d="M5 9h14M5 15h14"/>'), scale: ico('<path d="M12 3v18M5 7h14M5 7l-3 7a4 4 0 0 0 6 0zM19 7l-3 7a4 4 0 0 0 6 0z"/>'), check: ico('<path d="M20 6 9 17l-5-5"/>'), undo: ico('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>') };
+    const nameOf = (t) => R.added?.[t]?.name || hs.find((h) => h.ticker === t)?.name || p.holdings.find((h) => h.ticker === t)?.name || "";
+    const money = (x) => "$" + Math.abs(Math.round(x)).toLocaleString();
+    const row = (t) => { const T = t.ticker, gone = rm[T] !== undefined, isNew = !!R.added?.[T], c = tickColor(T), tw = Number(tg[T]) || 0;
+      const trade = t.action === "HOLD" ? `<span class="rb-trade hold">Hold</span>`
+        : `<span class="rb-trade ${t.action === "BUY" ? "buy" : "sell"}"><b>${t.action === "BUY" ? "Buy" : "Sell"} ${money(t.deltaUsd)}</b>${isNum(num(t.shares)) ? `<span class="mono">${fix(Math.abs(t.shares), 2)} sh</span>` : ""}</span>`;
+      return `<div class="pfe-row rb-row${gone ? " rb-gone" : ""}">
+        <span class="pfe-av" style="--c:${c}">${esc(T.slice(0, 4))}</span>
+        <div class="pfe-tk"><div class="rb-tkline"><b class="rb-tick mono">${esc(T)}</b>${isNew ? `<span class="tb-kind k-new">New</span>` : ""}${gone ? `<span class="tb-kind k-gone">Removing</span>` : ""}</div><span class="pfe-nm">${esc(nameOf(T) || " ")}</span></div>
+        <div class="pfe-w">${gone ? `<span class="rb-goneline small muted">Sold in full: ${t.current.toFixed(1)}% today → 0%</span>`
+          : `<label class="pfe-field"><input class="pfe-in mono" data-pft="${esc(T)}" type="number" inputmode="decimal" step="0.1" min="0" value="${tw}" aria-label="Target weight for ${esc(T)}"><span class="pfe-suf">%</span></label>
+          <div class="pfe-wbar rb-wbar"><i class="now" style="width:${Math.min(100, t.current)}%"></i><i style="width:${Math.min(100, tw)}%;background:${c}"></i></div>
+          <span class="pfe-hint mono">now ${t.current.toFixed(1)}%</span>`}</div>
+        <div class="rb-act">${trade}</div>
+        ${gone ? `<button class="pfe-rm rb-keep" data-pf="rb-keep-${esc(T)}" aria-label="Keep ${esc(T)}" title="Keep it">${I.undo}</button>` : `<button class="pfe-rm" data-pf="rb-rm-${esc(T)}" aria-label="Remove ${esc(T)}" title="Remove">${I.x}</button>`}</div>`; };
+    const buys = tr.filter((t) => t.action === "BUY"), sells = tr.filter((t) => t.action === "SELL");
+    const stack = tr.filter((t) => (Number(tg[t.ticker]) || 0) > 0).map((t) => { const w = Number(tg[t.ticker]) || 0; return `<i title="${esc(t.ticker + " " + w.toFixed(1) + "%")}" style="flex:${w} 0 0;background:${tickColor(t.ticker)}"></i>`; }).join("") + (left > 0.05 ? `<i class="gap" style="flex:${left} 0 0"></i>` : "");
+    return `<section class="pfe rb" id="pf-rebal">
+      <header class="pfe-head"><div><span class="eyebrow">Rebalance${dirty ? ` <i class="dirty-dot" title="Changes not recorded yet"></i>` : ""}</span><h2>${esc(p.name || "Untitled")}</h2></div>
+        <span class="small muted">${dirty ? "Changes not recorded yet" : "Set target weights, add or remove holdings"}</span></header>
+      <div class="pfe-alloc"><div class="pfe-alloc-top"><div><span class="pfe-lab">Targets</span><b class="mono">${sum.toFixed(1)}%</b><span class="pfe-status ${ok ? "ok" : left > 0 ? "under" : "over"}">${ok ? "Fully allocated" : left > 0 ? `${left.toFixed(1)}% unallocated` : `${(-left).toFixed(1)}% over`}</span></div>
+        <div class="pfe-tools"><button class="pfe-ghost" data-pf="rb-equal">${I.eq}Equal weight</button><button class="pfe-ghost" data-pf="rb-norm">${I.scale}Normalize to 100%</button></div></div>
+        <div class="pfe-stack">${stack}</div></div>
+      <div class="pfe-list"><div class="pfe-cols rb-cols" aria-hidden="true"><span></span><span>Holding</span><span>Target</span><span>Trade</span><span></span></div>
+        ${tr.map(row).join("")}
+        <form class="pfe-row rb-row rb-addrow" id="rb-add-form" autocomplete="off">
+          <span class="pfe-av rb-av-add">${I.plus}</span>
+          <div class="pfe-tk"><div class="pfe-tkbox"><svg class="pfe-tkic" viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="M13.2 13.2 17 17"/></svg><input class="pfe-in pfe-tkin" id="rb-add-q" type="search" placeholder="Add a stock, ETF or fund" aria-label="Add a holding" spellcheck="false"></div></div>
+          <div class="pfe-w"><label class="pfe-field"><input class="pfe-in mono" id="rb-add-w" type="number" inputmode="decimal" step="0.1" min="0" placeholder="0.0" aria-label="Target weight for the new holding"><span class="pfe-suf">%</span></label></div>
+          <div class="rb-act"><button class="pfe-ghost rb-addbtn" type="submit">${I.plus}Add</button></div><span></span></form></div>
+      <footer class="pfe-foot"><span class="small muted">${buys.length + sells.length ? `<b class="mono">${buys.length + sells.length}</b> trade${buys.length + sells.length === 1 ? "" : "s"}: buy ${money(buys.reduce((a, t) => a + t.deltaUsd, 0))}, sell ${money(sells.reduce((a, t) => a + t.deltaUsd, 0))}` : "No trades yet: change a target to see the orders"}. Recording sets the new weights and marks today on the performance chart.</span>
+        <span class="pfe-foot-btns"><button class="pfe-ghost" data-pf="rb-cancel">Close</button><button class="primary pfe-save" data-pf="rb-apply" ${Math.abs(sum - 100) < 0.5 ? "" : "disabled"}>${I.check}Record the rebalance</button></span></footer></section>`;
   }
   /** Inputs on the Portfolios tab (the page's click handler only sees buttons). */
   function pfBind(el) {
@@ -7999,7 +8047,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     el.querySelectorAll("[data-gq-backdrop]").forEach((bd) => bd.addEventListener("click", (ev) => { if (ev.target === bd) { S.gq = null; renderPortfolio(); } }));
     if (S.gq) { const f = el.querySelector(".q-dialog .q-card.on, .q-dialog .q-row.on, .q-dialog input[type=range], .q-dialog .q-next"); if (f && !el.querySelector(".q-dialog")?.contains(document.activeElement)) f.focus({ preventScroll: true }); }
     if (!S.gqEsc) { S.gqEsc = true; document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && S.gq) { S.gq = null; renderPortfolio(); } }); }
-    el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = num(inp.value) || 0; renderPortfolio(); } }));
+    el.querySelectorAll("input[data-pft]").forEach((inp) => inp.addEventListener("change", () => { if (S.pfRebal) { S.pfRebal.targets[inp.dataset.pft] = Number(inp.value) || 0; renderPortfolio(); } }));
     bindTickerBox($("rb-add-q"), { exclude: () => Object.keys(S.pfRebal?.targets || {}), onPick: (sym, it) => { $("rb-add-q").value = sym; S.rbPick = it; $("rb-add-w")?.focus(); } });
     $("rb-add-form")?.addEventListener("submit", (ev) => { ev.preventDefault(); if (!S.pfRebal) return;
       const t = String($("rb-add-q").value || "").trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""); if (!t) return;
