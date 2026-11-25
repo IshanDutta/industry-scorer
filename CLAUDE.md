@@ -88,8 +88,9 @@ starts a GitHub run (the owner wants it that way). The task writes its phase (`c
 page's bar (`syncProgress`) moves by time.
 
 Times like this for every industry and every window (1M to 5Y, with the historian's notes) comes from `daily-update.yml`
-run with `windows=true` (`runWindowsPass`, direct mode; saved on the run as `twin`; notes reused when the same stretches
-come back). Start it from Actions. The page uses `twin` for an industry's Times like this when it's under 3 days old.
+(`runWindowsPass`; saved on the run as `twin`; notes reused when the same stretches
+come back). Every daily update runs it for its sector after the update (the `daily` job hook in the page; skipped when the
+job ran out of time or for the history pass); `windows=true` runs only that pass. The page uses `twin` for an industry's Times like this when it's under 3 days old.
 
 ## Layout
 

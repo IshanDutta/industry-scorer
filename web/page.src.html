@@ -3572,7 +3572,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   /**
    * Times like this for every window (1M, 3M, 6M, 1Y, 3Y, 5Y), for every finished industry in a sector: the five past stretches
    * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
-   * the same stretches come back). Run on GitHub (the Daily update workflow with windows=true, started from Actions); saved on the run as `twin`.
+   * the same stretches come back). Run on GitHub at the end of every daily update (or alone with windows=true); saved on the run as `twin`.
    */
   async function runWindowsPass(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp) return;
@@ -3587,6 +3587,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const mk = await regimeData();
       const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "default", cache: false }; if (JOB) opts.jobStep = step; return await sampleJson(prompt, opts); };
       await pool(have, Math.max(1, concurrency), async (name) => {
+        if (JOB && S.jobStopped) return; // out of time on GitHub: what's done is saved
         const sl = slug(name); dr.working.add(name);
         try {
           if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
@@ -4382,10 +4383,13 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     cachePut: async (k, v) => { if (!JOB_CACHES.has(k) || !v?.runs) return 0; const cur = (await idbGet(k)) || { v: 1, runs: {} }; for (const [sl, e] of Object.entries(v.runs)) if (!cur.runs[sl] || String(e?.saved_at || "") >= String(cur.runs[sl].saved_at || "")) cur.runs[sl] = e; await idbPut(k, cur); return Object.keys(cur.runs).length; },
     ready: () => !!(S.ready && S.mcp && S.sample),
     start: (sector, opts) => { runSector(sector, opts || {}); return true; },
-    daily: (sector, opts) => { runDaily(sector, opts || {}); return true; },
+    // The daily update, then Times like this for every window (notes reused when the same stretches come back), unless
+    // the job was stopped for time or it's the history pass.
+    daily: (sector, opts) => { S.jobStopped = false; (async () => { const o = opts || {}; await runDaily(sector, o); const n0 = S.notices.slice();
+      if (!o.backfill && !S.jobStopped) { await runWindowsPass(sector, { names: o.names || null, concurrency: o.concurrency || 4 }); S.notices = [...n0, ...S.notices]; } })(); return true; },
     lean: (sector, opts) => { runLeanPass(sector, opts || {}); return true; },
-    windows: (sector, opts) => { runWindowsPass(sector, opts || {}); return true; },
-    stop: () => { const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
+    windows: (sector, opts) => { S.jobStopped = false; runWindowsPass(sector, opts || {}); return true; },
+    stop: () => { S.jobStopped = true; const r = S.sectorRun; if (!r) return false; r.cancel = true; for (const c of r.ctls) c.abort(); for (const x of r.runs.values()) { x.cancel = true; for (const c of x.ctls || []) c.abort(); } return true; },
     status: () => { const r = S.sectorRun, dr = S.dailyRun;
       if (dr) return { busy: true, phase: "daily " + dr.phase, label: dr.label, working: [...dr.working], calls: dr.calls, notices: [], errors: dr.failed.slice(-5), reuse: null, daily: { done: dr.done.length, of: dr.of, revised: dr.revised, quiet: dr.quiet, failed: dr.failed } };
       return { busy: busy(), phase: r?.phase || null, label: r?.label || null, working: r ? [...r.runs.keys()] : [], calls: r?.calls ?? null, notices: S.notices.map((x) => x.text), errors: r?.errors?.slice(-5) || [], reuse: r?.reuse || S.lastReuse || null }; },
