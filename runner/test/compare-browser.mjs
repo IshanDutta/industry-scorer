@@ -116,6 +116,7 @@ const brain = `
   await pg.waitForTimeout(2500); const pb = await pg.$(".cx-progs"); if (pb) await pb.screenshot({ path: o("progress.png") }); console.log("PROGRESS", await pg.evaluate(() => [...document.querySelectorAll(".cx-prog")].map((b) => b.textContent.replace(/\s+/g, " ").trim())));
   for (let i = 0; i < 60; i++) { await pg.waitForTimeout(1000); const t = await pg.textContent("#cmp"); if (/Bottom line/.test(t) && !/Comparing on GitHub|Writing the verdict/.test(t)) break; }
   console.log("calls:", (await pg.evaluate(() => window.__calls.filter((x) => /TRIGGER/.test(x)))));
+  await pg.evaluate(() => window.AMS?.foldAll(false)); await pg.waitForTimeout(300); // sections start folded; open them all for the checks below
   await pg.waitForTimeout(800);
   const txt = await pg.textContent("#cmp"); fs.writeFileSync(o("text.txt"), txt);
   await pg.screenshot({ path: o("full.png"), fullPage: true });

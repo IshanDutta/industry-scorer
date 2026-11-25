@@ -970,7 +970,7 @@ details.cx-fold > summary { list-style: none; cursor: pointer; } details.cx-fold
   --out: cubic-bezier(0.16, 1, 0.3, 1); --in: cubic-bezier(0.7, 0, 0.84, 0);
 }
 @media (max-width: 760px) { :root { --bar: 0px; --barh: 54px; } }
-html { scroll-padding-top: calc(var(--bar) + 12px); }
+
 body { font: 14.5px/1.55 var(--body); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 ::selection { background: color-mix(in srgb, var(--accent) 34%, transparent); color: var(--ink); }
 a { text-underline-offset: 2px; }
@@ -1161,6 +1161,46 @@ details.d-open > :not(summary) { animation: ams-rise var(--t3) var(--out) both; 
   .tab-ind.ready, .fold-btn svg, details > summary::before, .ptools button { transition: none !important; }
   .cmdk-scrim, .cmdk-scrim.open, .cmdk, .cmdk-scrim.open .cmdk { transition: opacity var(--t2) linear; transform: none; }
 }
+/* ---------------------------------------------------------------- easy to digest: cards, read-all, red team */
+ul.pts { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 3px; }
+.cardlist { list-style: none; margin: 8px 0 2px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px; align-items: start; }
+.cardlist > li { display: block; min-width: 0; margin: 0; padding: 12px 14px; background: var(--l2); border: 1px solid var(--line); border-radius: 12px; font-size: 13.5px; line-height: 1.55; color: var(--ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.cardlist > li:hover { border-color: var(--line-2); }
+ul.cardlist > li::before { content: none !important; display: none !important; }
+ol.cardlist { counter-reset: cl; }
+ol.cardlist > li { counter-increment: cl; position: relative; padding-left: 44px; }
+ol.cardlist > li::before { content: counter(cl) !important; position: absolute; left: 12px; top: 12px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 7px; background: var(--sunk); border: 1px solid var(--line-2); font: 700 11.5px var(--body); color: var(--muted); }
+.cardlist > li > b:first-child, .cardlist > li > strong:first-child { display: block; margin-bottom: 4px; font-size: 14px; line-height: 1.4; }
+.take.cardlist > li.pos { box-shadow: inset 3px 0 0 var(--gA); } .take.cardlist > li.neg { box-shadow: inset 3px 0 0 var(--gF); }
+.ev.cardlist > li { border-left: 1px solid var(--line); }
+.clamp > .clamp-in { display: block; max-height: calc(1.55em * 4); overflow: hidden; -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent); mask-image: linear-gradient(180deg, #000 50%, transparent); }
+.clamp.open > .clamp-in { max-height: none; -webkit-mask-image: none; mask-image: none; animation: ams-fade var(--t3) var(--out) both; }
+.more-btn { display: inline-flex; align-items: baseline; gap: 8px; margin-top: 6px; padding: 4px 12px; border-radius: 999px; background: transparent; border: 1px solid var(--line-2); color: var(--accent); font: 600 12.5px var(--body); }
+.more-btn small { font-weight: 500; color: var(--faint); font-size: 11.5px; }
+.more-btn:hover:not(:disabled) { border-color: var(--accent); }
+.rt { display: grid; gap: 12px; }
+.rt > summary { margin-bottom: 0; }
+.rt-thesis { background: var(--l2); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; }
+.rt-thesis p, .rcard p { margin: 0; line-height: 1.55; }
+.rt-h h4 { margin: 8px 0 0; font: 700 15.5px var(--display); font-stretch: 88%; letter-spacing: -0.01em; }
+.rgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 10px; align-items: start; }
+.rcard { min-width: 0; display: grid; gap: 8px; align-content: start; padding: 12px 14px; background: var(--l2); border: 1px solid var(--line); border-radius: 12px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.rcard:hover { border-color: var(--line-2); }
+.rcard.sev-high { box-shadow: inset 3px 0 0 var(--neg); } .rcard.sev-medium { box-shadow: inset 3px 0 0 var(--c3); } .rcard.sev-low { box-shadow: inset 3px 0 0 var(--bench); }
+.rcard-top { display: flex; flex-wrap: wrap; gap: 6px; }
+.rcard-h { margin: 0; font: 600 14.5px/1.45 var(--body); color: var(--ink); }
+.rcard-resp { display: grid; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+.rcard-prob { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center; }
+.rcard-prob b { font: 700 24px var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.rbar { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden; } .rbar > i { display: block; height: 100%; border-radius: 3px; background: var(--c3); }
+details.rcard-more > summary { font-size: 12.5px; font-weight: 600; color: var(--accent); padding: 2px 0 2px 20px; margin: 0; }
+details.rcard-more[open] > summary { margin-bottom: 4px; }
+/* Cards arrive in turn when their section first appears or opens. */
+:is(.p-new, .is-opening) :is(.cardlist > li, .rgrid > *) { animation: ams-in var(--t3) var(--out) both; animation-delay: calc(var(--k, 0) * 40ms + 80ms); }
+:is(.p-new, .is-opening) .rbar > i { transform-origin: 0 50%; animation: ams-grow var(--t4) var(--out) both; animation-delay: calc(var(--k, 0) * 40ms + 120ms); }
+/* A folded section says so, and shows what it holds. */
+.panel.is-folded > .panel-head .small.muted { color: var(--faint); }
+@media (prefers-reduced-motion: reduce) { :is(.p-new, .is-opening) :is(.cardlist > li, .rgrid > *, .rbar > i), .clamp.open > .clamp-in { animation: none !important; } }
 </style>
 
 <header class="appbar" id="appbar">
@@ -17945,9 +17985,9 @@ Return ONLY a JSON object:
       ${d.rethink && d.rethink.same === false ? `<div class="small"><span class="pill warn">full rewrite ordered</span> The strategist would now write this story differently from scratch: ${dailyRich(d.rethink.why, d.sources)}</div>` : ""}
       ${d.horizons?._scenarios ? `<div class="small"><b>Scenario odds:</b> ${Object.keys(d.horizons._scenarios.to).map((k) => `${k} ${d.horizons._scenarios.from[k]}% → ${d.horizons._scenarios.to[k]}%`).join(" · ")}</div>` : ""}
       ${(d.sections || []).length ? `<div class="small"><b>Rewritten today:</b><ul class="dlist" style="margin:2px 0 0">${d.sections.map((sct) => `<li><span class="pill ${sct.ok ? "pos" : "neu"}">${sct.ok ? "rewritten" : "couldn't rewrite"}</span> <b>${esc(sct.label)}</b>${sct.regulators?.length ? ` (${esc(sct.regulators.join(", "))})` : ""}: ${dailyRich(sct.why, d.sources)}${sct.ok ? "" : ` <span class="muted">${esc(sct.error || "")}</span>`}</li>`).join("")}</ul></div>` : ""}
-      ${(d.held || []).length ? `<div class="small muted"><b>Waiting for budget (first in line tomorrow):</b> ${d.held.map((h) => esc(h.label)).join("; ")}</div>` : ""}
-      ${(d.triggers || []).length ? `<div class="small muted"><b>Flagged by the data:</b> ${d.triggers.map(esc).join("; ")}</div>` : ""}
-      ${(d.watch || []).length ? `<div class="small muted"><b>Watch:</b> ${d.watch.map((w) => dailyRich(w, d.sources)).join("; ")}</div>` : ""}
+      ${(d.held || []).length ? `<div class="small muted"><b>Waiting for budget (first in line tomorrow):</b> ${ptList(d.held.map((h) => esc(h.label)))}</div>` : ""}
+      ${(d.triggers || []).length ? `<div class="small muted"><b>Flagged by the data:</b> ${ptList(d.triggers.map(esc))}</div>` : ""}
+      ${(d.watch || []).length ? `<div class="small muted"><b>Watch:</b> ${ptList(d.watch.map((w) => dailyRich(w, d.sources)))}</div>` : ""}
       ${hist.length ? `<details class="small"><summary>Earlier daily updates (${hist.length})</summary><ul class="dlist">${hist.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.revised ? `<span class="pill warn">revised</span> ` : ""}${dailyRich(h.headline, [])}${isNum(num(h.move)) ? ` <span class="muted">(${sg(h.move)})</span>` : ""}${(h.sections || []).filter((x) => x.ok).length ? ` <span class="muted">· rewrote ${esc(h.sections.filter((x) => x.ok).map((x) => x.label).join(", "))}</span>` : ""}</li>`).join("")}</ul></details>` : ""}</div>`;
   }
   const polChip = (x) => (x === null || x === undefined || !isNum(num(x)) ? "" : `<span class="pol ${x > 0.15 ? "p" : x < -0.15 ? "n" : "z"}" title="EODHD sentiment polarity">${x > 0 ? "+" : ""}${Number(x).toFixed(2)}</span>`);
@@ -18042,8 +18082,8 @@ Return ONLY a JSON object:
         <div class="lean-lvl ${c}">${Outlook.SIGN[x.call] > 0 ? "▲" : "▼"} ${esc(Outlook.label(x.call))}</div>
         <div class="lean-dots" title="${esc(x.call)}">${[1, 2, 3].map((k) => `<i class="${k <= Math.abs(Outlook.SIGN[x.call]) ? c : ""}"></i>`).join("")}</div>
         ${x.why ? `<p class="small" style="margin:0">${rich(x.why)}</p>` : `<p class="small muted" style="margin:0">Provisional: read off ${esc(x.basis || "the earlier call")}.</p>`}
-        ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${x.for.map(rich).join("; ")}</div>` : ""}
-        ${x.against?.length ? `<div class="small"><b>Against, and why it loses:</b> ${x.against.map(rich).join("; ")}</div>` : ""}
+        ${x.for?.length ? `<div class="small"><b style="color:var(--${c})">For:</b> ${ptList(x.for.map(rich))}</div>` : ""}
+        ${x.against?.length ? `<div class="small"><b>Against, and why it loses:</b> ${ptList(x.against.map(rich))}</div>` : ""}
         ${x.flips_it ? `<div class="small muted"><b>Flips if:</b> ${rich(x.flips_it)}</div>` : ""}
         ${o.nums ? o.nums(h, x) : ""}</div>`; };
     const ev = l.evidence || [];
@@ -18095,7 +18135,7 @@ Return ONLY a JSON object:
         <div><span class="muted">Last ${esc(h)}:</span> <b class="${f.trailing > 0 ? "pos-t" : f.trailing < 0 ? "neg-t" : ""}">${sgP(f.trailing)}</b> · a normal ${esc(h)} move is ±${f.sigma ?? "—"}%</div>
         ${f.like ? `<div><span class="muted">Past setups like today:</span> higher ${f.like.pos}% of the time ${esc(h)} later (n=${f.like.n})</div>` : ""}
         ${isNum(num(f.anchor?.abs?.prob_up)) ? `<div title="Momentum, the trend and valuation; tested out of sample it was barely better than the average alone"><span class="muted">Stats model:</span> ${f.anchor.abs.prob_up}% chance higher</div>` : ""}
-        ${ev.length ? `<div><span class="muted">In this window:</span> ${ev.map((e) => `${esc(fmtDate(e.date))} ${esc(trimC(String(e.title).split(/ — |: /)[0], 60))}`).join(" · ")}</div>` : ""}</div>`; };
+        ${ev.length ? `<div><span class="muted">In this window:</span> ${ev.map((e) => `${esc(fmtDate(e.date))} ${esc(showC(String(e.title).split(/ — |: /)[0], 60))}`).join(" · ")}</div>` : ""}</div>`; };
     return callsCard(l, { head, status, nums, since, history: indOutlookHist(name, r), verdict: "the lead's opportunity verdict", verdictCall: r.opportunity?.verdict });
   }
 
@@ -18144,7 +18184,7 @@ Return ONLY a JSON object:
     const rng = (l, r, u) => (Array.isArray(r) && r.length ? `<span>${l} ${r.map((x) => (u === "%" && x > 0 ? "+" : "") + x).join(" to ")}${u}</span>` : "");
     const scen = ["bull", "base", "bear"].filter((k) => sc[k]).map((k) => { const x = sc[k]; return `<div class="chan"><div class="chan-head"><b>${k === "bull" ? "Bull case" : k === "base" ? "Base case" : "Bear case"}</b><b class="mono">${x.probability}%</b></div>
       <div class="meter"><i style="width:${x.probability}%;background:${k === "bull" ? "var(--pos)" : k === "bear" ? "var(--neg)" : "var(--accent)"}"></i></div>
-      <p class="small" style="margin:0">${rich(x.narrative)}</p>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${x.triggers.map(rich).join("; ")}</div>` : ""}
+      <p class="small" style="margin:0">${rich(x.narrative)}</p>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${ptList(x.triggers.map(rich))}</div>` : ""}
       ${x.earnings ? `<div class="small"><b>Earnings:</b> ${rich(x.earnings)}</div>` : ""}${x.valuation ? `<div class="small"><b>Valuation:</b> ${rich(x.valuation)}</div>` : ""}
       <div class="nums small mono">${rng("EPS", x.eps_change, "%")}${rng("P/E", x.pe, "x")}${rng("12M price", x.price_move, "%")}</div></div>`; }).join("");
     // Every section, side by side across the three scenarios
@@ -18158,7 +18198,7 @@ Return ONLY a JSON object:
       ${op?.headline ? `<b class="headline">${rich(op.headline)}</b>` : ""}${op?.why ? para("", op.why) : ""}
       ${op && op.consistent === false ? `<div class="notice warn">The strategist's call doesn't match its own scenario numbers (expected return ${sgn(m.expected_return)}, reward-to-risk ${m.reward_risk ?? "n/a"}). Weigh the numbers.</div>` : ""}
       ${m?.checks?.some((c) => c.ok === false) ? `<div class="small muted">Consistency check: ${m.checks.filter((c) => c.ok === false).map((c) => `the ${c.scenario} case's ${sgn(c.stated)} price move doesn't match its own EPS and P/E (they imply ${sgn(c.implied)} from today's P/E)`).join("; ")}.</div>` : ""}
-      ${op?.entry_triggers?.length ? `<div class="small"><b>Becomes a buy if:</b> ${op.entry_triggers.map(rich).join("; ")}</div>` : ""}
+      ${op?.entry_triggers?.length ? `<div class="small"><b>Becomes a buy if:</b> ${ptList(op.entry_triggers.map(rich))}</div>` : ""}
       <div class="two">${op?.best_expressions?.length ? `<div><span class="eyebrow">Best ways to express it</span><ul class="dlist small">${op.best_expressions.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}${op?.avoid?.length ? `<div><span class="eyebrow">Avoid</span><ul class="dlist small">${op.avoid.map((x) => `<li>${tks([x.symbol])} ${rich(x.why)}</li>`).join("")}</ul></div>` : ""}</div></div>` : "";
     const leanBlk = leanBlock(r, d.name, d);
     const rev = ag.review;
@@ -18686,7 +18726,7 @@ Return ONLY a JSON object:
       `<div class="callout"><div class="callout-head"><span class="eyebrow">Across the largest companies</span><span class="pill ${c.summary.direction === "improving" ? "pos" : c.summary.direction === "deteriorating" ? "neg" : "neu"}">${esc(c.summary.direction)}</span></div><p class="small" style="margin:0">${rich(c.summary.text)}</p></div>
       <div class="chans">${c.companies.map((x) => `<div class="chan"><div class="chan-head"><b>${tks([x.symbol])}</b> <span class="small muted">${esc(x.prev_period)} → ${esc(x.period)}</span> <span class="pill ${TC[x.tone] || "neu"}">${esc(x.tone)}</span> <span class="pill ${GC[x.guidance] || "neu"}">guidance ${esc(x.guidance)}</span></div>
         <p class="small" style="margin:4px 0">${esc(x.tone_why)}${x.guidance_detail ? ` <span class="muted">${esc(x.guidance_detail)}</span>` : ""}</p>
-        ${x.new_topics.length ? `<div class="small"><b>New:</b> ${x.new_topics.map(esc).join("; ")}</div>` : ""}${x.dropped_topics.length ? `<div class="small"><b>Stopped mentioning:</b> ${x.dropped_topics.map(esc).join("; ")}</div>` : ""}${x.new_risks.length ? `<div class="small"><b>New risks:</b> ${x.new_risks.map(esc).join("; ")}</div>` : ""}
+        ${x.new_topics.length ? `<div class="small"><b>New:</b> ${ptList(x.new_topics.map(esc))}</div>` : ""}${x.dropped_topics.length ? `<div class="small"><b>Stopped mentioning:</b> ${ptList(x.dropped_topics.map(esc))}</div>` : ""}${x.new_risks.length ? `<div class="small"><b>New risks:</b> ${ptList(x.new_risks.map(esc))}</div>` : ""}
         ${x.quote_now ? `<blockquote class="small">Now: “${esc(x.quote_now)}”</blockquote>` : ""}${x.quote_then ? `<blockquote class="small muted">Then: “${esc(x.quote_then)}”</blockquote>` : ""}</div>`).join("")}</div>
       <div class="small muted">Quotes are checked word for word against the transcripts${c.quotes_dropped ? `; ${c.quotes_dropped} that didn't match were removed` : ""}.</div>`);
   }
@@ -18719,14 +18759,24 @@ Return ONLY a JSON object:
   function redTeamBlock(r) {
     const rt = r?.redteam; if (!rt) return "";
     const resp = Object.fromEntries((r.redteam_responses || []).map((x) => [x.n, x]));
-    const VC = { accepted: "neg", partly: "warn", rejected: "pos" };
-    return `<details class="box" open><summary><b>Red team</b> <span class="small muted">an independent ${rt.stance === "short" ? "short seller" : "contrarian long"} argued against this verdict; the review answered each point</span></summary>
-      <p class="small">${rich(rt.thesis)}</p>
-      <ol class="dlist small">${rt.arguments.map((a) => { const x = resp[a.n]; return `<li><span class="pill ${a.severity === "high" ? "neg" : a.severity === "medium" ? "warn" : "neu"}">${esc(a.severity)}</span> <b>${rich(a.claim)}</b> <span class="muted">${rich(a.evidence)}</span>${x ? `<div><span class="pill ${VC[x.verdict] || "neu"}">${x.verdict === "accepted" ? "review agreed" : x.verdict === "partly" ? "partly agreed" : "review disagreed"}</span> ${rich(x.why)}${x.change && !/^none/i.test(x.change) ? ` <span class="muted">Changed: ${rich(x.change)}</span>` : ""}</div>` : ""}</li>`; }).join("")}</ol>
-      ${rt.premortem.length ? `<div class="small"><b>Pre-mortem: if this verdict goes badly wrong, most likely because…</b><ul class="dlist">${rt.premortem.map((p) => `<li><b>${p.probability}%</b> ${rich(p.what_happened)} <span class="muted">Early warning: ${rich(p.early_warning)}</span></li>`).join("")}</ul></div>` : ""}
-      ${rt.kill_criteria.length ? `<div class="small"><b>What would prove the verdict wrong:</b> ${rt.kill_criteria.map(rich).join("; ")}</div>` : ""}
-      ${rt.blind_spots.length ? `<div class="small muted"><b>Blind spots raised:</b> ${rt.blind_spots.map(rich).join("; ")}</div>` : ""}</details>`;
+    const VC = { accepted: "neg", partly: "warn", rejected: "pos" }, VL = { accepted: "review agreed", partly: "partly agreed", rejected: "review disagreed" };
+    const sevC = (v) => (v === "high" ? "neg" : v === "medium" ? "warn" : "neu");
+    const args = rt.arguments.map((a) => { const x = resp[a.n];
+      return `<article class="rcard sev-${esc(a.severity || "low")}"><div class="rcard-top"><span class="pill ${sevC(a.severity)}">${esc(a.severity)}</span>${x ? `<span class="pill ${VC[x.verdict] || "neu"}">${esc(VL[x.verdict] || "review answered")}</span>` : ""}</div>
+        <h4 class="rcard-h">${rich(a.claim)}</h4>
+        ${a.evidence ? `<details class="rcard-more"><summary>The evidence</summary><p class="small">${rich(a.evidence)}</p></details>` : ""}
+        ${x ? `<div class="rcard-resp"><span class="eyebrow">What the review said</span><p class="small">${rich(x.why)}</p>${x.change && !/^none/i.test(x.change) ? `<details class="rcard-more"><summary>What changed in the verdict</summary><p class="small">${rich(x.change)}</p></details>` : ""}</div>` : ""}</article>`; }).join("");
+    const pm = rt.premortem.map((p) => `<article class="rcard"><div class="rcard-prob"><b>${esc(p.probability)}%</b><span class="rbar"><i style="width:${Math.max(0, Math.min(100, +p.probability || 0))}%"></i></span></div>
+        <p class="small">${rich(p.what_happened)}</p>${p.early_warning ? `<details class="rcard-more"><summary>Early warning</summary><p class="small">${rich(p.early_warning)}</p></details>` : ""}</article>`).join("");
+    const plain = (xs) => xs.map((x) => `<article class="rcard"><p class="small">${rich(x)}</p></article>`).join("");
+    return `<details class="box rt" open><summary><b>Red team</b> <span class="small muted">an independent ${rt.stance === "short" ? "short seller" : "contrarian long"} argued against this verdict; the review answered each point</span></summary>
+      <div class="rt-thesis"><span class="eyebrow">Their case</span><p class="small">${rich(rt.thesis)}</p></div>
+      <div class="rt-h"><h4>Their ${rt.arguments.length} arguments, and the review's answer</h4></div><div class="rgrid">${args}</div>
+      ${rt.premortem.length ? `<div class="rt-h"><h4>Pre-mortem: if this verdict goes badly wrong, most likely because…</h4></div><div class="rgrid">${pm}</div>` : ""}
+      ${rt.kill_criteria.length ? `<div class="rt-h"><h4>What would prove the verdict wrong</h4></div><div class="rgrid">${plain(rt.kill_criteria)}</div>` : ""}
+      ${rt.blind_spots.length ? `<div class="rt-h"><h4>Blind spots raised</h4></div><div class="rgrid">${plain(rt.blind_spots)}</div>` : ""}</details>`;
   }
+
 
   // ------------------------------------------------------------- estimates, positioning, sensitivities, cycle, track record
   const sgnPct = (x, dgt = 1) => (isNum(num(x)) ? `${x >= 0 ? "+" : ""}${(x * 100).toFixed(dgt)}%` : "—");
@@ -18937,23 +18987,69 @@ Return ONLY a JSON object:
     return `<nav class="sidenav" aria-label="Sections">${gs.map((g, i) => `<a href="#${esc(g.items[0][0])}" data-spy="${esc(g.items[0][0])}" data-grp="${esc(g.items.map((x) => x[0]).join(" "))}"><span class="num">${String(i + 1).padStart(2, "0")}</span>${esc(g.label)}</a>${g.items.length > 1 ? g.items.map(([id, l]) => `<a class="sub" href="#${esc(id)}" data-spy="${esc(id)}">${esc(l)}</a>`).join("") : ""}`).join("")}</nav>`;
   }
   const _spies = {};
-  /** Scrollspy: the section nearest the top of the screen is highlighted in the sidebar (and scrolled into view on phones). */
+  /**
+   * The sidebar and the page agree. The sections are put in the sidebar's order (so the page reads top to bottom the way
+   * the sidebar lists it); a link scrolls to its own section in this view, opening it if it's folded; and the highlighted
+   * link is the section at the top of the screen, worked out from where the sections are rather than guessed.
+   */
   function wireSpy(root) {
-    const key = root.id || "x"; if (_spies[key]) { _spies[key].disconnect(); delete _spies[key]; }
-    const nav = root.querySelector(".sidenav"); if (!nav || typeof IntersectionObserver === "undefined") return;
-    const links = [...nav.querySelectorAll("a[data-spy]")], ids = [...new Set(links.map((a) => a.dataset.spy))];
-    const secs = ids.map((id) => root.querySelector("#" + CSS.escape(id))).filter(Boolean).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
-    const vis = new Set();
-    const pick = (id) => { links.forEach((a) => a.classList.toggle("on", a.dataset.spy === id || (a.dataset.grp || "").split(" ").includes(id)));
-      const on = nav.querySelector("a.on:not(.sub)"); if (on && getComputedStyle(nav).display === "flex") on.scrollIntoView({ block: "nearest", inline: "nearest" }); };
-    const ob = new IntersectionObserver((ents) => { for (const e of ents) e.isIntersecting ? vis.add(e.target.id) : vis.delete(e.target.id); const first = secs.find((x) => vis.has(x.id)); if (first) pick(first.id); }, { rootMargin: `-${(parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0) + Math.round(innerHeight * 0.08)}px 0px -72% 0px`, threshold: 0 });
-    secs.forEach((x) => ob.observe(x)); _spies[key] = ob; if (secs[0]) pick(secs[0].id);
+    const key = root.id || "x"; if (_spies[key]) { _spies[key](); delete _spies[key]; }
+    const nav = root.querySelector(".sidenav"); if (!nav) return;
+    const links = [...nav.querySelectorAll("a[data-spy]")];
+    const ids = [...new Set(links.flatMap((a) => [a.dataset.spy, ...(a.dataset.grp || "").split(" ")]).filter(Boolean))];
+    const find = (id) => root.querySelector("#" + CSS.escape(id));
+    const stream = nav.parentElement?.querySelector(":scope > .stream");
+    if (stream) {
+      const kids = [...stream.children], top = (el) => { while (el && el.parentElement !== stream) el = el.parentElement; return el; };
+      const ordered = []; for (const id of ids) { const k = top(find(id)); if (k && !ordered.includes(k)) ordered.push(k); }
+      if (ordered.length) {
+        const first = Math.min(...ordered.map((k) => kids.indexOf(k)));
+        const want = [...kids.filter((k, i) => !ordered.includes(k) && i < first), ...ordered, ...kids.filter((k, i) => !ordered.includes(k) && i > first)];
+        if (want.some((k, i) => kids[i] !== k)) for (const k of want) stream.appendChild(k);
+      }
+    }
+    const secs = ids.map(find).filter(Boolean).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+    if (!secs.length) return;
+    const RMq = matchMedia("(prefers-reduced-motion: reduce)");
+    const horiz = () => getComputedStyle(nav).display === "flex";
+    const line = () => (parseInt(getComputedStyle(document.documentElement).getPropertyValue("--bar")) || 0) + (horiz() ? nav.offsetHeight : 0) + 28;
+    const keep = (a) => {
+      if (!a) return;
+      if (horiz()) nav.scrollTo({ left: Math.max(0, a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2), behavior: RMq.matches ? "auto" : "smooth" });
+      else if (a.offsetTop < nav.scrollTop + 8 || a.offsetTop + a.offsetHeight > nav.scrollTop + nav.clientHeight - 8) nav.scrollTo({ top: Math.max(0, a.offsetTop - nav.clientHeight / 3) });
+    };
+    let shown = null;
+    const pick = (id) => {
+      if (!id || id === shown) return; shown = id;
+      links.forEach((a) => { const on = a.dataset.spy === id || (a.dataset.grp || "").split(" ").includes(id); a.classList.toggle("on", on); if (on && !a.classList.contains("sub")) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current"); });
+      keep(horiz() ? nav.querySelector("a.on:not(.sub)") : nav.querySelector("a.sub.on") || nav.querySelector("a.on"));
+    };
+    const current = () => {
+      if (!root.offsetParent && getComputedStyle(root).display === "none") return null;
+      const y = line(); let id = secs[0].id;
+      for (const x of secs) { const r = x.getBoundingClientRect(); if (!r.height) continue; if (r.top - y <= 0) id = x.id; else break; }
+      return id;
+    };
+    let lock = 0, raf = 0;
+    const onScroll = () => { if (raf || Date.now() < lock) return; raf = requestAnimationFrame(() => { raf = 0; pick(current()); }); };
+    const onClick = (ev) => {
+      const a = ev.target.closest("a[data-spy], a.sub"); if (!a || !nav.contains(a)) return;
+      const id = (a.getAttribute("href") || "").replace(/^#/, ""), el = id && find(id); if (!el) return;
+      ev.preventDefault();
+      window.AMS?.reveal?.(el);
+      shown = null; pick(id); lock = Date.now() + (RMq.matches ? 150 : 1100);
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: RMq.matches ? "auto" : "smooth", block: "start" }));
+      window.AMS?.flash?.(el);
+    };
+    addEventListener("scroll", onScroll, { passive: true }); nav.addEventListener("click", onClick);
+    _spies[key] = () => { removeEventListener("scroll", onScroll); nav.removeEventListener("click", onClick); };
+    pick(current() || secs[0].id);
   }
   /** The industry report's sidebar, in the order the sections appear. */
   function industryGroups(d) {
     const has = (id) => true;
-    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"]] },
-      { label: "Performance", items: [["performance", "Returns vs SPY"], ["risk", "Risk"]] },
+    return [{ label: "Performance", items: [["performance", "Returns vs SPY"], ["risk", "Risk"]] },
+      { label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"], ["times", "Times like this"]] },
       { label: "Analyst Consensus", items: [["estimates", "Estimates & revisions"]] },
       { label: "Industry Landscape", items: [["ranking", "Company ranking"], ["history", "History & peers"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["companies", "The companies"]] },
       { label: "Foreign Affairs", items: [["macro", "Macro"], ["sensitivity", "Sensitivities"], ["world", "World events"], ["trade", "Trade relations"]] },
@@ -20038,9 +20134,9 @@ Return ONLY a JSON object:
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
   function fundGroups(fd) {
-    return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-times", "Times like this"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
+    return [{ label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
+      { label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-times", "Times like this"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
       { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"], ["fund-peers", "Peer funds"]] },
-      { label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
       { label: "Wall Street & news", items: [["fund-street", "Wall Street"], ["fund-news", "News & sentiment"], ["fund-season", "Earnings season"]] },
       { label: "Through its industries", items: [["fund-look", "Calls & scores"], ["fund-val", "Valuation & fundamentals"], ["fund-kpi", "KPIs & cycle"], ["fund-scen", "Scenarios & debates"], ["fund-dist", "Distributions"]] },
       { label: "Foreign Affairs", items: [["fund-macro", "Macro"], ["fund-world", "World events"], ["fund-trade", "Trade"], ["fund-reg", "Regulation"]] },
@@ -20085,7 +20181,7 @@ Return ONLY a JSON object:
       ${cell("Beta to SPY", fix(fd.gS?.beta ?? (fd.bench.symbol === "SPY" ? g1.beta : NaN), 2), isNum(num(g1.vol)) ? `volatility ${pct(g1.vol, false, 0)}` : "")}
       ${cell("Top 10 holdings", pct(fd.conc?.top10, false, 0), isNum(num(fd.conc?.effective_n)) ? `${fix(fd.conc.effective_n, 0)} effective holdings` : "")}
       <div><span class="eyebrow">Covered by your analysis</span><span class="v">${pct(c.covered, false, 0)}</span>${covBar}<span class="small muted">${pct(c.covered_full, false, 0)} full${B.quant > 0.0005 ? `, ${pct(B.quant, false, 0)} code-only` : ""}</span></div>
-      ${cell("Benchmark", esc(fd.bench.symbol), esc(trimC(fd.bench.why || "", 40)))}</div>`;
+      ${cell("Benchmark", esc(fd.bench.symbol), esc(showC(fd.bench.why || "", 40)))}</div>`;
     const vt = tier(g1.vol, [0.15, 0.3], ["Low", "Moderate", "High"]), shp = tier(g1.sharpe, [0, 1, 2], ["Poor", "Fair", "Good", "Excellent"]);
     const badges = `<div class="tierbadges">${vt ? `<span class="pill ${vt === "Low" ? "pos" : vt === "High" ? "neg" : "warn"}">Volatility: ${vt} (${pct(g1.vol, false, 0)})</span>` : ""}${shp ? `<span class="pill ${shp === "Poor" ? "neg" : shp === "Fair" ? "neu" : "pos"}">Sharpe: ${shp} (${fix(g1.sharpe, 2)})</span>` : ""}${isNum(num(g1.max_dd)) ? `<span class="pill ${g1.max_dd < -0.3 ? "neg" : g1.max_dd < -0.15 ? "warn" : "pos"}">Max drawdown 1Y: ${pct(g1.max_dd, true, 0)}</span>` : ""}${isNum(num(g1.alpha)) ? `<span class="pill ${g1.alpha >= 0 ? "pos" : "neg"}"><span class="gk">α</span> ${pct(g1.alpha)} a year vs ${esc(fd.bench.symbol)}</span>` : ""}${isNum(num(g1.tracking_error)) ? `<span class="pill neu">Tracking error ${pct(g1.tracking_error, false, 1)}</span>` : ""}${card?.best ? `<span class="pill pos">Best fit: ${esc(Score.PROFILES[card.best].label)}</span>` : ""}</div>`;
     // What it holds, at a glance: its sectors (donut) and its biggest industries with their 12-month calls.
@@ -20126,7 +20222,7 @@ Return ONLY a JSON object:
         ${x.decisions?.length ? `<div class="small"><span class="eyebrow">In the window</span><ul class="dlist small">${x.decisions.map((d) => `<li><span class="mono">${esc(d.date)}</span> ${fundCites(d.event, idx)}</li>`).join("")}</ul></div>` : ""}</div>`; }).join("");
     const SC = { bull: "pos", base: "neu", bear: "neg" };
     const scen = calls.scenarios && Object.keys(calls.scenarios).length ? `<h3>12-month scenarios</h3><div class="hcards">${["bull", "base", "bear"].filter((k) => calls.scenarios[k]).map((k) => { const x = calls.scenarios[k];
-      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k} case</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b></div><div class="meter"><i style="width:${isNum(x.probability) ? x.probability : 0}%;background:${k === "bull" ? "var(--pos)" : k === "bear" ? "var(--neg)" : "var(--accent)"}"></i></div><div class="small">${fundCites(x.narrative, idx)}</div>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${x.triggers.map((y) => fundCites(y, idx)).join("; ")}</div>` : ""}</div>`; }).join("")}</div>` : "";
+      return `<div class="hcard"><div class="dim-head"><span class="pill ${SC[k]}">${k} case</span><b class="mono">${isNum(x.probability) ? x.probability + "%" : ""}</b></div><div class="meter"><i style="width:${isNum(x.probability) ? x.probability : 0}%;background:${k === "bull" ? "var(--pos)" : k === "bear" ? "var(--neg)" : "var(--accent)"}"></i></div><div class="small">${fundCites(x.narrative, idx)}</div>${x.triggers?.length ? `<div class="small"><b>Triggers:</b> ${ptList(x.triggers.map((y) => fundCites(y, idx)))}</div>` : ""}</div>`; }).join("")}</div>` : "";
     const issues = fd.full?.checks?.issues?.length ? `<div class="notice warn small"><span>Code checks on the scenarios: ${esc(fd.full.checks.issues.join("; "))}.</span></div>` : "";
     const thesis = core.thesis || hz ? `${core.thesis ? core.thesis.split(/\n+/).map((pp) => `<p class="prose">${fundCites(pp, idx)}</p>`).join("") : ""}
       ${core.vs_benchmark?.why ? `<div class="callout"><div class="callout-head"><b>Against ${esc(fd.bench.symbol)}</b>${core.vs_benchmark.call ? `<span class="pill ${VS[core.vs_benchmark.call]}">${esc(core.vs_benchmark.call)}</span>` : ""}</div><div class="small">${fundCites(core.vs_benchmark.why, idx)}</div></div>` : ""}
@@ -20177,7 +20273,7 @@ Return ONLY a JSON object:
     // ---- holdings
     const cn = fd.conc || {};
     const HN = new Map((core.holdings_notes || []).map((x) => [String(idx[x.id] || "").split(" ")[0], x])), HST = { tailwind: "pos", neutral: "neu", headwind: "neg" };
-    const hrows = (fd.hold || []).map((h) => { const hn = HN.get(h.ticker); return `<tr><td class="wr"><span class="tick">${esc(h.ticker)}</span><div class="small muted">${esc(trimC(h.name || "", 34))}</div>${hn ? `<div class="small" style="min-width:220px;max-width:360px;margin-top:3px">${hn.stance ? `<span class="pill ${HST[hn.stance]}">${esc(hn.stance)}</span> ` : ""}${hn.bet ? `<b>${esc(hn.bet)}.</b> ` : ""}${fundCites(hn.view, idx)}</div>` : ""}</td><td class="n"><b>${pct(h.weight, false, 2)}</b></td><td class="wr small">${esc(h.industry || "—")}${h.inTop50 ? ` <span class="muted">#${h.rank}</span>` : h.industry ? ` <span class="muted">(outside top 50)</span>` : ""}</td>
+    const hrows = (fd.hold || []).map((h) => { const hn = HN.get(h.ticker); return `<tr><td class="wr"><span class="tick">${esc(h.ticker)}</span><div class="small muted">${esc(showC(h.name || "", 34))}</div>${hn ? `<div class="small" style="min-width:220px;max-width:360px;margin-top:3px">${hn.stance ? `<span class="pill ${HST[hn.stance]}">${esc(hn.stance)}</span> ` : ""}${hn.bet ? `<b>${esc(hn.bet)}.</b> ` : ""}${fundCites(hn.view, idx)}</div>` : ""}</td><td class="n"><b>${pct(h.weight, false, 2)}</b></td><td class="wr small">${esc(h.industry || "—")}${h.inTop50 ? ` <span class="muted">#${h.rank}</span>` : h.industry ? ` <span class="muted">(outside top 50)</span>` : ""}</td>
       <td class="n">${fix(h.pe, 1)}</td><td class="n ${cls(num(h.r1y))}">${pct(h.r1y)}</td><td class="n">${isNum(num(h.div)) ? pct(h.div, false, 1) : "—"}</td><td class="n">${pct(h.opm, false, 0)}</td><td class="mono small">${esc(h.next || "")}</td>
       <td>${h.call12 ? `<span class="pill ${CALLC(h.call12)}">${esc(h.call12)}</span>` : ""}</td><td class="small">${h.co ? `<button class="linkbtn" data-co="${esc(h.ticker)}" title="${esc(h.co)}">its analysis</button>` : `<button class="linkbtn" data-co="${esc(h.ticker)}">open</button>`}</td></tr>`; }).join("");
     const HSTC = { tailwind: "pos", headwind: "neg", neutral: "neu" }, top10 = (fd.hold || []).slice(0, 12), hmax = top10[0]?.weight || 1;
@@ -20202,7 +20298,7 @@ Return ONLY a JSON object:
       return `<div class="fcard ${FX2[rd?.effect] || "neu"}"><div class="top"><b style="min-width:0">${g.status === "analyzed" || g.status === "stale" ? `<button class="linkbtn" data-open-industry="${esc(g.industry)}">${esc(g.industry)}</button>` : esc(g.industry)}</b><span class="w">${pct(g.weight, false, 1)}</span></div>
         <div class="nm">${esc(g.sector || "")} · <span class="pill ${ST[g.status][0]}" style="font-size:11px">${ST[g.status][1]}</span></div><div class="meter"><i style="width:${(100 * g.weight / imax).toFixed(1)}%;background:var(--accent)"></i></div>
         <div class="row small">${c12 ? `<span class="pill ${CALLC(c12)}">12M ${esc(c12)}</span>` : ""}${d && isNum(num(d.expected12)) ? `<span class="muted">expected ${pts(d.expected12)}</span>` : ""}${isNum(sc0) ? `<span class="muted">best score ${Math.round(sc0)} <span class="g ${gr === "—" ? "none" : gr}">${gr}</span> ${esc(d.best)}</span>` : ""}</div>
-        ${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : d?.headline ? `<div class="small muted">${esc(trimC(stripCites(d.headline), 200))}</div>` : ""}
+        ${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : d?.headline ? `<div class="small muted">${esc(showC(stripCites(d.headline), 200))}</div>` : ""}
         <div class="row small muted">${g.top.slice(0, 4).map((h) => `<span class="chip-s">${esc(h.ticker || h.name)} ${pct(h.weight, false, 1)}</span>`).join("")}</div></div>`; }).join("")}</div>`;
     const indSec = sec("fund-ind", "The industries it holds", `${c.industries.length} industries`, `${R("industries", "core")}${icards}<details style="margin-top:10px"><summary class="small"><b>Every industry</b> (${c.industries.length})</summary><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry, its biggest holdings and what it means for the fund</th><th>Sector</th><th class="n">Weight</th><th>12-month call</th><th class="n">Expected</th><th class="n">Best score</th><th>Your analysis</th></tr></thead><tbody>${irows}</tbody></table></div></details>`);
     // ---- against the benchmark
@@ -20349,7 +20445,7 @@ Return ONLY a JSON object:
     const worldSec = AF?.world?.length || L?.world?.length ? (() => {
       const more = (x) => { const parts = [ln("Now", x.now), ln("Why now", x.why_now), ln("Trigger", x.trigger), ln("First-order effect", x.first_order),
           x.developments?.length ? `<div><b>Latest:</b><ul class="dlist">${x.developments.map((d) => `<li><span class="mono">${esc(fmtShort(d.date))}</span> ${esc(stripCites(d.text))}</li>`).join("")}</ul></div>` : "",
-          x.channels?.length ? `<div><b>How it reaches the industry:</b> ${x.channels.map(esc).join("; ")}</div>` : "",
+          x.channels?.length ? `<div><b>How it reaches the industry:</b> ${ptList(x.channels.map(esc))}</div>` : "",
           x.scenarios?.length ? `<div><b>Scenarios:</b>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name)}${c.trigger ? ` <span class="muted">if ${esc(stripCites(c.trigger))}</span>` : ""}${c.outcome ? ` → ${esc(stripCites(c.outcome))}` : ""}</div>`).join("")}</div>` : "",
           ln("Near term", x.near_term), ln("Structural", x.structural), x.offsets?.length ? ln("Offsets", x.offsets.join("; ")) : "",
           x.watch?.length ? `<div><b>Watch:</b> ${x.watch.map((w) => `${esc(w.indicator)} <span class="muted">(${esc(stripCites(w.signal))})</span>`).join("; ")}</div>` : "", ln("Most exposed", x.exposure)].filter(Boolean);
@@ -20360,19 +20456,19 @@ Return ONLY a JSON object:
           <div class="small muted">${esc([x.category, x.region, x.status, x.since ? `since ${fmtShort(x.since)}` : ""].filter(Boolean).join(" · "))} · reaches <b>${pct(x.reach, false, 0)}</b> of the fund</div>
           <div class="actions" style="justify-content:flex-start;align-items:center;margin:6px 0"><span class="small muted">Its industries</span>${x.adverse > 0.002 ? `<span class="pill neg">adverse ${pct(x.adverse, false, 0)}</span>` : ""}${x.favorable > 0.002 ? `<span class="pill pos">supportive ${pct(x.favorable, false, 0)}</span>` : ""}${Object.entries(x.stances).filter(([k]) => !["adverse", "supportive", "favorable"].includes(k)).map(([k, v]) => `<span class="pill neu">${esc(k)} ${pct(v, false, 0)}</span>`).join("")}
             <span class="small muted" style="margin-left:8px">${esc(fd.sym)}</span>${y ? `${fEff(y.effect)} ${y.magnitude ? fLvl(y.magnitude, "impact") : ""} ${vsI(y.vs_industries)}` : ourPend}</div>
-          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : x.summary ? `<p class="small muted" style="margin:0">${esc(trimC(stripCites(x.summary), 280))}</p>` : ""}
+          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : x.summary ? `<p class="small muted" style="margin:0">${esc(showC(stripCites(x.summary), 280))}</p>` : ""}
           ${y?.channel || y?.scenario || y?.watch ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${fundCites(y.channel, idx)}</div>` : ""}${y.scenario ? `<div><b>Scenario that matters:</b> ${fundCites(y.scenario, idx)}</div>` : ""}${y.watch ? `<div class="muted"><b>Watch:</b> ${fundCites(y.watch, idx)}</div>` : ""}</div>` : ""}
           ${x.winners_held.length || x.losers_held.length ? `<div class="small" style="margin-top:4px">${x.winners_held.length ? `<b>Holdings named winners:</b> ${heldChips(x.winners_held, "pos")} ` : ""}${x.losers_held.length ? `<b>losers:</b> ${heldChips(x.losers_held, "neg")}` : ""}</div>` : ""}
           ${more(x)}</div>`; }).join("")
         : L.world.slice(0, 10).map((x) => { const rd = wRead.get(lc(x.title)); return `<div class="box"><b>${esc(x.title)}</b><div class="small muted">reaches ${pct(x.w, false, 0)} · adverse ${pct(x.adverse, false, 0)} · favorable ${pct(x.favorable, false, 0)}</div>${rd?.why ? `<div class="small">${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</div>`; }).join("");
       const nDeep = AF?.world?.filter((x) => x.deep_any).length || 0;
       return sec("fund-world", "World events", AF ? `${nDeep} deep dive${nDeep === 1 ? "" : "s"} and ${AF.world.length - nDeep} tracked situation${AF.world.length - nDeep === 1 ? "" : "s"} from its industries' world-events reports, for ${esc(fd.sym)}` : "the situations its industries' reports follow",
-        `${WO?.summary ? `<div class="callout"><span class="eyebrow">For ${esc(fd.sym)}</span><p class="small" style="margin:4px 0 0">${fundCites(WO.summary, idx)}</p>${WO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(WO.biggest, idx)}</div>` : ""}${WO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${WO.watch.map((w) => fundCites(w, idx)).join("; ")}</div>` : ""}</div>` : ""}${IND("world")}<div class="two">${cards}</div>`); })() : "";
+        `${WO?.summary ? `<div class="callout"><span class="eyebrow">For ${esc(fd.sym)}</span><p class="small" style="margin:4px 0 0">${fundCites(WO.summary, idx)}</p>${WO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(WO.biggest, idx)}</div>` : ""}${WO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(WO.watch.map((w) => fundCites(w, idx)))}</div>` : ""}</div>` : ""}${IND("world")}<div class="two">${cards}</div>`); })() : "";
     // Trade
     const tRead = readsBy(ex.trade), TO = ex.trade_overall, STC = { allied: "pos", ally: "pos", partner: "pos", neutral: "neu", competitor: "warn", competitive: "warn", rival: "neg", adversary: "neg", adversarial: "neg" };
     const tradeSec = AF?.trade?.length || L?.trade?.length ? (() => {
       const top = `${AF?.tradeVerdicts?.length ? `<h3>Each industry's trade verdict</h3><div class="small">By fund weight: ${mixChips(AF.trade_mix)}</div><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry and its verdict</th><th class="n">Weight</th><th>Rating</th><th class="n">Health</th></tr></thead><tbody>${AF.tradeVerdicts.map((v) => `<tr><td class="wr"><b>${esc(v.industry)}</b><div class="small muted">${esc(stripCites(v.headline || ""))}</div></td><td class="n">${pct(v.weight, false, 1)}</td><td><span class="pill ${/severe|high|critical/.test(v.rating) ? "neg" : v.rating === "manageable" ? "neu" : "warn"}">${esc(v.rating || "—")}</span></td><td class="n">${v.health ?? "—"}${v.band ? `<div class="small muted">${esc(v.band)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}
-        ${TO?.summary ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(fd.sym)}</b>${TO.risk ? fLvl(TO.risk === "moderate" ? "medium" : TO.risk, "trade risk") : ""}</div><p class="small" style="margin:0">${fundCites(TO.summary, idx)}</p>${TO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(TO.biggest, idx)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${TO.watch.map((w) => fundCites(w, idx)).join("; ")}</div>` : ""}</div>` : ""}`;
+        ${TO?.summary ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(fd.sym)}</b>${TO.risk ? fLvl(TO.risk === "moderate" ? "medium" : TO.risk, "trade risk") : ""}</div><p class="small" style="margin:0">${fundCites(TO.summary, idx)}</p>${TO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(TO.biggest, idx)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(TO.watch.map((w) => fundCites(w, idx)))}</div>` : ""}</div>` : ""}`;
       if (!AF?.trade?.length) return sec("fund-trade", "Trade relations", "the countries its industries' trade maps name", `${top}${IND("trade")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th class="n">Industries' revenue there</th><th class="n">Fund weight naming it</th><th>Usual stance</th><th>Worst threat</th></tr></thead><tbody>${L.trade.slice(0, 12).map((x) => { const rd = tRead.get(lc(x.country)); return `<tr><td class="wr"><b>${esc(x.country)}</b>${rd?.why ? `<div class="small">${fLvl(rd.exposure, "exposure")} ${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</td><td class="n">${x.rev > 0 ? pct(x.rev / (L.on || 1), false, 1) : "—"}</td><td class="n muted">${pct(x.w, false, 0)}</td><td>${esc(x.stance)}</td><td>${esc(x.threat || "")}</td></tr>`; }).join("")}</tbody></table></div>`);
       const rowsT = AF.trade.map((c) => { const y = tRead.get(lc(c.country));
         return `<tr><td class="wr"><span class="idtag">${esc(c.id)}</span> <b>${esc(c.country)}</b><div class="small muted">${esc(c.roles || "")}</div></td><td class="n"><b>${c.rev > 0 ? pct(c.rev, false, 1) : "—"}</b>${c.rev_est ? ` <span class="small muted" title="Partly the trade analysts' estimates where no filing names the country">est.</span>` : ""}</td><td class="n muted">${pct(c.reach, false, 0)}</td>
@@ -20387,7 +20483,7 @@ Return ONLY a JSON object:
         return `<div class="box"><div class="dim-head" style="flex-wrap:wrap;justify-content:flex-start"><span class="idtag">${esc(c.id)}</span><b>${esc(c.country)}</b><span class="pill ${STC[lc(c.stance)] || "neu"}">${esc(c.stance || "")}</span>${c.threat && !["none", "low"].includes(lc(c.threat)) ? `<span class="pill neg">${esc(c.threat)} threat</span>` : ""}</div>
           <div class="small muted">${esc([c.trajectory, c.rev > 0 ? `${pct(c.rev, false, 1)} of its industries' revenue (weighted)` : "", `named by ${pct(c.reach, false, 0)} of the fund`].filter(Boolean).join(" · "))}</div>
           <div class="actions" style="justify-content:flex-start;align-items:center;margin:6px 0"><span class="small muted">${esc(fd.sym)}</span>${y ? `${fLvl(y.exposure, "exposure")} ${fEff(y.effect)}` : ourPend}</div>
-          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : `<p class="small muted" style="margin:0">${esc(trimC(stripCites(c.headline || c.why || ""), 260))}</p>`}
+          ${y?.why ? `<p class="small" style="margin:0">${fundCites(y.why, idx)}</p>` : `<p class="small muted" style="margin:0">${esc(showC(stripCites(c.headline || c.why || ""), 260))}</p>`}
           ${y?.channel || y?.risk || y?.freeze ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${fundCites(y.channel, idx)}</div>` : ""}${y.risk ? `<div><b>Risk:</b> ${fundCites(y.risk, idx)}</div>` : ""}${y.freeze ? `<div><b>If trade froze:</b> ${fundCites(y.freeze, idx)}</div>` : ""}</div>` : ""}
           ${c.exposed_held.length ? `<div class="small" style="margin-top:4px"><b>Holdings its industries name most exposed:</b> ${heldChips(c.exposed_held)}</div>` : ""}
           <details class="small"><summary>The industries' dossier on ${esc(c.country)}</summary><div style="display:grid;gap:6px;margin-top:6px">${dossier.join("")}</div></details></div>`; }).join("");
@@ -20402,19 +20498,19 @@ Return ONLY a JSON object:
         <details class="small"><summary>Its regulation and legal report</summary><div style="display:grid;gap:4px;margin-top:4px">${ln("Summary", v.summary)}${(v.most_material || []).length ? `<div><b>Most material:</b> ${v.most_material.map((x) => `${esc(x.body)}: ${esc(x.rule)}`).join("; ")}</div>` : ""}${(v.timeline || []).length ? `<div><b>Timeline:</b> ${v.timeline.map((x) => `<span class="mono">${esc(x.date)}</span> ${esc(stripCites(x.event))}`).join("; ")}</div>` : ""}${(v.regulators || []).length ? `<div><b>Regulators:</b> ${v.regulators.map((x) => esc(x.name)).join(", ")}</div>` : ""}${ln("Legal climate", v.legal_summary)}${(v.winners || []).length || (v.losers || []).length ? `<div><b>Winners:</b> ${(v.winners || []).map((x) => esc(x.symbol)).join(", ") || "—"} · <b>losers:</b> ${(v.losers || []).map((x) => esc(x.symbol)).join(", ") || "—"}</div>` : ""}</div></details></td>
         <td class="n">${pct(v.weight, false, 1)}</td><td>${rg(v.stance)}</td><td>${esc(v.intensity || "—")}</td></tr>`).join("")}</tbody></table></div>` : "";
       const our = RO?.summary ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(fd.sym)}</b>${RO.stance ? fEff(RO.stance) : ""}</div><p class="small" style="margin:0">${fundCites(RO.summary, idx)}</p>${RO.biggest ? `<div class="small"><b>What matters most:</b> ${fundCites(RO.biggest, idx)}</div>` : ""}
-        ${RO.timeline?.length ? `<div class="small"><b>Dated steps ahead for ${esc(fd.sym)}:</b><ul class="dlist">${RO.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date)}</b> ` : ""}${fundCites(x.event, idx)}${x.why ? ` <span class="muted">${fundCites(x.why, idx)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${RO.watch.map((w) => fundCites(w, idx)).join("; ")}</div>` : ""}</div>` : "";
+        ${RO.timeline?.length ? `<div class="small"><b>Dated steps ahead for ${esc(fd.sym)}:</b><ul class="dlist">${RO.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date)}</b> ` : ""}${fundCites(x.event, idx)}${x.why ? ` <span class="muted">${fundCites(x.why, idx)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(RO.watch.map((w) => fundCites(w, idx)))}</div>` : ""}</div>` : "";
       const book = (r) => { const parts = [ln("What it is", r.what), ln("The numbers", r.numeric), ln("For the industry", r.impact), ln("Last 12 months", r.last12), ln("Today", r.today), ln("Next 12 months", r.next12), ln("Citation", r.citation),
         `<div><b>Its industries under it:</b> ${r.industries.map((x) => `${esc(x.industry)} <span class="muted">(${pct(x.weight, false, 1)}, ${esc(x.severity || "")})</span>`).join("; ")}</div>`].filter(Boolean);
         return `<details class="small"><summary>The rule book</summary><div style="display:grid;gap:4px;margin-top:4px">${parts.join("")}</div></details>`; };
       const rules = (AF?.rules || []).map((r) => { const y = rRead.get(lc(r.name));
         return `<tr><td class="wr"><span class="idtag">${esc(r.id)}</span> <b>${esc(r.name)}</b>${r.named_held.length ? ` ${heldChips(r.named_held.slice(0, 4))}` : ""}<div class="small muted">${esc(r.body)}${r.category ? ` · ${esc(r.category)}` : ""}</div>${book(r)}</td>
-          <td><span class="pill ${SEVC[r.severity] || "neu"}">${esc(r.severity || "")}</span><div class="small muted">${esc(String(r.status || "").replace(/_/g, " "))}${r.effective ? " · " + esc(trimC(r.effective, 60)) : ""}</div></td><td class="n">${pct(r.reach, false, 0)}</td>
+          <td><span class="pill ${SEVC[r.severity] || "neu"}">${esc(r.severity || "")}</span><div class="small muted">${esc(String(r.status || "").replace(/_/g, " "))}${r.effective ? " · " + esc(showC(r.effective, 60)) : ""}</div></td><td class="n">${pct(r.reach, false, 0)}</td>
           <td class="wr" style="min-width:150px">${y ? `${fEff(y.effect)} ${fLvl(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${fundCites(y.link, idx)}</div>` : ""}` : ourPend}</td>
-          <td class="wr small">${y?.why ? fundCites(y.why, idx) : `<span class="muted">${esc(trimC(stripCites(r.bottom_line || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${fundCites(y.cost, idx)}</div>` : ""}${y?.timing ? `<div class="muted"><b>When:</b> ${fundCites(y.timing, idx)}</div>` : ""}</td></tr>`; }).join("");
+          <td class="wr small">${y?.why ? fundCites(y.why, idx) : `<span class="muted">${esc(showC(stripCites(r.bottom_line || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${fundCites(y.cost, idx)}</div>` : ""}${y?.timing ? `<div class="muted"><b>When:</b> ${fundCites(y.timing, idx)}</div>` : ""}</td></tr>`; }).join("");
       const items = (AF?.items || []).map((x) => { const y = liRead.get(lc(x.title));
-        return `<tr><td class="wr"><span class="idtag">${esc(x.id)}</span> <span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.named_held.length ? ` ${heldChips(x.named_held.slice(0, 4))}` : ""}${x.value ? ` <span class="muted">${esc(x.value)}</span>` : ""}${x.parties ? `<div class="small muted">${esc(trimC(stripCites(x.parties), 160))}</div>` : ""}${x.text ? `<details class="small"><summary>The industries' read</summary><div>${esc(stripCites(x.text))}</div><div class="muted">${x.industries.map((r) => `${esc(r.industry)} ${pct(r.weight, false, 1)}`).join(", ")}</div></details>` : ""}</td>
-          <td class="small">${esc(x.status || "")}${x.date ? `<div class="muted">${esc(x.date)}</div>` : ""}${x.direction ? ` ${fEff(x.direction === "tailwind" ? "helps" : x.direction === "headwind" ? "hurts" : x.direction)}` : ""}${x.next ? `<div class="muted">Next: ${esc(trimC(stripCites(x.next), 120))}</div>` : ""}</td><td class="n">${pct(x.reach, false, 0)}</td>
-          <td class="wr" style="min-width:150px">${y ? `${fEff(y.effect)} ${fLvl(y.materiality, "materiality")}` : ourPend}</td><td class="wr small">${y?.why ? fundCites(y.why, idx) : `<span class="muted">${esc(trimC(stripCites(x.text || ""), 200))}</span>`}${y?.next ? `<div class="muted"><b>Next:</b> ${fundCites(y.next, idx)}</div>` : ""}</td></tr>`; }).join("");
+        return `<tr><td class="wr"><span class="idtag">${esc(x.id)}</span> <span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${x.named_held.length ? ` ${heldChips(x.named_held.slice(0, 4))}` : ""}${x.value ? ` <span class="muted">${esc(x.value)}</span>` : ""}${x.parties ? `<div class="small muted">${esc(showC(stripCites(x.parties), 160))}</div>` : ""}${x.text ? `<details class="small"><summary>The industries' read</summary><div>${esc(stripCites(x.text))}</div><div class="muted">${x.industries.map((r) => `${esc(r.industry)} ${pct(r.weight, false, 1)}`).join(", ")}</div></details>` : ""}</td>
+          <td class="small">${esc(x.status || "")}${x.date ? `<div class="muted">${esc(x.date)}</div>` : ""}${x.direction ? ` ${fEff(x.direction === "tailwind" ? "helps" : x.direction === "headwind" ? "hurts" : x.direction)}` : ""}${x.next ? `<div class="muted">Next: ${esc(showC(stripCites(x.next), 120))}</div>` : ""}</td><td class="n">${pct(x.reach, false, 0)}</td>
+          <td class="wr" style="min-width:150px">${y ? `${fEff(y.effect)} ${fLvl(y.materiality, "materiality")}` : ourPend}</td><td class="wr small">${y?.why ? fundCites(y.why, idx) : `<span class="muted">${esc(showC(stripCites(x.text || ""), 200))}</span>`}${y?.next ? `<div class="muted"><b>Next:</b> ${fundCites(y.next, idx)}</div>` : ""}</td></tr>`; }).join("");
       const old = !AF?.rules?.length && L?.rules?.length ? `<ul class="dlist small">${L.rules.map((r) => { const rd = rRead.get(lc(r.name)); return `<li><b>${esc(r.name)}</b> <span class="pill ${r.severity === "critical" ? "neg" : "warn"}">${esc(r.severity)}</span> <span class="muted">${esc(r.body)} · ${pct(r.w, false, 0)} of the fund</span>${rd?.why ? `<div>${fEff(rd.effect)} ${fundCites(rd.why, idx)}</div>` : ""}</li>`; }).join("")}</ul>` : "";
       return sec("fund-reg", "Regulation & legal", AF ? `${AF.rules.length} rules from its industries' rule books and ${AF.items.length} policy, litigation and deal items, for ${esc(fd.sym)}` : "its industries' regulatory verdicts and binding rules", `${verd}${our}${IND("reg")}
         ${rules ? `<h3>Rules</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Rule</th><th>Severity for its industries</th><th class="n">Reaches</th><th>For ${esc(fd.sym)}</th><th>Why and how big</th></tr></thead><tbody>${rules}</tbody></table></div>` : old}
@@ -20425,7 +20521,7 @@ Return ONLY a JSON object:
       ${core.risks?.length ? `<div class="box cool"><b>Risks</b><ul class="dlist small">${core.risks.map((x) => `<li>${fundCites(x.risk, idx)}${idChips(x.ids, idx, x.risk)} ${x.likelihood ? `<span class="small muted">${esc(x.likelihood)} likelihood, ${esc(x.impact || "?")} impact</span>` : ""}</li>`).join("")}</ul></div>` : ""}
       ${core.catalysts?.length ? `<div class="box hot"><b>Catalysts</b><ul class="dlist small">${core.catalysts.map((x) => `<li><span class="mono">${esc(x.date)}</span> <b>${fundCites(x.event, idx)}</b> ${fundCites(x.why, idx)}${idChips(x.ids, idx, x.why)}</li>`).join("")}</ul></div>` : ""}
       ${core.watch?.length || calls.change_mind?.length ? `<div class="box"><b>Watch</b><ul class="dlist small">${(core.watch || []).map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>${calls.change_mind?.length ? `<b>What would change the call</b><ul class="dlist small">${calls.change_mind.map((x) => `<li>${fundCites(x, idx)}</li>`).join("")}</ul>` : ""}</div>` : ""}</div>`) : "";
-    const calSec = fd.cal?.length ? sec("fund-cal", "Calendar", "the holdings' earnings and the industries' dated events, next four months", `${R("calendar", "calls")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th class="n">Fund weight</th></tr></thead><tbody>${fd.cal.map((x) => `<tr><td class="mono">${esc(x.date)}</td><td class="wr"><b>${esc(x.title)}</b> <span class="small muted">${esc(x.kind)}${x.importance ? ", " + esc(x.importance) : ""}</span>${x.detail ? `<div class="small muted">${esc(trimC(x.detail, 200))}</div>` : ""}</td><td class="n">${pct(x.w, false, 1)}</td></tr>`).join("")}</tbody></table></div>`) : "";
+    const calSec = fd.cal?.length ? sec("fund-cal", "Calendar", "the holdings' earnings and the industries' dated events, next four months", `${R("calendar", "calls")}<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Date</th><th>Event</th><th class="n">Fund weight</th></tr></thead><tbody>${fd.cal.map((x) => `<tr><td class="mono">${esc(x.date)}</td><td class="wr"><b>${esc(x.title)}</b> <span class="small muted">${esc(x.kind)}${x.importance ? ", " + esc(x.importance) : ""}</span>${x.detail ? `<div class="small muted">${esc(showC(x.detail, 200))}</div>` : ""}</td><td class="n">${pct(x.w, false, 1)}</td></tr>`).join("")}</tbody></table></div>`) : "";
     // ---- times like this: the past days most like today in the fund's own history, and what came next
     const TL = fd.timesL, tim = TL?.episodes?.length ? (() => {
       const tidyC = (t) => stripCites(t).replace(/\s*\(\s*[,;][^)]*\)/g, "").replace(/\(\s*\)/g, "").replace(/\s+([.,;:])/g, "$1");
@@ -20483,7 +20579,7 @@ Return ONLY a JSON object:
         ${NWR.watch ? `<div class="small muted"><b>Watch:</b> ${fundCites(NWR.watch, idx)}</div>` : ""}</div>` : `<div class="small muted">${fd.writing ? "The news read is being written…" : "Our read of the news comes with the analysis."}</div>`;
       const hmax = Math.max(...NL.rows.map((r) => r.weight), 0.0001);
       const bar = (v) => (isNum(num(v)) ? `<div style="position:relative;height:8px;background:var(--sunk);border-radius:4px;min-width:90px"><i style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--line)"></i><i style="position:absolute;top:0;bottom:0;border-radius:4px;${v >= 0 ? `left:50%;width:${Math.min(50, v * 50).toFixed(1)}%;background:var(--pos)` : `right:50%;width:${Math.min(50, -v * 50).toFixed(1)}%;background:var(--neg)`}"></i></div>` : "");
-      const htab = NL.rows.length ? `<h3>Each holding's sentiment</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>30 days</th><th class="n">7d</th><th class="n">90d</th><th class="n">Change</th><th class="n">vs its industry</th><th class="n">Articles 30d</th></tr></thead><tbody>${NL.rows.map((r) => `<tr><td><button class="linkbtn tick" data-co="${esc(r.ticker)}">${esc(r.ticker)}</button><div class="small muted">${esc(trimC(r.industry || "", 30))}</div></td><td class="n">${pct(r.weight, false, 1)}<div class="meter" style="margin-top:3px"><i style="width:${(100 * r.weight / hmax).toFixed(0)}%;background:var(--accent)"></i></div></td>
+      const htab = NL.rows.length ? `<h3>Each holding's sentiment</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Weight</th><th>30 days</th><th class="n">7d</th><th class="n">90d</th><th class="n">Change</th><th class="n">vs its industry</th><th class="n">Articles 30d</th></tr></thead><tbody>${NL.rows.map((r) => `<tr><td><button class="linkbtn tick" data-co="${esc(r.ticker)}">${esc(r.ticker)}</button><div class="small muted">${esc(showC(r.industry || "", 30))}</div></td><td class="n">${pct(r.weight, false, 1)}<div class="meter" style="margin-top:3px"><i style="width:${(100 * r.weight / hmax).toFixed(0)}%;background:var(--accent)"></i></div></td>
           <td style="min-width:120px"><b class="mono ${tone(r.s30)}">${f2(r.s30)}</b>${bar(r.s30)}</td><td class="n">${f2(r.s7)}</td><td class="n muted">${f2(r.s90)}</td><td class="n">${chg(r.change)}</td><td class="n">${chg(r.vs_ind)}</td><td class="n">${isNum(num(r.n30)) ? r.n30.toLocaleString() : "—"}${r.spike >= 1.5 ? ` <span class="pill warn">${r.spike.toFixed(1)}× pace</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
         <div class="small muted">Scores from −1 to +1. Each holding's own daily news sentiment from EODHD where it was fetched, else its industry run's figure. "vs its industry" is its 30-day score against its industry's.</div>` : "";
       const mv = (title, xs, c) => (xs.length ? `<div class="box ${c}"><b>${title}</b><ul class="dlist small">${xs.map((r) => `<li><b class="tick">${esc(r.ticker)}</b> <span class="muted">${pct(r.weight, false, 1)}</span> ${f2(r.s90)} → <b>${f2(r.s30)}</b> ${chg(r.change)}</li>`).join("")}</ul></div>` : "");
@@ -20492,7 +20588,7 @@ Return ONLY a JSON object:
       const flow = NL.flow.length ? `<h3>Its industries' news flow</h3><div class="fcards">${NL.flow.map((x) => `<div class="fcard ${num(x.news_dim?.score) > 0 ? "pos" : num(x.news_dim?.score) < 0 ? "neg" : "neu"}"><div class="top"><b>${esc(x.industry)}</b><span class="mono small">${pct(x.weight, false, 1)}</span></div>
           <div class="row small">${x.news_dim ? `<span class="muted">news flow</span> ${sc(x.news_dim.score)}` : ""}${x.perception ? `<span class="muted">perception</span> ${sc(x.perception.score)}` : ""}${isNum(num(x.s30)) ? `<span class="muted">sentiment</span> <b class="mono">${f2(x.s30)}</b>` : ""}</div>
           ${x.news_dim?.summary ? `<div class="small">${esc(stripCites(x.news_dim.summary))}</div>` : ""}${x.perception?.summary ? `<div class="small muted">${esc(stripCites(x.perception.summary))}</div>` : ""}</div>`).join("")}</div><div class="small muted">From each industry run: its lead strategist's news-flow and perception scores (−2 to +2) and its measured news sentiment.</div>` : "";
-      const heads = NL.heads.length ? `<h3>Headlines on its holdings</h3>${NL.cover.length ? `<div class="small muted">Most covered: ${NL.cover.map(([t, k]) => `<span class="chip-s">${esc(t)} ${k}</span>`).join(" ")}</div>` : ""}${(() => { const li = (x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}${x.summary ? `<div class="small muted">${esc(trimC(stripCites(x.summary), 200))}</div>` : ""}<span class="src"><span class="idtag">${esc(x.id)}</span><span class="mono">${esc(x.date)}</span>${x.symbol ? `<span class="tk">${esc(x.symbol)}${x.weight ? ` ${pct(x.weight, false, 1)}` : ""}</span>` : ""}${esc(x.source || "")}${x.from === "industry run" ? ` · via the ${esc(x.industry)} run` : ""}</span></li>`;
+      const heads = NL.heads.length ? `<h3>Headlines on its holdings</h3>${NL.cover.length ? `<div class="small muted">Most covered: ${NL.cover.map(([t, k]) => `<span class="chip-s">${esc(t)} ${k}</span>`).join(" ")}</div>` : ""}${(() => { const li = (x) => `<li>${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}${x.summary ? `<div class="small muted">${esc(showC(stripCites(x.summary), 200))}</div>` : ""}<span class="src"><span class="idtag">${esc(x.id)}</span><span class="mono">${esc(x.date)}</span>${x.symbol ? `<span class="tk">${esc(x.symbol)}${x.weight ? ` ${pct(x.weight, false, 1)}` : ""}</span>` : ""}${esc(x.source || "")}${x.from === "industry run" ? ` · via the ${esc(x.industry)} run` : ""}</span></li>`;
         return `<ul class="newslist">${NL.heads.slice(0, 12).map(li).join("")}</ul>${NL.heads.length > 12 ? `<details><summary class="small">${NL.heads.length - 12} more headlines</summary><ul class="newslist">${NL.heads.slice(12).map(li).join("")}</ul></details>` : ""}`; })()}` : "";
       return sec("fund-news", "News & sentiment", `its ${NL.rows.length} biggest holdings and ${NL.flow.length} industries`, `${tiles}${ours}${IND("news")}${chart}${movers}${htab}${flow}${heads}`); })()
       : fd.netDone ? "" : sec("fund-news", "News & sentiment", "", `<div class="small muted">${S.mcp ? "Reading the news and sentiment on its biggest holdings…" : "Open this page in Claude to read the news."}</div>`);
@@ -20532,7 +20628,7 @@ Return ONLY a JSON object:
     const PRS = fd.peers?.rows || [], pRead = core.peers;
     const peerSec = PRS.length > 1 ? sec("fund-peers", "Against its peer funds", `${PRS.length - (PRS.some((r) => r.self) ? 1 : 0)} funds like it`, `${pRead?.summary ? fundReadBox(pRead.summary, idx, `Our read${pRead.stance ? ": " + pRead.stance : ""}`) : ""}
       <div class="tbl-wrap"><table><thead><tr><th>Fund</th><th class="n">1Y</th><th class="n">3Y a year</th><th class="n">5Y a year</th><th class="n">Volatility</th><th class="n">Max drawdown, 1Y</th><th class="n">Beta to SPY</th><th class="n">Expense</th><th class="n">Assets</th><th>Our 12M call</th></tr></thead><tbody>${PRS.map((r) => { const first = (k) => (r.rank[k] === 1 ? ` <span class="pill pos">1st</span>` : ""), c12 = r.call12 || (r.self && OL?.calls?.["12M"] && !OL.provisional ? OL.calls["12M"].call : "");
-        return `<tr${r.self ? ' class="self"' : ""}><td>${r.self ? `<b class="tick">${esc(r.sym)}</b>` : `<button class="linkbtn tick" data-fund="${esc(r.sym)}">${esc(r.sym)}</button>`}<div class="small muted">${esc(trimC(r.name || "", 40))}</div></td><td class="n ${cls(num(r.r1y))}">${pct(r.r1y)}${first("r1y")}</td><td class="n">${pct(r.r3y)}${first("r3y")}</td><td class="n">${pct(r.r5y)}</td><td class="n">${pct(r.vol, false, 0)}</td><td class="n">${pct(r.max_dd)}</td><td class="n">${fix(r.beta, 2)}</td><td class="n">${isNum(num(r.expense)) ? pct(r.expense, false, 2) : "—"}${first("expense")}</td><td class="n">${cap(r.aum)}</td><td>${c12 ? `<span class="pill ${Outlook.cls(c12)}">${esc(Outlook.label(c12))}</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
+        return `<tr${r.self ? ' class="self"' : ""}><td>${r.self ? `<b class="tick">${esc(r.sym)}</b>` : `<button class="linkbtn tick" data-fund="${esc(r.sym)}">${esc(r.sym)}</button>`}<div class="small muted">${esc(showC(r.name || "", 40))}</div></td><td class="n ${cls(num(r.r1y))}">${pct(r.r1y)}${first("r1y")}</td><td class="n">${pct(r.r3y)}${first("r3y")}</td><td class="n">${pct(r.r5y)}</td><td class="n">${pct(r.vol, false, 0)}</td><td class="n">${pct(r.max_dd)}</td><td class="n">${fix(r.beta, 2)}</td><td class="n">${isNum(num(r.expense)) ? pct(r.expense, false, 2) : "—"}${first("expense")}</td><td class="n">${cap(r.aum)}</td><td>${c12 ? `<span class="pill ${Outlook.cls(c12)}">${esc(Outlook.label(c12))}</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>
       <div class="chart"><h3>1-year and 3-year (a year) returns</h3>${barsChart(PRS.map((r) => ({ label: r.sym, a: isNum(num(r.r1y)) ? r.r1y * 100 : null, b: isNum(num(r.r3y)) ? r.r3y * 100 : null })), { fmtY: (v) => v.toFixed(0) + "%", colorA: "var(--accent)", colorB: "var(--bench)", height: 170 })}<div class="legend"><span><i style="background:var(--accent)"></i>1 year</span><span><i style="background:var(--bench)"></i>3 years, a year</span></div></div>
       <div class="small muted">Code: dividend-adjusted prices from FMP, facts from FMP. Peers are funds on the same sector for a sector fund, else the same style, plus its benchmark. "Our 12M call" shows for any peer you've analyzed; click one to open it.</div>`) : "";
     // ---- the daily check: what moved since the calls, and how fresh each input is
@@ -20544,9 +20640,9 @@ Return ONLY a JSON object:
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls (code's starting point moving a full notch or clearly crossing zero, a move of a normal month or more, a big holding reporting, the write-up's inputs, or calls a week old) and redoes only that, by itself: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis. "Update my funds" on the fund list does the same for every fund you've analyzed.</div>`) : "";
     const secs = [snap, leanSec, thesisSec, tim, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, perfSec, riskSec, stressSec, tech, street, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
-    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
+    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] }, { label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
         { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
-        { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-peers", "Peer funds"]] }, { label: "Performance", items: [["fund-perf", "Returns"], ["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] }];
+        { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-peers", "Peer funds"]] }];
       return `<div class="shell">${sideNav(g)}<div class="stream">${[...bs, holdSec, peerSec, perfSec, riskSec, stressSec, tech, dist].filter(Boolean).join("")}</div></div>`; }
     return `<div class="shell">${sideNav(fundGroups(fd))}<div class="stream">${secs.filter(Boolean).join("")}</div></div>`;
   }
@@ -20733,7 +20829,7 @@ Return ONLY a JSON object:
     const chips = `<div class="pf-switch">${st.list.map((x) => `<button class="pf-chip ${x.id === p.id ? "on" : ""}" data-pf="sel-${esc(x.id)}">${esc(x.name)}${S.pfAna?.[x.id]?.grades?.current ? ` <span class="pf-mini ${GRADE_CLS(S.pfAna[x.id].grades.current.letter)}">${esc(S.pfAna[x.id].grades.current.letter)}</span>` : ""}</button>`).join("")}<button class="pf-chip add" data-pf="new">+ New portfolio</button></div>`;
     const running = !!(S.pfAnaRun?.pid === p.id || (job && /queued|running/.test(job.state || "")));
     const hero = `<section class="pf-hero">
-      <div class="pf-hero-main"><span class="eyebrow">Portfolio${p.description ? " · " + esc(trimC(p.description, 80)) : ""}</span><h1>${esc(p.name)}</h1>
+      <div class="pf-hero-main"><span class="eyebrow">Portfolio${p.description ? " · " + esc(showC(p.description, 80)) : ""}</span><h1>${esc(p.name)}</h1>
         <div class="pf-value mono">${esc(usd(total))}</div>
         <div class="pf-tags">${isNum(num(day)) && D ? `<span class="pf-tag ${day >= 0 ? "up" : "down"}">${day >= 0 ? "▲" : "▼"} ${pct(day, true, 2)} today</span>` : ""}${isNum(gain) ? `<span class="pf-tag ${gain >= 0 ? "up" : "down"}">${gain >= 0 ? "+" : "−"}${esc(usd(Math.abs(gain)))} (${pct(gain / pos.cost, true, 1)}) unrealized</span>` : ""}<span class="pf-tag">${hs.length} holdings</span><span class="pf-tag">bought ${esc(fmtDate(pos?.from || pfStart(p)))}</span>${A ? `<span class="pf-tag">analyzed ${esc(fmtDate(A.day))}</span>` : ""}</div></div>
       <div class="pf-hero-side">${g ? `<button class="pf-gradebtn" data-pf="tab-analysis" title="Open the analysis">${gradeBadge(g, 72)}<span><b>Grade ${esc(g.letter)}</b><span class="small muted">${Math.round(g.score)}/100 for a ${esc(A.goalFull.label.toLowerCase())} goal</span></span></button>` : ""}
@@ -20813,14 +20909,14 @@ Return ONLY a JSON object:
     const mvS = Object.fromEntries(PMode.marketValues({ ...p, holdings: hs }).map((h) => [h.ticker, h.marketValue]));
     const htab = sec("pf-hold", "Holdings", `${hs.length} · ${usd(total)}`, `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th>Type</th><th>Sector</th><th class="n">Weight<div class="small muted">target · now</div></th><th class="n">Shares</th><th class="n">Price</th><th class="n">1D</th><th class="n">Avg cost</th><th class="n">Cost basis</th><th class="n">Value</th><th class="n">Gain</th></tr></thead><tbody>${hs.map((h) => {
       const r = PR[h.ticker] || {}, value = isNum(num(r.value)) ? r.value : mvS[h.ticker], cost = num(r.cost), g = num(r.gain), imp = r.implied ? "≈" : "", drift = num(r.weightNow) - (num(h.weight) || 0);
-      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(trimC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}${h.sectorTop ? ` <span class="muted">(largest)</span>` : ""}</td>
+      return `<tr><td><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small muted">${esc(showC(h.name || "", 34))}</div></td><td class="small">${esc(h.asset_type)}</td><td class="small">${esc(h.sector || "—")}${h.sectorTop ? ` <span class="muted">(largest)</span>` : ""}</td>
         <td class="n"><b>${p2(h.weight, 1)}%</b>${isNum(num(r.weightNow)) ? `<div class="small ${Math.abs(drift) >= 2 ? (drift > 0 ? "up" : "down") : "muted"}">${r.weightNow.toFixed(1)}%</div>` : ""}</td><td class="n">${isNum(num(r.shares)) ? imp + fix(r.shares, r.shares >= 100 ? 1 : 2) : "—"}</td><td class="n">${fix(h.price, 2)}</td><td class="n ${cls(num(h.change) / 100)}">${isNum(num(h.change)) ? `${h.change > 0 ? "+" : ""}${h.change.toFixed(2)}%` : "—"}</td>
         <td class="n">${isNum(num(r.avgCost)) ? imp + fix(r.avgCost, 2) : "—"}</td><td class="n">${isNum(cost) ? usd(cost) : "—"}</td><td class="n"><b>${usd(value)}</b></td><td class="n ${cls(g)}">${isNum(g) ? `${g >= 0 ? "+" : "−"}${usd(Math.abs(g))}<div class="small">${isNum(cost) && cost > 0 ? pp(g / cost) : ""}</div>` : "—"}</td></tr>`; }).join("")}</tbody>
       ${pos?.cost > 0 ? `<tfoot><tr><td colspan="8"><b>Total</b></td><td class="n">${usd(pos.cost)}</td><td class="n"><b>${usd(pos.total)}</b></td><td class="n ${cls(pos.total - pos.cost)}"><b>${pos.total >= pos.cost ? "+" : "−"}${usd(Math.abs(pos.total - pos.cost))}</b><div class="small">${pp(pos.total / pos.cost - 1)}</div></td></tr></tfoot>` : ""}</table></div>
       ${anyImp ? `<div class="small muted">≈ Implied: ${esc(usd(p.totalInvestment > 0 ? p.totalInvestment : 10000))} put in on ${esc(fmtDate(pos.from))} at the starting weights${(p.rebalanceEvents || []).length ? ", with every recorded rebalance (average cost)" : ""}, dividends reinvested, so the shares are today's value at today's price. Enter your own shares and average cost in the Editor to use them instead; change the purchase date there too.</div>` : ""}`);
     // 7. Look-through
     const lt = PMode.lookThrough(hs, D.funds || {});
-    const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Total</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td class="wr"><b class="tick">${esc(r.ticker)}</b> <span class="small muted">${esc(trimC(r.name || "", 30))}</span>
+    const look = Object.keys(D.funds || {}).length ? sec("pf-look", "Look-through exposure", "the single stocks inside its funds, added to its direct holdings", `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Total</th></tr></thead><tbody>${lt.rows.slice(0, 25).map((r) => `<tr><td class="wr"><b class="tick">${esc(r.ticker)}</b> <span class="small muted">${esc(showC(r.name || "", 30))}</span>
         <div class="small muted">${[r.direct ? `<span style="color:var(--text)">direct ${pct(r.direct, false, 2)}</span>` : "", ...r.via.slice(0, 4).map((v) => `${esc(v.fund)} ${pct(v.weight, false, 2)}`)].filter(Boolean).join(" · ")}</div></td>
         <td class="n" style="width:120px"><b>${pct(r.total, false, 2)}</b><div class="meter" style="margin-top:4px"><i style="width:${Math.min(100, (r.total / (lt.rows[0]?.total || 1)) * 100)}%;background:var(--accent)"></i></div></td></tr>`).join("")}</tbody></table></div>
       ${lt.overlap.length ? `<div class="small"><b>Held both directly and through funds:</b> ${lt.overlap.slice(0, 8).map((r) => `<span class="chip-s">${esc(r.ticker)} ${pct(r.total, false, 1)}</span>`).join(" ")}</div>` : ""}<div class="small muted">Effective exposure = direct weight + Σ fund weight × its weight in the fund (each fund's full holdings list from FMP).</div>`) : "";
@@ -20839,7 +20935,7 @@ Return ONLY a JSON object:
     const row = (r, i) => { const t = (r.ticker || "").toUpperCase(), w = pfeW(r);
       return `<div class="pfe-row" data-row="${i}">
         <span class="pfe-av" style="--c:${t ? tickColor(t) : "var(--line)"}">${t ? esc(t.slice(0, 4)) : "?"}</span>
-        <div class="pfe-tk"><input class="pfe-in pfe-tkin" data-pfr="${i}" data-k="ticker" value="${esc(t)}" list="pf-sug" placeholder="Ticker" autocomplete="off" spellcheck="false" aria-label="Ticker ${i + 1}"><span class="pfe-nm" data-pfe-nm="${i}">${esc(trimC(r.name || (t ? "" : "Search a stock, ETF or fund"), 34))}</span></div>
+        <div class="pfe-tk"><input class="pfe-in pfe-tkin" data-pfr="${i}" data-k="ticker" value="${esc(t)}" list="pf-sug" placeholder="Ticker" autocomplete="off" spellcheck="false" aria-label="Ticker ${i + 1}"><span class="pfe-nm" data-pfe-nm="${i}">${esc(showC(r.name || (t ? "" : "Search a stock, ETF or fund"), 34))}</span></div>
         <div class="pfe-w"><label class="pfe-field">${entry === "pct"
           ? `<input class="pfe-in mono" data-pfr="${i}" data-k="weight" type="number" inputmode="decimal" step="0.1" min="0" value="${w ? r.weight : ""}" placeholder="0.0" aria-label="Weight ${i + 1}"><span class="pfe-suf">%</span>`
           : `<span class="pfe-pre">$</span><input class="pfe-in mono" data-pfr="${i}" data-k="dollar" type="number" inputmode="decimal" step="1" min="0" value="${w ? Math.round(w * tot / 100) : ""}" placeholder="0" aria-label="Amount ${i + 1}">`}</label>
@@ -21296,7 +21392,7 @@ Return ONLY a JSON object:
   /** [E1]-style ids as small chips with the fact behind them on hover. */
   function recRich(t, ds) {
     const facts = {}; for (const line of String(ds || "").split("\n")) { const m = line.match(/^\[([A-Z]{1,2}\d{1,3})\]\s*(.*)$/); if (m) facts[m[1]] = m[2]; }
-    return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(trimC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
+    return esc(t).replace(/\[([A-Z]{1,2}\d{1,3})\]/g, (m, id) => (facts[id] ? `<span class="cite t" title="${esc(showC(facts[id], 300))}" tabindex="0">${id}</span>` : ""));
   }
   // Line icons (24px grid) for the questionnaire and the goals strip.
   const QI = {
@@ -21385,7 +21481,7 @@ Return ONLY a JSON object:
     const W = A.write?.improved || A.write?.recommended || {}, R = new Map((W.review || []).map((r) => [r.id, r])), wr = (t) => recRich(t, W.reviewFacts || "");
     const AC = { keep: "pos", add: "pos2", trim: "warn", replace: "neg", sell: "neg2" };
     return `<section class="panel"><div class="panel-head"><h2>Your holdings, one by one</h2><span class="small muted">each one's record against the S&amp;P 500, what the runs expect for its industries, and what to do</span></div><div class="pf-cards" style="grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))">${H.map((h, i) => { const r = R.get(`H${i + 1}`), act = h.broad ? "replace" : r?.action || h.action, s = h.stats, P = (k) => s?.periods?.find((q) => q.k === k);
-      return `<div class="pf-card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><button class="linkbtn tick" ${h.type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`} style="font-size:18px">${esc(h.ticker)}</button> <span class="pf-type">${h.type}</span><div class="small muted">${esc(trimC(h.name, 40))}</div></div><div style="text-align:right"><span class="pill ${AC[act] || "neu"}" style="font-size:13px">${esc(act.toUpperCase())}</span><div class="mono small">${pct(h.weight, false, 1)}</div></div></div>
+      return `<div class="pf-card"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div><button class="linkbtn tick" ${h.type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`} style="font-size:18px">${esc(h.ticker)}</button> <span class="pf-type">${h.type}</span><div class="small muted">${esc(showC(h.name, 40))}</div></div><div style="text-align:right"><span class="pill ${AC[act] || "neu"}" style="font-size:13px">${esc(act.toUpperCase())}</span><div class="mono small">${pct(h.weight, false, 1)}</div></div></div>
         ${r?.headline ? `<div><b>${wr(r.headline)}</b></div>` : ""}${r?.why ? `<div class="small">${wr(r.why)}</div>` : h.why.length ? `<div class="small">${esc(h.why.join("; "))}</div>` : ""}
         ${r?.instead ? `<div class="small"><b>Instead:</b> ${wr(r.instead)}</div>` : h.alternative ? `<div class="small"><b>Instead:</b> <b class="tick">${esc(h.alternative.symbol)}</b> <span class="muted">${esc(h.alternative.why)}</span></div>` : ""}
         ${s ? `<div class="tbl-wrap"><table class="wrap-table" style="font-size:12px"><thead><tr><th></th>${["1Y", "3Y", "5Y"].map((k) => `<th class="n">${k}</th>`).join("")}</tr></thead><tbody><tr><td>${esc(h.ticker)}</td>${["1Y", "3Y", "5Y"].map((k) => `<td class="n ${cls(P(k)?.ret)}"><b>${pct(P(k)?.ret)}</b></td>`).join("")}</tr><tr><td class="muted">S&amp;P 500</td>${["1Y", "3Y", "5Y"].map((k) => `<td class="n muted">${pct(P(k)?.spy)}</td>`).join("")}</tr></tbody></table></div>
@@ -21431,7 +21527,7 @@ Return ONLY a JSON object:
     const fixes = !steps.length ? (W.verdict?.fixes || []).slice(0, 5) : [];
     const todo = steps.length || fixes.length ? `<section><div class="ov-h"><h2>What to do</h2>${M?.conviction ? `<span class="pill ${M.conviction >= 7 ? "pos2" : "pos"}">conviction ${M.conviction}/10</span>` : ""}</div>${M?.title ? `<p style="margin:0 0 8px;font-size:16px"><b>${wm(M.title)}</b></p>` : ""}<div style="display:grid;gap:8px">${steps.length ? steps.map((s, i) => `<div class="ov-step"><span class="n">${i + 1}</span><div><b>${esc(s.step)}</b><div class="small">${wm(s.detail)}</div></div></div>`).join("") : fixes.map((f, i) => `<div class="ov-step"><span class="n">${i + 1}</span><div class="small">${recRich(f, W.dossier || "")}</div></div>`).join("")}</div></section>` : "";
     const etfs = `<section><div class="ov-h"><h2>Your new ETFs</h2><button class="sm" data-pf="ana-sub-new">Full details</button></div><div class="ov-grid">${R.held.map(({ c, w }) => { const X = W.etfs?.[c.symbol], s = c.stats || A.deep?.[c.symbol]?.stats, P = (k) => s?.periods?.find((q) => q.k === k), top = Object.entries(c.vec?.ind || {}).filter(([k]) => !k.startsWith("(")).sort((a, b) => b[1] - a[1])[0];
-      return `<div class="ov-card"><div class="row"><div><button class="linkbtn sym" data-fund="${esc(c.symbol)}">${esc(c.symbol)}</button>${X?.conviction ? ` <span class="pill ${X.conviction >= 7 ? "pos2" : X.conviction >= 5 ? "pos" : "neu"}">${X.conviction}/10</span>` : ""}<div class="small muted ellip">${esc(trimC(c.info?.name || "", 40))}</div></div><div style="text-align:right"><div class="ov-wt">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(R.total * w)}</div></div></div>
+      return `<div class="ov-card"><div class="row"><div><button class="linkbtn sym" data-fund="${esc(c.symbol)}">${esc(c.symbol)}</button>${X?.conviction ? ` <span class="pill ${X.conviction >= 7 ? "pos2" : X.conviction >= 5 ? "pos" : "neu"}">${X.conviction}/10</span>` : ""}<div class="small muted ellip">${esc(showC(c.info?.name || "", 40))}</div></div><div style="text-align:right"><div class="ov-wt">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(R.total * w)}</div></div></div>
         ${X?.verdict ? `<div class="small">${recRich(X.verdict, W.etfFacts?.[c.symbol] || "")}</div>` : c.isBond ? `<div class="small muted">${esc(EtfStrat.BUCKETS[c.bucket] || "Bonds")} · yield ${pct(c.yield, false, 2)}</div>` : top ? `<div class="small muted">${esc(top[0])} ${pct(top[1], false, 0)}</div>` : ""}
         <div class="ov-mini"><div><span class="small muted">1Y</span><b class="${cls(P("1Y")?.ret)}">${pct(P("1Y")?.ret, true, 0)}</b></div><div><span class="small muted">3Y/yr</span><b class="${cls(P("3Y")?.ret)}">${pct(P("3Y")?.ret, true, 0)}</b></div><div><span class="small muted">${c.isBond ? "yield" : "quality"}</span><b>${c.isBond ? pct(c.yield, false, 1) : isNum(c.quality) ? c.quality : "—"}</b></div></div></div>`; }).join("")}</div></section>`;
     const X = W.desk, D = A.desk || [], top = (X?.top?.length ? X.top : D.slice(0, 3).map((_, i) => `Q${i + 1}`)).slice(0, 3), by = new Map((X?.opportunities || []).map((o) => [o.id, o]));
@@ -21477,7 +21573,7 @@ Return ONLY a JSON object:
       <nav class="iv-jump ana-nav">${INTEL_SECS.map(([id, l]) => `<button class="${id === cur ? "on" : ""}" data-pf="intel-go-${id}">${l}</button>`).join("")}</nav></section>`;
     if (I === "loading") return head + `<section class="panel"><div class="pf-run" style="border:0;padding:0"><div class="pf-spin"></div><div class="small muted">Reading the industry reports behind this portfolio…</div></div></section>`;
     if (!I) return head + `<section class="panel"><div class="small muted">None of this portfolio's industries has a saved run yet: run them (or their sectors) and come back.</div></section>`;
-    const L = I.look || {}, AF = I.aff || {}, st = (t) => esc(stripCites(t || "")), cut = (t, k = 320) => esc(trimC(stripCites(t || ""), k));
+    const L = I.look || {}, AF = I.aff || {}, st = (t) => esc(stripCites(t || "")), cut = (t) => esc(stripCites(t || ""));
     const wP = (w) => `<span class="mono muted">${pct(w, false, w < 0.1 ? 1 : 0)}</span>`;
     const CALLC = (c) => /bull|up|buy|over/i.test(c || "") ? "pos" : /bear|down|sell|under/i.test(c || "") ? "neg" : "neu";
     const EFF = (e) => { const x = lc(e); return /support|favor|tailwind|positive|help|benefit/.test(x) ? "pos" : /advers|headwind|negative|hurt|pressure|risk/.test(x) ? "neg" : /mixed/.test(x) ? "warn" : "neu"; };
@@ -21535,7 +21631,7 @@ Return ONLY a JSON object:
         <div class="small">${cut(x.summary, 320)}</div></summary>
         <div class="iv-more">${ln("Now", x.now)}${ln("Why now", x.why_now)}${ln("Trigger", x.trigger)}${ln("First-order effect", x.first_order)}${ln("Near term", x.near_term)}${ln("Structural", x.structural)}
           ${x.developments?.length ? `<div><b>Latest:</b><ul class="dlist">${x.developments.map((d) => `<li><span class="mono">${esc(fmtShort(d.date))}</span> ${cut(d.text, 200)}</li>`).join("")}</ul></div>` : ""}
-          ${x.channels?.length ? `<div><b>How it reaches the industries:</b> ${x.channels.map((c) => cut(typeof c === "string" ? c : c.text || c.channel || "", 160)).join("; ")}</div>` : ""}
+          ${x.channels?.length ? `<div><b>How it reaches the industries:</b> ${ptList(x.channels.map((c) => cut(typeof c === "string" ? c : c.text || c.channel || "", 160)))}</div>` : ""}
           ${x.scenarios?.length ? `<div><b>Scenarios:</b>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name || "")}${c.trigger ? ` <span class="muted">if ${cut(c.trigger, 140)}</span>` : ""}${c.outcome ? ` → ${cut(c.outcome, 180)}` : ""}</div>`).join("")}</div>` : ""}
           ${x.watch?.length ? `<div><b>Watch:</b> ${x.watch.map((w) => typeof w === "string" ? cut(w, 120) : `${esc(w.indicator || "")} <span class="muted">(${cut(w.signal, 120)})</span>`).join("; ")}</div>` : ""}${ln("Most exposed", x.exposure)}
           ${x.winners_held?.length || x.losers_held?.length ? `<div><b>Companies you own it names:</b> ${(x.winners_held || []).map((h) => `<span class="pill pos">${esc(h.symbol)}</span>`).join(" ")} ${(x.losers_held || []).map((h) => `<span class="pill neg">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}
@@ -21553,7 +21649,7 @@ Return ONLY a JSON object:
           ${c.risks?.length ? `<div><b>Risks:</b><ul class="dlist">${c.risks.map((r) => `<li><b>${cut(r.risk, 140)}</b> <span class="muted">${esc([r.type, r.likelihood && r.likelihood + " likelihood", r.impact && r.impact + " impact", r.timing].filter(Boolean).join(" · "))}</span>${r.mechanism ? `<div class="muted">${cut(r.mechanism, 180)}</div>` : ""}</li>`).join("")}</ul></div>` : ""}
           ${c.security?.threat ? ln(`Security (${c.security.level || "n/a"})`, c.security.threat) : ""}${c.deps?.length ? `<div><b>What its industries depend on there:</b> ${c.deps.map((d) => `${esc(d.input)} <span class="muted">(${esc([d.criticality, d.share].filter(Boolean).join(", "))})</span>`).join("; ")}</div>` : ""}
           ${c.developments?.length ? `<div><b>Latest:</b> ${c.developments.map((d) => `<span class="mono">${esc(fmtShort(d.date))}</span> ${cut(d.text, 200)}`).join(" ")}</div>` : ""}${ln("If trade froze", c.freeze)}${ln("Outlook", c.outlook)}
-          ${c.watch?.length ? `<div><b>Watch:</b> ${c.watch.map((w) => cut(w, 120)).join("; ")}</div>` : ""}${c.exposed_held?.length ? `<div><b>Companies you own named most exposed:</b> ${c.exposed_held.map((h) => `<span class="pill warn">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}
+          ${c.watch?.length ? `<div><b>Watch:</b> ${ptList(c.watch.map((w) => cut(w, 120)))}</div>` : ""}${c.exposed_held?.length ? `<div><b>Companies you own named most exposed:</b> ${c.exposed_held.map((h) => `<span class="pill warn">${esc(h.symbol)}</span>`).join(" ")}</div>` : ""}
           <div><b>Its industries there:</b> ${inds(c.industries, (r) => (isNum(num(r.share)) ? ` <span class="small muted">${pct(r.share, false, 0)} of revenue${r.est ? " est." : ""}</span>` : ""))}</div></div></details>`).join("");
     const tradeS = tv || trows ? sec("iv-trade", "Trade relations", `every country on its industries' trade maps, with their country dossiers`, `${tv ? `<h3>Each industry's trade verdict</h3><div class="iv-stack">${tv}</div>` : ""}
       ${trows ? `<h3>Where its industries' revenue is</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Country</th><th class="n">Revenue there</th><th class="n">Named by</th><th>The industries' read</th></tr></thead><tbody>${trows}</tbody></table></div><div class="small muted">Revenue in the country from filings where companies name it, else the trade analyst's estimate, weighted by the portfolio's industries.</div>` : ""}
@@ -21566,7 +21662,7 @@ Return ONLY a JSON object:
           ${(v.timeline || []).length ? `<div><b>Dated steps ahead:</b><ul class="dlist">${v.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date)}</b> ` : ""}${cut(x.event || x.what || x.text || "", 200)}</li>`).join("")}</ul></div>` : ""}
           ${(v.winners || []).length ? `<div><b>Winners:</b> ${v.winners.map((x) => typeof x === "string" ? esc(x) : `${esc(x.symbol || x.name || "")}${x.why ? ` <span class="muted">(${cut(x.why, 100)})</span>` : ""}`).join("; ")}</div>` : ""}
           ${(v.losers || []).length ? `<div><b>Losers:</b> ${v.losers.map((x) => typeof x === "string" ? esc(x) : `${esc(x.symbol || x.name || "")}${x.why ? ` <span class="muted">(${cut(x.why, 100)})</span>` : ""}`).join("; ")}</div>` : ""}
-          ${(v.watch || []).length ? `<div><b>Watch:</b> ${v.watch.map((x) => cut(typeof x === "string" ? x : x.what || x.event || x.text || "", 140)).join("; ")}</div>` : ""}</div></details>`).join("");
+          ${(v.watch || []).length ? `<div><b>Watch:</b> ${ptList(v.watch.map((x) => cut(typeof x === "string" ? x : x.what || x.event || x.text || "", 140)))}</div>` : ""}</div></details>`).join("");
     const rules = (AF.rules || []).map((r) => `<details class="iv-card"><summary><div class="iv-card-h"><span class="idtag">${esc(r.id)}</span><b>${esc(r.name)}</b>${pill(r.severity || "", SEVC[lc(r.severity)] || "neu")}${r.status ? `<span class="small muted">${esc(r.status)}${r.effective ? ` · effective ${esc(r.effective)}` : ""}</span>` : ""}</div>
         <div class="small muted">${esc(r.body || "")} · reaches ${pct(r.reach / (I.on || 1), false, 0)}</div><div class="small">${cut(r.bottom_line, 300)}</div></summary>
         <div class="iv-more">${ln("What it is", r.what)}${ln("The numbers", r.numeric)}${ln("For the industry", r.impact)}${ln("Last 12 months", r.last12)}${ln("Today", r.today)}${ln("Next 12 months", r.next12)}${ln("Citation", r.citation)}
@@ -21606,7 +21702,7 @@ Return ONLY a JSON object:
     const indS = BR.length ? sec("iv-ind", "Industry by industry", "each industry's own report, as its analysts left it", `<div class="iv-stack">${BR.map((b) => b.missing ? `<div class="iv-card"><b>${esc(b.industry)}</b> ${wP(b.weight)} <span class="small muted">no saved run</span></div>` : `<details class="iv-card"><summary><div class="iv-card-h"><b>${esc(b.industry)}</b> ${wP(b.weight)}${b.opportunity ? pill(b.opportunity, /attract|strong|buy|over/i.test(b.opportunity) ? "pos" : /unattr|avoid|under|sell/i.test(b.opportunity) ? "neg" : "neu") : ""}${isNum(num(b.expected12)) ? `<span class="mono ${b.expected12 >= 0 ? "up" : "down"}">${b.expected12 > 0 ? "+" : ""}${fix(b.expected12, 1)}% 12M</span>` : ""}<span class="small muted">${esc(b.sector)}${b.as_of ? ` · ${esc(fmtShort(b.as_of))}` : ""}</span></div>
         <div class="actions" style="justify-content:flex-start;margin:4px 0">${["1M", "3M", "6M", "12M"].map((h) => b.calls[h] ? `<span class="small muted">${h}</span>${pill(b.calls[h], CALLC(b.calls[h]))}` : "").join(" ")}${b.regime ? `<span class="small muted">macro</span>${pill(b.regime, "neu")}` : ""}${b.trade ? `<span class="small muted">trade</span>${pill(b.trade, "neu")}` : ""}${b.reg ? `<span class="small muted">regulation</span>${pill(b.reg)}` : ""}${b.cycle ? `<span class="small muted">cycle</span>${pill(b.cycle, "neu")}` : ""}</div>
         <div class="small">${cut(b.headline, 300)}</div></summary>
-        <div class="iv-more">${b.drivers?.length ? `<div><b>Drivers:</b> ${b.drivers.map((x) => cut(x, 160)).join("; ")}</div>` : ""}${b.risks?.length ? `<div><b>Risks:</b> ${b.risks.map((x) => cut(x, 160)).join("; ")}</div>` : ""}
+        <div class="iv-more">${b.drivers?.length ? `<div><b>Drivers:</b> ${ptList(b.drivers.map((x) => cut(x, 160)))}</div>` : ""}${b.risks?.length ? `<div><b>Risks:</b> ${ptList(b.risks.map((x) => cut(x, 160)))}</div>` : ""}
           ${["bull", "base", "bear"].filter((k) => b.scen?.[k]?.text).map((k) => `<div class="small"><span class="pill ${k === "bull" ? "pos" : k === "bear" ? "neg" : "neu"}">${k} ${fix(b.scen[k].p, 0)}% · ${num(b.scen[k].move) > 0 ? "+" : ""}${fix(b.scen[k].move, 0)}%</span> ${cut(b.scen[k].text, 220)}</div>`).join("")}
           <div class="iv-reads">${READS.filter(([k]) => b.reads?.[k]).map(([k, l]) => `<div><span class="eyebrow">${l}</span><p class="small">${cut(b.reads[k], 320)}</p></div>`).join("")}</div>
           ${b.news?.items?.length ? `<div><b>Latest news:</b><ul class="dlist small">${b.news.items.map((x) => `<li><span class="mono">${esc(fmtShort(x.date))}</span> ${x.symbol ? `<b>${esc(x.symbol)}</b> ` : ""}${x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</li>`).join("")}</ul></div>` : ""}</div></details>`).join("")}</div>`) : "";
@@ -21976,7 +22072,7 @@ Return ONLY a JSON object:
     if (F) { const raw = new Set(["pe", "fwd_pe", "beta", "exp12"]), fm = (k, v) => (raw.has(k) ? (k === "exp12" ? (isNum(v) ? v.toFixed(1) + "%" : "—") : fix(v, k === "beta" ? 2 : 1)) : pct(v, false));
       out.own = sec("rec-own", "What you really own", "the mix looked through to its industries and companies, against the whole market", `<div class="two"><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Measure</th><th class="n">This mix</th><th class="n">Market</th></tr></thead><tbody>${F.metrics.map((m) => `<tr><td>${esc(m.label)}</td><td class="n"><b>${fm(m.key, F.port[m.key])}</b></td><td class="n">${fm(m.key, F.mkt[m.key])}</td></tr>`).join("")}<tr><td>Industries the runs call up / down (12M)</td><td class="n"><b>${pct(F.calls.port?.up, false, 0)} / ${pct(F.calls.port?.down, false, 0)}</b></td><td class="n">${pct(F.calls.mkt?.up, false, 0)} / ${pct(F.calls.mkt?.down, false, 0)}</td></tr></tbody></table><div class="small muted" style="padding:6px">Industry figures weighted by how much of each the mix holds (market: by size); P/Es as earnings yields, the rest as weighted medians.</div></div>
         <div class="box"><h3 style="margin:0 0 6px">Coming up in the next 90 days</h3>${cal.length ? `<ul class="dlist small">${cal.map((e) => `<li><b class="mono">${esc(fmtDate(e.date))}</b> ${e.kind === "earnings" ? `<span class="pill neu">earnings</span>` : `<span class="pill warn">catalyst</span>`} ${esc(e.title)} <span class="muted">${pct(e.weight, false, 1)} of the mix · ${esc(e.industry)}${e.beats ? ` · beat ${esc(e.beats)} of the last reports` : ""}</span></li>`).join("")}</ul>` : `<div class="small muted">Nothing dated.</div>`}</div></div>
-        ${cos.length ? `<h3 style="margin:10px 0 6px">The 25 largest companies underneath</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Weight</th><th>Industry</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op. margin</th><th class="n">Dividend</th><th class="n">1Y</th><th class="n">Score</th><th>Run's 12M call</th><th>Next report</th></tr></thead><tbody>${cos.map((x) => `<tr><td><button class="linkbtn tick" data-co="${esc(x.symbol)}">${esc(x.symbol)}</button><div class="small muted">${esc(trimC(x.name, 26))}${x.classes?.length > 1 ? ` · ${esc(x.classes.join(" + "))}` : ""}${!x.industry ? `${x.name ? " · " : ""}not in the industry runs` : ""}</div></td><td class="n"><b>${pct(x.weight, false, 2)}</b></td><td class="small">${esc(x.industry || "—")}</td><td class="n">${fix(x.pe, 1)}</td><td class="n ${cls(x.growth)}">${pct(x.growth, true, 0)}</td><td class="n">${pct(x.opm, false, 0)}</td><td class="n">${pct(x.div, false, 1)}</td><td class="n ${cls(x.r1y)}">${pct(x.r1y, true, 0)}</td><td class="n">${isNum(x.score) ? Math.round(x.score) : "—"}</td><td class="small">${esc(x.call12 || "—")}</td><td class="small mono">${esc(x.next || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}`); }
+        ${cos.length ? `<h3 style="margin:10px 0 6px">The 25 largest companies underneath</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th class="n">Weight</th><th>Industry</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op. margin</th><th class="n">Dividend</th><th class="n">1Y</th><th class="n">Score</th><th>Run's 12M call</th><th>Next report</th></tr></thead><tbody>${cos.map((x) => `<tr><td><button class="linkbtn tick" data-co="${esc(x.symbol)}">${esc(x.symbol)}</button><div class="small muted">${esc(showC(x.name, 26))}${x.classes?.length > 1 ? ` · ${esc(x.classes.join(" + "))}` : ""}${!x.industry ? `${x.name ? " · " : ""}not in the industry runs` : ""}</div></td><td class="n"><b>${pct(x.weight, false, 2)}</b></td><td class="small">${esc(x.industry || "—")}</td><td class="n">${fix(x.pe, 1)}</td><td class="n ${cls(x.growth)}">${pct(x.growth, true, 0)}</td><td class="n">${pct(x.opm, false, 0)}</td><td class="n">${pct(x.div, false, 1)}</td><td class="n ${cls(x.r1y)}">${pct(x.r1y, true, 0)}</td><td class="n">${isNum(x.score) ? Math.round(x.score) : "—"}</td><td class="small">${esc(x.call12 || "—")}</td><td class="small mono">${esc(x.next || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}`); }
     return out;
   }
   function recView(res, asParts = false) {
@@ -22027,7 +22123,7 @@ Return ONLY a JSON object:
     const cw = new Map((Sl?.companies || []).map((x) => [x.id, x.why])), cid = W.ids?.C || {}, gotCo = new Map(ach.stocks.map((s) => [s.symbol, s.weight]));
     const coS = sec("rec-cos", "3 · The companies it's built to own", `${Object.keys(res.T).length} companies, the best in each industry for a ${esc(goal.label.toLowerCase())} investor by the run's own ranking`, `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr));gap:10px">${res.tgt.held.filter((h) => res.picksBy[h.name]?.picks?.length).map((h) => `<div class="box"><div style="display:flex;justify-content:space-between"><b>${esc(h.name)}</b><span class="mono">${pct(h.target, false)}</span></div>
       <div class="tbl-wrap"><table class="wrap-table" style="margin-top:6px"><tbody>${res.picksBy[h.name].picks.map((p) => { const x = p.c || {}, got = cands.reduce((s, c, i) => s + sel.w[i] * (num(c.vec?.cos?.[p.symbol]) || 0), 0), why = cw.get(cid[p.symbol]);
-        return `<tr><td style="width:70px"><button class="linkbtn tick" data-co="${esc(p.symbol)}">${esc(p.symbol)}</button><div class="small muted">${esc(trimC(p.name || x.name || "", 22))}</div></td><td class="small">score <b>${isNum(p.profile) ? p.profile : "—"}</b>${p.strategist ? ' <span class="pill pos" title="' + esc(p.strategist) + '">strategist pick</span>' : ""}<div class="muted">${["growth", "quality", "value", "momentum", "revisions"].filter((k) => isNum(p.factors?.[k])).map((k) => `${k.slice(0, 4)} ${p.factors[k]}`).join(" · ")}</div>
+        return `<tr><td style="width:70px"><button class="linkbtn tick" data-co="${esc(p.symbol)}">${esc(p.symbol)}</button><div class="small muted">${esc(showC(p.name || x.name || "", 22))}</div></td><td class="small">score <b>${isNum(p.profile) ? p.profile : "—"}</b>${p.strategist ? ' <span class="pill pos" title="' + esc(p.strategist) + '">strategist pick</span>' : ""}<div class="muted">${["growth", "quality", "value", "momentum", "revisions"].filter((k) => isNum(p.factors?.[k])).map((k) => `${k.slice(0, 4)} ${p.factors[k]}`).join(" · ")}</div>
           <div class="muted">P/E ${fix(x.pe, 1)} · growth ${pct(num(x.ntm_growth ?? x.rev_growth), false, 0)} · div ${pct(num(x.div_yield), false, 1)}</div>${why ? `<div style="margin-top:3px">${wr(why)}</div>` : ""}</td><td class="n small">target ${pct(h.target * p.within, false, 2)}<div class="${got >= h.target * p.within * 0.6 ? "up" : "muted"}">got ${pct(got, false, 2)}</div></td></tr>`; }).join("")}</tbody></table></div>
       ${res.picksBy[h.name].avoided?.length ? `<div class="small muted">Strategist avoids: ${res.picksBy[h.name].avoided.map((a) => `<b class="tick">${esc(a.symbol)}</b>`).join(" ")}</div>` : ""}</div>`).join("")}</div>`);
     // 4. ETFs
@@ -22035,7 +22131,7 @@ Return ONLY a JSON object:
     const etfS = sec("rec-etfs", "4 · The ETFs", `${held.length} chosen from ${cands.length}: each placed to deliver part of the target with as little overlap as possible`, `${Sl?.overlap ? `<p>${wr(Sl.overlap)}</p>` : ""}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(400px,100%),1fr));gap:10px">${held.map(({ c, w }) => { const e = ew.get(c.symbol), v = c.vec || {};
       const caps = c.isBond ? [] : Object.entries(v.cos || {}).filter(([t]) => res.T[t]).sort((a, b) => b[1] - a[1]).slice(0, 6), inT = c.isBond ? 0 : Object.entries(v.ind || {}).reduce((a, [k, x]) => a + (res.tgt.held.some((h) => h.name === k) ? x : 0), 0);
       const ov = ach.pairs.filter((p) => p.a === c.symbol || p.b === c.symbol).sort((a, b) => b.overlap - a.overlap)[0];
-      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px"><div><button class="linkbtn tick" data-fund="${esc(c.symbol)}" style="font-size:18px">${esc(c.symbol)}</button> ${e?.role ? `<span class="pill ${REC_ROLE[e.role] || "neu"}">${esc(e.role)}</span>` : ""}<div class="small muted">${esc(trimC(c.info?.name || "", 52))}</div></div><div style="text-align:right"><div class="mono" style="font-size:22px;font-weight:600">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(total * w)}</div></div></div>
+      return `<div class="box"><div style="display:flex;justify-content:space-between;gap:8px"><div><button class="linkbtn tick" data-fund="${esc(c.symbol)}" style="font-size:18px">${esc(c.symbol)}</button> ${e?.role ? `<span class="pill ${REC_ROLE[e.role] || "neu"}">${esc(e.role)}</span>` : ""}<div class="small muted">${esc(showC(c.info?.name || "", 52))}</div></div><div style="text-align:right"><div class="mono" style="font-size:22px;font-weight:600">${(w * 100).toFixed(1)}%</div><div class="small muted">${usd(total * w)}</div></div></div>
         <div class="small" style="margin:6px 0">${c.isBond ? `${esc(EtfStrat.BUCKETS[c.bucket] || "")} · yield ${pct(c.yield, false, 2)} · duration ~${c.e.duration}y · +1pp rates ${pct(c.v?.rates_up_1pp)}` : `<b>${pct(inT, false, 0)}</b> in target industries · <b>${pct(caps.reduce((a, x) => a + x[1], 0), false, 0)}</b> in target companies · ${v.n} holdings (effective ${fix(v.effN, 0)})`}</div>
         ${caps.length ? `<div>${caps.map(([t, x]) => `<span class="chip-s">${esc(t)} ${pct(x, false, 1)}</span>`).join(" ")}</div>` : ""}
         ${!c.isBond ? `<div class="small muted" style="margin-top:4px">${Object.entries(v.ind || {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, x]) => `${esc(k)} ${pct(x, false, 0)}`).join(" · ")}</div>` : ""}
@@ -22689,7 +22785,7 @@ Return ONLY a JSON object:
     const win = ov || codeBest, rank = v?.ranking?.length ? v.ranking : [...syms].sort((a, b) => (cmpMean(Compare.TYPES.map((t) => fit[t][b]?.total).filter(isNum)) || 0) - (cmpMean(Compare.TYPES.map((t) => fit[t][a]?.total).filter(isNum)) || 0));
     const podium = rank.map((s, i) => `<div class="cx-pod${i === 0 ? " first" : ""}" style="--tc:${cmpColor(s)}"><span class="cx-place">${i + 1}</span>${cmpTick(s)}${v?.names?.[s]?.verdict ? `<span class="pill ${CMP_VERD[v.names[s].verdict]}">${esc(v.names[s].verdict)}</span>` : ""}</div>`).join("");
     const ck0 = (V?.checks || []).filter((x) => x.where !== "overall");
-    const checks = ck0.length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${ck0.map((x) => esc(x.text)).join("; ")}.</div>` : "";
+    const checks = ck0.length && !busy ? `<div class="cx-checks small"><b>Where the verdict departs from code's numbers:</b> ${ptList(ck0.map((x) => esc(x.text)))}.</div>` : "";
     const hero = sec("cmp-verdict", "The verdict", V && !busy ? `written ${esc(ago(V.at))}${V.via === "github" ? ` on GitHub${V.run_url ? ` · <a href="${esc(V.run_url)}" target="_blank" rel="noopener">run</a>` : ""}` : ""}${V.secs ? ` in ${V.secs}s` : ""}` : "",
       `${writing}${ghNote}${err}${noClaude}${v || busy || jRun ? `<div class="cx-runrow">${runBtn}<span class="small muted">${V ? `Last compared ${esc(ago(V.at))}.` : ""}</span></div>` : ""}<div class="cx-hero" style="--tc:${cmpColor(win)}"><div class="cx-hero-main"><span class="eyebrow">${v ? "Better overall" : "Code's front-runner"}</span>
         <div class="cx-win">${cmpTick(win, true)}<div><div class="cx-win-name">${esc(subs.find((s) => s.sym === win)?.name || "")}</div>${v?.overall?.confidence ? `<span class="pill ${v.overall.confidence === "high" ? "pos" : v.overall.confidence === "low" ? "warn" : "neu"}">${esc(v.overall.confidence)} confidence</span>` : `<span class="small muted">by the average of its four investor scores</span>`}${(() => { const w0 = v?.wins?.[win] || (v ? [] : Compare.TYPES.filter((t) => fit[t].ranked[0] === win)); return w0.length ? `<div class="cx-bestfor"><span class="small muted">Best for</span>${w0.map((t) => `<span class="pill pos">${esc(Compare.TYPE_LABEL[t])}</span>`).join("")}</div>` : ""; })()}</div></div>
@@ -22889,7 +22985,7 @@ Return ONLY a JSON object:
           ${look ? `<span class="eyebrow">Its industries' 1M-12M calls, weighted</span>${look}` : ""}
           ${mix.length ? `<span class="eyebrow">Its industries</span><div class="cx-mix">${mix.slice(0, 12).map((x) => `<div class="cx-brow"><span class="small ellip" title="${esc(x.industry)}">${esc(x.industry)}</span><div class="cx-track"><i style="width:${(100 * x.weight / maxW).toFixed(1)}%;background:${cmpColor(s0.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span>${x.call ? `<span class="pill ${CALLC(x.call)}" style="font-size:10.5px">${esc(x.call)}</span>` : `<span class="small muted">no report</span>`}</div>`).join("")}</div>` : ""}
           ${!mix.length && s0.sectors?.length ? `<span class="eyebrow">Its sectors (EODHD)</span><div class="cx-mix">${s0.sectors.map((x) => `<div class="cx-brow"><span class="small ellip">${esc(x.sector)}</span><div class="cx-track"><i style="width:${(100 * x.weight / Math.max(0.0001, s0.sectors[0].weight)).toFixed(1)}%;background:${cmpColor(s0.sym)}"></i></div><span class="small mono">${pct(x.weight, false, 1)}</span><span></span></div>`).join("")}</div>` : ""}
-          ${(s0.holdTop || []).length ? `<span class="eyebrow">Biggest holdings${s0.holdFrom && s0.holdFrom !== "FMP" ? ` <span class="muted" style="text-transform:none;letter-spacing:0">· from ${esc(s0.holdFrom)}</span>` : ""}</span><div class="tbl-wrap"><table class="cx-hold"><thead><tr><th>Holding</th><th class="n">Weight</th><th>Industry · its 12M call</th></tr></thead><tbody>${s0.holdTop.slice(0, 12).map((h) => `<tr><td><b class="tick">${esc(h.ticker)}</b> <span class="small muted ellip">${esc(trimC(h.name || "", 26))}</span></td><td class="n mono">${pct(h.weight, false, 1)}</td><td class="small">${esc(h.industry || "—")}${h.call12 ? ` <span class="pill ${CALLC(h.call12)}" style="font-size:10.5px">${esc(h.call12)}</span>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">${bd ? "A bond fund: its holdings are bonds, read through the yield, duration and spread above." : "Holdings not available for this fund."}</div>`}</div>`; }).join("")}</div>`) : "";
+          ${(s0.holdTop || []).length ? `<span class="eyebrow">Biggest holdings${s0.holdFrom && s0.holdFrom !== "FMP" ? ` <span class="muted" style="text-transform:none;letter-spacing:0">· from ${esc(s0.holdFrom)}</span>` : ""}</span><div class="tbl-wrap"><table class="cx-hold"><thead><tr><th>Holding</th><th class="n">Weight</th><th>Industry · its 12M call</th></tr></thead><tbody>${s0.holdTop.slice(0, 12).map((h) => `<tr><td><b class="tick">${esc(h.ticker)}</b> <span class="small muted ellip">${esc(showC(h.name || "", 26))}</span></td><td class="n mono">${pct(h.weight, false, 1)}</td><td class="small">${esc(h.industry || "—")}${h.call12 ? ` <span class="pill ${CALLC(h.call12)}" style="font-size:10.5px">${esc(h.call12)}</span>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="small muted">${bd ? "A bond fund: its holdings are bonds, read through the yield, duration and spread above." : "Holdings not available for this fund."}</div>`}</div>`; }).join("")}</div>`) : "";
 
     // ---- foreign affairs: world situations, the trade map and regulation (code), with the desk's reads
     const dW = (t) => (MD?.world || []).find((x) => { const a1 = x.situation.toLowerCase().slice(0, 20), b1 = String(t).toLowerCase().slice(0, 20); return a1.includes(b1.slice(0, 12)) || b1.includes(a1.slice(0, 12)); });
@@ -22911,7 +23007,7 @@ Return ONLY a JSON object:
           <div class="cx-mi-val"><span class="pill ${sevC(c0.threat)}">${esc(c0.threat ? c0.threat + " threat" : "threat n/a")}</span></div>
           <div class="cx-mi-reads">${syms.map((k) => { const p0 = c0.per[k], dd = d0?.impact?.[k]; return `<span class="cx-mi-r" style="--tc:${cmpColor(k)}"><b class="cx-mi-sym">${esc(k)}</b>${p0 ? `${isNum(p0.rev) ? `<span class="small mono">${pct(p0.rev, false, 1)}${p0.est ? "<sup>est</sup>" : ""}</span>` : ""}<span class="pill ${STC(p0.stance)}">${esc(p0.stance || "exposed")}</span>` : `<span class="cx-ne">not exposed</span>`}${dd && dd.direction !== "neutral" ? `<span class="pill ${IMPC[dd.direction]}" title="${esc(dd.why || "")}">desk ${IMPA[dd.direction]}</span>` : ""}</span>`; }).join("")}</div></div></summary>
           <div class="cx-mi-body">${d0?.read ? `<p class="small cx-dline"><b>Macro desk.</b> ${esc(stripCites(d0.read))}</p>` : ""}${c0.headline ? `<p class="small">${esc(stripCites(c0.headline))}</p>` : ""}${c0.outlook ? `<p class="small"><b>Outlook.</b> ${esc(stripCites(c0.outlook))}</p>` : ""}
-            ${(c0.risks || []).length ? `<p class="small"><b>Risks.</b> ${(c0.risks || []).map((r) => esc(stripCites(typeof r === "string" ? r : r?.risk || ""))).filter(Boolean).join("; ")}</p>` : ""}
+            ${(c0.risks || []).length ? `<p class="small"><b>Risks.</b> ${ptList((c0.risks || []).map((r) => esc(stripCites(typeof r === "string" ? r : r?.risk || ""))).filter(Boolean))}</p>` : ""}
             ${syms.some((k) => d0?.impact?.[k]?.why) ? `<div class="cx-mi-why">${syms.filter((k) => d0?.impact?.[k]?.why).map((k) => `<div class="small"><b class="cx-mi-sym" style="--tc:${cmpColor(k)}">${esc(k)}</b> ${esc(stripCites(d0.impact[k].why))}</div>`).join("")}</div>` : ""}
             <div class="small muted">Revenue there is each ticker's industry's (reported, else estimated); "not exposed": its industry report doesn't name the country.</div></div></details>`; }).join("")}</div>` : "";
     const regL = MA.rules.length || MA.items.length || MD?.regulation?.length ? `${MD?.regulation?.length ? `<div class="cx-cards">${MD.regulation.map((r0) => `<div class="box small"><b>${esc(r0.item)}</b>${r0.status ? ` <span class="muted">${esc(r0.status)}</span>` : ""}${chips(Object.fromEntries(syms.map((k) => [k, r0.impact[k]?.direction])))}${syms.filter((k) => r0.impact[k]?.why).map((k) => `<div>${cmpTick(k)} ${esc(r0.impact[k].why)}</div>`).join("")}</div>`).join("")}</div>` : ""}
@@ -22931,7 +23027,7 @@ Return ONLY a JSON object:
         ${adv.length ? `<div class="small"><span class="eyebrow neg-t">Against it</span>${listOf(adv.slice(0, 3).map((w) => `${esc(w.title)} <span class="muted">${esc(w.per[k].stance)}</span>`), "cx-neg")}</div>` : ""}
         ${sup.length ? `<div class="small"><span class="eyebrow pos-t">For it</span>${listOf(sup.slice(0, 2).map((w) => `${esc(w.title)} <span class="muted">${esc(w.per[k].stance)}</span>`))}</div>` : ""}
         ${tr.length ? `<div class="small"><b>Where it trades:</b> ${tr.slice(0, 4).map((c0) => `${esc(c0.country)}${isNum(num(c0.per[k].rev)) ? ` ${pct(c0.per[k].rev, false, 1)}${c0.per[k].est ? " est." : ""}` : ""} <span class="pill ${STC(c0.per[k].stance)}">${esc(c0.per[k].stance || "exposed")}</span>`).join(" · ")}</div>` : ""}
-        ${hi.length ? `<div class="small"><b>Rules that bite:</b> ${hi.slice(0, 3).map((r0) => esc(r0.name)).join("; ")}</div>` : ""}
+        ${hi.length ? `<div class="small"><b>Rules that bite:</b> ${ptList(hi.slice(0, 3).map((r0) => esc(r0.name)))}</div>` : ""}
         ${A0?.watch ? `<div class="small cx-dline"><b>Watch:</b> ${esc(stripCites(A0.watch))}</div>` : ""}`); }).join("")) : "";
     const affairs = worldC || tradeT || regL ? sec("cmp-affairs", "Foreign affairs", "world situations, the trade map and regulation, from their industry reports, with each ticker's exposure",
       `${affCards}${worldC ? `<h3>World situations</h3><div class="cx-sits">${worldC}</div>` : ""}${tradeT}${regL ? `<h3>Regulation, policy and litigation</h3>${regL}` : ""}${MD ? deskBy("macro") : `<div class="small muted">The macro and foreign affairs desk's reads come with the verdict.</div>`}`) : "";
@@ -22983,10 +23079,11 @@ Return ONLY a JSON object:
     const tog = v?.together?.pairing || mixItems.length || v?.risks?.length ? sec("cmp-together", "Owning them together", "", `<div class="two">${mixItems.length ? `<div class="box"><h3>A split for a balanced investor</h3><div class="cx-split">${mixItems.map((x) => `<i style="flex:${x.value};background:${cmpColor(x.name)}" title="${esc(x.name)} ${x.value}%"></i>`).join("")}</div><div class="legend">${mixItems.map((x) => `<span><i style="background:${cmpColor(x.name)}"></i>${esc(x.name)} ${x.value}%</span>`).join("")}</div>${v.together.pairing ? `<p class="small">${esc(v.together.pairing)}</p>` : ""}</div>` : v?.together?.pairing ? `<div class="box"><p class="small">${esc(v.together.pairing)}</p></div>` : ""}
       ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
 
-    const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
+    const groups = [{ label: "Performance", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"]] },
+      { label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
       { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [insideF ? ["cmp-funds", "Inside the funds"] : null, ["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
-      { label: "Market", items: [["cmp-perf", "Performance"], ["cmp-risk", "Risk & diversification"], ["cmp-outlook", "Where it's going"]] },
+      { label: "Outlook", items: [["cmp-outlook", "Where it's going"]] },
       { label: "Analysis", items: [["cmp-cases", "The case for each"], tog ? ["cmp-together", "Owning them together"] : null] }];
     return errNote + ld + `<div class="shell">${sideNav(groups)}<div class="stream">${hero}${lineup}${inv}${ahead}${macroInd}${affairs}${macroS}${streetS}${insideF}${dims}${perf}${risk}${metrics}${outl}${cases}${tog}
       <div class="small muted">Numbers from FMP and EODHD (kept for the day); industry reports and written analyses from this browser, the page's database and the runs synced from GitHub. Nothing is written for a ticker here: open it on the Companies or Funds tab for its own full analysis.</div></div></div>`;
@@ -23060,6 +23157,10 @@ Return ONLY a JSON object:
     const o = $("dcf-out"); if (o) o.innerHTML = dcfOut(co, CoFacts.dcf(co.dcfP));
   }
   const trimC = (t, k) => (String(t).length > k ? String(t).slice(0, k - 1) + "…" : String(t));
+  /** Text for the screen: whole. The length argument stays so call sites read the same; the reader expands long text instead. */
+  const showC = (t) => String(t ?? "");
+  /** A list of points, shown as a list (as cards when they're long) rather than run together with semicolons. */
+  const ptList = (xs) => { const a = (xs || []).filter((x) => x != null && String(x) !== ""); return a.length ? `<ul class="pts">${a.map((x) => `<li>${x}</li>`).join("")}</ul>` : ""; };
   const pcx = (x, d = 1) => (isNum(num(x)) ? pct(x, true, d) : "—");
   /** Everything computed from the prices and statements: performance, the risk Greeks, option Greeks, history, scores. */
   function coFacts(co) {
@@ -23509,8 +23610,8 @@ Return ONLY a JSON object:
     // The industry's own words on the partner (its share of the industry, else why it matters), and which industry companies rely on it.
     const rows = In.map((x) => { const y = L[x.id], share = stripCites(x.share || ""), iwhy = stripCites(x.why || ""), role = share || iwhy, dep = x.depends || [];
       const relied = dep.length ? `<div class="small muted" style="margin-top:4px">Relied on by: ${dep.slice(0, 10).map((d) => (d === co.sym ? `<mark>${esc(d)}</mark>` : esc(d))).join(", ")}${dep.length > 10 ? ` +${dep.length - 10} more` : ""}</div>` : "";
-      return `<tr><td><b class="tick">${esc(x.symbol || "")}</b> ${esc(trimC(x.name || "", 30))}<div class="small muted">${esc(x.role || "")}</div></td><td class="wr small">${role ? esc(trimC(role, 260)) : `<span class="muted">—</span>`}${relied}</td>
-      <td>${y ? lvlP(y.dependence, "dependence") : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : share && iwhy ? `<span class="muted">${esc(trimC(iwhy, 200))}</span>` : ""}</td></tr>`; }).join("");
+      return `<tr><td><b class="tick">${esc(x.symbol || "")}</b> ${esc(showC(x.name || "", 30))}<div class="small muted">${esc(x.role || "")}</div></td><td class="wr small">${role ? esc(showC(role, 260)) : `<span class="muted">—</span>`}${relied}</td>
+      <td>${y ? lvlP(y.dependence, "dependence") : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : share && iwhy ? `<span class="muted">${esc(showC(iwhy, 200))}</span>` : ""}</td></tr>`; }).join("");
     return sec("co-chain", "Customers, channels & suppliers", `from the ${esc(co.run.name)} supply-chain analysis`,
       `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Partner</th><th>Its role in the industry</th><th>${esc(co.sym)}'s dependence</th><th>Why</th></tr></thead><tbody>${rows}</tbody></table></div>${lensNote(co, t)}`);
   }
@@ -23520,7 +23621,7 @@ Return ONLY a JSON object:
     const TONE = { "more confident": "pos", "less confident": "neg", "more cautious": "warn", "about the same": "neu", unchanged: "neu" }, GD = { raised: "pos", lowered: "neg", maintained: "neu", initiated: "neu", withdrawn: "neg" };
     const sorted = [...cs].sort((a, b) => (a.symbol === co.sym ? -1 : b.symbol === co.sym ? 1 : 0));
     const rows = sorted.map((x) => `<tr><td><b class="tick">${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)}</b><div class="small muted">${esc(x.period || "")}</div></td><td><span class="pill ${TONE[x.tone] || "neu"}">${esc(x.tone || "")}</span></td><td>${x.guidance ? `<span class="pill ${GD[x.guidance] || "neu"}">${esc(x.guidance)}</span>` : ""}</td>
-      <td class="wr small">${esc(stripCites(x.tone_why || ""))}${x.guidance_detail ? `<div class="muted">${esc(trimC(stripCites(x.guidance_detail), 300))}</div>` : ""}${(x.new_risks || []).length ? `<div><b>New risks:</b> ${esc((x.new_risks || []).map((r) => (typeof r === "string" ? r : r?.text || r?.risk || "")).filter(Boolean).slice(0, 3).join("; "))}</div>` : ""}</td></tr>`).join("");
+      <td class="wr small">${esc(stripCites(x.tone_why || ""))}${x.guidance_detail ? `<div class="muted">${esc(showC(stripCites(x.guidance_detail), 300))}</div>` : ""}${(x.new_risks || []).length ? `<div><b>New risks:</b> ${esc((x.new_risks || []).map((r) => (typeof r === "string" ? r : r?.text || r?.risk || "")).filter(Boolean).slice(0, 3).join("; "))}</div>` : ""}</td></tr>`).join("");
     const own = cs.some((x) => x.symbol === co.sym);
     return sec("co-calls", "Earnings calls across the industry", own ? `${esc(co.sym)}'s own call first, then its peers'` : `${esc(co.sym)} wasn't among the calls the industry team read; these are its peers'`,
       `<div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th>Tone vs last call</th><th>Guidance</th><th>What changed</th></tr></thead><tbody>${rows}</tbody></table></div>`);
@@ -23533,8 +23634,8 @@ Return ONLY a JSON object:
     const PB = Object.fromEntries((co.lensIn?.chain || []).filter((x) => x.symbol && x.symbol !== co.sym).map((x) => [x.symbol, x])), LC = t?.lens?.chain || {};
     const partnerOf = (e) => (e.tickers || []).map((x) => PB[x]).find(Boolean);
     const row = (e) => { const y = L[e.id], mine = e.tickers.includes(co.sym) || e.source === "company", pt = !mine && partnerOf(e);
-      return `<tr${mine ? ' style="background:color-mix(in srgb, var(--accent) 7%, transparent)"' : pt ? ' style="background:color-mix(in srgb, var(--c3) 6%, transparent)"' : ""}><td class="mono">${esc(fmtShort(e.date))}${e.estimated ? `<div class="small muted">est.</div>` : ""}</td><td class="wr"><b>${esc(e.title)}</b> <span class="pill neu">${esc(SRCL[e.source] || "industry")}</span>${pt ? ` <span class="pill warn">${esc(trimC(pt.role || "partner", 28))}${LC[pt.id]?.dependence ? ` · ${esc(LC[pt.id].dependence)} dependence` : ""}</span>` : ""}${e.tickers.length ? `<div class="small">${e.tickers.map((x) => `<b class="tick">${x === co.sym ? `<mark>${esc(x)}</mark>` : esc(x)}</b>`).join(" ")}</div>` : ""}${e.detail && y?.why ? `<div class="small muted">${esc(trimC(stripCites(e.detail), 160))}</div>` : ""}</td>
-      <td>${y ? `${lvlP(y.impact === "none" ? "low" : y.impact, "impact")} ${y.direction ? `<span class="pill ${DIRC[y.direction] || "neu"}">${esc(y.direction)}</span>` : ""}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(e.detail || ""), 200))}</span>`}</td></tr>`; };
+      return `<tr${mine ? ' style="background:color-mix(in srgb, var(--accent) 7%, transparent)"' : pt ? ' style="background:color-mix(in srgb, var(--c3) 6%, transparent)"' : ""}><td class="mono">${esc(fmtShort(e.date))}${e.estimated ? `<div class="small muted">est.</div>` : ""}</td><td class="wr"><b>${esc(e.title)}</b> <span class="pill neu">${esc(SRCL[e.source] || "industry")}</span>${pt ? ` <span class="pill warn">${esc(showC(pt.role || "partner", 28))}${LC[pt.id]?.dependence ? ` · ${esc(LC[pt.id].dependence)} dependence` : ""}</span>` : ""}${e.tickers.length ? `<div class="small">${e.tickers.map((x) => `<b class="tick">${x === co.sym ? `<mark>${esc(x)}</mark>` : esc(x)}</b>`).join(" ")}</div>` : ""}${e.detail && y?.why ? `<div class="small muted">${esc(showC(stripCites(e.detail), 160))}</div>` : ""}</td>
+      <td>${y ? `${lvlP(y.impact === "none" ? "low" : y.impact, "impact")} ${y.direction ? `<span class="pill ${DIRC[y.direction] || "neu"}">${esc(y.direction)}</span>` : ""}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(showC(stripCites(e.detail || ""), 200))}</span>`}</td></tr>`; };
     const months = []; for (const e of In) { const m = e.date.slice(0, 7); if (!months.length || months[months.length - 1].m !== m) months.push({ m, rows: [] }); months[months.length - 1].rows.push(e); }
     const mName = (m) => new Date(m + "-15T00:00:00Z").toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
     const body = months.map((g) => `<tr><td colspan="4" class="eyebrow" style="padding-top:12px">${esc(mName(g.m))} <span class="muted" style="text-transform:none">· ${g.rows.length} event${g.rows.length === 1 ? "" : "s"}</span></td></tr>${g.rows.map(row).join("")}`).join("");
@@ -23542,11 +23643,11 @@ Return ONLY a JSON object:
     const last = In[In.length - 1]?.date;
     // What's next for the company itself, and its customers' and suppliers' next reports (FMP), soonest first.
     const ownNext = In.filter((e) => e.source === "company" || e.tickers.includes(co.sym)).slice(0, 3);
-    const own = ownNext.length ? `<div class="small"><b>${esc(co.sym)}'s own next dates:</b> ${ownNext.map((e) => `<span class="numchip">${esc(fmtShort(e.date))} ${esc(trimC(e.title.replace(co.sym + " ", ""), 40))}</span>`).join(" ")}</div>` : "";
+    const own = ownNext.length ? `<div class="small"><b>${esc(co.sym)}'s own next dates:</b> ${ownNext.map((e) => `<span class="numchip">${esc(fmtShort(e.date))} ${esc(showC(e.title.replace(co.sym + " ", ""), 40))}</span>`).join(" ")}</div>` : "";
     const PE = (co.partnerEarn || []).filter((x) => x.next || x.last).sort((a, b) => (a.next?.date || "9999") < (b.next?.date || "9999") ? -1 : 1);
     const surp = (x) => (x?.last && isNum(x.last.act) && isNum(x.last.est) && x.last.est !== 0 ? Math.round(((x.last.act - x.last.est) / Math.abs(x.last.est)) * 1000) / 10 : NaN);
     const pTbl = PE.length ? `<h3>${esc(co.sym)}'s customers' and suppliers' earnings</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Partner</th><th>Role</th><th>${esc(co.sym)}'s dependence</th><th>Next report</th><th>Last report</th></tr></thead><tbody>${PE.map((x) => { const sp = surp(x), dep = LC[x.id]?.dependence;
-      return `<tr><td><b class="tick">${esc(x.symbol)}</b> <span class="small">${esc(trimC(x.name || "", 30))}</span>${x.relies ? `<div class="small muted">the industry says ${esc(co.sym)} relies on it</div>` : ""}</td><td class="small">${esc(x.role || "")}</td><td>${dep ? lvlP(dep, "") : `<span class="muted">—</span>`}</td>
+      return `<tr><td><b class="tick">${esc(x.symbol)}</b> <span class="small">${esc(showC(x.name || "", 30))}</span>${x.relies ? `<div class="small muted">the industry says ${esc(co.sym)} relies on it</div>` : ""}</td><td class="small">${esc(x.role || "")}</td><td>${dep ? lvlP(dep, "") : `<span class="muted">—</span>`}</td>
         <td class="mono">${x.next ? `${esc(fmtShort(x.next.date))}${isNum(x.next.est) ? `<div class="small muted">EPS est. ${fix(x.next.est, 2)}</div>` : ""}` : "—"}</td>
         <td class="small">${x.last ? `${esc(fmtShort(x.last.date))}${isNum(sp) ? ` <span class="pill ${sp >= 0 ? "pos" : "neg"}">${sp >= 0 ? "beat" : "missed"} by ${Math.abs(sp)}%</span>` : ""}` : "—"}</td></tr>`; }).join("")}</tbody></table></div>
       <div class="small muted">The industry's supply-chain partners, from its customers-and-suppliers analysis; dates from FMP. A customer's report is an early read on ${esc(co.sym)}'s demand, a supplier's on its costs and supply.</div>` : "";
@@ -23579,21 +23680,21 @@ Return ONLY a JSON object:
     const dimL = { macro: "Macro", news: "News flow", world_events: "World events", regulatory: "Regulatory", perception: "Perception", mna: "M&A", legal: "Legal" };
     const dimP = (v) => (isNum(num(v)) ? `<span class="pill ${v > 0 ? "pos" : v < 0 ? "neg" : "neu"}">${v > 0 ? "+" : ""}${v}</span>` : `<span class="muted">—</span>`);
     const dims = Object.keys(In.dims || {}).length ? `<h3>Backdrop scorecard</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Dimension</th><th class="n">Industry</th><th class="n">${esc(co.sym)}</th><th>Why ${esc(co.sym)} differs</th></tr></thead><tbody>${Object.entries(In.dims).map(([k, v]) => { const y = L.dimensions?.[k];
-      return `<tr><td class="wr" style="min-width:240px"><b>${esc(dimL[k] || k)}</b><div class="small muted">${esc(trimC(stripCites(v.summary || ""), 160))}</div></td><td class="n">${dimP(v.score)}</td><td class="n">${y ? dimP(y.score) : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : ""}</td></tr>`; }).join("")}</tbody></table></div><div class="small muted">−2 to +2 on each dimension the industry's lead strategist scores.</div>` : "";
+      return `<tr><td class="wr" style="min-width:240px"><b>${esc(dimL[k] || k)}</b><div class="small muted">${esc(showC(stripCites(v.summary || ""), 160))}</div></td><td class="n">${dimP(v.score)}</td><td class="n">${y ? dimP(y.score) : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : ""}</td></tr>`; }).join("")}</tbody></table></div><div class="small muted">−2 to +2 on each dimension the industry's lead strategist scores.</div>` : "";
     // Code's version: the industry's move times how much the stock amplifies its industry (beta to the industry, last year).
     const bI = num(co.betaInd?.beta), atBeta = (r) => (isNum(bI) && Array.isArray(r) && r.length ? r.map((v) => (isNum(num(v)) ? Math.round(num(v) * bI) : null)) : null);
     const ev = (f) => { const ks = ["bull", "base", "bear"].filter((k) => In.iscen[k] && isNum(num(In.iscen[k].probability))), w = ks.reduce((a, k) => a + num(In.iscen[k].probability), 0);
       if (!w) return NaN; let tot = 0; for (const k of ks) { const r = f(k); if (!r?.length) return NaN; const m = r.filter((v) => isNum(num(v))).map(num); if (!m.length) return NaN; tot += (num(In.iscen[k].probability) / w) * (m.reduce((a, v) => a + v, 0) / m.length); } return Math.round(tot * 10) / 10; };
     const evInd = ev((k) => In.iscen[k].price_move), evBeta = ev((k) => atBeta(In.iscen[k].price_move));
     const sc = Object.keys(In.iscen || {}).length ? `<h3>If the industry's scenarios play out</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Industry scenario</th><th class="n">Probability</th><th class="n">Industry</th>${isNum(bI) ? `<th class="n">${esc(co.sym)} at its beta<div class="small muted">${fix(bI, 2)}× the industry</div></th>` : ""}<th class="n">${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${["bull", "base", "bear"].filter((k) => In.iscen[k]).map((k) => { const x = In.iscen[k], y = L.ind_scenarios?.[k];
-      return `<tr><td class="wr"><span class="pill ${SC[k]}">${k}</span> <span class="small">${esc(stripCites(trimC(x.narrative, 260)))}</span></td><td class="n">${isNum(num(x.probability)) ? x.probability + "%" : "—"}</td><td class="n">${esc(rng(x.price_move))}</td>${isNum(bI) ? `<td class="n muted">${esc(rng(atBeta(x.price_move)))}</td>` : ""}<td class="n"><b>${y ? esc(rng(y.move)) : "—"}</b></td><td class="wr small">${y?.why ? rich(y.why) : pend(co, t)}</td></tr>`; }).join("")}</tbody></table></div>
+      return `<tr><td class="wr"><span class="pill ${SC[k]}">${k}</span> <span class="small">${esc(stripCites(showC(x.narrative, 260)))}</span></td><td class="n">${isNum(num(x.probability)) ? x.probability + "%" : "—"}</td><td class="n">${esc(rng(x.price_move))}</td>${isNum(bI) ? `<td class="n muted">${esc(rng(atBeta(x.price_move)))}</td>` : ""}<td class="n"><b>${y ? esc(rng(y.move)) : "—"}</b></td><td class="wr small">${y?.why ? rich(y.why) : pend(co, t)}</td></tr>`; }).join("")}</tbody></table></div>
       ${isNum(bI) ? `<div class="small muted">"At its beta" is code: the industry's move × ${esc(co.sym)}'s beta to its industry (${fix(bI, 2)}, daily returns over the last year${isNum(num(co.betaInd?.corr)) ? `, correlation ${fix(co.betaInd.corr, 2)}` : ""}).${isNum(evInd) && isNum(evBeta) ? ` Probability-weighted: the industry ${evInd > 0 ? "+" : ""}${evInd}%, ${esc(co.sym)} at its beta ${evBeta > 0 ? "+" : ""}${evBeta}%.` : ""} The ${esc(co.sym)} column is the write-up's own read, which can differ for company reasons.</div>` : ""}` : "";
     const db = (In.debates || []).length ? `<h3>The industry's debates, for ${esc(co.sym)}</h3><div style="display:grid;gap:8px">${In.debates.map((d) => { const y = L.debates?.[d.id];
       return `<div class="box"><div class="dim-head"><b>${esc(d.question)}</b>${d.lean ? `<span class="small muted">industry leans <span class="pill ${SIDE[lc(d.lean)] || "neu"}">${esc(d.lean)}</span></span>` : ""}${y ? `<span class="small">${esc(co.sym)}: <span class="pill ${SIDE[y.side] || "neu"}">${esc(y.side)}</span></span>` : ""}</div>
         ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : `<div class="small muted">${co.writing ? "Being written…" : ""}</div>`}
         <details class="small"><summary>The bull and bear case</summary><p style="margin:4px 0"><b>Bull:</b> ${esc(stripCites(d.bull))}</p><p style="margin:4px 0"><b>Bear:</b> ${esc(stripCites(d.bear))}</p>${d.resolves_with ? `<p class="muted" style="margin:4px 0">Resolves with: ${esc(stripCites(d.resolves_with))}</p>` : ""}</details></div>`; }).join("")}</div>` : "";
     const cm = (L.change_mind || []).length || (In.changeMind || []).length ? `<h3>What would change the call</h3><div class="two"><div class="box"><b>For ${esc(co.sym)}</b><ul class="dlist small">${(L.change_mind || []).map((x) => `<li>${rich(x)}</li>`).join("") || `<li class="muted">${co.writing ? "Being written…" : "—"}</li>`}</ul></div><div class="box"><b>For the industry</b><ul class="dlist small">${(In.changeMind || []).map((x) => `<li>${esc(stripCites(x))}</li>`).join("")}</ul></div></div>` : "";
-    const rt = In.redteam ? `<details><summary class="small"><b>The industry's red team</b> argued the ${esc(In.redteam.stance || "other")} side</summary><p class="small">${esc(stripCites(In.redteam.thesis))}</p>${In.redteam.kill.length ? `<div class="small"><b>Kill criteria:</b> ${In.redteam.kill.map((x) => esc(stripCites(x))).join("; ")}</div>` : ""}${In.redteam.blind.length ? `<div class="small"><b>Blind spots:</b> ${In.redteam.blind.map((x) => esc(stripCites(x))).join("; ")}</div>` : ""}</details>` : "";
+    const rt = In.redteam ? `<details><summary class="small"><b>The industry's red team</b> argued the ${esc(In.redteam.stance || "other")} side</summary><p class="small">${esc(stripCites(In.redteam.thesis))}</p>${In.redteam.kill.length ? `<div class="small"><b>Kill criteria:</b> ${ptList(In.redteam.kill.map((x) => esc(stripCites(x))))}</div>` : ""}${In.redteam.blind.length ? `<div class="small"><b>Blind spots:</b> ${ptList(In.redteam.blind.map((x) => esc(stripCites(x))))}</div>` : ""}</details>` : "";
     if (!dims && !sc && !db && !cm) return "";
     return sec("co-scen", "Scenarios & debates", `the ${esc(co.run.name)} lead strategist's work, applied to ${esc(co.sym)}`, `${dims}${sc}${db}${cm}${rt}${t?.lens ? "" : lensNote(co, t)}`);
   }
@@ -23617,7 +23718,7 @@ Return ONLY a JSON object:
     const ln = (l, v) => (v ? `<div><b>${l}:</b> ${esc(v)}</div>` : "");
     const more = (x) => { const parts = [ln("Now", x.now), ln("Why now", x.why_now), ln("Trigger", x.trigger), ln("First-order effect", x.first_order),
         x.developments?.length ? `<div><b>Latest:</b><ul class="dlist">${x.developments.map((d) => `<li><span class="mono">${esc(fmtShort(d.date))}</span> ${esc(d.text)}</li>`).join("")}</ul></div>` : "",
-        x.channels?.length ? `<div><b>How it reaches the industry:</b> ${x.channels.map(esc).join("; ")}</div>` : "",
+        x.channels?.length ? `<div><b>How it reaches the industry:</b> ${ptList(x.channels.map(esc))}</div>` : "",
         x.scenarios?.length ? `<div><b>Scenarios:</b>${x.scenarios.map((c) => `<div><b class="mono">${esc(String(c.probability ?? ""))}%</b> ${esc(c.name)}${c.trigger ? ` <span class="muted">if ${esc(c.trigger)}</span>` : ""}${c.outcome ? ` → ${esc(c.outcome)}` : ""}</div>`).join("")}</div>` : "",
         ln("Near term", x.near_term), ln("Structural", x.structural), x.offsets?.length ? ln("Offsets", x.offsets.join("; ")) : "",
         x.watch?.length ? `<div><b>Watch:</b> ${x.watch.map((w) => `${esc(w.indicator)} <span class="muted">(${esc(w.signal)})</span>`).join("; ")}</div>` : "", x.exposure ? ln("Most exposed", x.exposure) : "",
@@ -23627,11 +23728,11 @@ Return ONLY a JSON object:
     const cards = In.map((x) => { const y = L[x.id]; return `<div class="box"><div class="dim-head" style="flex-wrap:wrap;justify-content:flex-start"><b>${esc(x.title)}</b>${x.deep ? "" : `<span class="pill neu">tracked</span>`}</div>
       <div class="small muted">${esc([x.category, x.region, x.status, x.since ? `since ${fmtShort(x.since)}` : ""].filter(Boolean).join(" · "))}</div>
       <div class="actions" style="justify-content:flex-start;align-items:center;margin:6px 0"><span class="small muted">Industry</span>${effP(x.stance === "supportive" ? "helps" : x.stance === "adverse" ? "hurts" : x.stance)}<span class="small muted" style="margin-left:8px">${esc(co.sym)}</span>${y ? `${effP(y.effect)} ${lvlP(y.magnitude, "impact")} ${vsP(y.vs_industry)}` : pend(co, t)} ${named(x)}</div>
-      ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : x.summary ? `<p class="small muted" style="margin:0">${esc(trimC(x.summary, 260))}</p>` : ""}
+      ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : x.summary ? `<p class="small muted" style="margin:0">${esc(showC(x.summary, 260))}</p>` : ""}
       ${y?.channel || y?.scenario || y?.watch ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${rich(y.channel)}</div>` : ""}${y.scenario ? `<div><b>Scenario that matters:</b> ${rich(y.scenario)}</div>` : ""}${y.watch ? `<div class="muted"><b>Watch:</b> ${rich(y.watch)}</div>` : ""}</div>` : ""}
       ${more(x)}</div>`; }).join("");
     const nDeep = In.filter((x) => x.deep).length;
-    const heads = HL.length ? `<details><summary class="small"><b>World headlines</b> behind these situations (${HL.length})</summary><ul class="dlist small">${HL.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)} <span class="muted">${esc(h.source)}${h.situations.length ? ` · ${h.situations.map((id) => esc(trimC(In.find((s) => s.id === id)?.title || id, 40))).join("; ")}` : ""}</span></li>`).join("")}</ul></details>` : "";
+    const heads = HL.length ? `<details><summary class="small"><b>World headlines</b> behind these situations (${HL.length})</summary><ul class="dlist small">${HL.map((h) => `<li><span class="mono">${esc(fmtShort(h.date))}</span> ${h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">${esc(h.title)}</a>` : esc(h.title)} <span class="muted">${esc(h.source)}${h.situations.length ? ` · ${h.situations.map((id) => esc(showC(In.find((s) => s.id === id)?.title || id, 40))).join("; ")}` : ""}</span></li>`).join("")}</ul></details>` : "";
     return sec("co-world", "World events", `${nDeep} deep dive${nDeep === 1 ? "" : "s"} and ${In.length - nDeep} tracked situation${In.length - nDeep === 1 ? "" : "s"} from the ${esc(co.run.name)} analysis, for ${esc(co.sym)}`,
       `<div class="two">${cards}</div>${heads}${lensNote(co, t)}${mentionsFor(co, "world")}`);
   }
@@ -23654,11 +23755,11 @@ Return ONLY a JSON object:
     const cards = In.map((c) => { const y = L[c.id], ex1 = exp1(c); return `<div class="box"><div class="dim-head" style="flex-wrap:wrap;justify-content:flex-start"><b>${esc(c.country)}</b><span class="pill ${c.importance === "existential" || c.importance === "high" ? "warn" : "neu"}">${esc(c.importance || "")}</span><span class="pill ${STC[c.stance] || "neu"}">${esc(c.stance || "")}</span>${c.threat && !["none", "low"].includes(c.threat) ? `<span class="pill neg">${esc(c.threat)} threat</span>` : ""}${ex1 ? `<span class="pill warn" title="${esc([ex1.channel, ex1.severity].filter(Boolean).join(", "))}">industry names ${esc(co.sym)} most exposed</span>` : ""}</div>
       <div class="small muted">${esc([c.roles, c.trajectory, isNum(c.ind_share) ? `${pct(c.ind_share, false, 0)} of industry revenue` : "", c.revenue ? `${co.sym}: ${pct(c.revenue.share, false, 0)} of revenue (${c.revenue.region})` : ""].filter(Boolean).join(" · "))}</div>
       <div class="actions" style="justify-content:flex-start;align-items:center;margin:6px 0"><span class="small muted">${esc(co.sym)}</span>${y ? `${lvlP(y.exposure, "exposure")} ${effP(y.effect)}` : pend(co, t)}</div>
-      ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : `<p class="small muted" style="margin:0">${esc(trimC(stripCites(c.headline || c.why || ""), 260))}</p>`}
+      ${y?.why ? `<p class="small" style="margin:0">${rich(y.why)} ${cites(y.evidence)}</p>` : `<p class="small muted" style="margin:0">${esc(showC(stripCites(c.headline || c.why || ""), 260))}</p>`}
       ${y?.channel || y?.risk || y?.freeze ? `<div class="small" style="display:grid;gap:2px;margin-top:4px">${y.channel ? `<div><b>Channel:</b> ${rich(y.channel)}</div>` : ""}${y.risk ? `<div><b>Risk:</b> ${rich(y.risk)}</div>` : ""}${y.freeze ? `<div><b>If trade froze:</b> ${rich(y.freeze)}</div>` : ""}</div>` : ""}
       ${dossier(c)}</div>`; }).join("");
     const top = `${TV ? `<div class="small"><b>The industry's trade verdict:</b> <span class="pill ${TV.rating === "manageable" ? "neu" : /severe|high|critical/.test(TV.rating) ? "neg" : "warn"}">${esc(TV.rating)}</span>${TV.health !== null ? ` <span class="muted">health ${esc(String(TV.health))}/100 (${esc(TV.band)})</span>` : ""} ${esc(TV.headline)}</div>` : ""}
-      ${TO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${TO.risk ? `<span class="pill ${RK[TO.risk] || "neu"}">${esc(TO.risk)} trade risk</span>` : ""}</div>${TO.summary ? `<p class="small" style="margin:0">${rich(TO.summary)}</p>` : ""}${TO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(TO.biggest)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${TO.watch.map(rich).join("; ")}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s trade read is being written…</div>` : ""}`;
+      ${TO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${TO.risk ? `<span class="pill ${RK[TO.risk] || "neu"}">${esc(TO.risk)} trade risk</span>` : ""}</div>${TO.summary ? `<p class="small" style="margin:0">${rich(TO.summary)}</p>` : ""}${TO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(TO.biggest)}</div>` : ""}${TO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(TO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s trade read is being written…</div>` : ""}`;
     // Code: where the company's revenue sits against the industry's. The industry's share is the filings figure where
     // companies name the country, else the trade analyst's estimate (a filings 0 for a country no company names is "not
     // reported", not 0). A company that reports only regions gets one row per region: its region total against the
@@ -23706,20 +23807,20 @@ Return ONLY a JSON object:
     const nameRe = coNameRe(co), names = (r) => nameRe && nameRe.test([r.name, r.what, r.numeric, r.impact, r.last12, r.today, r.next12, r.bottom_line].filter(Boolean).join(" "));
     const nNamed = In.filter(names).length;
     const rows = In.map((r) => { const y = L[r.id]; return `<tr><td class="wr"><b>${esc(r.name)}</b>${names(r) ? ` <span class="pill warn">names ${esc(co.sym)}</span>` : ""}<div class="small muted">${esc(r.body)}${r.category ? ` · ${esc(r.category)}` : ""}</div>${ruleMore(r)}</td>
-      <td><span class="pill ${SEVC[r.severity] || "neu"}">${esc(r.severity || "")}</span><div class="small muted">${esc(String(r.status || "").replace(/_/g, " "))}${r.effective ? " · " + esc(trimC(r.effective, 60)) : ""}</div></td>
+      <td><span class="pill ${SEVC[r.severity] || "neu"}">${esc(r.severity || "")}</span><div class="small muted">${esc(String(r.status || "").replace(/_/g, " "))}${r.effective ? " · " + esc(showC(r.effective, 60)) : ""}</div></td>
       <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td>
-      <td class="wr small">${y?.why ? `${rich(y.why)} ${cites(y.evidence)}` : `<span class="muted">${esc(trimC(stripCites(r.bottom_line || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.timing ? `<div class="muted"><b>When:</b> ${rich(y.timing)}</div>` : ""}</td></tr>`; }).join("");
+      <td class="wr small">${y?.why ? `${rich(y.why)} ${cites(y.evidence)}` : `<span class="muted">${esc(showC(stripCites(r.bottom_line || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.timing ? `<div class="muted"><b>When:</b> ${rich(y.timing)}</div>` : ""}</td></tr>`; }).join("");
     const RI = co.lensIn?.regItems || [], LI = t?.lens?.reg_items || {};
     const items = RI.length ? `<h3>Policy, litigation and deals</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Item</th><th>Status</th><th>For ${esc(co.sym)}</th><th>Why</th></tr></thead><tbody>${RI.map((x) => { const y = LI[x.id], me = (x.names || []).includes(co.sym);
-      return `<tr><td class="wr"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${me ? ` <span class="pill warn">names ${esc(co.sym)}</span>` : ""}${x.value ? ` <span class="muted">${esc(x.value)}</span>` : ""}${x.parties ? `<div class="small muted">${esc(trimC(x.parties, 160))}</div>` : ""}${x.text ? `<details class="small"><summary>The industry's read</summary><div>${esc(x.text)}</div>${x.names?.length ? `<div class="muted">Names: ${x.names.map((n) => (n === co.sym ? `<mark>${esc(n)}</mark>` : esc(n))).join(", ")}</div>` : ""}</details>` : ""}</td>
-        <td class="small">${esc(x.status || "")}${x.date ? `<div class="muted">${esc(x.date)}</div>` : ""}${x.direction ? ` ${effP(x.direction === "tailwind" ? "helps" : x.direction === "headwind" ? "hurts" : x.direction)}` : ""}${x.next ? `<div class="muted">Next: ${esc(trimC(x.next, 120))}</div>` : ""}</td>
-        <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(trimC(stripCites(x.text || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.next ? `<div class="muted"><b>Next:</b> ${rich(y.next)}</div>` : ""}</td></tr>`; }).join("")}</tbody></table></div>` : "";
+      return `<tr><td class="wr"><span class="pill neu">${esc(x.kind)}</span> <b>${esc(x.title)}</b>${me ? ` <span class="pill warn">names ${esc(co.sym)}</span>` : ""}${x.value ? ` <span class="muted">${esc(x.value)}</span>` : ""}${x.parties ? `<div class="small muted">${esc(showC(x.parties, 160))}</div>` : ""}${x.text ? `<details class="small"><summary>The industry's read</summary><div>${esc(x.text)}</div>${x.names?.length ? `<div class="muted">Names: ${x.names.map((n) => (n === co.sym ? `<mark>${esc(n)}</mark>` : esc(n))).join(", ")}</div>` : ""}</details>` : ""}</td>
+        <td class="small">${esc(x.status || "")}${x.date ? `<div class="muted">${esc(x.date)}</div>` : ""}${x.direction ? ` ${effP(x.direction === "tailwind" ? "helps" : x.direction === "headwind" ? "hurts" : x.direction)}` : ""}${x.next ? `<div class="muted">Next: ${esc(showC(x.next, 120))}</div>` : ""}</td>
+        <td>${y ? `${effP(y.effect)} ${lvlP(y.materiality, "materiality")}${y.link ? `<div class="small muted">via ${esc(y.link)}</div>` : ""}` : pend(co, t)}</td><td class="wr small">${y?.why ? rich(y.why) : `<span class="muted">${esc(showC(stripCites(x.text || ""), 220))}</span>`}${y?.cost ? `<div><b>Size:</b> ${rich(y.cost)}</div>` : ""}${y?.next ? `<div class="muted"><b>Next:</b> ${rich(y.next)}</div>` : ""}</td></tr>`; }).join("")}</tbody></table></div>` : "";
     // The industry's verdict, its winners and losers, and the dated steps ahead, next to this company's own read.
     const wl = V && (V.winners.length || V.losers.length) ? `<div class="small"><b>The industry's regulatory winners:</b> ${V.winners.map((x) => `<span title="${esc(x.why)}">${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)}</span>`).join(", ") || "—"} · <b>losers:</b> ${V.losers.map((x) => `<span title="${esc(x.why)}">${x.symbol === co.sym ? `<mark>${esc(x.symbol)}</mark>` : esc(x.symbol)}</span>`).join(", ") || "—"}${[...V.winners, ...V.losers].find((x) => x.symbol === co.sym) ? `<div class="muted">${esc([...V.winners, ...V.losers].find((x) => x.symbol === co.sym).why)}</div>` : ""}</div>` : "";
     const our = RO ? `<div class="box" style="margin:8px 0"><div class="dim-head" style="justify-content:flex-start;flex-wrap:wrap"><b>For ${esc(co.sym)}</b>${RO.stance ? `<span class="pill ${STC[RO.stance] || "neu"}">${esc(RO.stance)}</span>` : ""}${RO.vs_peers ? `<span class="pill ${PEER[RO.vs_peers] || "neu"}">${esc(RO.vs_peers)} vs peers</span>` : ""}</div>
       ${RO.summary ? `<p class="small" style="margin:0">${rich(RO.summary)}</p>` : ""}${RO.biggest ? `<div class="small"><b>What matters most:</b> ${rich(RO.biggest)}</div>` : ""}
       ${RO.timeline?.length ? `<div class="small"><b>Dated steps ahead for ${esc(co.sym)}:</b><ul class="dlist">${RO.timeline.map((x) => `<li>${x.date ? `<b class="mono">${esc(x.date.length === 7 ? x.date : fmtShort(x.date))}</b> ` : ""}${rich(x.event)}${x.why ? ` <span class="muted">${rich(x.why)}</span>` : ""}</li>`).join("")}</ul></div>` : ""}
-      ${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${RO.watch.map(rich).join("; ")}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s regulatory read is being written…</div>` : "";
+      ${RO.watch?.length ? `<div class="small muted"><b>Watch:</b> ${ptList(RO.watch.map(rich))}</div>` : ""}</div>` : co.writing ? `<div class="small muted">${esc(co.sym)}'s regulatory read is being written…</div>` : "";
     const indMore = V ? `<details class="small"><summary>The industry's regulation and legal report</summary><div style="display:grid;gap:6px;margin-top:6px">${ln("Summary", V.summary)}
       ${V.most_material.length ? `<div><b>Most material:</b><ul class="dlist">${V.most_material.map((x) => `<li><b>${esc(x.body)}</b> ${esc(x.rule)} <span class="muted">${esc(x.why)}</span></li>`).join("")}</ul></div>` : ""}
       ${V.timeline.length ? `<div><b>Timeline:</b><ul class="dlist">${V.timeline.map((x) => `<li><span class="mono">${esc(fmtShort(x.date))}</span> ${x.body ? `<b>${esc(x.body)}</b> ` : ""}${esc(x.event)}</li>`).join("")}</ul></div>` : ""}
@@ -23745,7 +23846,7 @@ Return ONLY a JSON object:
     const bars = items.map((x, i) => { const w = two ? bw * 0.34 : bw * 0.62, x0 = P.l + i * bw + (bw - (two ? 2 * w : w)) / 2;
       const r = (v, xx, col) => (isNum(v) ? `<rect x="${xx.toFixed(1)}" y="${Math.min(y(v), y(0)).toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(1, Math.abs(y(v) - y(0))).toFixed(1)}" fill="${col || (v >= 0 ? "var(--pos)" : "var(--neg)")}" rx="2"><title>${esc(x.label)}: ${esc(fmtY(v))}</title></rect>` : "");
       const dot = isNum(x.d) ? `<circle cx="${(P.l + i * bw + bw / 2).toFixed(1)}" cy="${y(x.d).toFixed(1)}" r="4.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="2"><title>${esc(x.label)} estimate: ${esc(fmtY(x.d))}</title></circle>` : "";
-      return r(x.a, x0, colorA) + (two ? r(x.b, x0 + w, colorB) : "") + dot + `<text x="${(P.l + i * bw + bw / 2).toFixed(1)}" y="${H - P.b + 15}" text-anchor="middle">${esc(trimC(x.label, labelW))}</text>`; }).join("");
+      return r(x.a, x0, colorA) + (two ? r(x.b, x0 + w, colorB) : "") + dot + `<text x="${(P.l + i * bw + bw / 2).toFixed(1)}" y="${H - P.b + 15}" text-anchor="middle">${esc(showC(x.label, labelW))}</text>`; }).join("");
     return `<svg viewBox="0 0 ${W} ${H}" role="img">${g}<line x1="${P.l}" x2="${W - P.r}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" stroke="var(--faint)"/>${bars}</svg>`;
   }
   /** A donut with its legend. items: [{name, value}] */
@@ -24189,7 +24290,7 @@ Return ONLY a JSON object:
     const fmtv = (r, v) => (v === null || v === undefined ? "—" : r.kind === "chg" ? pct(v) : r.kind === "pct" ? pct(v, false) : r.kind === "cap" ? cap(v) : fix(v, 2));
     const bar = (g) => (g === null ? "" : `<div class="pillar-bar" style="min-width:60px"><i style="width:${g}%;background:${g >= 67 ? "var(--gA)" : g >= 34 ? "var(--accent)" : "var(--gF)"}"></i></div>`);
     const rows = (co.peers || []).map((r) => `<tr><td>${esc(r.label)}</td><td class="n"><b>${fmtv(r, r.value)}</b></td><td class="n muted">${fmtv(r, r.median)}</td><td class="n">${r.pct ?? "—"}</td><td>${bar(r.good)}</td></tr>`).join("");
-    const cl = (co.closest || []).map((c) => `<tr><td><button class="linkbtn tick" data-co="${esc(c.symbol)}">${esc(c.symbol)}</button>${c.fmp_peer ? ` <span class="chip">FMP peer</span>` : ""}</td><td>${esc(trimC(c.name || "", 34))}</td><td class="n">${cap(c.market_cap)}</td><td class="n">${fix(c.pe, 1)}</td><td class="n">${pct(c.rev_growth)}</td><td class="n">${pct(c.op_margin)}</td><td class="n ${cls(num(c.ret_1Y))}">${pct(c.ret_1Y)}</td></tr>`).join("");
+    const cl = (co.closest || []).map((c) => `<tr><td><button class="linkbtn tick" data-co="${esc(c.symbol)}">${esc(c.symbol)}</button>${c.fmp_peer ? ` <span class="chip">FMP peer</span>` : ""}</td><td>${esc(showC(c.name || "", 34))}</td><td class="n">${cap(c.market_cap)}</td><td class="n">${fix(c.pe, 1)}</td><td class="n">${pct(c.rev_growth)}</td><td class="n">${pct(c.op_margin)}</td><td class="n ${cls(num(c.ret_1Y))}">${pct(c.ret_1Y)}</td></tr>`).join("");
     return sec("co-peers", `Closest peers in the ${esc(co.run.name)} top 50`, co.row?.rank ? "from the industry run's own numbers" : "its numbers from FMP, against the industry's 50",
       `<div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Company</th><th class="n">Mkt cap</th><th class="n">P/E</th><th class="n">Growth</th><th class="n">Op margin</th><th class="n">1Y</th></tr></thead><tbody>${cl}</tbody></table></div>
        <details><summary class="small">Every metric against the industry median (${(co.peers || []).length})</summary><div class="tbl-wrap"><table><thead><tr><th>Metric</th><th class="n">${esc(co.sym)}</th><th class="n">Industry median</th><th class="n">Percentile</th><th>Better than</th></tr></thead><tbody>${rows}</tbody></table></div>
@@ -24222,7 +24323,7 @@ Return ONLY a JSON object:
     const t = co.thesis?.thesis || co.partial;
     const facts = `<div class="strip">${[["Headquarters", [p.city, p.state, p.country].filter(Boolean).join(", ") || "—"], ["CEO", p.ceo || "—"], ["Employees", isNum(num(p.fullTimeEmployees)) ? Number(p.fullTimeEmployees).toLocaleString() : "—"], ["IPO", p.ipoDate ? fmtShort(p.ipoDate) + " " + String(p.ipoDate).slice(0, 4) : "—"], ["Sector / industry", [p.sector, p.industry].filter(Boolean).join(" · ") || "—"]].map(([l, v]) => `<div><span class="eyebrow">${l}</span><span class="small" style="color:var(--ink);font-weight:600">${esc(v)}</span></div>`).join("")}</div>`;
     const pies = (s.product?.items?.length || s.geo?.items?.length) ? `<div class="two">${s.product?.items?.length ? `<div><h3>Revenue by segment <span class="small muted">${esc(s.product.label || "")}</span></h3>${donut(s.product.items.map((x) => ({ name: x.name, value: x.share })))}</div>` : ""}${s.geo?.items?.length ? `<div><h3>Revenue by region <span class="small muted">${esc(s.geo.label || "")}</span></h3>${donut(s.geo.items.map((x) => ({ name: x.name, value: x.share })))}</div>` : ""}</div>` : "";
-    const moat = t?.moat?.rating || t?.moat?.sources?.length ? `<div class="box"><div class="dim-head"><b>Moat</b>${t.moat.rating ? `<span class="pill ${t.moat.rating === "wide" ? "pos" : t.moat.rating === "none" ? "neg" : "neu"}">${esc(t.moat.rating)}</span>` : ""}</div>${(t.moat.sources || []).length ? `<div class="small"><b>Where it comes from:</b> ${t.moat.sources.map(rich).join("; ")}</div>` : ""}${(t.moat.threats || []).length ? `<div class="small"><b>What could erode it:</b> ${t.moat.threats.map(rich).join("; ")}</div>` : ""}</div>` : "";
+    const moat = t?.moat?.rating || t?.moat?.sources?.length ? `<div class="box"><div class="dim-head"><b>Moat</b>${t.moat.rating ? `<span class="pill ${t.moat.rating === "wide" ? "pos" : t.moat.rating === "none" ? "neg" : "neu"}">${esc(t.moat.rating)}</span>` : ""}</div>${(t.moat.sources || []).length ? `<div class="small"><b>Where it comes from:</b> ${ptList(t.moat.sources.map(rich))}</div>` : ""}${(t.moat.threats || []).length ? `<div class="small"><b>What could erode it:</b> ${ptList(t.moat.threats.map(rich))}</div>` : ""}</div>` : "";
     const ex = co.data?.execs || [];
     const lead = ex.length ? `<details><summary class="small"><b>Leadership</b> (${ex.length})</summary><div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Title</th><th class="n">Pay</th><th class="n">Born</th></tr></thead><tbody>${ex.map((x) => `<tr><td>${esc(x.name)}</td><td class="small">${esc(x.title || "")}</td><td class="n">${isNum(num(x.pay)) && x.pay > 0 ? cap(x.pay) : "—"}</td><td class="n">${x.born || "—"}</td></tr>`).join("")}</tbody></table></div></details>` : "";
     return sec("co-biz", "Business overview", "",
@@ -24388,7 +24489,7 @@ Return ONLY a JSON object:
   const curTab = () => d.querySelector("#tabs .tab.cur")?.dataset.tab || "industries";
 
   // ---------------------------------------------------------------- folding sections
-  const FK = "ams.fold.v1";
+  const FK = "ams.fold.v2";
   const fold = store.get(FK, {}) || {};
   const saveFold = () => { const ks = Object.keys(fold); if (ks.length > 600) for (const k of ks.slice(0, ks.length - 600)) delete fold[k]; store.set(FK, fold); };
   const titleOf = (p) => (p.querySelector(":scope > .panel-head h2, :scope > .panel-head h3")?.textContent || "").replace(/\s+/g, " ").trim();
@@ -24399,8 +24500,17 @@ Return ONLY a JSON object:
     p.classList.toggle("is-folded", f);
     const b = p.querySelector(":scope > .panel-head .fold-btn"); if (b) { b.setAttribute("aria-expanded", String(!f)); b.setAttribute("aria-label", label(p, f)); b.title = f ? "Expand" : "Collapse"; }
   }
+  const LEAD = new Set(["performance", "overview", "co-returns", "co-lean", "co-snap", "fund-perf", "fund-snap", "bond-snap", "cmp-perf", "cmp-verdict"]);
+  function dflt(p) {
+    if (p.dataset.foldDefault) return p.dataset.foldDefault === "closed";
+    const st = p.closest(".stream"); if (!st || LEAD.has(p.id)) return false;
+    const ps = [...st.querySelectorAll(":scope > section.panel, :scope > * > section.panel")], i = ps.indexOf(p);
+    if (i < 0 || i === 0) return false;
+    return !(i < 2 && !ps.some((x) => LEAD.has(x.id)));
+  }
   function enhance(p) {
-    const head = p.querySelector(":scope > .panel-head"); if (!head) return false;
+    let head = p.querySelector(":scope > .panel-head");
+    if (!head) { const h0 = p.querySelector(":scope > h2"); if (!h0) return false; head = d.createElement("div"); head.className = "panel-head"; p.insertBefore(head, h0); head.appendChild(h0); }
     if (!head.dataset.fold) {
       head.dataset.fold = "1";
       const b = d.createElement("button"); b.type = "button"; b.className = "fold-btn"; b.innerHTML = CHEV;
@@ -24408,15 +24518,21 @@ Return ONLY a JSON object:
       if (h) { const t = d.createElement("span"); t.className = "ph-t"; h.parentNode.insertBefore(t, h); t.append(b, h); } else head.prepend(b);
     }
     const k = keyOf(p); p.dataset.foldKey = k;
-    setFolded(p, k in fold ? !!fold[k] : p.dataset.foldDefault === "closed");
+    setFolded(p, k in fold ? !!fold[k] : dflt(p));
     return true;
   }
   function toggle(p, to, quiet) {
     const now = p.classList.contains("is-folded"), next = to ?? !now; if (next === now) return;
     fold[p.dataset.foldKey || keyOf(p)] = next; if (!quiet) saveFold();
-    const done = () => { p.classList.remove("is-closing"); setFolded(p, next); if (!next && !quiet) { p.classList.add("is-opening"); later(300, () => p.classList.remove("is-opening")); } };
+    const done = () => { p.classList.remove("is-closing"); setFolded(p, next); if (!next && !quiet) { digest(p); stagger(p); p.classList.add("is-opening"); countUp(p); later(700, () => p.classList.remove("is-opening")); } };
     if (next && !quiet && !RM.matches) { p.classList.add("is-closing"); setTimeout(done, 100); } else done();
   }
+  function reveal(el) {
+    for (let p = el.closest("section.panel"); p; p = p.parentElement?.closest("section.panel")) if (p.classList.contains("is-folded")) { if (!p.dataset.foldKey) enhance(p); toggle(p, false); }
+    for (let x = el.parentElement?.closest("details"); x; x = x.parentElement?.closest("details")) x.open = true;
+    syncFoldBtn();
+  }
+  function flash(p) { p = p.closest("section.panel") || p; p.classList.remove("is-flash"); void p.offsetWidth; p.classList.add("is-flash"); setTimeout(() => p.classList.remove("is-flash"), 700); }
   function foldAll(to) {
     const ps = [...liveViews(), $("method")].filter(Boolean).flatMap((el) => [...el.querySelectorAll("section.panel")]).filter((p) => p.querySelector(":scope > .panel-head[data-fold]"));
     for (const p of ps) toggle(p, to, true); saveFold(); syncFoldBtn();
@@ -24434,6 +24550,55 @@ Return ONLY a JSON object:
     setTimeout(() => { if (det.open) { det.classList.add("d-open"); setTimeout(() => det.classList.remove("d-open"), 320); } }, 0);
   });
 
+  // ---------------------------------------------------------------- easy to digest: cards, "Read all", numbers that count up
+  const ZONE = "#report,#company,#fund,#cmp,#pf,#picker,#method";
+  const SKIP = "nav, .sidenav, .cmdk, .sug, .tip, svg, form, .memo-plan, .cx-tl, .legend-list, .cx-mi-sum, .statusline, .pfe-foot, .rcard-top";
+  const BLOCKS = "div, p, ul, ol, table, details, section, h1, h2, h3, h4, blockquote, form, svg, canvas, input, select, textarea";
+  const CLAMP_AT = 420;
+  // Lists already inside a card stay lists: cards in cards get heavy.
+  const CARDISH = ".hz, .dim, .dimblock, .fcard, .mcard, .cx-rcard, .cx-tcard, .cx-sit, .cx-card, .cx-invc, .rcard, .cardlist, .ov-card, .pf-card, .memo-card, .memo-side, .prof, .cep-card, .ep-card, .iv-card, .kpi, .pf-sub";
+  const words = (t) => (t.trim().match(/\S+/g) || []).length;
+  function digest(root) {
+    const scope = root || d;
+    for (const l of scope.querySelectorAll("ul:not([data-dg]), ol:not([data-dg])")) {
+      l.dataset.dg = "1"; if (!l.closest(ZONE) || l.closest(SKIP) || l.closest("td, th") || l.parentElement?.closest(CARDISH)) continue;
+      const li = [...l.children].filter((x) => x.tagName === "LI"); if (li.length < 2) continue;
+      const lens = li.map((x) => x.textContent.trim().length), avg = lens.reduce((a, b) => a + b, 0) / lens.length;
+      if (avg < 60 && Math.max(...lens) < 140) continue;
+      l.classList.add("cardlist"); li.forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9))));
+    }
+    for (const g of scope.querySelectorAll(".rgrid:not([data-dg])")) { g.dataset.dg = "1"; [...g.children].forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9)))); }
+    for (const e of scope.querySelectorAll("p:not([data-dg]), li:not([data-dg]), div:not([data-dg]), blockquote:not([data-dg])")) {
+      e.dataset.dg = "1";
+      if (e.classList.contains("clamp-in") || e.closest(".clamp-in") || !e.closest(ZONE) || e.closest(SKIP) || e.closest(".panel-head") || e.querySelector(BLOCKS)) continue;
+      const t = e.textContent; if (t.length < CLAMP_AT) continue;
+      const inner = d.createElement("span"); inner.className = "clamp-in"; while (e.firstChild) inner.appendChild(e.firstChild);
+      const b = d.createElement("button"); b.type = "button"; b.className = "more-btn"; b.setAttribute("aria-expanded", "false"); b.dataset.w = String(words(t));
+      b.innerHTML = `<span>Read all</span><small>${words(t)} words</small>`;
+      e.append(inner, b); e.classList.add("clamp");
+    }
+  }
+  d.addEventListener("click", (ev) => {
+    const b = ev.target.closest(".more-btn"); if (!b) return; ev.preventDefault();
+    const e = b.parentElement, open = !e.classList.contains("open"); e.classList.toggle("open", open); b.setAttribute("aria-expanded", String(open));
+    b.innerHTML = open ? "<span>Show less</span>" : `<span>Read all</span><small>${b.dataset.w} words</small>`;
+    if (!open && e.getBoundingClientRect().top < 0) e.scrollIntoView({ block: "nearest" });
+  });
+  function stagger(root) { for (const l of root.querySelectorAll(".cardlist, .rgrid")) [...l.children].forEach((x, i) => x.style.setProperty("--k", String(Math.min(i, 9)))); }
+  const NUMS = ".kpi .v, .strip .v, .ov-kpi .v, .mval, .stat-big, .pf-value, .hz-num .v, .pf-stat-v, .memo-stat b, .prof .big b, .fcard .w, .retcard .rv, .rcard-prob b, .cx-mi-n b";
+  function countUp(root) {
+    if (RM.matches) return;
+    for (const el of root.querySelectorAll(NUMS)) {
+      if (el.children.length || el.dataset.cu) continue; const t = el.textContent, m = t.match(/-?\d[\d,]*\.?\d*/); if (!m) continue;
+      const raw = m[0].replace(/,/g, ""), target = parseFloat(raw); if (!isFinite(target) || target === 0) continue;
+      const dec = (raw.split(".")[1] || "").length, comma = m[0].includes(","), t0 = performance.now(); el.dataset.cu = "1";
+      const step = (now) => { const k = Math.min(1, (now - t0) / 300), v = target * (1 - Math.pow(1 - k, 3)); let n = Math.abs(v).toFixed(dec);
+        if (comma) n = Number(n).toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+        if (k < 1) { el.textContent = t.slice(0, m.index) + (v < 0 ? "-" : "") + n + t.slice(m.index + m[0].length); requestAnimationFrame(step); } else { el.textContent = t; delete el.dataset.cu; } };
+      requestAnimationFrame(step);
+    }
+  }
+
   // ---------------------------------------------------------------- first sight of a section: rise in, a few at a time
   let seen = new Set(), lastTab = null, booted = false;
   function decorate() {
@@ -24443,7 +24608,8 @@ Return ONLY a JSON object:
       const k = p.dataset.foldKey || keyOf(p);
       if (!seen.has(k)) { seen.add(k); if (shown(p.closest("#picker,#report,#company,#fund,#cmp,#pf") || p) && !p.closest(".is-folded")) fresh.push(p); }
     }
-    if (!RM.matches && booted) fresh.forEach((p, i) => { if (p.getBoundingClientRect().top > innerHeight * 1.5) return; p.style.setProperty("--i", String(Math.min(i, 7))); p.classList.add("p-new"); setTimeout(() => p.classList.remove("p-new"), 900); });
+    digest();
+    if (!RM.matches && booted) fresh.forEach((p, i) => { if (p.getBoundingClientRect().top > innerHeight * 1.5) return; p.style.setProperty("--i", String(Math.min(i, 7))); p.classList.add("p-new"); countUp(p); setTimeout(() => p.classList.remove("p-new"), 1200); });
     syncFoldBtn();
   }
 
@@ -24516,9 +24682,9 @@ Return ONLY a JSON object:
   const clickTab = (t) => d.querySelector(`#tabs [data-tab="${t}"]`)?.click();
   const afterRender = (f) => requestAnimationFrame(() => requestAnimationFrame(f));
   function goSection(p) {
-    if (p.classList.contains("is-folded")) toggle(p, false);
-    p.scrollIntoView({ behavior: RM.matches ? "instant" : "smooth", block: "start" });
-    p.classList.remove("is-flash"); void p.offsetWidth; p.classList.add("is-flash"); setTimeout(() => p.classList.remove("is-flash"), 700);
+    reveal(p); if (p.classList.contains("is-folded")) toggle(p, false);
+    requestAnimationFrame(() => p.scrollIntoView({ behavior: RM.matches ? "instant" : "smooth", block: "start" }));
+    flash(p);
   }
   function viaForm(tab, input, form, v) {
     clickTab(tab);
@@ -24606,6 +24772,7 @@ Return ONLY a JSON object:
   const mo = new MutationObserver(() => { if (queued) return; queued = true; requestAnimationFrame(() => { queued = false; onTabs(); decorate(); }); });
   mo.observe(d.querySelector(".wrap") || d.body, { childList: true, subtree: true });
   mo.observe($("tabs"), { childList: true, subtree: true });
+  window.AMS = { reveal, flash, foldAll: (to) => foldAll(!!to), digest };
   onTabs(); decorate();
   if (!RM.matches) { html.classList.add("boot"); setTimeout(() => html.classList.remove("boot"), 900); }
   setTimeout(() => { booted = true; }, 400);
