@@ -256,7 +256,9 @@
     const reports = Object.fromEntries(Object.entries(rec.reports || {}).map(([k, v]) => [k.replace(sl + "--", ""), v?.result]).filter(([, v]) => v));
     const books = Object.values(rec.regbooks || {}).filter((b) => b?.book).map((b) => ({ body: b.body, book: b.book }));
     const L = CO().lensInputs({ name: rec.name, saved_at: rec.saved_at, industry: rec.industry, agent: rec.agent, macro: rec.macro, reports, books, lead: rec.agent?.result || null }, [], [], rec.industry?.as_of || null);
-    const m = reports.macro || {}, t = (x, k) => cutW(x, k);
+    // Text is kept whole (up to 1,200 characters, or 4x the old cut) so the pages show it in full; FundMore.affairsText
+    // cuts each field back to its old length for the prompts (LENS_CUT), so what Claude reads doesn't change.
+    const m = reports.macro || {}, t = (x, k) => cutW(x, Math.max(1200, k * 4));
     return {
       // The industry's whole macro table (every indicator the macro planner chose, its numbers and the strategist's read
       // of each), what's moving and why, how the macro reaches it, what would flip it, and the releases ahead.
@@ -299,7 +301,7 @@
     const rules = Object.values(rec?.regbooks || {}).flatMap((b) => (b?.book?.rules || []).map((r) => ({ name: String(r.name || "").slice(0, 140), body: String(b.body || "").slice(0, 80), severity: r.severity || "", status: r.status || "", bottom_line: String(r.bottom_line || "").slice(0, 220) })))
       .filter((r) => r.name && (r.severity === "critical" || r.severity === "high")).sort((x, y) => (SEV[x.severity] ?? 4) - (SEV[y.severity] ?? 4)).slice(0, 3);
     return {
-      v: 7, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
+      v: 8, name: rec?.name || d.name, slug, sector: d.sector || null, saved_at: rec?.saved_at || d.updated_at || null, as_of: d.as_of || null, kind: rec?.agent?.result ? "full" : "quant",
       scores: row?.scores || scores || null, best: row?.best || null, opportunity: a.opportunity?.verdict || a.opportunity?.call || row?.opportunity || null, headline: String(a.headline || row?.headline || "").slice(0, 300),
       expected12: isNum(n(a.math?.expected_return)) ? n(a.math.expected_return) : isNum(n(row?.expected)) ? n(row.expected) : null,
       calls, lean: leanC, lean_date: a.outlook?.date || row?.outlook?.date || null, scen,
