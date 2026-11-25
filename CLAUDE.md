@@ -43,11 +43,13 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
 
 ## Portfolios
 
-- **Analysis tab** = the portfolio run through the fund pipeline (`pfFundOpen`): `pfRaw` looks every fund through to its
-  holdings (FMP) and adds the stocks, `pfSeries` prices it daily at its weights, then `fundAnalyze`, `fundNet`, a small
-  code-only fill and `fundWrite` (written here on the viewer's Claude, never the GitHub fund job; `pfP` rewords the fund
-  prompts for a portfolio). It renders with `fundView` through `pfWords`. While it's on screen `S.fund` is the portfolio's
-  fd (`fd.pf`); `renderFund` sends redraws to the Portfolios tab and gives the Funds tab its own fund (`S.fundUser`) back.
+- **Dashboard** (`pfDash`, maths in `web/pfx.js`, worked out once per load in `pfX`): one page with a sidebar, all code, no Claude.
+  - At a glance: tiles, plus a written read (`PfX.read`).
+  - Performance: value with the S&P 500 toggle, drawdowns (today's mix over 5 years), month by month, rolling 6 months, where the return came from.
+  - Risk: ratios against the S&P 500 with VaR and CVaR in dollars, who carries the risk (covariance risk shares), how the holdings move together (correlations), a stress test through past crises with "if the market fell", and a range of outcomes (lognormal fan).
+  - What it owns: sectors against the S&P 500 (SPY's sector weights), regions (funds' country weights), the companies inside and how much the funds overlap, the industries with our calls (from the saved runs' digests, `pfIndLoad`).
+  - Income and costs; Wall Street on its biggest companies.
+  - Prices are read from mid-2007 for the stress test. The old Analysis tab (`pfFundTab`, the fund pipeline) is no longer shown.
 - **What to change** = the older analysis (grade, recommended mix, new ETFs). Only the first version is written (on
   GitHub or here); the others are written when picked.
 - **Editor**: weights (or amounts) only; no shares, average cost or "bought on" (saving drops shares and avg cost).
