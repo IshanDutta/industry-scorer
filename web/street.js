@@ -14,7 +14,7 @@
   const pts = (x) => { const v = Math.round(x * 100); return `${v > 0 ? "+" : v < 0 ? "−" : "±"}${Math.abs(v)} point${Math.abs(v) === 1 ? "" : "s"}`; };
   const MON = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const monthName = (d) => { const m = +String(d).slice(5, 7); return m ? `${MON[m - 1]} ${String(d).slice(0, 4)}` : String(d); };
-  const dayName = (d) => { const m = +String(d).slice(5, 7), day = +String(d).slice(8, 10); return m && day ? `${MON[m - 1].slice(0, 3)} ${day}` : String(d); };
+  const dayName = (d) => { const m = +String(d).slice(5, 7), day = +String(d).slice(8, 10); return m && day ? `${MON[m - 1].slice(0, 3)} ${day}, ${String(d).slice(0, 4)}` : String(d); };
   const money = (x) => (isNum(x) ? `$${x >= 100 ? x.toFixed(0) : x.toFixed(2)}` : "n/a");
   const back = (today, days) => { if (!today) return ""; const d = new Date(today + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - days); return d.toISOString().slice(0, 10); };
 

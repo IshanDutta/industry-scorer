@@ -40,6 +40,31 @@ Points after a label render with `ptList` (a list, never "a; b; c"), and on-scre
 prompts keep `trimC`. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the
 `--t1`..`--t4` tokens (100/150/200/300ms), transform and opacity only, and honors reduced motion.
 
+## Portfolios
+
+- **Analysis tab** = the portfolio run through the fund pipeline (`pfFundOpen`): `pfRaw` looks every fund through to its
+  holdings (FMP) and adds the stocks, `pfSeries` prices it daily at its weights, then `fundAnalyze`, `fundNet`, a small
+  code-only fill and `fundWrite` (written here on the viewer's Claude, never the GitHub fund job; `pfP` rewords the fund
+  prompts for a portfolio). It renders with `fundView` through `pfWords`. While it's on screen `S.fund` is the portfolio's
+  fd (`fd.pf`); `renderFund` sends redraws to the Portfolios tab and gives the Funds tab its own fund (`S.fundUser`) back.
+- **What to change** = the older analysis (grade, recommended mix, new ETFs). Only the first version is written (on
+  GitHub or here); the others are written when picked.
+- **Editor**: weights (or amounts) only; no shares, average cost or "bought on" (saving drops shares and avg cost).
+- **Ticker boxes** everywhere (portfolio editor, rebalance, Companies, Compare, Funds) share one search (`bindTickerBox`,
+  `cmpLive`: FMP symbol and name search plus EODHD's, which knows the mutual funds FMP doesn't). Search calls get their
+  own short lane in the FMP and EODHD queues, so suggestions show while a page is still loading its data.
+- **Rebalance** adds and removes holdings; a dot on Rebalance and Edit holdings marks changes not saved; leaving the
+  editor with unsaved edits asks first.
+
+## Update everything from GitHub
+
+The button fires the `SYNC_TRIGGER` task (prompt in `runner/update-task.md`; the live task needs the same prompt). It
+first runs `daily-update.yml` with `windows=true`: `runWindowsPass` gives every finished industry Times like this for
+every window with the historian's notes (saved on the run as `twin`; notes reused when the same stretches come back),
+direct mode so it's quick. Then it copies the updated sectors into the page. The task writes its phase (`starting`,
+`github` with `run_url`, `copying`, `done`) to `sync/github`; the page's bar (`syncProgress`) moves by time inside each
+phase. The page uses `twin` for an industry's Times like this when it's under 3 days old.
+
 ## Layout
 
 - `web/page.src.html`: the page (HTML, CSS, and most of the app code; about 10,000 lines). Edit this, never

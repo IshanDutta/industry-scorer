@@ -17,7 +17,7 @@ assert.deepStrictEqual([T.a365.up, T.a365.down, T.a365.init, T.a365.n], [1, 1, 1
 assert(Math.abs(T.pt.chg - (80 / 72 - 1)) < 1e-9);
 assert.strictEqual(T.label, "improving");
 const tx = S.text(T);
-assert(tx.length >= 4 && /\*\*/.test(tx[0]) && /Jefferies upgraded it at \*Buy\* on Nov 10/.test(tx.join(" ")), tx.join("\n"));
+assert(tx.length >= 4 && /\*\*/.test(tx[0]) && /Jefferies upgraded it at \*Buy\* on Nov 10, 2026/.test(tx.join(" ")), tx.join("\n"));
 assert(/The trend: improving/.test(tx[tx.length - 1]));
 assert(!/…/.test(tx.join(" ")));
 
