@@ -1268,6 +1268,9 @@ details.st-more > summary { font-size: 13px; color: var(--accent); }
 .st-slot .skel { border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { :is(.p-new, .is-opening) .st-col { animation: none !important; } }
 /* ---------------------------------------------------------------- macro tables: a card per row, on every screen */
+table.co-table th { white-space: nowrap; overflow-wrap: normal; }
+table.co-table td.co { min-width: 170px; } table.co-table .co-nm { font-size: 12.5px; color: var(--muted); line-height: 1.35; white-space: normal; overflow-wrap: normal; }
+.co-views { margin: 0 0 10px; flex-wrap: wrap; }
 .tbl-wrap:has(> table.cardtable) { border: 0; background: transparent; border-radius: 0; }
 table.cardtable { display: block; }
 table.cardtable thead { display: none; }
@@ -5020,10 +5023,14 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const healthK = [kpi("Debt/equity", fix(f.de), na), kpi("Current ratio", fix(f.current_ratio), na), kpi("Interest cover", mult(f.int_cover), na || "operating income / interest"),
       kpi("FCF margin", pct(f.fcf_margin, false)), kpi("ROIC", pct(f.roic, false), na || "after-tax")].join("");
 
-    const cols = [["rank", "#", "n"], ["symbol", "Ticker", ""], ["name", "Company", ""], ["market_cap", "Mkt cap", "n"], ["weight", "Weight", "n"],
-      ...WINDOWS.map((w) => ["ret_" + w, w, "n"]), ["excess_1Y", "vs SPY 1Y", "n"], ["pe", "P/E", "n"], ["fwd_pe", "Fwd P/E", "n"], ["ntm_growth", "NTM EPS gr.", "n"], ["rev30", "Est. 30d", "n"], ["ps", "P/S", "n"], ["rev_growth", "Rev growth", "n"],
-      ["op_margin", "Op margin", "n"], ["div_yield", "Div yield", "n"], ["de", "D/E", "n"], ["beats", "Beats", "n"], ["next", "Next report", ""],
-      ["beta", "Beta", "n"], ["alpha", "Alpha 1Y", "n"], ["vol_1y", "Vol 1Y", "n"], ["max_dd_1y", "Max DD", "n"], ["short_pct", "Short % float", "n"], ["own_change_pp", "13F own. Δ", "n"], ["insider_buys", "Insider buys", "n"]];
+    // Too many measures for one table that fits without sideways scrolling: the company always shows, and the rest
+    // come in four views (S.coView, remembered). Sorting works on any measure.
+    const CO_VIEWS = [["ret", "Returns", [["market_cap", "Mkt cap", "n"], ["weight", "Weight", "n"], ...WINDOWS.map((w) => ["ret_" + w, w, "n"]), ["excess_1Y", "vs SPY 1Y", "n"]]],
+      ["val", "Valuation and growth", [["pe", "P/E", "n"], ["fwd_pe", "Fwd P/E", "n"], ["ps", "P/S", "n"], ["ntm_growth", "EPS growth (next 12M)", "n"], ["rev30", "Estimates, last 30 days", "n"], ["rev_growth", "Revenue growth", "n"], ["op_margin", "Op margin", "n"], ["div_yield", "Div yield", "n"], ["de", "Debt/equity", "n"]]],
+      ["risk", "Earnings and risk", [["beats", "Beats", "n"], ["next", "Next report", "n"], ["beta", "Beta", "n"], ["alpha", "Alpha 1Y", "n"], ["vol_1y", "Volatility 1Y", "n"], ["max_dd_1y", "Max drop 1Y", "n"]]],
+      ["own", "Who's buying", [["weight", "Weight", "n"], ["short_pct", "Short % of float", "n"], ["own_change_pp", "Funds' stake change", "n"], ["insider_buys", "Insider buys", "n"]]]];
+    const coView = CO_VIEWS.find((v) => v[0] === S.coView) || CO_VIEWS[0];
+    const cols = [["rank", "#", "n"], ["symbol", "Company", "co"], ...coView[2]];
     const cons = [...(d.constituents || [])].sort((a, c) => {
       const k = S.sort.key, av = a[k], bv = c[k];
       if (typeof av === "string" || typeof bv === "string") return S.sort.dir * String(av ?? "").localeCompare(String(bv ?? ""));
@@ -5034,9 +5041,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       : k === "pe" || k === "ps" || k === "fwd_pe" ? (isNum(num(v)) ? fix(v, 1) : "—") : k === "ntm_growth" || k === "rev30" ? pct(v) : k === "short_pct" ? pct(v, false) : k === "own_change_pp" ? (isNum(num(v)) ? `${v >= 0 ? "+" : ""}${fix(v, 1)}pp` : "—") : k === "insider_buys" ? (isNum(num(v)) ? String(v) : "—") : k === "next" ? (v ? esc(fmtShort(v)) : "—") : k === "beats" ? esc(v ?? "—")
       : k === "div_yield" ? pct(v, false, 2) : k === "op_margin" || k === "vol_1y" || k === "max_dd_1y" ? pct(v, false)
       : k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" || k === "alpha" ? pct(v) : esc(v);
-    const symCell = (c) => `<button class="linkbtn tick" data-co="${esc(c.symbol)}" title="Open ${esc(c.symbol)}'s company page">${esc(c.symbol)}</button>${c.formerly ? `<div class="small muted">formerly ${esc(c.formerly)}</div>` : ""}`;
-    const table = `<div class="tbl-wrap" style="max-height:560px"><table><thead><tr>${cols.map(([k, l, c]) => `<th class="sortable ${c}" tabindex="0" data-sort="${k}" aria-sort="${S.sort.key === k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none"}">${l}${S.sort.key === k ? (S.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
-      <tbody>${cons.map((c) => `<tr>${cols.map(([k, , cl]) => `<td class="${cl} ${k === "symbol" ? "tick" : ""} ${k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" ? cls(num(c[k])) : ""}">${k === "symbol" ? symCell(c) : fmtCell(k, c[k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+    const symCell = (c) => `<button class="linkbtn tick" data-co="${esc(c.symbol)}" title="Open ${esc(c.symbol)}'s company page">${esc(c.symbol)}</button>${c.name ? `<div class="co-nm">${esc(c.name)}</div>` : ""}${c.formerly ? `<div class="small muted">formerly ${esc(c.formerly)}</div>` : ""}`;
+    const sortCol = [...CO_VIEWS.flatMap((v) => v[2]), ["name", "Company"]].find((x) => x[0] === S.sort.key), sortHidden = S.sort.key !== "rank" && S.sort.key !== "symbol" && !cols.some((x) => x[0] === S.sort.key) && sortCol;
+    const table = `<div class="seg co-views" role="group" aria-label="Measures shown">${CO_VIEWS.map(([k, l]) => `<button type="button" aria-pressed="${k === coView[0]}" data-co-view="${k}">${l}</button>`).join("")}</div>${sortHidden ? `<div class="small muted">Sorted by ${esc(sortCol[1])} (${S.sort.dir > 0 ? "lowest" : "highest"} first).</div>` : ""}
+      <div class="tbl-wrap"><table class="co-table"><thead><tr>${cols.map(([k, l, c]) => `<th class="sortable ${c}" tabindex="0" data-sort="${k}" aria-sort="${S.sort.key === k ? (S.sort.dir > 0 ? "ascending" : "descending") : "none"}">${l}${S.sort.key === k ? (S.sort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
+      <tbody>${cons.map((c) => `<tr>${cols.map(([k, , cl]) => `<td class="${cl} ${k.startsWith("ret_") || k.startsWith("excess_") || k === "rev_growth" ? cls(num(c[k])) : ""}">${k === "symbol" ? symCell(c) : fmtCell(k, c[k])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 
     const canRun = S.mcp && !busy();
     el.innerHTML = `
@@ -11255,6 +11264,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
    */
   const PP_AHEAD = { "1M": 63, "3M": 126, "6M": 189, "1Y": 252, "3Y": 252, "5Y": 252 };
   try { S.ppSpy = localStorage.getItem("ams.ppSpy") === "1"; } catch {}
+  try { S.coView = localStorage.getItem("ams.coView") || null; } catch {}
   function ppSpyFor(from) {
     const b = S.bench?.spy; if (b?.dates?.length && b.dates[0] <= from) return b;
     if (S.spyLong?.dates?.length && S.spyLong.dates[0] <= from) return S.spyLong;
@@ -12700,6 +12710,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     if (t.dataset.regRecheck && S.selected) { runRegBooks(S.selected, { recheckKey: t.dataset.regRecheck }); return; }
     if (t.dataset.regRebuild && S.selected) { runRegBooks(S.selected); return; }
     if (t.dataset.b) { S.basis = t.dataset.b; renderReport(); return; }
+    if (t.dataset.coView) { S.coView = t.dataset.coView; try { localStorage.setItem("ams.coView", S.coView); } catch {} renderReport(); return; }
     if (t.dataset.sort) { const k = t.dataset.sort; S.sort = { key: k, dir: S.sort.key === k ? -S.sort.dir : (["name", "symbol", "rank", "next"].includes(k) ? 1 : -1) }; renderReport(); return; }
   });
   document.addEventListener("keydown", (ev) => {
