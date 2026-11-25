@@ -3634,86 +3634,143 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
   }
 
   /**
-   * What an industry's saved analysis is missing, part by part: text that was cut short when it was saved (the old
-   * length limits ended it with "…"), a KPI analysis cut short, a value chain whose lookups all failed, a missing
-   * earnings-call read or historian's note, rule books written before the fact-check kept the analyst's reasoning (or
-   * missing, or cut), a regulatory verdict without a headline, and a lead analysis with cut text or that failed.
+   * The repair (GitHub, Daily update with repair=true), the cheap way: only what's broken is written again in full (a
+   * KPI analysis cut short, a value chain whose lookups all failed, a missing earnings-call read, missing rule books, a
+   * missing or failed lead analysis, a missing historian's note); rule books and verdicts fact-checked before reasoning
+   * could be kept get only the removed reasoning checked again (from the saved original); and every passage cut short by
+   * the old length limits is finished in place by the analyst model (Patch). Everything else stays exactly as it is.
    */
-  // Source titles and quotes can end in "…" on their own, and the daily updates' own history is kept as it is: neither counts.
-  const CUT_SKIP = new Set(["sources", "quotes", "daily_refs", "daily_history", "daily", "daily_pending", "outlook_history", "coverage", "excerpt"]);
-  const cutCount = (o) => (typeof o === "string" ? (/…\s*$/.test(o) ? 1 : 0) : Array.isArray(o) ? o.reduce((a, x) => a + cutCount(x), 0) : o && typeof o === "object" ? Object.entries(o).reduce((a, [k, x]) => a + (CUT_SKIP.has(k) ? 0 : cutCount(x)), 0) : 0);
-  function repairPlan(name) {
-    const sl = slug(name), why = {}, add = (k, w) => { (why[k] ||= []).push(w); };
-    const r = (k) => rep(name, k)?.result;
-    if (kpiCut(r("kpi"))) add("kpi", "the KPI analysis was cut short"); else if (cutCount(r("kpi"))) add("kpi", `${cutCount(r("kpi"))} passages cut short`);
-    if (chainBroken(r("chain"))) add("chain", "no customers or suppliers came back from FMP"); else if (cutCount(r("chain"))) add("chain", `${cutCount(r("chain"))} passages cut short`);
-    const hasPrev = (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt);
-    if (!r("calls") && hasPrev) add("calls", "the earnings-call read is missing"); else if (cutCount(r("calls"))) add("calls", `${cutCount(r("calls"))} passages cut short`);
-    for (const k of ["macro", "world", "trade", "reg"]) if (cutCount(r(k))) add(k, `${cutCount(r(k))} passages cut short`);
-    const bodies = regBodies(name), docs = bodies.map((b) => bookDoc(name, RegBook.bodyKey(b.name)));
-    if (bodies.length) {
-      const miss = docs.filter((x) => !x).length, old = docs.filter((x) => x && !("analysis" in (x.fact_check || {}))).length, cut = docs.filter((x) => x && cutCount(x.book)).length, rv = r("regverdict");
-      if (miss) add("rulebook", `${miss} rule book${miss === 1 ? "" : "s"} missing`);
-      if (old) add("rulebook", `${old} rule book${old === 1 ? "" : "s"} fact-checked before reasoning was kept`);
-      if (cut) add("rulebook", `${cut} rule book${cut === 1 ? "" : "s"} with text cut short`);
-      if (rv && (!String(rv.headline || "").trim() || cutCount(rv))) add("rulebook", "the regulatory verdict has no headline or was cut short");
-    }
-    const ag = S.agents[sl];
-    if (!ag?.result) add("thesis", "the lead analysis is missing"); else if (cutCount(ag.result)) add("thesis", `${cutCount(ag.result)} passages of the lead analysis cut short`);
-    if ((S.teamErrors[sl] || {}).lead) add("thesis", "the lead strategist failed last time");
-    const T = S.industries[sl]?.history?.times; if (T?.episodes?.length && !r("history")) add("history", "the historian's note is missing");
-    return why;
-  }
   // What a full rewrite of the lead analysis must keep: its track record and the daily updates' history.
   const LEAD_KEEP = ["outlook", "outlook_history", "daily_history", "daily", "daily_pending", "daily_refs", "landed", "rethink", "sections_rewritten"];
+  function repairPlan(name) {
+    const sl = slug(name), r = (k) => rep(name, k)?.result, full = {};
+    if (kpiCut(r("kpi"))) full.kpi = "the KPI analysis was cut short";
+    if (chainBroken(r("chain"))) full.chain = "no customers or suppliers came back from FMP";
+    if (!r("calls") && (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt)) full.calls = "the earnings-call read is missing";
+    const bodies = regBodies(name), missingBooks = bodies.map((b) => RegBook.bodyKey(b.name)).filter((k) => !bookDoc(name, k));
+    if (missingBooks.length) full.rulebook = `${missingBooks.length} rule book${missingBooks.length === 1 ? "" : "s"} missing`;
+    const ag = S.agents[sl];
+    if (!ag?.result || (S.teamErrors[sl] || {}).lead) full.thesis = !ag?.result ? "the lead analysis is missing" : "the lead strategist failed last time";
+    const T = S.industries[sl]?.history?.times; if (T?.episodes?.length && !r("history")) full.history = "the historian's note is missing";
+    const restore = bodies.map((b) => RegBook.bodyKey(b.name)).filter((k) => { const d = bookDoc(name, k); return d?.raw && !("analysis" in (d.fact_check || {})); });
+    const rv = rep(name, "regverdict"); const restoreVerdict = !!(rv?.raw && !("analysis" in (rv.fact_check || {})));
+    const fill = fillTargets(name).reduce((a, t) => a + Patch.cuts(t.obj).length, 0);
+    return { full, missingBooks, restore, restoreVerdict, fill };
+  }
+  const repairEmpty = (p) => !Object.keys(p.full).length && !p.restore.length && !p.restoreVerdict && !p.fill;
+  // Where cut passages live: the reports, the lead analysis and the rule books.
+  function fillTargets(name) {
+    const sl = slug(name), out = [];
+    for (const k of ["kpi", "chain", "calls", "macro", "world", "trade", "trademap", "reg", "regverdict", "history"]) { const x = rep(name, k); if (x?.result && typeof x.result === "object") out.push({ key: k, label: ({ kpi: "KPIs", chain: "customers and suppliers", calls: "earnings calls", macro: "macro", world: "world events", trade: "trade relations", trademap: "trade map", reg: "regulation, legal and deals", regverdict: "regulatory verdict", history: "historian" })[k], obj: x.result }); }
+    if (S.agents[sl]?.result) out.push({ key: "lead", label: "lead analysis", obj: S.agents[sl].result });
+    for (const [k, d] of Object.entries(S.regbooks)) if (k.startsWith(sl + "--") && d?.book) out.push({ key: "book:" + k, label: `rule book: ${d.body || k}`, obj: d.book });
+    return out;
+  }
+  // Every source an industry's text can cite, with its text (for finishing passages).
+  function srcMap(name) {
+    const sl = slug(name), m = {}, put = (x) => { if (x?.id) m[String(x.id).toUpperCase()] ||= x; };
+    for (const x of S.research[sl]?.items || []) put(x);
+    for (const t of S.tx[sl]?.items || []) put({ ...t, title: `${t.symbol} ${t.period} earnings call`, source: "earnings call" });
+    for (const r of (S.macroBy[sl] || S.macro)?.rows || []) put({ id: r.id, title: r.label, summary: `${r.value ?? ""} ${r.unit || ""} (${r.date || ""})`, source: r.source });
+    for (const x of S.world?.items || []) put(x);
+    for (const x of S.agents[sl]?.sources || []) put(x);
+    for (const [k, d] of Object.entries(S.reports)) if (k.startsWith(sl + "--")) for (const x of d?.sources || d?.result?.sources || []) put(x);
+    for (const [k, d] of Object.entries(S.regbooks)) if (k.startsWith(sl + "--")) for (const x of d?.sources || []) put(x);
+    return m;
+  }
 
-  /**
-   * The repair pass (GitHub, Daily update with repair=true): every industry's missing or cut parts are written again
-   * by the same analysts, sections first, then the rule books and the regulatory verdict, then the lead strategist
-   * (keeping its track record), then the historian. Industries with nothing missing are left alone, so running it
-   * again continues where it stopped.
-   */
   async function runRepairPass(sector, { names = null, concurrency = 4 } = {}) {
     if (busy() || !S.mcp || !S.sample) return;
-    const dr = S.dailyRun = { sector, phase: "repair", label: "Finding what's missing", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), repair: true, found: {} };
+    const dr = S.dailyRun = { sector, phase: "repair", label: "Finding what's missing", done: [], quiet: [], revised: [], failed: [], sections: [], sectionsFailed: [], held: [], calls: 0, of: 0, working: new Set(), repair: true };
     try {
       const rec = await secGet(sector);
       const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
       dr.label = "Market data, the macro catalog and the news wire (no Claude)";
       await refreshBenchmark(); await detectEod(); await sharedResearch();
       const plans = {};
-      for (const n of list) { if (!(await loadInto(n))) continue; const w = repairPlan(n); if (Object.keys(w).length) plans[n] = w; dropFromMemory(n); }
-      const todo = Object.keys(plans); dr.of = todo.length; dr.found = plans;
-      for (const [n, w] of Object.entries(plans)) for (const [k, ws] of Object.entries(w)) S.notices.push({ kind: "info", text: `${n}: ${k}: ${ws.join("; ")}` });
+      for (const n of list) { if (!(await loadInto(n))) continue; const p = repairPlan(n); if (!repairEmpty(p)) plans[n] = p; dropFromMemory(n); }
+      const todo = Object.keys(plans); dr.of = todo.length;
+      const n0 = Object.entries(plans).map(([n, p]) => ({ kind: "info", text: `${n}: ${[...Object.entries(p.full).map(([k, w]) => `${k} (${w})`), p.restore.length ? `${p.restore.length} rule books' reasoning to bring back` : "", p.restoreVerdict ? "the verdict's reasoning to bring back" : "", p.fill ? `${p.fill} passages to finish` : ""].filter(Boolean).join("; ")}` }));
       if (!todo.length) { S.notices = [{ kind: "info", text: `Nothing missing in ${sector}.` }]; return; }
-      const n0 = S.notices.slice();
+      const call = async (prompt, step) => { dr.calls++; const opts = { modelTier: "default", cache: false, retryCut: true }; if (JOB) opts.jobStep = step; return await sampleJson(prompt, opts); };
       await pool(todo, Math.max(1, concurrency), async (name) => {
         if (JOB && S.jobStopped) return;
-        const sl = slug(name), w = plans[name]; dr.working.add(name);
+        const sl = slug(name), p = plans[name]; dr.working.add(name);
         try {
           const snap = await idbGet("run:" + sl);
           if (!(await loadInto(name))) throw new Error("couldn't load the saved run");
           if (snap?.macro?.rows?.length) S.macroBy[sl] = snap.macro; // the industry's own indicators, as the reports cite them
-          const label = (k) => k === "calls" ? "Earnings-call read" : k === "rulebook" ? "Rule books and the regulatory verdict" : Daily.SECTIONS[k]?.label || k;
-          const sections = Object.keys(w).filter((k) => !["thesis", "history"].includes(k)).map((k) => ({ key: k, label: label(k), why: "repair: " + w[k].join("; "), by: "code", importance: "high" }));
-          if (sections.length) { await dailySections(name, sections, dr); for (const sct of sections) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}${sct.ok ? "" : ` (${sct.error || "failed"})`}`); }
-          if (w.thesis) {
+          // 1. What's broken is written again in full, by the same analysts.
+          const label = (k) => ({ calls: "Earnings-call read", rulebook: "Missing rule books and the regulatory verdict" })[k] || Daily.SECTIONS[k]?.label || k;
+          const sections = Object.keys(p.full).filter((k) => !["thesis", "history"].includes(k)).map((k) => ({ key: k, label: label(k), why: "repair: " + p.full[k], by: "code", importance: "high", ...(k === "rulebook" ? { regulators: [] } : {}) }));
+          if (sections.length) {
+            if (p.missingBooks.length) { try { await runRegBooks(name, { keys: p.missingBooks, run: { name, cancel: false, ctls: new Set(), team: [], label: "" } }); dr.sections.push(`${name}: ${p.missingBooks.length} missing rule books`); } catch (e) { if (FATAL.has(e?.code)) throw e; dr.sectionsFailed.push(`${name}: missing rule books (${sampleErr(e)})`); } }
+            const rest = sections.filter((x) => x.key !== "rulebook");
+            if (rest.length) { await dailySections(name, rest, dr); for (const sct of rest) (sct.ok ? dr.sections : dr.sectionsFailed).push(`${name}: ${sct.label}${sct.ok ? "" : ` (${sct.error || "failed"})`}`); }
+          }
+          if (p.full.thesis) {
             const before = S.agents[sl], keep = Object.fromEntries(LEAD_KEEP.filter((k) => before?.result?.[k] !== undefined).map((k) => [k, before.result[k]]));
             await runLead(name, { run: { name, cancel: false, ctls: new Set(), team: [], label: "" } });
             const after = S.agents[sl];
-            if (after?.result && after.run_at !== before?.run_at) { S.agents[sl] = jsonSafe({ ...after, result: { ...after.result, ...keep, rewrites_since_full: 0, repaired: { date: today(), why: w.thesis } } }); dr.sections.push(`${name}: the lead analysis`); }
+            if (after?.result && after.run_at !== before?.run_at) { S.agents[sl] = jsonSafe({ ...after, result: { ...after.result, ...keep, rewrites_since_full: 0 } }); dr.sections.push(`${name}: the lead analysis`); }
             else dr.sectionsFailed.push(`${name}: the lead analysis (${S.teamErrors[sl]?.lead || "didn't finish"})`);
           }
-          if (w.history) { const h = await runHistorian(name, { force: true }); (h ? dr.sections : dr.sectionsFailed).push(`${name}: the historian's note`); }
+          if (p.full.history) { const h = await runHistorian(name, { force: true }); (h ? dr.sections : dr.sectionsFailed).push(`${name}: the historian's note`); }
+
+          // 2. The reasoning the old fact-check removed: those claims only, checked again under the rule that keeps reasoning.
+          const pack = S.research[sl] || { items: [] }, tx = S.tx[sl] || { items: [] }, baseIdx = Team.index(pack, tx, macroOf(name));
+          const docs = []; // { kind, key, doc, spec, idx, again }
+          for (const k of p.restore) { const d = bookDoc(name, k); if (!d?.raw || "analysis" in (d.fact_check || {})) continue; const idx = { ...baseIdx }; for (const x of d.sources || []) idx[String(x.id).toUpperCase()] = x; docs.push({ kind: "book", key: k, doc: d, spec: RegBook.bookSpec, idx }); }
+          const rv = rep(name, "regverdict");
+          if (p.restoreVerdict && rv?.raw && !("analysis" in (rv.fact_check || {}))) { const idx = { ...baseIdx }; for (const [k, d] of Object.entries(S.regbooks)) if (k.startsWith(sl + "--")) for (const x of d?.sources || []) idx[String(x.id).toUpperCase()] = x; docs.push({ kind: "verdict", doc: { ...rv, book: rv.result }, spec: RegBook.verdictSpec, idx, keep: ["timeline"] }); }
+          for (const x of docs) {
+            x.again = Patch.recheck(x.doc, x.spec, RegBook);
+            // Only when the saved checks rebuild the saved text exactly is it safe to rebuild it with the new answers.
+            const same = x.again && JSON.stringify(Patch.rebuild(x.doc, x.spec, { results: [] }, { claims: [], prev: x.again.prev }, x.idx, RegBook, { keep: x.keep || [], saved: x.doc.book }).work) === JSON.stringify(x.doc.book);
+            if (!same) x.again = null;
+          }
+          const todoC = docs.flatMap((x, bi) => (x.again?.claims || []).map((c) => ({ ...c, id: `B${bi + 1}${c.id}`, bi, cid: c.id })));
+          const answers = {}; // bi -> {results: []}
+          for (let i = 0; i < todoC.length; i += 120) {
+            const part = todoC.slice(i, i + 120), idxAll = Object.assign({}, ...docs.map((x) => x.idx));
+            try {
+              const raw = await call(RegBook.factcheckPrompt(part, idxAll, `the regulatory rule books and verdict for the ${name} industry`), `Repair, reasoning re-checked: ${name}`);
+              for (const r of Array.isArray(raw?.results) ? raw.results : []) { const c = part.find((y) => y.id === String(r?.id || "").toUpperCase()); if (c) (answers[c.bi] ||= { results: [] }).results.push({ ...r, id: c.cid }); }
+            } catch (e) { if (FATAL.has(e?.code)) throw e; dr.sectionsFailed.push(`${name}: reasoning re-check (${sampleErr(e)})`); }
+          }
+          let back = 0;
+          docs.forEach((x, bi) => {
+            if (!x.again) return;
+            const out = Patch.rebuild(x.doc, x.spec, answers[bi] || { results: [] }, x.again, x.idx, RegBook, { keep: x.keep || [], saved: x.doc.book });
+            back += out.summary.analysis || 0;
+            if (x.kind === "book") S.regbooks[`${sl}--${x.key}`] = jsonSafe({ ...x.doc, book: out.work, checks: out.checks, fact_check: out.summary, checked_at: new Date().toISOString() });
+            else { const { book, ...v } = x.doc; S.reports[`${sl}--regverdict`] = jsonSafe({ ...v, result: out.work, checks: out.checks, fact_check: out.summary }); }
+          });
+          if (docs.length) dr.sections.push(`${name}: ${back} pieces of reasoning brought back in ${docs.filter((x) => x.again).length} rule books and verdicts`);
+
+          // 3. Passages cut short by the old length limits: finished in place, everything around them as it was.
+          const targets = fillTargets(name), chunks = Patch.plan(targets, { per: 40 }), src = srcMap(name);
+          const ag = S.agents[sl]?.result, gist = ag ? `${ag.headline || ""} ${String(ag.thesis || "").slice(0, 1500)}` : "";
+          let filled = 0, of = 0;
+          for (const [i, ch] of chunks.entries()) {
+            try { const raw = await call(Patch.fillPrompt(ch.items, { subject: `the ${name} industry`, gist, sources: src }), `Repair, cut passages finished (${i + 1}/${chunks.length}): ${name}`); const r = ch.apply(raw); filled += r.ok; of += r.of; }
+            catch (e) { if (FATAL.has(e?.code)) throw e; dr.sectionsFailed.push(`${name}: finishing passages, part ${i + 1} (${sampleErr(e)})`); }
+          }
+          if (chunks.length) {
+            // The objects were changed in place: stamp the reports and rule books so they save.
+            for (const t of targets) if (t.key === "lead") S.agents[sl] = jsonSafe({ ...S.agents[sl] }); else if (t.key.startsWith("book:")) S.regbooks[t.key.slice(5)] = jsonSafe({ ...S.regbooks[t.key.slice(5)] }); else S.reports[`${sl}--${t.key}`] = jsonSafe({ ...S.reports[`${sl}--${t.key}`] });
+            dr.sections.push(`${name}: ${filled} of ${of} cut passages finished`);
+          }
           dr.revised.push(name);
           await doFlush(name);
         } catch (e) { dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`); if (FATAL.has(e?.code)) throw e; }
         finally { dr.done.push(name); dr.working.delete(name); dr.label = `${dr.done.length} of ${dr.of} industries repaired`; dropFromMemory(name); }
       }, null);
-      S.notices = [...n0, { kind: "info", text: `Repair of ${sector}: ${dr.revised.length} of ${dr.of} industries; ${dr.sections.length} parts rewritten${dr.sectionsFailed.length ? `, ${dr.sectionsFailed.length} failed: ${dr.sectionsFailed.join(" | ")}` : ""}${dr.failed.length ? `; industries failed: ${dr.failed.join(" | ")}` : ""}.` }];
+      S.notices = [...n0, { kind: "info", text: `Repair of ${sector}: ${dr.revised.length} of ${dr.of} industries. Done: ${dr.sections.join(" | ") || "nothing"}${dr.sectionsFailed.length ? `. Failed: ${dr.sectionsFailed.join(" | ")}` : ""}${dr.failed.length ? `. Industries failed: ${dr.failed.join(" | ")}` : ""}.` }];
     } catch (e) { S.notices = [...S.notices, { kind: "err", text: `The repair stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
+
 
   /** Analyze (or finish) every industry in a sector. A finished or `fresh` run starts over. */
   async function runSector(sector, { fresh = false, redoGaps = false, addNew = false } = {}) {
