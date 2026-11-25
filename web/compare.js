@@ -341,6 +341,69 @@ Return ONLY a JSON object:
     const headline = s.bondHeadline || `Yield to maturity ${pc(b.ytm)}, carry after costs ${pc(b.carry)} a year${isNum(nn(b.breakeven)) ? `; yields can rise about ${Math.round(nn(b.breakeven))}bp over 12 months before the price loss eats a year's carry` : ""}${sh && isNum(nn(sh.ret12)) ? `; +100bp → ${nn(sh.ret12) > 0 ? "+" : ""}${nn(sh.ret12).toFixed(1)}% over 12 months` : ""}${shd && isNum(nn(shd.ret12)) ? `, -100bp → ${nn(shd.ret12) > 0 ? "+" : ""}${nn(shd.ret12).toFixed(1)}%` : ""}.`;
     return { sym: s.sym, industry: `${b.kind ? b.kind[0].toUpperCase() + b.kind.slice(1) : "Bonds"}${isNum(nn(b.duration)) ? ` · ${nn(b.duration).toFixed(1)}y duration` : ""}`, weight: 1, regime, headline, summary: "", bond: true };
   }
+  // ---- every ticker gets a read on every indicator: where its industry report has none, code estimates one from the
+  // ticker's measured sensitivity to that factor (daily returns against the market, the 10-year, oil, the dollar and
+  // high-yield bonds) and its business exposure (revenue by region); with neither, it is "not exposed".
+  const REGION_RE = { china: /cny|cnh|yuan|renminbi|hang seng|china|csi|shanghai|shenzhen/, europe: /eur\b|eur\/|euro\b|stoxx|dax|cac|ftse|europe|gbp|sterling/, japan: /jpy|yen|nikkei|topix|japan/, asia: /kospi|krw|twd|taiex|inr|sensex|nifty|asia/, latam: /mxn|brl|peso|real\b|latam|mexico|brazil/ };
+  /** Which measured factor an indicator moves, which way (+1: the indicator rising is the factor's shock), and its region. */
+  function factorOf(label) {
+    const l = String(label || "").toLowerCase(), region = Object.keys(REGION_RE).find((r) => REGION_RE[r].test(l)) || null;
+    if (/2s10s|curve|steepen|term spread/.test(l)) return null;
+    if (/\bvix\b|volatility index/.test(l)) return { factor: "market", sign: -1, via: "risk appetite", cap: "medium", region };
+    if (/(spread|oas)\b/.test(l) && /(credit|high[- ]yield|\bhy\b|\big\b|investment[- ]grade|corporate|baa|bbb)/.test(l)) return { factor: "credit", sign: 1, via: "credit spreads", region };
+    if (/high[- ]yield|\bhyg\b|junk bond/.test(l)) return { factor: "credit", sign: -1, via: "credit", region };
+    if (/10y|10-year|ten-year|2y\b|2-year|30y|30-year|treasury|real yield|mortgage rate|fed funds|policy rate|interest rate decision|bund|gilt|jgb/.test(l)) return { factor: "rates", sign: 1, via: "yields", region };
+    if (/dollar index|\bdxy\b|usd\s*\/|\busd[a-z]{3}\b|usd-/.test(l)) return { factor: "dollar", sign: 1, via: "the dollar", region };
+    if (/(eur|gbp|aud|nzd)\s*\/\s*usd|eurusd|gbpusd/.test(l)) return { factor: "dollar", sign: -1, via: "the dollar", region };
+    if (/brent|wti|crude|\boil\b|gasoline|rbob|diesel|jet fuel|heating oil/.test(l)) return { factor: "oil", sign: 1, via: "oil", region };
+    if (/cpi|pce|ppi|inflation|price index|breakeven|wage|hourly earnings|import prices/.test(l)) return { factor: "rates", sign: 1, via: "yields (hot inflation lifts them)", cap: "medium", region };
+    if (/s&p|nasdaq|\bdow\b|russell|\bsox\b|semiconductor index|stoxx|hang seng|nikkei|kospi|msci|ftse|\bdax\b|\bcac\b|sensex|nifty|csi|shanghai|topix|equit|stock index|index\)/.test(l)) return { factor: "market", sign: 1, via: "the stock market", cap: region ? "medium" : null, region };
+    if (/unemployment|jobless|claims|layoff/.test(l)) return { factor: "market", sign: -1, via: "growth and earnings", cap: "medium", region };
+    if (/gdp|payroll|jobs|employment|pmi|\bism\b|retail|spending|sentiment|confidence|industrial production|durable|housing|capex|orders|income|consumer|output/.test(l)) return { factor: "market", sign: 1, via: "growth and earnings", cap: "medium", region };
+    return region ? { factor: null, sign: 1, via: "the region", region } : null;
+  }
+  /** Revenue by region from reported geographic segments [{name, share}] (or a fund's US/non-US mix): {us, nonus, china, europe, japan, asia, latam}. */
+  function geoExpo(items) {
+    const o = { us: 0, china: 0, europe: 0, japan: 0, asia: 0, latam: 0 }; let named = 0;
+    for (const x of items || []) { const nm = String(x?.name || "").toLowerCase(), sh = n(x?.share); if (!isNum(sh) || sh <= 0) continue; named += sh;
+      if (/united states|^u\.?s\.?a?\.?$|^us\b|domestic/.test(nm)) o.us += sh; else if (/north america|americas/.test(nm)) { o.us += sh * 0.85; o.latam += sh * 0.1; }
+      else if (/china|hong kong|taiwan/.test(nm)) o.china += sh; else if (/japan/.test(nm)) o.japan += sh;
+      else if (/europe|emea|germany|france|united kingdom|\buk\b|netherlands|ireland|switzerland|italy|spain/.test(nm)) o.europe += /emea/.test(nm) ? sh * 0.75 : sh;
+      else if (/asia|apac|pacific|india|korea|singapore|australia/.test(nm)) o.asia += sh; else if (/latin|mexico|brazil|south america/.test(nm)) o.latam += sh; }
+    if (!(named > 0)) return null;
+    for (const k of Object.keys(o)) o[k] /= named; o.nonus = Math.max(0, 1 - o.us); o.asia += o.china + o.japan; return o;
+  }
+  const REL_T = (t) => (Math.abs(t) >= 2.5 ? "high" : Math.abs(t) >= 1.5 ? "medium" : Math.abs(t) >= 1 ? "low" : null);
+  const capRel = (r, cap) => (cap && REL_RANK[r] > REL_RANK[cap] ? cap : r);
+  const SHOCK = { market: "+1% S&P 500", rates: "+0.25pp 10-year yield", oil: "+10% oil", dollar: "+5% dollar", credit: "high-yield spreads widening (-2% HYG)" };
+  /**
+   * Code's read of one indicator for one ticker: { effect, relevance, why, est: true }. The direction comes from the
+   * indicator's latest move (1M change, else against its prior), the factor it moves and the ticker's measured response
+   * to that factor; the size from how strong the measurement is (its t-statistic) or, for currencies and regions, its
+   * revenue there. "not exposed" when there's no measured link and no business there.
+   */
+  function codeRead(s, x) {
+    const F = factorOf(`${x.label || ""} ${x.key || ""}`), pc0 = (v) => `${Math.round(v * 100)}%`;
+    if (!F) return { effect: "not exposed", relevance: "", why: "No measured link to this indicator and no business tied to it.", est: true };
+    const ch = isNum(n(x.chg_1m)) ? n(x.chg_1m) : isNum(n(x.value)) && isNum(n(x.prior)) ? n(x.value) - n(x.prior) : NaN;
+    const mv = !isNum(ch) || Math.abs(ch) < 1e-9 ? 0 : Math.sign(ch), f = F.factor ? (s.sens || []).find((y) => y.key === F.factor) : null;
+    const E = s.expo || null, regShare = F.region ? n(E?.[F.region]) : NaN;
+    const meas = f && isNum(n(f.effect)) && isNum(n(f.t)) ? { rel: REL_T(n(f.t)), eff: n(f.effect), t: n(f.t) } : null;
+    const parts = [];
+    let dir = 0, rel = null;
+    if (meas?.rel && Math.abs(meas.eff) >= 0.001) { dir = mv * F.sign * Math.sign(meas.eff); rel = capRel(meas.rel, F.cap);
+      parts.push(`measured over its daily returns: ${SHOCK[F.factor] || F.factor} → ${meas.eff > 0 ? "+" : ""}${(meas.eff * 100).toFixed(2)}% (t ${meas.t.toFixed(1)}), through ${F.via}`); }
+    // Currencies and regional markets: revenue earned there moves with them (a stronger dollar translates foreign sales into fewer dollars).
+    // A currency pair or market tied to one region reads its revenue there; the dollar index reads all revenue abroad.
+    if (F.region && isNum(regShare) && regShare >= 0.08) { const r2 = regShare >= 0.3 ? "high" : regShare >= 0.15 ? "medium" : "low";
+      const d2 = F.factor === "dollar" ? -mv * F.sign : mv; if (!dir) { dir = d2; rel = r2; } else if (REL_RANK[r2] > REL_RANK[rel]) rel = r2;
+      parts.push(`${pc0(regShare)} of its revenue is in ${F.region === "asia" ? "Asia" : F.region === "latam" ? "Latin America" : F.region[0].toUpperCase() + F.region.slice(1)}`); }
+    else if (F.factor === "dollar" && isNum(n(E?.nonus)) && E.nonus >= 0.2) { const r2 = E.nonus >= 0.45 ? "high" : E.nonus >= 0.3 ? "medium" : "low";
+      if (!dir) { dir = -mv * F.sign; rel = r2; } else if (REL_RANK[r2] > REL_RANK[rel]) rel = r2; parts.push(`${pc0(E.nonus)} of its revenue is outside the US`); }
+    if (!rel) return { effect: "not exposed", relevance: "", why: `${meas ? `Its link to ${F.via} isn't measurable (t ${meas.t.toFixed(1)})` : `No measured link to ${F.via}`}${F.region ? ", and no reported revenue there" : ""}.`, est: true };
+    const effect = !mv || !dir ? "neutral" : dir > 0 ? "tailwind" : "headwind";
+    return { effect, relevance: rel, why: `Code's estimate (no industry report reads it): ${parts.join("; ")}.${mv ? ` The indicator is ${mv > 0 ? "up" : "down"}${isNum(n(x.chg_1m)) ? " over the month" : ""}.` : ""}`, est: true };
+  }
   function mergeAffairs(subjects) {
     const I = new Map(), W = new Map(), T = new Map(), R = new Map(), P = new Map(), regimes = [], moves = [], flips = [];
     for (const s of subjects) {
@@ -380,7 +443,10 @@ Return ONLY a JSON object:
       for (const e of I.values()) { const r = bondRead(s.bond, e); if (r) { e.per[s.sym] = r; reads.push(r); } }
       regimes.push(bondRegime(s, reads));
     }
-    const n0 = (e) => Object.keys(e.per).length;
+    // Every other cell: code's estimate for the ticker (bond funds were read through their duration above).
+    for (const e of I.values()) for (const s of subjects) { const p0 = e.per[s.sym]; if (p0 && p0.effect) continue; if (s.bond) { if (!p0) e.per[s.sym] = { effect: "not exposed", relevance: "", why: "A bond fund: no industry or duration link to this indicator.", est: true }; continue; }
+      e.per[s.sym] = codeRead(s, e); }
+    const n0 = (e) => Object.values(e.per).filter((p) => !p.est).length;
     const GORD = {}; [...I.values()].forEach((e) => { GORD[e.group] = Math.max(GORD[e.group] || 0, n0(e)); });
     const sev = { critical: 0, high: 1, medium: 2, low: 3 };
     return {
@@ -594,7 +660,8 @@ Return ONLY a JSON object:
     return L.join("\n");
   }
   const LV = ["buy", "accumulate", "hold", "trim", "avoid"], CONF = ["high", "medium", "low"];
-  const str = (x, k = 900) => (typeof x === "string" ? cut(x, k) : "");
+  // Desk and verdict text: twice the length asked for before anything is cut, so a long sentence is never cut off.
+  const str = (x, k = 900) => (typeof x === "string" ? cut(x, k * 2) : "");
   const arr = (x, k = 6, m = 220) => (Array.isArray(x) ? x.map((y) => str(y, m)).filter(Boolean).slice(0, k) : []);
   /** The call's answer, checked: picks must be one of the tickers; everything trimmed; missing names filled. */
   function clean(raw, syms) {
@@ -651,6 +718,6 @@ Return ONLY a JSON object:
     return [day, ...subjects.map((s) => `${s.sym}:${s.saved?.at || "-"}:${s.ind?.saved_at || "-"}:${s.outlook?.date || "-"}`)].join("|");
   }
 
-  const api = { DESK_PARTS, mergeParts, mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
+  const api = { factorOf, geoExpo, codeRead, DESK_PARTS, mergeParts, mergeAffairs, bondRead, bondRegime, reconcile, DESKS, DESK_KEYS, IMPACT, deskDossier, deskPrompt, cleanDesk, desksText, writtenText, GROUPS, GROUP_KEYS, METRICS: M, MBY, INFO, TYPES, TYPE_LABEL, WEIGHTS, HZ, SIGN, score1, outlookScore, scoreAll, fits, headToHead, correlation, rebase, drawdown, years, overlap, dossier, prompt, clean, checks, fingerprint, fmtV, grade };
   if (typeof module !== "undefined" && module.exports) module.exports = api; else root.Compare = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

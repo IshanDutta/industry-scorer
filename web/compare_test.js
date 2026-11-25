@@ -110,7 +110,7 @@ console.log("compare ok");
   assert.equal(row("cpi").per.SHY.effect, "headwind");
   assert.equal(row("cpi").per.SHY.relevance, "medium");
   assert.equal(row("unemp").per.SHY.effect, "headwind", "falling unemployment hurts Treasuries");
-  assert.ok(!row("dxy").per.SHY, "no rule for the dollar");
+  assert.equal(row("dxy").per.SHY.effect, "not exposed", "no rule for the dollar: not exposed");
   assert.equal(row("Fed funds rate").per.SHY.relevance, "high");
   assert.ok(!M2.indicators.some((e) => e.label === "US CPI y/y" && e.key !== "cpi"), "no duplicate CPI row");
   const rg = M2.regimes.find((r) => r.sym === "SHY"); assert.ok(rg && rg.bond && /1\.9y duration/.test(rg.industry) && rg.regime === "restrictive", JSON.stringify(rg));
@@ -146,4 +146,23 @@ console.log("compare ok");
   assert.ok(mc.regime === "r" && mc.pick === "AAA" && mc.world.length === 1 && mc.trade.length === 1 && mc.indicators.length === 1);
   assert.equal(C4.mergeParts("macro", [null, { world: [] }]).world.length, 0, "one half failing still gives the other");
   console.log("desk halves ok");
+}
+
+// Every cell filled: code's estimate from measured sensitivity and revenue by region; "not exposed" where there's neither.
+{
+  const C5 = require("./compare.js");
+  const pg = { sym: "PG", kind: "stock", aff: { regimes: [], indicators: [{ key: "cpi", label: "US CPI y/y", value: 3.7, prior: 3.4, effects: { headwind: 1 }, reads: [{ effect: "headwind", relevance: "high", weight: 1 }] }] },
+    sens: [{ key: "dollar", effect: -0.012, t: -2.8 }, { key: "rates", effect: -0.004, t: -0.6 }], expo: C5.geoExpo([{ name: "United States", share: 0.48 }, { name: "Europe", share: 0.22 }, { name: "Greater China", share: 0.08 }, { name: "Latin America", share: 0.22 }]) };
+  const nv = { sym: "NVDA", kind: "stock", aff: { regimes: [], indicators: [
+    { key: "dxy", label: "US Dollar Index", value: 104, chg_1m: 2.02, effects: {}, reads: [] },
+    { key: "cny", label: "USD/CNY", value: 6.66, chg_1m: -0.19, effects: {}, reads: [] },
+    { key: "cocoa", label: "Cocoa futures", value: 5420, chg_1m: -3, effects: {}, reads: [] }] }, sens: [{ key: "market", effect: 0.018, t: 9 }], expo: C5.geoExpo([{ name: "United States", share: 0.6 }, { name: "Taiwan", share: 0.25 }, { name: "China", share: 0.15 }]) };
+  const M5 = C5.mergeAffairs([pg, nv]), r5 = (k) => M5.indicators.find((e) => e.key === k);
+  const d = r5("dxy").per.PG; assert.ok(d.est && d.effect === "headwind" && d.relevance === "high" && /52% of its revenue is outside the US/.test(d.why), JSON.stringify(d));
+  const c = r5("cny").per.NVDA; assert.ok(c.est && c.relevance === "high" && /China/.test(c.why), JSON.stringify(c));
+  assert.equal(r5("cocoa").per.PG.effect, "not exposed"); assert.equal(r5("cocoa").per.NVDA.effect, "not exposed");
+  assert.ok(!r5("cpi").per.PG.est && r5("cpi").per.PG.effect === "headwind", "the industry's own read wins");
+  assert.ok(r5("cpi").per.NVDA.est, "NVDA's industry doesn't read CPI: code's estimate");
+  for (const e of M5.indicators) for (const k of ["PG", "NVDA"]) assert.ok(e.per[k]?.effect, e.label + " " + k);
+  console.log("every cell filled ok");
 }
