@@ -24,12 +24,17 @@ sections become a card per row (`.cardtable`) and every table stacks into cards 
 sideways), long text gets light typography (`emphasize`: its first sentence leads, figures with units in bold, turns
 like "but" in italics; never a "Read all": the owner doesn't want text folded), key numbers count up, and only a tab's
 first section and its verdict start open (the rest start folded; `window.AMS.foldAll(false)` opens everything, which the browser test does).
-Every tab starts with performance, then the snapshot (verdict). Performance holds Times like this by window
-(`twBlock`, `Regimes.windowEpisodes`: the 5 past 1/3/6/12-month stretches most like the last one and what followed 1, 3,
-6 and 12 months later), with the older monthly view underneath. Wall Street sections show the last 12 months of ratings
+Every tab starts with the snapshot (the verdict) alone, then Performance, then the rest; the company and fund pages
+have no separate "Where it's going" section (the snapshot covers it). Performance holds Times like this by window
+(`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period buttons show (1M/3M/6M/1Y; the
+industry page has its own 1M-1Y buttons), with no buttons inside Times like this. It shows the 5 past stretches most like
+the last one, what followed 1, 3, 6 and 12 months later, an overlay chart (today's path with the tapped stretch laid over
+it, lined up at today), and per stretch "Then / What happened next / What's different now" (one historian call per
+window, `Regimes.windowHistorianPrompt`, kept in localStorage for the day; code writes the last two until it answers),
+with every measure then vs now. The older monthly view sits underneath. Wall Street sections show the last 12 months of ratings
 (`Street` in `web/street.js`, `streetSlot`/`streetHTML`): monthly rating mix, upgrades and downgrades, target moves, and
 a code-written read of the trend. Model output is saved whole (the cleaners no longer cut text); prompts keep their caps.
-Every tab starts with performance: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
+The sidebar order: the sidebar groups (`industryGroups`, `fundGroups`, `companyGroups`, Compare's
 `groups`) set the order, and `wireSpy` puts the sections in that order and highlights from where they actually are.
 Points after a label render with `ptList` (a list, never "a; b; c"), and on-screen text is never cut (`showC`);
 prompts keep `trimC`. It only decorates the DOM the app renders and is skipped in the GitHub job. Motion uses the

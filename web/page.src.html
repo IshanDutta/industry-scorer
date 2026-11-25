@@ -1311,6 +1311,22 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .tw-old > summary { font-size: 14px; }
 .tw-old-in { display: grid; gap: 12px; margin-top: 8px; }
 @media (max-width: 420px) { .tw-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tw-ep-t { font: 700 17px var(--display); font-stretch: 88%; }
+.tw-p { margin: 0; font-size: 14px; line-height: 1.6; }
+.tw-lesson { justify-self: start; font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line-2); color: var(--ink); }
+.tw-closest { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.tw-most { color: var(--accent); }
+.tw-read p { margin: 4px 0 0; line-height: 1.6; }
+.tw-meas { display: grid; gap: 6px; margin-top: 8px; }
+.tw-m { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 2px 8px; align-items: baseline; padding: 6px 8px; border-radius: 8px; background: var(--surface); font-size: 12.5px; }
+.tw-m b { font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .tw-m { grid-template-columns: auto minmax(0, 1fr) auto minmax(0, 1fr); } .tw-m > span:first-child { grid-column: 1 / -1; } }
+.tw-ep { cursor: pointer; }
+.tw-ep:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tw-ep.tw-picked { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.tw-chart svg { max-height: 300px; }
+.tw-chart .tw-pl { fill: var(--accent); font: 600 12px var(--body); }
+.tw-chart .tw-pk { animation: ams-fade var(--t3) var(--out) both; }
 </style>
 
 <header class="appbar" id="appbar">
@@ -4643,7 +4659,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
-          <div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
+          <div class="seg" role="group" aria-label="Window">${["1M", "3M", "6M", "1Y"].map((k) => `<button type="button" aria-pressed="${k === (S.indRet || "1Y")}" data-ind-ret="${k}">${k}</button>`).join("")}</div><div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
         ${note(ag, "performance")}
         <div class="strip" aria-label="SPY and rates">${strip}</div>
         <div class="kpis">${perfK}</div>${charts}${twBlock("industry", d.name, timesSection(d))}</section>
@@ -5820,8 +5836,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   /** The industry report's sidebar, in the order the sections appear. */
   function industryGroups(d) {
     const has = (id) => true;
-    return [{ label: "Performance", items: [["performance", "Returns & times like this"]] },
-      { label: "Snapshot", items: [["overview", "Verdict & calls"], ["plan", "Trade plan"], ["scores", "Scores"]] },
+    return [{ label: "Snapshot", items: [["overview", "Verdict & calls"]] },
+      { label: "Performance", items: [["performance", "Returns & times like this"]] },
+      { label: "Plan & scores", items: [["plan", "Trade plan"], ["scores", "Scores"]] },
       { label: "Risk", items: [["risk", "Risk profile"]] },
       { label: "Analyst Consensus", items: [["estimates", "Estimates & revisions"]] },
       { label: "Industry Landscape", items: [["ranking", "Company ranking"], ["history", "History & peers"], ["industry", "KPIs & cycle"], ["chain", "Customers & suppliers"], ["calls", "Earnings calls"], ["companies", "The companies"]] },
@@ -6907,8 +6924,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   const fEff = (e) => (e ? `<span class="pill ${FEFF[e] || "neu"}">${esc(e)}</span>` : "");
   const fLvl = (v, w) => (v ? `<span class="pill ${v === "high" ? "neg" : v === "medium" || v === "moderate" ? "warn" : "neu"}">${esc(v)}${w ? " " + w : ""}</span>` : "");
   function fundGroups(fd) {
-    return [{ label: "Performance", items: [["fund-perf", "Returns & times like this"]] },
-      { label: "Snapshot", items: [["fund-snap", "Verdict & calls"], ["fund-lean", "Where it's going"], ["fund-thesis", "Analysis"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
+    return [{ label: "Snapshot", items: [["fund-snap", "Verdict & calls"]] },
+      { label: "Performance", items: [["fund-perf", "Returns & times like this"]] },
+      { label: "Our analysis", items: [["fund-thesis", "Analysis"], ["fund-fit", "Scores & fit"], ["fund-plan", "Trade plan"], ["fund-fresh", "What's changed"]] },
       { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
       { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-ind", "Industries"], ["fund-active", "Against the benchmark"], ["fund-cov", "Coverage"], ["fund-peers", "Peer funds"]] },
       { label: "Wall Street & news", items: [["fund-street", "Wall Street"], ["fund-news", "News & sentiment"], ["fund-season", "Earnings season"]] },
@@ -7414,8 +7432,8 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       <div class="tbl-wrap"><table><thead><tr><th>Input</th><th>As of</th><th class="n">Age</th><th></th></tr></thead><tbody>${FR.map((r) => `<tr><td>${esc(r.what)}</td><td class="mono">${esc(r.date || "—")}</td><td class="n ${r.age > 14 ? "down" : ""}">${r.age === null ? "—" : r.age + "d"}</td><td class="small muted">${esc(r.note)}</td></tr>`).join("")}</tbody></table></div>
       ${fd.dlog?.length ? `<h3>Daily updates</h3><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Day</th><th>What it did</th><th>Why</th></tr></thead><tbody>${fd.dlog.slice(0, 10).map((x) => `<tr><td class="mono">${esc(x.date)}</td><td>${esc(ACT[x.action] || x.action)}${x.flips?.length ? `<div class="small"><b>Calls changed:</b> ${esc(x.flips.join("; "))}</div>` : ""}${x.err ? `<div class="small down">${esc(x.err)}</div>` : ""}</td><td class="wr small">${esc((x.why || []).join("; ") || "—")}</td></tr>`).join("")}</tbody></table></div>` : ""}
       <div class="small muted">Each time the page opens, code checks what moved since the calls (code's starting point moving a full notch or clearly crossing zero, a move of a normal month or more, a big holding reporting, the write-up's inputs, or calls a week old) and redoes only that, by itself: the calls (one Claude call) or, when the write-up's inputs moved, the whole analysis. "Update my funds" on the fund list does the same for every fund you've analyzed.</div>`) : "";
-    const secs = [snap, leanSec, thesisSec, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, tim)), riskSec, stressSec, tech, streetF, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
-    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Performance", items: [["fund-perf", "Returns & times like this"]] }, { label: "Snapshot", items: [["bond-snap", "Verdict & calls"], w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
+    const secs = [snap, thesisSec, fitSec, plan, freshSec, holdSec, indSec, actSec, covSec, peerSec, addTo(perfSec, twBlock("fund", fd.sym, tim)), riskSec, stressSec, tech, streetF, news, seasonSec, lookSec, valSec, kpiSec, scenSec, dist, macroSec, worldSec, tradeSec, regSec, drv, calSec];
+    if (fd.bond) { const w0 = (id, label) => (fd.bondFull ? [id, label] : null), bs = bondSecs(fd), g = [{ label: "Snapshot", items: [["bond-snap", "Verdict & calls"]] }, { label: "Performance", items: [["fund-perf", "Returns & times like this"]] }, { label: "Our analysis", items: [w0("bond-calls", "Where it's going"), w0("bond-thesis", "Analysis"), w0("bond-scen", "Scenarios")] },
         { label: "Risk & patterns", items: [["fund-risk", "Risk"], ["fund-stress", "Stress & boom tests"], ["fund-tech", "Timeframe patterns"]] },
         { label: "Rates & credit", items: [["bond-shocks", "What moves its price"], fd.bondM?.lend?.rows?.length ? ["bond-lend", "Who it lends to"] : null, w0("bond-risks", "Risks & watch"), ["bond-macro", "The backdrop"]] },
         { label: "What it holds", items: [["fund-hold", "Holdings"], ["fund-peers", "Peer funds"]] }];
@@ -9856,8 +9874,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const tog = v?.together?.pairing || mixItems.length || v?.risks?.length ? sec("cmp-together", "Owning them together", "", `<div class="two">${mixItems.length ? `<div class="box"><h3>A split for a balanced investor</h3><div class="cx-split">${mixItems.map((x) => `<i style="flex:${x.value};background:${cmpColor(x.name)}" title="${esc(x.name)} ${x.value}%"></i>`).join("")}</div><div class="legend">${mixItems.map((x) => `<span><i style="background:${cmpColor(x.name)}"></i>${esc(x.name)} ${x.value}%</span>`).join("")}</div>${v.together.pairing ? `<p class="small">${esc(v.together.pairing)}</p>` : ""}</div>` : v?.together?.pairing ? `<div class="box"><p class="small">${esc(v.together.pairing)}</p></div>` : ""}
       ${v?.risks?.length ? `<div class="box"><h3>Risks that cut across</h3><ul class="memo-pts cx-neg">${v.risks.map((x) => `<li class="small">${esc(x)}</li>`).join("")}</ul></div>` : ""}</div>`) : "";
 
-    const groups = [{ label: "Performance", items: [["cmp-perf", "Performance"]] },
-      { label: "Verdict", items: [["cmp-verdict", "The verdict"], ["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
+    const groups = [{ label: "Verdict", items: [["cmp-verdict", "The verdict"]] },
+      { label: "Performance", items: [["cmp-perf", "Performance"]] },
+      { label: "The names", items: [["cmp-lineup", "The line-up"], ["cmp-investors", "By investor"]] },
       { label: "Risk", items: [["cmp-risk", "Risk & diversification"]] },
       { label: "Ahead", items: [["cmp-ahead", "What's ahead"], macroInd ? ["cmp-macroind", "Macro indicators"] : null, affairs ? ["cmp-affairs", "Foreign affairs"] : null, macroS ? ["cmp-macro", "Macro scenarios"] : null, ["cmp-street", "Wall Street & sentiment"]] },
       { label: "Scores", items: [insideF ? ["cmp-funds", "Inside the funds"] : null, ["cmp-dims", "Dimensions"], ["cmp-h2h", "Every metric"]] },
@@ -10028,12 +10047,13 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const body = old ? old.replace(/^\s*<section[^>]*>\s*<div class="panel-head">[\s\S]*?<\/div>/, "").replace(/<\/section>\s*$/, "") : "";
     const title = old ? (old.match(/<h2>([\s\S]*?)<\/h2>/)?.[1] || "").replace(/<[^>]+>/g, "") : "";
     const sub = old ? (old.match(/<span class="small muted">([\s\S]*?)<\/span><\/div>/)?.[1] || "") : "";
-    const w = S.twWin?.[kind + ":" + key] || (kind === "company" && TW_WIN[S.coRet] ? S.coRet : "6M");
-    return `<div class="tw" data-tw="${kind}" data-tw-key="${esc(key)}"><div class="tw-head"><h3>Times like this</h3><span class="small muted">Pick a window: the 5 past stretches most like the last one (the macro backdrop at its end, and how ${kind === "industry" ? "the industry" : esc(key)} and the market moved through it), and what came 1, 3, 6 and 12 months after</span></div>
-      <div class="seg tw-tabs" role="group" aria-label="Window">${Object.keys(TW_WIN).map((h) => `<button type="button" data-tw-win="${h}" aria-pressed="${h === w}">Last ${TW_LAB[h]}</button>`).join("")}</div>
-      <div class="tw-body"><div class="skel" style="height:120px"></div></div>
+    const w = twWinOf(kind);
+    return `<div class="tw" data-tw="${kind}" data-tw-key="${esc(key)}"><div class="tw-head"><h3>Times like this${TW_WIN[w] ? `: the last ${TW_LAB[w]}` : ""}</h3><span class="small muted">${TW_WIN[w] ? `The 5 past ${TW_LAB[w]} stretches most like the last one (the macro backdrop at its end, and how ${kind === "industry" ? "the industry" : esc(key)} and the market moved through it), and what came 1, 3, 6 and 12 months after. Tap a stretch to lay it over today's path.` : `Pick 1M, 3M, 6M or 1Y in Performance above to see the past stretches most like it.`}</span></div>
+      <div class="tw-body">${TW_WIN[w] ? `<div class="skel" style="height:120px"></div>` : ""}</div>
       ${body ? `<details class="tw-old"><summary><b>${esc(title || "Times like this")}</b>${sub ? ` <span class="small muted">${sub}</span>` : ""}</summary><div class="tw-old-in">${body}</div></details>` : ""}</div>`;
   }
+  /** The window Performance is showing (its period buttons), for Times like this. */
+  const twWinOf = (kind) => { const r = kind === "company" ? S.coRet || "1Y" : kind === "fund" ? S.fundRet || "1Y" : S.indRet || "1Y"; return r === "12M" ? "1Y" : r; };
   async function twSeries(kind, key) {
     const norm = (x) => (x?.dates?.length ? { dates: x.dates, values: x.closes || x.values || x.levels } : null);
     if (kind === "company") return S.co?.sym === key ? norm(S.co.data?.ser || S.co.ser) : null;
@@ -10049,8 +10069,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   function wireTimes(root) { for (const el of (root || document).querySelectorAll(".tw:not([data-tw-on])")) { el.dataset.twOn = "1"; twShow(el); } }
   async function twShow(el, win) {
     const kind = el.dataset.tw, key = el.dataset.twKey, k0 = kind + ":" + key; S.twWin ||= {};
-    win = win || S.twWin[k0] || el.querySelector('[data-tw-win][aria-pressed="true"]')?.dataset.twWin || "6M"; S.twWin[k0] = win;
-    el.querySelectorAll("[data-tw-win]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.twWin === win)));
+    win = win || twWinOf(kind); S.twWin[k0] = win; if (!TW_WIN[win]) return;
     const body = el.querySelector(".tw-body"), ck = `${k0}|${win}|${today()}`;
     if (_twHtml.has(ck)) { body.innerHTML = _twHtml.get(ck); return; }
     if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
@@ -10058,24 +10077,77 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     try {
       const [ind, mk] = await Promise.all([twSeries(kind, key), regimeData()]);
       const R = ind ? Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }) : null;
-      const html = twHTML(R, win, kind, key); _twHtml.set(ck, html);
-      if (S.twWin[k0] !== win) return;
-      for (const x of document.querySelectorAll(".tw")) if (x.dataset.tw === kind && x.dataset.twKey === key) x.querySelector(".tw-body").innerHTML = html;
+      const draw = (N) => { _twState.set(ck, { R, N, win, kind, key }); const html = twHTML(R, win, kind, key, N); _twHtml.set(ck, html);
+        if (S.twWin[k0] !== win) return; for (const x of document.querySelectorAll(".tw")) if (x.dataset.tw === kind && x.dataset.twKey === key) x.querySelector(".tw-body").innerHTML = html; };
+      const N0 = twNoteGet(ck); draw(N0 || (R?.episodes?.length && S.sample ? "pending" : null));
+      if (!N0 && R?.episodes?.length && S.sample) draw(await twNarrate(kind, key, R, ck));
     } catch (e) { if (FATAL.has(e?.code)) throw e; body.innerHTML = `<div class="small muted">The long price history didn't come back from FMP, so the past stretches can't be found right now.</div>`; }
   }
-  document.addEventListener("click", (ev) => { const b = ev.target.closest("[data-tw-win]"); if (!b) return; const el = b.closest(".tw"); if (el) twShow(el, b.dataset.twWin); });
-  function twHTML(R, win, kind, key) {
+  const _twState = new Map();
+  document.addEventListener("click", (ev) => {
+    // The industry's Performance window buttons.
+    const w = ev.target.closest("[data-ind-ret]");
+    if (w) { S.indRet = w.dataset.indRet; const sec0 = w.closest("section"); sec0?.querySelectorAll("[data-ind-ret]").forEach((b) => b.setAttribute("aria-pressed", String(b === w)));
+      const el = sec0?.querySelector(".tw"); if (el) { const tmp = document.createElement("div"); tmp.innerHTML = twBlock(el.dataset.tw, el.dataset.twKey, ""); const head = tmp.querySelector(".tw-head"); if (head) el.querySelector(".tw-head").replaceWith(head); twShow(el, twWinOf("industry")); } return; }
+    // Tapping a stretch lays it over today's path.
+    const c = ev.target.closest(".tw-ep"); if (!c || ev.target.closest("summary, details, a, button")) return;
+    const el = c.closest(".tw"), kind = el?.dataset.tw, key = el?.dataset.twKey; if (!el) return;
+    const win = twWinOf(kind), ck = `${kind}:${key}|${win}|${today()}`, st = _twState.get(ck); if (!st) return;
+    (S.twPick ||= {})[ck] = +c.dataset.i; const html = twHTML(st.R, st.win, st.kind, st.key, st.N); _twHtml.set(ck, html);
+    el.querySelector(".tw-body").innerHTML = html; el.querySelector(".tw-chart")?.scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  });
+  /** The historian's notes for one window's stretches: kept in this browser for the day. */
+  const twNoteGet = (ck) => { try { const all = JSON.parse(localStorage.getItem("ams.tw.notes") || "{}"); return all[ck] || null; } catch { return null; } };
+  const twNoteSet = (ck, v) => { try { const all = JSON.parse(localStorage.getItem("ams.tw.notes") || "{}"); all[ck] = v; const ks = Object.keys(all); for (const k of ks.slice(0, Math.max(0, ks.length - 60))) delete all[k]; localStorage.setItem("ams.tw.notes", JSON.stringify(all)); } catch {} };
+  async function twNarrate(kind, key, R, ck) {
+    const co = S.co?.sym === key ? S.co : null, fd = S.fund?.sym === key ? S.fund : null;
+    const subj = kind === "industry" ? "the industry" : key;
+    const long = kind === "industry" ? `the US-listed "${key}" industry` : kind === "company" ? `${key}${co?.data?.profile?.companyName ? ` (${co.data.profile.companyName})` : ""}, a US-listed stock${co?.run?.name ? ` in the ${co.run.name} industry` : ""}` : `the ${key} fund${fd?.facts?.name ? ` (${fd.facts.name})` : ""}`;
+    try { const raw = await sampleJson(Regimes.windowHistorianPrompt(long, subj, R, { today: today() }), { modelTier: "default", cache: false });
+      const N = Regimes.cleanWindowHistorian(raw, R); twNoteSet(ck, N); return N; }
+    catch (e) { if (FATAL.has(e?.code)) throw e; return null; }
+  }
+  function twChart(R, pick, it, ML) {
+    const cur = R.now_track || [], eps = R.episodes.map((e) => e.track || []), all = [cur, ...eps].flat(); if (all.length < 4) return "";
+    const W = 640, H = 250, L = 40, Rr = 14, T = 14, B = 30, x0 = Math.min(...all.map((p) => p[0])), x1 = Math.max(252, ...all.map((p) => p[0]));
+    const ys = all.map((p) => p[1]), lo = Math.min(...ys), hi = Math.max(...ys), pad = (hi - lo) * 0.06 || 1;
+    const X = (t) => L + ((t - x0) / (x1 - x0)) * (W - L - Rr), Y = (v) => T + (1 - (v - (lo - pad)) / (hi - lo + 2 * pad)) * (H - T - B);
+    const line = (pts) => pts.map(([t, v]) => `${X(t).toFixed(1)},${Y(v).toFixed(1)}`).join(" ");
+    const grid = [lo, 100, hi].map((v) => `<line class="grid" x1="${L}" x2="${W - Rr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${v >= 100 ? "+" : ""}${(v - 100).toFixed(0)}%</text>`).join("");
+    const ticks = [[x0, `−${Math.round(-x0 / 21)}M`], [0, "today"], [63, "+3M"], [126, "+6M"], [252, "+12M"]].filter(([t]) => t >= x0 && t <= x1).map(([t, l]) => `<text x="${X(t).toFixed(1)}" y="${H - 10}" text-anchor="middle">${l}</text>`).join("");
+    const others = eps.map((p, i) => (i === pick || p.length < 2 ? "" : `<polyline class="tw-ln" points="${line(p)}" fill="none" stroke="var(--bench)" stroke-opacity=".35" stroke-width="1.25"/>`)).join("");
+    const P = eps[pick] || [], e = R.episodes[pick], endP = P[P.length - 1];
+    const picked = P.length > 1 ? `<polyline class="tw-pk" points="${line(P)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>${endP ? `<text class="tw-pl" x="${Math.min(W - Rr, X(endP[0])).toFixed(1)}" y="${(Y(endP[1]) - 8).toFixed(1)}" text-anchor="end">${esc(ML(e.end))}: ${endP[1] >= 100 ? "+" : ""}${(endP[1] - 100).toFixed(1)}% a year on</text>` : ""}` : "";
+    const now = cur.length > 1 ? `<polyline points="${line(cur)}" fill="none" stroke="var(--ink)" stroke-width="2.5" stroke-linejoin="round"/><circle cx="${X(0).toFixed(1)}" cy="${Y(100).toFixed(1)}" r="4" fill="var(--ink)" stroke="var(--surface)" stroke-width="2"/>` : "";
+    return `<div class="chart tw-chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(it)}'s path over the window, with the picked past stretch laid over it">${grid}<line x1="${X(0).toFixed(1)}" x2="${X(0).toFixed(1)}" y1="${T}" y2="${H - B}" stroke="var(--line-2)" stroke-dasharray="3 4"/>${others}${picked}${now}${ticks}</svg>
+      <div class="legend"><span><i style="background:var(--ink)"></i>${esc(it)}, the last ${R.wname}</span><span><i style="background:var(--accent)"></i>${e ? `${esc(ML(e.start))} to ${esc(ML(e.end))}, then the year after` : "the picked stretch"}</span><span><i style="background:var(--bench);opacity:.5"></i>the other 4</span><span class="muted">lined up at today = 0%</span></div></div>`;
+  }
+  function twHTML(R, win, kind, key, N = null) {
     if (!R?.episodes?.length) return `<div class="small muted">There isn't enough price history to find past ${TW_LAB[win]} stretches like this one.</div>`;
     const it = kind === "industry" ? "The industry" : key, its = kind === "industry" ? "The industry's" : key + "'s", lab = (k) => Regimes.wlabel(k, R.window).replace(/^It\b/, it).replace(/^Its\b/, its), lab2 = (k) => lab(k).replace(/^The industry's\b/, "its").replace(/^The industry\b/, "the industry"), HZ = [["1M", "1 month"], ["3M", "3 months"], ["6M", "6 months"], ["12M", "1 year"]];
     const sg = (v, u = "%") => (isNum(num(v)) ? `<b class="${v >= 0 ? "up" : "down"}">${v > 0 ? "+" : ""}${v}${u}</b>` : `<span class="muted">not yet</span>`);
     const ML = (d) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
     const strip = `<div class="tw-base">${HZ.map(([h, l]) => { const b = R.base[h] || {}; return `<div class="tw-b"><span class="eyebrow">${l} later</span><span class="tw-bn"><b>${b.up ?? "—"}</b> of ${b.n ?? 5} higher</span><span class="small">median ${sg(b.median)}</span><span class="small muted">beat the S&amp;P 500 ${b.beat ?? "—"} of ${b.n ?? 5} · range ${isNum(num(b.worst)) ? `${b.worst > 0 ? "+" : ""}${b.worst}%` : "—"} to ${isNum(num(b.best)) ? `${b.best > 0 ? "+" : ""}${b.best}%` : "—"}</span></div>`; }).join("")}</div>`;
     const nowC = `<div class="tw-now"><span class="eyebrow">The last ${TW_LAB[win]}, to ${esc(fmtShort(R.as_of))}</span><div class="tw-chips">${R.features.slice(0, 9).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, R.now[k]))}</b></span>`).join("")}</div></div>`;
-    const cards = R.episodes.map((e, i) => `<article class="rcard tw-ep" style="--k:${i}"><div class="tw-ep-h"><span class="tw-ep-n">${i + 1}</span><div><b>${ML(e.start)} → ${ML(e.end)}</b><div class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches since ${esc(String(R.from || "").slice(0, 4))}</div></div></div>
+    const pend = N === "pending", NN = pend ? null : N, nb = (i) => NN?.episodes?.[i] || null;
+    const sgn = (v, u = "%") => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${v}${u}` : "n/a");
+    const after = (e) => { const r = e.it, sp = e.spy, ok = ["1M", "3M", "6M", "12M"].filter((h) => isNum(num(r[h])));
+      if (!ok.length) return "";
+      const up = ok.filter((h) => r[h] > 0).length, own = isNum(num(r["12M"])) && isNum(num(sp["12M"])) ? (Math.sign(r["12M"]) !== Math.sign(sp["12M"]) ? (r["12M"] < sp["12M"] ? ", so the weakness was its own rather than the market's" : ", so the strength was its own rather than the market's") : r["12M"] - sp["12M"] > 5 ? ", well ahead of the market" : r["12M"] - sp["12M"] < -5 ? ", behind the market" : ", roughly with the market") : "";
+      return `${it} ${up === ok.length ? "kept rising" : up === 0 ? "kept falling" : "went both ways"}: ${ok.map((h) => `${sgn(r[h])} after ${h === "12M" ? "12M" : h}`).join(", ")}${isNum(num(e.maxdd6)) ? `, with a worst drop of ${e.maxdd6}% inside six months` : ""}. The S&P 500 was ${ok.map((h) => `${sgn(sp[h])} after ${h}`).join(", ")}${own}.`; };
+    const diff = (e) => { const ks = e.unlike.slice(0, 2); return ks.length ? `The biggest gaps: ${ks.map((k) => `${lab2(k)} is ${Regimes.wval(k, R.now[k])} now against ${Regimes.wval(k, e.then[k])} then`).join("; ")}.` : ""; };
+    const every = (e) => `<details class="tw-every"><summary>Then vs now, every measure</summary><div class="tw-meas">${R.features.map((k) => `<div class="tw-m"><span>${esc(lab(k))}</span><span class="small muted">${ML(e.end)}</span><b>${esc(Regimes.wval(k, e.then[k]))}</b><span class="small muted">Today</span><b>${esc(Regimes.wval(k, R.now[k]))}</b></div>`).join("")}</div></details>`;
+    const cards = R.episodes.map((e, i) => `<article class="rcard tw-ep${NN?.closest === "W" + (i + 1) ? " tw-closest" : ""}" style="--k:${i}"><div class="tw-ep-h"><div><b class="tw-ep-t">${ML(e.end)}</b> <span class="small muted">the ${TW_LAB[win]} from ${ML(e.start)}</span><div class="small muted">closer than ${e.similarity}% of all ${TW_LAB[win]} stretches since ${esc(String(R.from || "").slice(0, 4))}${NN?.closest === "W" + (i + 1) ? ` · <b class="tw-most">most like today</b>` : ""}</div></div></div>
+        ${nb(i)?.then ? `<p class="tw-p"><b>Then.</b> ${esc(nb(i).then)}</p>` : pend ? `<p class="tw-p small muted">The historian is writing what was going on then…</p>` : ""}
+        <p class="tw-p"><b>What happened next.</b> ${esc(nb(i)?.after || after(e))}</p>
+        <p class="tw-p"><b>What's different now.</b> ${esc(nb(i)?.different || diff(e))}</p>
+        ${nb(i)?.lesson ? `<div class="tw-lesson">${esc(nb(i).lesson)}</div>` : ""}
         <div class="tw-then"><span class="eyebrow">Then</span>${["iw", "sw", "ddw", "ff", "cpi", "vix"].filter((k) => k in e.then).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, e.then[k]))}</b></span>`).join("")}</div>
         <div class="tw-after"><span class="eyebrow">What came after</span><div class="tw-grid">${HZ.map(([h, l]) => `<div class="tw-cell"><span class="small muted">${l}</span>${sg(e.it[h])}<span class="small muted">S&amp;P ${isNum(num(e.spy[h])) ? `${e.spy[h] > 0 ? "+" : ""}${e.spy[h]}%` : "—"}</span></div>`).join("")}</div></div>
-        ${e.path?.length > 2 ? epPath(e.path, e.spy_path) : ""}<div class="small muted">Worst drop in the next 6 months: ${isNum(num(e.maxdd6)) ? `${e.maxdd6}%` : "—"} · most alike: ${e.alike.map((k) => esc(lab2(k))).join(", ")} · least alike: ${e.unlike.map((k) => esc(lab2(k))).join(", ")}</div></article>`).join("");
-    return `${strip}${nowC}<div class="rgrid tw-eps">${cards}</div>`;
+        ${e.path?.length > 2 ? epPath(e.path, e.spy_path) : ""}<div class="small"><b>Most alike:</b> ${e.alike.map((k) => esc(lab(k))).join(", ")} · <b>least alike:</b> ${e.unlike.map((k) => esc(lab(k))).join(", ")}</div>${every(e)}</article>`).join("");
+    const read = NN?.read ? `<div class="callout tw-read"><span class="eyebrow">The historian's read</span><p>${esc(NN.read).replace(/\[(W\d)\]/g, (m, id) => `<b>${ML(R.episodes[+id.slice(1) - 1]?.end || "")}</b>`)}</p></div>` : "";
+    const ck = `${kind}:${key}|${win}|${today()}`, pick = S.twPick?.[ck] ?? Math.max(0, (NN?.closest ? +NN.closest.slice(1) - 1 : 0));
+    return `${twChart(R, pick, it, ML)}${strip}${read}${nowC}<div class="rgrid tw-eps">${cards.replace(/<article class="rcard tw-ep([^"]*)" style="--k:(\d+)">/g, (m, cl, i) => `<article class="rcard tw-ep${cl}${+i === pick ? " tw-picked" : ""}" style="--k:${i}" data-i="${i}" tabindex="0" role="button" aria-pressed="${+i === pick}">`)}</div>`;
   }
   /** The company's Performance section, with Times like this inside it. */
   function coReturnsAll(co) { return addTo(coReturns(co), twBlock("company", co.sym, co.run ? coTimes(co) : "")); }
@@ -10264,7 +10336,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       return `<div class="notice info">Pulling ${esc(co.sym)}'s prices since 2007, statements, estimates, ownership and news (a few seconds)…</div><div class="shell">${sideNav(companyGroups(co))}<div class="stream">${skRet}${sk(4)}${sk(3)}${sk(5)}${sk(3)}</div></div>`;
     }
     if (co.stage === "error") return notices;
-    const secs = [run ? coLeanBlock(co) : "", coReturnsAll(co), coSnapshot(co, t), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
+    const secs = [coSnapshot(co, t), coReturnsAll(co), run ? coThesis(co, t, ck) : "", run ? coScores(co, t) : "", coPlan(co, t), coNews(co),
       coPerf(co), coRiskSec(co), coStreet(co), coStress(co),
       run ? coLandscape(co) : "", run ? coPeers(co) : "", coKpis(co, t), coChain(co, t), coCalls(co),
       coMacro(co, t), coWorld(co, t), coTrade(co, t), coTech(co),
@@ -10806,8 +10878,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const run = !!co.run, I = co.lensIn || {};
     const it = (ok, id, l) => (ok ? [id, l] : null);
     return [
+      { label: "Snapshot", items: [["co-snap", "Snapshot"]] },
       { label: "Performance", items: [["co-returns", "Performance"]] },
-      { label: "Snapshot", items: [it(run, "co-lean", "Where it's going"), ["co-snap", "Snapshot"], it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
+      { label: "Our analysis", items: [it(run, "co-thesis", "Our analysis"), it(co.scores, "co-scores", "Scores"), it(run, "co-plan", "Trade plan"), it(co.news?.length || co.data?.sentiment?.length, "co-news", "News & sentiment")] },
       { label: "Returns & Risk", items: [it(co.perf, "co-perf", "Returns vs SPY"), it(co.g1, "co-risk", "Risk & Greeks")] },
       { label: "Analyst Consensus", items: [["co-street", "Wall Street"]] },
       { label: "Stress Test", items: [it(co.ep?.length, "co-stress", "Crises & booms")] },
@@ -11300,7 +11373,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     if (t.dataset.coTf) { S.coTf = t.dataset.coTf; renderCompany(); return; }
     if (t.dataset.trkH) { S.trkH = t.dataset.trkH; if (S.tab === "companies") renderCompany(); else renderReport(); return; }
     if (t.dataset.coRet && S.co) { S.coRet = t.dataset.coRet; if (TW_WIN[t.dataset.coRet]) (S.twWin ||= {})["company:" + S.co.sym] = t.dataset.coRet; const cur = $("co-returns"), tmp = document.createElement("div"); tmp.innerHTML = coReturnsAll(S.co); const nx = tmp.firstElementChild;
-      if (cur && nx) { cur.replaceWith(nx); wireCharts(nx); } return; }
+      if (cur && nx) { cur.replaceWith(nx); wireCharts(nx); wireTimes(nx); wireStreet(nx); } return; }
     if (t.dataset.coPer) { S.coPer = t.dataset.coPer; renderCompany(); return; }
     if (t.dataset.dcfReset) { if (S.co?.dcfBase) { S.co.dcfP = { ...S.co.dcfBase }; renderCompany(); } return; }
     if (t.dataset.openIndustry) { S.tab = "industries"; renderAll(); choose(t.dataset.openIndustry); return; }
@@ -11496,7 +11569,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       const t = e.textContent; if (t.length < CLAMP_AT) continue;
       emphasize(e);
     }
-    for (const p of scope.querySelectorAll("p.prose:not([data-em]), .prose > p:not([data-em]), .summary-text:not([data-em]), .st-read p:not([data-em]), .rcard p:not([data-em]), .cardlist > li:not([data-em])")) if (p.closest(ZONE) && p.textContent.length > 160) emphasize(p);
+    for (const p of scope.querySelectorAll("p.prose:not([data-em]), .prose > p:not([data-em]), .summary-text:not([data-em]), .st-read p:not([data-em]), .rcard p:not([data-em]), .cardlist > li:not([data-em])")) if (p.closest(ZONE) && !p.closest(".tw, .st") && p.textContent.length > 160) emphasize(p);
   }
   d.addEventListener("click", (ev) => {
     const b = ev.target.closest(".more-btn"); if (!b) return; ev.preventDefault();
@@ -11531,7 +11604,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     for (const nav of d.querySelectorAll(".sidenav.open")) if (!nav.contains(ev.target)) { nav.classList.remove("open"); nav.querySelector(".nav-toggle")?.setAttribute("aria-expanded", "false"); }
   });
   // Long text gets a little typography: its first sentence leads, figures with units stand out, turns are in italics.
-  const NUM_RE = /(?<![\w./\-−])([+\-−]?\$\d[\d,]*(?:\.\d+)?(?:\s?(?:[KMBT]\b|billion|million|trillion))?|[+\-−]\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|pts\b|points\b)?|\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|[KMBT]\b|billion\b|million\b|trillion\b))/g;
+  const NUM_RE = /(?<![\w./\-−])([+\-−]?\$\d[\d,]*(?:\.\d+)?(?:\s?(?:[KMBT]\b|billion|million|trillion))?|[+\-−]\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|pts\b|points\b)?|\d[\d,]*(?:\.\d+)?\s?(?:%|x\b|bp\b|bps\b|pp\b|[BT]\b|billion\b|million\b|trillion\b))/g;
   const TURN_RE = /\b(but|however|although|though|yet|despite|unless|instead|whereas)\b/gi;
   const NOEMPH = "a, b, strong, i, em, code, button, .cite, .pill, .tick, mark, sup, sub, .num, .lead, svg, .more-btn";
   function emphasize(root) {
@@ -11542,7 +11615,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     for (const n of nodes) {
       let t = n.nodeValue; if (!t.trim()) continue;
       let html = t.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
-      if (!led) { led = true; const m = html.match(/^([\s\S]{20,240}?[.!?])(\s+|$)/); if (m) html = `<span class="lead">${m[1]}</span>${html.slice(m[1].length)}`; }
+      if (!led) { led = true; const m = html.match(/^([\s\S]{20,240}?[.!?])(\s+|$)/); if (m && m[1].length < root.textContent.length * 0.45) html = `<span class="lead">${m[1]}</span>${html.slice(m[1].length)}`; }
       html = html.replace(/(<span class="lead">[\s\S]*?<\/span>)|([^<]+)/g, (all, lead, plain) => lead ? lead : plain.replace(NUM_RE, '<b class="num">$1</b>').replace(TURN_RE, "<em>$1</em>"));
       if (html === t) continue;
       const tpl = d.createElement("template"); tpl.innerHTML = html; n.replaceWith(tpl.content);

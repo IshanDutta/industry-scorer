@@ -238,6 +238,15 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     f.oilw = ret(mk.uso, d, m); f.usdw = ret(mk.uup, d, m);
     return f;
   }
+  /** The path through a stretch and the year after it, rebased to 100 at its end: [[trading days from the end, level]]. */
+  function track(s, d, m, fwd = 252) {
+    const i = at(s.dates, d); if (i < 0) return [];
+    const a = Math.max(0, i - Math.round(m * 21)), b = Math.min(s.values.length - 1, i + fwd), step = Math.max(1, Math.round((b - a) / 90)), out = [];
+    for (let j = i; j >= a; j -= step) out.unshift([j - i, r1((s.values[j] / s.values[i]) * 100, 2)]);
+    for (let j = i + step; j <= b; j += step) out.push([j - i, r1((s.values[j] / s.values[i]) * 100, 2)]);
+    if (b > i && out[out.length - 1][0] !== b - i) out.push([b - i, r1((s.values[b] / s.values[i]) * 100, 2)]);
+    return out;
+  }
   function windowEpisodes({ ind, mk = {}, months = 6, today, k = 5, recentMonths = 12 }) {
     if (!ind?.dates?.length || ind.dates.length < 400) return null;
     const last = ind.dates[ind.dates.length - 1], now = today && today < last ? today : last;
@@ -257,15 +266,49 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
       const diffs = keys.filter((kk) => isNum(r.f[kk])).map((kk) => ({ key: kk, z: Math.abs(r.f[kk] - fNow[kk]) / sds[kk] })).sort((a, b) => a.z - b.z);
       return { start: monthEnd(addMonths(r.d, -months)), end: r.d, similarity: Math.round((1 - ranked.indexOf(r) / N) * 1000) / 10,
         then: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, r.f[kk])])), alike: diffs.slice(0, 3).map((x) => x.key), unlike: diffs.slice(-2).reverse().map((x) => x.key),
-        it: fi.ret, spy: fs.ret, excess: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(fi.ret[h]) && isNum(fs.ret[h]) ? r1(fi.ret[h] - fs.ret[h]) : null])), maxdd6: fi.maxdd6, path: fi.path, spy_path: fs.path }; });
+        track: track(ind, r.d, months), it: fi.ret, spy: fs.ret, excess: Object.fromEntries(Object.keys(H).map((h) => [h, isNum(fi.ret[h]) && isNum(fs.ret[h]) ? r1(fi.ret[h] - fs.ret[h]) : null])), maxdd6: fi.maxdd6, path: fi.path, spy_path: fs.path }; });
     const base = Object.fromEntries(Object.keys(H).map((h) => { const t = ep.map((e) => e.it[h]).filter(isNum), x = ep.map((e) => e.excess[h]).filter(isNum);
       return [h, { up: t.filter((v) => v > 0).length, n: t.length, median: r1(quant(t, 0.5)), beat: x.filter((v) => v > 0).length, best: t.length ? r1(Math.max(...t)) : null, worst: t.length ? r1(Math.min(...t)) : null }]; }));
-    return { as_of: now, from: rows[0]?.d || null, window: months, wname: wname(months), stretches: N, features: keys, now: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, fNow[kk])])), episodes: ep, base };
+    return { now_track: track(ind, now, months, 0), as_of: now, from: rows[0]?.d || null, window: months, wname: wname(months), stretches: N, features: keys, now: Object.fromEntries(keys.map((kk) => [kk, fmt(kk, fNow[kk])])), episodes: ep, base };
   }
   const wlabel = (kk, months) => (WMAP[kk]?.label || kk).replace("{w}", wname(months));
   const wval = (kk, v) => { if (!isNum(v)) return "n/a"; const u = WMAP[kk]?.unit; return u === "" ? `${v}` : u === "pp" ? `${v > 0 ? "+" : ""}${v}pp` : `${["ff", "cpi", "volw"].includes(kk) ? "" : v > 0 ? "+" : ""}${v}%`; };
 
-  const Regimes = { windowEpisodes, wfingerprint, WFEAT, WMAP, wlabel, wval, H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
+  /** The window stretches as prompt text (W1-W5 to cite). subject: "the industry", "KO", ... */
+  function windowText(W, subject = "it") {
+    if (!W?.episodes?.length) return "";
+    const lab = (kk) => wlabel(kk, W.window).replace(/^It\b/, subject).replace(/^Its\b/, subject + "'s");
+    const ML = (d) => String(d).slice(0, 7);
+    const L = [`TODAY'S STRETCH: the last ${W.wname} to ${W.as_of}: ${W.features.map((kk) => `${lab(kk)} ${wval(kk, W.now[kk])}`).join("; ")}.`];
+    for (const [i, e] of W.episodes.entries())
+      L.push(`[W${i + 1}] ${ML(e.start)} to ${ML(e.end)} (closer than ${e.similarity}% of all ${W.wname} stretches since ${String(W.from || "").slice(0, 4)}). Then: ${W.features.map((kk) => `${lab(kk)} ${wval(kk, e.then[kk])}`).join("; ")}. Most alike: ${e.alike.map(lab).join(", ")}; least alike: ${e.unlike.map(lab).join(", ")}. After: ${subject} ${Object.keys(H).map((h) => `${h} ${pc(e.it[h])}`).join(", ")}; S&P 500 ${Object.keys(H).map((h) => `${h} ${pc(e.spy[h])}`).join(", ")}; worst drop in the next 6 months ${pc(e.maxdd6)}.`);
+    L.push(`Across the ${W.episodes.length}: ${Object.entries(W.base).map(([h, b]) => `${h} higher in ${b.up} of ${b.n}, median ${pc(b.median)}, beat the S&P 500 in ${b.beat}`).join("; ")}.`);
+    return L.join("\n");
+  }
+  /** The historian, for one window: what was going on in each stretch, what happened next and why, what differs now. */
+  function windowHistorianPrompt(subjectLong, subject, W, { today } = {}) {
+    return `You are a market historian. The subject is ${subjectLong}. Today is ${today}. Code compared the last ${W.wname} with every past ${W.wname} stretch since ${String(W.from || "").slice(0, 4)}, on the macro backdrop at the end of the stretch and on how ${subject} and the S&P 500 moved through it, and found the ${W.episodes.length} most similar stretches. For each, it measured what ${subject} and the S&P 500 did over the next 1, 3, 6 and 12 months.
+
+${windowText(W, subject)}
+
+For each stretch, write from what you know of market history:
+- "then": what was going on in markets and the economy during that stretch, and for ${subject} (2 sentences; well-known events only, such as a Fed pivot, a recession scare, an oil collapse, a war, a pandemic wave).
+- "after": what happened over the next 12 months and why, using the measured returns above for every number (2-3 sentences). Never invent a number: the returns come from code.
+- "different": the most important way today differs from then, and which way it cuts (1-2 sentences, with the numbers above).
+- "lesson": one short phrase.
+Then "read": 2-3 sentences on what these stretches say about the next 1, 3, 6 and 12 months, and how much weight they deserve given the differences. Cite stretches by ID, e.g. [W2].
+If you are not sure what happened in a given stretch, say so plainly rather than guessing.
+
+Reply with ONLY this JSON: {"episodes": [{"id": "W1", "then": "...", "after": "...", "different": "...", "lesson": "..."}], "read": "...", "closest": "W#"}`;
+  }
+  function cleanWindowHistorian(raw, W) {
+    const s = (x) => String(x || "").replace(/\s+/g, " ").trim(), list = Array.isArray(raw?.episodes) ? raw.episodes : [];
+    const eps = W.episodes.map((e, i) => { const x = list.find((y) => String(y?.id || "").toUpperCase() === `W${i + 1}`) || list[i] || {};
+      return { id: `W${i + 1}`, end: e.end, then: s(x.then), after: s(x.after), different: s(x.different), lesson: s(x.lesson) }; });
+    return { episodes: eps, read: s(raw?.read), closest: /^W[1-9]$/i.test(String(raw?.closest || "")) ? String(raw.closest).toUpperCase() : "", ends: W.episodes.map((e) => e.end) };
+  }
+
+  const Regimes = { windowText, windowHistorianPrompt, cleanWindowHistorian, windowEpisodes, wfingerprint, WFEAT, WMAP, wlabel, wval, H, FEATURES, FMAP, monthly, fingerprint, forward, episodes, text, historianPrompt, cleanHistorian, fval, company, companyText };
   if (typeof module !== "undefined" && module.exports) module.exports = Regimes;
   else root.Regimes = Regimes;
 })(typeof window !== "undefined" ? window : globalThis);
