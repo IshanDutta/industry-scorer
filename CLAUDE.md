@@ -62,6 +62,8 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
 The Screener tab (`renderScreener`, `web/screener.js`) works like Kwanti's screener:
 - Pick asset types (ETFs, mutual funds, stocks, in any combination) and add criteria on the left; the results refresh as you go.
 - Criteria include asset class, equity style, equity sector and region (with a minimum %), fund category, provider, return over any period, yield, volatility, Sharpe, max drawdown, beta, expense ratio, net assets, holdings, sector, industry, stock style, region, exchange, market cap and P/E, P/B, P/S, EPS, margin, quick ratio and debt.
+- Every percentage criterion has a slider (`scrSlider`: 0-100%, returns and net margin −100% to +100%, drawdown −100% to 0, on a
+  square-root scale so small numbers get room; an end means no limit) alongside its Min and Max boxes.
 - You choose the columns, sort by several at once (shift-tap a header, or "Then by…"), tick 2-4 rows to compare (Compare tab), export to CSV, and save searches (page database `screens/<id>`).
 - Searching for one asset ranks the others by how alike they are (`Screener.similar`).
 

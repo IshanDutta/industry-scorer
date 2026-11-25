@@ -1420,6 +1420,20 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .scr-range .pfe-field { padding: 6px 8px; }
 .scr-range .pfe-pre { font: 600 10.5px var(--body); text-transform: uppercase; letter-spacing: .05em; }
 .scr-hint { font-size: 11.5px; color: var(--faint); line-height: 1.4; }
+.scr-sl { position: relative; height: 44px; margin: 2px 4px 0; }
+.scr-sl-track { position: absolute; left: 0; right: 0; top: 10px; height: 6px; border-radius: 3px; background: var(--sunk); border: 1px solid var(--line); }
+.scr-sl-fill { position: absolute; top: -1px; bottom: -1px; border-radius: 3px; background: var(--accent); }
+.scr-sl-zero { position: absolute; top: -4px; width: 2px; height: 12px; margin-left: -1px; background: var(--line-2); }
+.scr-sl-in { position: absolute; left: -8px; right: -8px; width: calc(100% + 16px); top: 2px; height: 22px; margin: 0; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.scr-sl-in::-webkit-slider-runnable-track { background: transparent; border: 0; height: 22px; }
+.scr-sl-in::-moz-range-track { background: transparent; border: 0; }
+.scr-sl-in::-webkit-slider-thumb { -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, .35); cursor: grab; }
+.scr-sl-in::-moz-range-thumb { pointer-events: auto; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); cursor: grab; }
+.scr-sl-in:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scr-sl-in:active::-webkit-slider-thumb { cursor: grabbing; }
+.scr-sl-ticks { position: absolute; left: 0; right: 0; top: 24px; height: 16px; }
+.scr-sl-ticks span { position: absolute; transform: translateX(-50%); font: 500 10px var(--mono); color: var(--faint); white-space: nowrap; }
+.scr-sl-ticks span:first-child { transform: none; } .scr-sl-ticks span:last-child { transform: translateX(-100%); }
 .scr-hint b { color: var(--muted); font-weight: 600; font-family: var(--mono); }
 .scr-add { display: grid; gap: 8px; padding-top: 4px; border-top: 1px solid var(--line); }
 .scr-add > .pfe-lab { margin-top: 6px; }
@@ -10338,6 +10352,33 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   const SCR_Q = { stock: { exchange: "NYSE,NASDAQ,AMEX", isEtf: false, isFund: false, marketCapMoreThan: 3e8 }, etf: { exchange: "NYSE,NASDAQ,AMEX", isEtf: true, marketCapMoreThan: 2.5e7 }, fund: { isFund: true, country: "US", marketCapMoreThan: 1e8 } };
   const SCR_DEEP = ["r", "tr", "v3", "sh3", "b3", "dd", "pe", "pb", "ps", "eps", "qr", "npm", "de", "y", "er", "ac", "pv", "mc", "hc", "inc", "dom", "sw", "rg"];
   const SCR_DEEPCOL = new Set(["v3", "sh3", "dd", "b3", "er", "ac", "pv", "hc", "age", "pe", "pb", "ps", "eps", "npm", "qr", "de", "box", "cat", "rk"]);
+  /*
+   * Sliders for every percentage criterion: 0% to 100% (returns and net margin −100% to +100%, drawdown −100% to 0%).
+   * The track is on a square-root scale so small numbers (an expense ratio of 0.2%) get room; a thumb at either end means
+   * "no limit" on that side. The Min and Max boxes stay, and the two follow each other.
+   */
+  const SCR_SL = { r: [-100, 100], npm: [-100, 100], dd: [-100, 0] };
+  const scrSlDom = (k) => SCR_SL[k] || [0, 100];
+  const scrToPos = (v) => Math.sign(v) * Math.sqrt(Math.min(100, Math.abs(v)) / 100) * 1000;
+  const scrFromPos = (p) => { const v = Math.sign(p) * 100 * Math.pow(Math.abs(p) / 1000, 2), a = Math.abs(v); return Math.sign(v) * (a < 1 ? Math.round(a * 100) / 100 : a < 10 ? Math.round(a * 10) / 10 : Math.round(a)); };
+  function scrSlider(i, c, f) {
+    const [a, b] = scrSlDom(c.k), pa = scrToPos(a), pb = scrToPos(b);
+    const lo = isNum(f.min) ? Math.max(pa, Math.min(pb, scrToPos(Screener.toUI(c, f.min)))) : pa, hi = isNum(f.max) ? Math.max(pa, Math.min(pb, scrToPos(Screener.toUI(c, f.max)))) : pb;
+    const L = ((lo - pa) / (pb - pa)) * 100, R = 100 - ((hi - pa) / (pb - pa)) * 100;
+    const ticks = (a < 0 ? [a, -25, -5, 0, 5, 25, b] : [0, 2, 10, 25, 50, b]).filter((v) => v >= a && v <= b);
+    return `<div class="scr-sl" data-sl="${i}"><div class="scr-sl-track"><i class="scr-sl-fill" style="left:${L.toFixed(2)}%;right:${R.toFixed(2)}%"></i>${a < 0 && b > 0 ? `<i class="scr-sl-zero" style="left:${(((0 - pa) / (pb - pa)) * 100).toFixed(2)}%"></i>` : ""}</div>
+      <input type="range" class="scr-sl-in" data-scr-sl="${i}" data-end="lo" min="${pa.toFixed(0)}" max="${pb.toFixed(0)}" step="1" value="${lo.toFixed(0)}" aria-label="${esc(c.label)}: at least">
+      <input type="range" class="scr-sl-in" data-scr-sl="${i}" data-end="hi" min="${pa.toFixed(0)}" max="${pb.toFixed(0)}" step="1" value="${hi.toFixed(0)}" aria-label="${esc(c.label)}: at most">
+      <div class="scr-sl-ticks">${ticks.map((v) => `<span style="left:${(((scrToPos(v) - pa) / (pb - pa)) * 100).toFixed(2)}%">${v > 0 && a < 0 ? "+" : ""}${v}%</span>`).join("")}</div></div>`;
+  }
+  /** Move a box's slider thumbs and fill to its filter (after typing in Min or Max). */
+  function scrSlSync(box, i) {
+    const f = S.scr.filters[i], c = f && Screener.CRIT[f.k], sl = box?.querySelector(".scr-sl"); if (!sl || !c) return;
+    const [a, b] = scrSlDom(c.k), pa = scrToPos(a), pb = scrToPos(b), clip = (p) => Math.max(pa, Math.min(pb, p));
+    const lo = isNum(f.min) ? clip(scrToPos(Screener.toUI(c, f.min))) : pa, hi = isNum(f.max) ? clip(scrToPos(Screener.toUI(c, f.max))) : pb;
+    sl.querySelector('[data-end="lo"]').value = lo; sl.querySelector('[data-end="hi"]').value = hi;
+    const fill = sl.querySelector(".scr-sl-fill"); fill.style.left = (((lo - pa) / (pb - pa)) * 100).toFixed(2) + "%"; fill.style.right = (100 - ((hi - pa) / (pb - pa)) * 100).toFixed(2) + "%";
+  }
   function scrState() {
     if (S.scr) return S.scr;
     let saved = null; try { saved = JSON.parse(localStorage.getItem(SCR_KEY) || "null"); } catch {}
@@ -10502,7 +10543,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         const vs = base.filter((o) => c.for.includes(o.t)).map((o) => c.get(o, f)).filter(isNum).sort((a, b) => a - b), q = (p) => vs[Math.min(vs.length - 1, Math.floor(p * vs.length))];
         const show = (v) => { const x = Screener.toUI(c, v); return isNum(x) ? (c.unit === "%" ? x.toFixed(Math.abs(x) < 1 ? 2 : 1) + "%" : c.unit === "$M" ? "$" + Math.round(x).toLocaleString() + "M" : c.unit === "$B" ? "$" + x.toFixed(1) + "B" : x.toFixed(2)) : "—"; };
         ctl = `${c.period ? `<div class="scr-per" role="group" aria-label="Period">${Screener.PERIODS.map((p) => `<button aria-pressed="${(f.p || "1Y") === p}" data-scr-per="${i}" data-p="${p}">${p}</button>`).join("")}</div>` : ""}
-          <div class="scr-range"><label class="pfe-field"><span class="pfe-pre">Min</span><input class="pfe-in mono" data-scr-min="${i}" type="number" inputmode="decimal" step="any" value="${isNum(f.min) ? Screener.toUI(c, f.min) : ""}" placeholder="any" aria-label="${esc(c.label)} at least"><span class="pfe-suf">${c.unit === "x" ? "" : esc(c.unit)}</span></label>
+          ${c.unit === "%" ? scrSlider(i, c, f) : ""}<div class="scr-range"><label class="pfe-field"><span class="pfe-pre">Min</span><input class="pfe-in mono" data-scr-min="${i}" type="number" inputmode="decimal" step="any" value="${isNum(f.min) ? Screener.toUI(c, f.min) : ""}" placeholder="any" aria-label="${esc(c.label)} at least"><span class="pfe-suf">${c.unit === "x" ? "" : esc(c.unit)}</span></label>
             <span class="muted">to</span><label class="pfe-field"><span class="pfe-pre">Max</span><input class="pfe-in mono" data-scr-max="${i}" type="number" inputmode="decimal" step="any" value="${isNum(f.max) ? Screener.toUI(c, f.max) : ""}" placeholder="any" aria-label="${esc(c.label)} at most"><span class="pfe-suf">${c.unit === "x" ? "" : esc(c.unit)}</span></label></div>
           ${vs.length > 5 ? `<span class="scr-hint">Most are between <b>${show(q(0.1))}</b> and <b>${show(q(0.9))}</b>; the middle is <b>${show(q(0.5))}</b> (${vs.length.toLocaleString()} known)</span>` : D?.src === "live" ? `<span class="scr-hint">Fills in as rows load (live mode)</span>` : ""}`;
       }
@@ -10592,10 +10633,20 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   function scrInput(ev) {
     const t = ev.target, ds = t.dataset, s = S.scr; if (!t.closest("#scr")) return;
     if (ds.scrVq !== undefined) { const q = t.value.trim().toLowerCase(); t.closest(".scr-box")?.querySelectorAll(".scr-chip").forEach((c) => { c.hidden = !!q && !c.textContent.toLowerCase().includes(q) && c.getAttribute("aria-pressed") !== "true"; }); return; }
+    if (ds.scrSl !== undefined) {
+      const i = +ds.scrSl, f = s.filters[i], c = f && Screener.CRIT[f.k]; if (!f) return; const box = t.closest(".scr-box"), sl = t.closest(".scr-sl");
+      const [a, b] = scrSlDom(c.k), pa = scrToPos(a), pb = scrToPos(b), lo = sl.querySelector('[data-end="lo"]'), hi = sl.querySelector('[data-end="hi"]');
+      if (+lo.value > +hi.value) { if (ds.end === "lo") lo.value = hi.value; else hi.value = lo.value; }
+      const pl = +lo.value, ph = +hi.value, vl = pl <= pa ? null : scrFromPos(pl), vh = ph >= pb ? null : scrFromPos(ph);
+      f.min = vl === null ? undefined : Screener.fromUI(c, vl); f.max = vh === null ? undefined : Screener.fromUI(c, vh);
+      const mi = box.querySelector(`[data-scr-min="${i}"]`), ma = box.querySelector(`[data-scr-max="${i}"]`); if (mi) mi.value = vl === null ? "" : vl; if (ma) ma.value = vh === null ? "" : vh;
+      const fill = sl.querySelector(".scr-sl-fill"); fill.style.left = (((pl - pa) / (pb - pa)) * 100).toFixed(2) + "%"; fill.style.right = (100 - ((ph - pa) / (pb - pa)) * 100).toFixed(2) + "%";
+      scrDeb(() => { s.show = 50; scrRemember(); renderScreenerMain(); }); return;
+    }
     const k = ds.scrMin ?? ds.scrMax ?? ds.scrTh; if (k === undefined) return;
     const f = s.filters[+k], c = f && Screener.CRIT[f.k]; if (!f) return;
     if (ds.scrTh !== undefined) f.th = t.value === "" ? undefined : Number(t.value);
-    else { const v = t.value === "" ? null : Screener.fromUI(c, t.value); if (ds.scrMin !== undefined) f.min = v ?? undefined; else f.max = v ?? undefined; }
+    else { const v = t.value === "" ? null : Screener.fromUI(c, t.value); if (ds.scrMin !== undefined) f.min = v ?? undefined; else f.max = v ?? undefined; scrSlSync(t.closest(".scr-box"), +k); }
     scrDeb(() => { s.show = 50; scrRemember(); renderScreenerMain(); });
   }
   function scrChange(ev) {
