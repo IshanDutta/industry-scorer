@@ -2494,6 +2494,8 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       throw e;
     }
   }
+  /** A value chain where every named company was left out: FMP didn't answer when it was written. */
+  const chainBroken = (r) => !!r && !(r.partners || []).length && (r.dropped || []).length >= 3;
   /** A KPI report whose answer was cut short: marked partial, or everything after unit economics empty. */
   const kpiCut = (r) => !!r && (!!r.partial || (!(r.demand_drivers || []).length && !(r.supply_drivers || []).length && !(r.hot_segments || []).length && !(r.cool_segments || []).length && !String(r.pricing_power?.text || "").trim()));
   const STOP_CODES = new Set(["not_granted", "sampling_disabled", "rate_limited", "session_expired", "cancelled", "capability_disabled", "capability_removed", "not_declared"]);
@@ -2615,7 +2617,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       en.note = `Checking ${partners.length} companies' filings`; renderReport();
       const from = E.addDays(today(), -380);
       const kept = [];
-      await pool(partners, COMPANY_CONCURRENCY, async (pt) => {
+      const look = async (list) => pool(list, COMPANY_CONCURRENCY, async (pt) => {
         const prof = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: pt.symbol }), []))?.[0];
         if (!prof || prof.isActivelyTrading === false || prof.isEtf || prof.isFund) return;
         const [inc, cf, ch] = await Promise.all([
@@ -2624,6 +2626,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           optional(async () => toSeries(await fmp("chart", { endpoint: "historical-price-eod-dividend-adjusted", symbol: pt.symbol, from_date: from, to_date: today() })), null)]);
         kept.push({ ...pt, name: pt.name || prof.companyName, industry: prof.industry, stats: Chain.partnerStats(inc, cf, ch) });
       }, R);
+      await look(partners);
+      // Every lookup failing at once is FMP not answering (busy or down), not every company being delisted: wait, try again,
+      // and if it still fails, the step fails (so it's redone) instead of saving an empty list of customers and suppliers.
+      if (!kept.length) { en.note = "FMP didn't answer for any company: trying again"; renderReport(); await new Promise((r) => setTimeout(r, 20000)); await look(partners); }
+      if (!kept.length) throw { code: "empty_completion", message: `FMP didn't return any of the ${partners.length} named companies (${partners.map((x) => x.symbol).join(", ")}); the value chain will be redone` };
       const order = partners.map((x) => x.symbol);
       kept.sort((a, b) => order.indexOf(a.symbol) - order.indexOf(b.symbol));
       save("chain", jsonSafe({ partners: kept, aggregate: Chain.chainAggregate(kept), dropped: partners.filter((x) => !kept.some((k) => k.symbol === x.symbol)).map((x) => x.symbol) }));
@@ -3404,11 +3411,11 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
           const dft = Daily.drift(d, String(ag.run_at || "").slice(0, 10));
           const drift = dft ? { ...dft, updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null } : { updates: Number(res.rewrites_since_full) || 0, rethink: res.rethink || null };
           const cands = backfill ? [] : Daily.pickSections(tri, x, { pending: res.daily_pending || [], drift }, today());
-          const kpiRedo = !backfill && kpiCut(rep(name, "kpi")?.result);
+          const kpiRedo = !backfill && kpiCut(rep(name, "kpi")?.result), chainRedo = !backfill && chainBroken(rep(name, "chain")?.result);
           const l0 = res.outlook, lAge = l0?.date ? (Date.parse(today()) - Date.parse(l0.date)) / 864e5 : Infinity;
           const st = backfill ? 2 : Daily.strength(x, tri, shock);
           day[name] = { x, tri, cands, drift, runAt: ag.run_at || "", bodies: bodies.length, strength: st, score: (isNum(x.z) ? Math.abs(x.z) * 10 : 0) + x.triggers.length + (tri?.material ? 5 : 0),
-            leanDue: !l0 || l0.provisional || lAge >= 7, kpiRedo, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
+            leanDue: !l0 || l0.provisional || lAge >= 7, kpiRedo, chainRedo, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
           await doFlush(name);
         } catch (e) {
           dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
@@ -3445,9 +3452,12 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       dr.borrowed = pl.borrowed || 0;
       const chosen = {}; for (const c of pl.run) (chosen[c.industry] ||= []).push(c);
       // Repairs first, outside the budget: a KPI analysis whose answer was cut short is written again in full.
-      for (const [n, v] of Object.entries(day)) if (v.kpiRedo && !(chosen[n] || []).some((c) => c.key === "kpi")) (chosen[n] ||= []).push({ industry: n, key: "kpi", label: Daily.SECTIONS.kpi.label, why: "repair: the last KPI analysis was cut short, so its pricing power, drivers and segments were missing", by: "code", importance: "high" });
+      for (const [n, v] of Object.entries(day)) {
+        if (v.kpiRedo && !(chosen[n] || []).some((c) => c.key === "kpi")) (chosen[n] ||= []).push({ industry: n, key: "kpi", label: Daily.SECTIONS.kpi.label, why: "repair: the last KPI analysis was cut short, so its pricing power, drivers and segments were missing", by: "code", importance: "high" });
+        if (v.chainRedo && !(chosen[n] || []).some((c) => c.key === "chain")) (chosen[n] ||= []).push({ industry: n, key: "chain", label: Daily.SECTIONS.chain.label, why: "repair: FMP didn't answer when the customers and suppliers were last looked up, so the list was empty", by: "code", importance: "high" });
+      }
       const heldBy = {}; for (const c of pl.held) (heldBy[c.industry] ||= []).push(c);
-      for (const k of Object.keys(heldBy)) heldBy[k] = heldBy[k].filter((c) => !(c.key === "kpi" && day[k]?.kpiRedo));
+      for (const k of Object.keys(heldBy)) heldBy[k] = heldBy[k].filter((c) => !(c.key === "kpi" && day[k]?.kpiRedo) && !(c.key === "chain" && day[k]?.chainRedo));
       dr.held = pl.held.map((c) => `${c.industry}: ${c.label}`);
       dr.budget = budget === Infinity ? null : Math.round(budget * 100) / 100;
 
@@ -4461,7 +4471,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
     const err = S.teamErrors[sl] || {};
     if (!S.research[sl] || !S.world?.items) out.push("research");
     const failed = (k) => !!(err[k] || (k === "world" && (err.scout || err.dive)) || (k === "macro" && (err.plan || err.indicators)));
-    for (const k of ["kpi", "world", "trade", "reg", "chain"]) if ((!rep(name, k) || (k === "kpi" && kpiCut(rep(name, k).result))) && !failed(k)) out.push(k);
+    for (const k of ["kpi", "world", "trade", "reg", "chain"]) if ((!rep(name, k) || (k === "kpi" && kpiCut(rep(name, k).result)) || (k === "chain" && chainBroken(rep(name, k).result))) && !failed(k)) out.push(k);
     if (!rep(name, "calls") && !failed("calls") && (S.tx[sl]?.items || []).some((t) => t.prev?.excerpt)) out.push("calls");
     const m = rep(name, "macro"); if ((!m || m.result?.partial || !macroOf(name)?.rows?.length) && !failed("macro")) out.push("macro");
     const bodies = regBodies(name);
@@ -5910,7 +5920,7 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       <td class="wr small">${rich(x.why)} ${cites(x.evidence)}${x.depends?.length ? `<div class="muted">Matters to ${tks(x.depends)}</div>` : ""}${x.stats?.currency && x.stats.currency !== "USD" ? `<div class="muted">Reports in ${esc(x.stats.currency)}; not in the dollar totals</div>` : ""}</td></tr>`).join("");
     return sec("chain", "Customers & suppliers", `Value-chain analyst · ${esc(ago(r.run_at))}`,
       `<div class="kpis">${K}</div><div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Company</th><th>Role</th><th class="n">Revenue 12M</th><th class="n">Capex 12M</th><th class="n">Capex latest q</th><th class="n">Shares 3M</th><th>Why it matters</th></tr></thead><tbody>${rows}</tbody></table></div>
-      ${ch.dropped?.length ? `<div class="small muted">Named but left out (not found or not actively traded): ${esc(ch.dropped.join(", "))}.</div>` : ""}
+      ${chainBroken(ch) ? `<div class="notice warn">FMP didn't answer when these companies were looked up, so none of the ${ch.dropped.length} customers and suppliers the analyst named made it in. The next daily update on GitHub looks them up again.</div>` : ch.dropped?.length ? `<div class="small muted">Named but left out (not found or not actively traded): ${esc(ch.dropped.join(", "))}.</div>` : ""}
       <div class="small muted">The analyst names the companies; every number comes from their own filings (year-on-year, so seasonality cancels). Customers' capital spending is the hard demand signal; accelerating means the latest quarter grew faster than the one before.</div>`);
   }
   function callsSection(d) {
