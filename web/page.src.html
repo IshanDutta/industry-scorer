@@ -3424,10 +3424,10 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
             leanDue: !l0 || l0.provisional || lAge >= 7, kpiRedo, chainRedo, calls0: Object.fromEntries(Object.entries(res.horizons || {}).map(([h, hv]) => [h, hv?.call])) };
           await doFlush(name);
         } catch (e) {
-          dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
           // The industry no longer has any company (FMP moved them to other industries): it's left out from now on,
           // the way a full sector run leaves out an industry with no companies, instead of failing every day.
-          if (e?.code === "empty" && rec) { rec.skip ||= {}; rec.skip[name] = `${e.message} Left out of daily updates since ${today()}.`; await secPut(sector, "", rec).catch(() => {}); }
+          if (e?.code === "empty" && rec) { rec.skip ||= {}; rec.skip[name] = `${e.message} Left out of daily updates since ${today()}.`; await secPut(sector, "", rec).catch(() => {}); (dr.retired ||= []).push(name); }
+          else dr.failed.push(`${name}: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}`);
           if (FATAL.has(e?.code)) throw e;
         } finally { dr.working.delete(name); dr.label = `Read the day for ${Object.keys(day).length} of ${dr.of} industries`; dropFromMemory(name); }
       }, null);
@@ -3549,9 +3549,9 @@ button.pfx-dl:hover { background: var(--sunk); } .pfx-dl i, .pfx-dot { width: 12
       const spent = JOB && window.__job_spent ? Number(await window.__job_spent().catch(() => 0)) || 0 : 0;
       const r0 = await secGet(sector);
       if (r0) await idbPut(secKey(sector), jsonSafe({ ...r0, rows: { ...(r0.rows || {}), ...(dr.rows || {}) }, daily_at: new Date().toISOString(), daily_spend: { month, usd: Math.round((ds.usd + spent) * 100) / 100, budget: JOB?.monthBudget || null },
-        daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
+        daily: { date: today(), revised: dr.revised, quiet: dr.quiet, failed: dr.failed, retired: dr.retired || [], sections: dr.sections, sections_failed: dr.sectionsFailed, held: dr.held, budget: dr.budget, spent: Math.round(spent * 100) / 100,
           analyses_updated: dr.updated || 0, quiet_day: dr.quietDay || 0, held_updates: dr.heldUpdates || [], day_money: dr.dayMoney ?? null, weekend: !!(new Date(today() + "T00:00:00Z").getUTCDay() % 6 === 0), leans: dr.leans || 0, lean_flips: dr.flips || [], rethinks: dr.rethinks || [], big_day: dr.bigDay || "", borrowed: dr.borrowed || 0, filings: filings.length } }));
-      S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.failed.length ? `, ${dr.failed.length} failed (${dr.failed.join("; ")})` : ""}.` }];
+      S.notices = [{ kind: "info", text: `Daily update of ${sector}${dr.bigDay ? ` (a big day: ${dr.bigDay})` : ""}: ${dr.updated || 0} analys${dr.updated === 1 ? "is" : "es"} brought up to date, ${dr.revised.length} industr${dr.revised.length === 1 ? "y" : "ies"} with changes, ${dr.quiet.length} unchanged${dr.sections.length ? `; ${dr.sections.length} section${dr.sections.length === 1 ? "" : "s"} rewritten (${dr.sections.join("; ")})` : ""}${dr.held.length ? `; ${dr.held.length} held for tomorrow's budget` : ""}${dr.retired?.length ? `; left out from now on, no companies left in them: ${dr.retired.join(", ")}` : ""}${dr.failed.length ? `, ${dr.failed.length} failed (${dr.failed.join("; ")})` : ""}.` }];
     } catch (e) { S.notices = [{ kind: "err", text: `The daily update stopped: ${FATAL.has(e?.code) ? errText(e) : e?.message || sampleErr(e)}` }]; }
     finally { S.dailyRun = null; renderAll(); }
   }
