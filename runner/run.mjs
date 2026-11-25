@@ -221,7 +221,7 @@ async function main() {
   }
   if (daily) {
     const dd = rec.daily || {};
-    log(`Daily update: ${(dd.revised || []).length} industries revised, ${(dd.quiet || []).length} unchanged, ${(dd.failed || []).length} failed · ${cost.requests} Claude requests · $${cost.usd}`);
+    if (env.JOB_REPAIR !== "1") log(`Daily update: ${(dd.revised || []).length} industries revised, ${(dd.quiet || []).length} unchanged, ${(dd.failed || []).length} failed · ${cost.requests} Claude requests · $${cost.usd}`);
     log(`This session: $${cost.session_usd} (day's money $${dd.day_money ?? "no limit"}; ${dd.analyses_updated || 0} updated by Claude, ${dd.quiet_day || 0} quiet (code only), ${(dd.held_updates || []).length} held for the budget)`);
     for (const [k, v] of Object.entries(cost.by_step).slice(0, 25)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests)`);
     // Cost by kind of step (the step names carry the industry after a colon).
@@ -234,7 +234,10 @@ async function main() {
       ...status.notices.map((n) => `> ${n}`)].join("\n"));
     await browser.close(); await mcp.close();
     // Reaching the day's spending cap is the budget working, not a failure: what finished is saved.
-    process.exit((sampler.fatal && !sampler.fatal.budget) || (env.JOB_BACKFILL !== "1" && !(dd.revised || []).length && !(dd.quiet || []).length && !(dd.retired || []).length) ? 1 : 0);
+    // The repair and the rule-book pass don't write a daily summary (rec.daily is the last daily update's): only a fatal
+    // error fails them, so a pass that did its work isn't reported as failed.
+    const pass = env.JOB_REPAIR === "1";
+    process.exit((sampler.fatal && !sampler.fatal.budget) || (!pass && env.JOB_BACKFILL !== "1" && !(dd.revised || []).length && !(dd.quiet || []).length && !(dd.retired || []).length) ? 1 : 0);
   }
   for (const [k, v] of Object.entries(cost.by_step)) log(`  ${k}: $${v.usd.toFixed(2)} (${v.requests} requests${v.reused ? `, ${v.reused} reused` : ""})`);
   if (cost.reuse) log(`Reused from earlier sectors: ${cost.reuse.situations} situations, ${cost.reuse.countries} countries, ${cost.reuse.instruments} instruments${cost.reuse.wire ? ", the news wire" : ""}; added ${cost.reuse.added.situations} / ${cost.reuse.added.countries} / ${cost.reuse.added.instruments}`);
