@@ -27,7 +27,9 @@ first section and its verdict start open (the rest start folded; `window.AMS.fol
 Every tab starts with the snapshot (the numbers, with no prediction card), then Performance, then "Where it's going,
 and why" (the full calls and reasons) on the company and fund pages, then the rest. Performance holds one chart (`ppBox`/`ppHTML`: company, fund and industry) with an S&P 500 toggle (`S.ppSpy`, remembered)
 and, right under it, Times like this by window (`twBlock`, `Regimes.windowEpisodes`): the window is whatever Performance's period
-buttons show (1M/3M/6M/1Y; the industry page has its own 1M-1Y buttons). The 5 past stretches most like the last one are a short
+buttons show (1M/3M/6M/1Y/3Y/5Y; the industry page has its own 1M-5Y buttons). For an industry the historian's notes come only
+from GitHub (`runWindowsPass` saves them on the run as `twin`; the page never calls Claude for them and reuses them while the
+same stretches come back); companies and funds still have them written on the viewer's Claude. The 5 past stretches most like the last one are a short
 list (start and end month and year, 3M and 1Y after); tapping one opens it and lays it over the Performance chart (`S.twOver`:
 the stretch from the same start, then what came after it, dashed, from today's level). Each opened stretch has "Then / What
 happened next / What's different now" (one historian call per window, `Regimes.windowHistorianPrompt`, kept in localStorage
@@ -43,11 +45,13 @@ prompts keep `trimC`. It only decorates the DOM the app renders and is skipped i
 
 ## Portfolios
 
-- **Analysis tab** = the portfolio run through the fund pipeline (`pfFundOpen`): `pfRaw` looks every fund through to its
-  holdings (FMP) and adds the stocks, `pfSeries` prices it daily at its weights, then `fundAnalyze`, `fundNet`, a small
-  code-only fill and `fundWrite` (written here on the viewer's Claude, never the GitHub fund job; `pfP` rewords the fund
-  prompts for a portfolio). It renders with `fundView` through `pfWords`. While it's on screen `S.fund` is the portfolio's
-  fd (`fd.pf`); `renderFund` sends redraws to the Portfolios tab and gives the Funds tab its own fund (`S.fundUser`) back.
+- **Dashboard** (`pfDash`, maths in `web/pfx.js`, worked out once per load in `pfX`): one page with a sidebar, all code, no Claude.
+  - At a glance: tiles, plus a written read (`PfX.read`).
+  - Performance: value with the S&P 500 toggle, drawdowns (today's mix over 5 years), month by month, rolling 6 months, where the return came from.
+  - Risk: ratios against the S&P 500 with VaR and CVaR in dollars, who carries the risk (covariance risk shares), how the holdings move together (correlations), a stress test through past crises with "if the market fell", and a range of outcomes (lognormal fan).
+  - What it owns: sectors against the S&P 500 (SPY's sector weights), regions (funds' country weights), the companies inside and how much the funds overlap, the industries with our calls (from the saved runs' digests, `pfIndLoad`).
+  - Income and costs; Wall Street on its biggest companies.
+  - Prices are read from mid-2007 for the stress test. The old Analysis tab (`pfFundTab`, the fund pipeline) is no longer shown.
 - **What to change** = the older analysis (grade, recommended mix, new ETFs). Only the first version is written (on
   GitHub or here); the others are written when picked.
 - **Editor**: weights (or amounts) only; no shares, average cost or "bought on" (saving drops shares and avg cost).
@@ -76,7 +80,7 @@ Data:
 
 The button fires the `SYNC_TRIGGER` task (prompt in `runner/update-task.md`; the live task needs the same prompt). It
 first runs `daily-update.yml` with `windows=true`: `runWindowsPass` gives every finished industry Times like this for
-every window with the historian's notes (saved on the run as `twin`; notes reused when the same stretches come back),
+every window (1M to 5Y) with the historian's notes (saved on the run as `twin`; notes reused when the same stretches come back),
 direct mode so it's quick. Then it copies the updated sectors into the page. The task writes its phase (`starting`,
 `github` with `run_url`, `copying`, `done`) to `sync/github`; the page's bar (`syncProgress`) moves by time inside each
 phase. The page uses `twin` for an industry's Times like this when it's under 3 days old.

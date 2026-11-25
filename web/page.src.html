@@ -1370,6 +1370,92 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
 .dirty-dot { display: inline-block; width: 8px; height: 8px; margin-left: 6px; border-radius: 50%; background: var(--accent); vertical-align: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 .dirty-dot[hidden] { display: none; }
 .rb-t { display: inline-flex; align-items: center; gap: 6px; }
+/* ---- Portfolio dashboard */
+.pfx-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(168px, 100%), 1fr)); gap: 8px; }
+.pfx-tiles.small3 { grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); margin: 4px 0 10px; }
+.pfx-tile { display: grid; gap: 3px; align-content: start; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); position: relative; overflow: hidden; }
+.pfx-tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--line-2); }
+.pfx-tile.pos::before { background: var(--pos); } .pfx-tile.neg::before { background: var(--neg); }
+.pfx-tile.big { grid-column: span 2; } @media (max-width: 560px) { .pfx-tile.big { grid-column: span 1; } }
+.pfx-tl { font: 600 11px var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.pfx-tv { font-size: 22px; font-weight: 600; color: var(--ink); line-height: 1.15; } .pfx-tile.big .pfx-tv { font-size: 30px; }
+.pfx-tv small { font-size: .55em; color: var(--faint); }
+.pfx-tile.pos .pfx-tv { color: var(--pos); } .pfx-tile.neg .pfx-tv { color: var(--neg); }
+.pfx-ts { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.pfx-read { display: grid; gap: 6px; margin-top: 12px; padding: 14px 16px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.pfx-read p { margin: 0; font-size: 14.5px; line-height: 1.6; }
+.pfx-read p b { color: var(--ink); }
+.pfx-perhead { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.pfx-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 8px; margin-top: 8px; }
+.pfx-dd { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-dd > div { display: grid; gap: 2px; } .pfx-dd b.mono { font-size: 18px; }
+.pfx-rank { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: var(--sunk); color: var(--muted); font-size: 12px; font-weight: 700; }
+.neg-t { color: var(--neg); } .pos-t { color: var(--pos); }
+.pfx-heat { display: grid; gap: 3px; }
+.pfx-hrow { display: grid; grid-template-columns: 52px repeat(12, minmax(0, 1fr)) 70px 64px; gap: 3px; }
+.pfx-hh span { font: 600 10.5px var(--body); letter-spacing: .05em; text-transform: uppercase; color: var(--faint); text-align: center; }
+.pfx-hy { font-size: 13px; font-weight: 700; align-self: center; }
+.pfx-hc { display: grid; place-items: center; min-height: 32px; border-radius: 6px; font-size: 11.5px; background: var(--sunk); color: var(--ink); }
+.pfx-hc em { display: none; font-style: normal; }
+.pfx-ht { font-weight: 700; } .pfx-hs { color: var(--muted); background: transparent; border: 1px dashed var(--line); }
+.pfx-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr)); gap: 8px; margin: 10px 0 6px; }
+.pfx-stats > div { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-stats b { font-size: 17px; }
+@media (max-width: 760px) {
+  .pfx-hh { display: none; }
+  .pfx-hrow { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); }
+  .pfx-hy { grid-column: 1 / -1; }
+  .pfx-hc { min-height: 40px; align-content: center; gap: 1px; } .pfx-hc em { display: block; font-size: 9.5px; color: var(--muted); }
+  .pfx-ht, .pfx-hs { grid-column: span 2; }
+}
+.pfx-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; } @media (max-width: 900px) { .pfx-3 { grid-template-columns: minmax(0, 1fr); } }
+.pfx-3 h3, .pfx-2 h3 { margin: 0 0 6px; font-size: 14px; }
+.pfx-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } @media (max-width: 900px) { .pfx-2 { grid-template-columns: minmax(0, 1fr); } }
+.pfx-bars, .pfx-rcl, .pfx-look, .pfx-ovl, .pfx-inds { display: grid; gap: 6px; }
+.pfx-bar { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr) 74px; gap: 10px; align-items: center; padding: 6px 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-bl { display: grid; gap: 1px; min-width: 0; }
+.pfx-btrack { position: relative; height: 10px; border-radius: 5px; background: var(--sunk); overflow: hidden; }
+.pfx-btrack i { position: absolute; top: 0; bottom: 0; border-radius: 5px; background: var(--accent); transition: width var(--t3) var(--out); }
+.pfx-btrack i.pos { background: var(--pos); } .pfx-btrack i.neg { background: var(--neg); }
+.pfx-btrack:not(.one)::after { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--line-2); }
+.pfx-btrack.one i { left: 0; }
+.pfx-bar > b, .pfx-lr > b, .pfx-ov > b:last-of-type { text-align: right; }
+.pfx-sum { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pfx-rt td:first-child { min-width: 220px; }
+.pfx-rcr { display: grid; grid-template-columns: minmax(120px, 190px) minmax(0, 1fr) minmax(150px, 210px); gap: 12px; align-items: center; padding: 8px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-pair { display: grid; gap: 4px; } .pfx-pair > div { display: grid; grid-template-columns: 44px minmax(0, 1fr) 46px; gap: 8px; align-items: center; } .pfx-pair b { text-align: right; font-size: 13px; }
+@media (max-width: 700px) { .pfx-rcr { grid-template-columns: minmax(0, 1fr); gap: 6px; } .pfx-bar { grid-template-columns: minmax(0, 1fr) 70px; } .pfx-bar .pfx-btrack { grid-column: 1 / -1; grid-row: 2; } }
+.pfx-mat { display: grid; grid-template-columns: 56px repeat(var(--n), minmax(0, 1fr)); gap: 3px; max-width: 760px; }
+.pfx-mh { font-size: 11.5px; font-weight: 700; color: var(--muted); display: grid; place-items: center; min-height: 28px; }
+.pfx-mc { display: grid; place-items: center; min-height: 34px; border-radius: 6px; font-size: 11.5px; background: var(--sunk); }
+.pfx-mc.d { background: repeating-linear-gradient(135deg, var(--sunk) 0 4px, var(--bg) 4px 8px); }
+@media (max-width: 700px) { .pfx-mat.wide { display: none; } .pfx-mat { grid-template-columns: 44px repeat(var(--n), minmax(0, 1fr)); } .pfx-mc { font-size: 10px; min-height: 30px; } .pfx-mh { font-size: 10px; } }
+.pfx-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0 6px; } @media (max-width: 700px) { .pfx-pairs { grid-template-columns: minmax(0, 1fr); } }
+.pfx-pairs > div { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-pr { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.pfx-tilt { display: grid; gap: 5px; }
+.pfx-tr { display: grid; grid-template-columns: minmax(110px, 170px) minmax(0, 1fr) 44px 34px; gap: 8px; align-items: center; font-size: 13px; }
+.pfx-tb { display: grid; gap: 2px; } .pfx-tb i { display: block; height: 7px; border-radius: 4px; } .pfx-tb i.p { background: var(--accent); } .pfx-tb i.s { background: var(--bench); opacity: .7; }
+.pfx-tr b { text-align: right; }
+.pfx-stack { display: flex; gap: 2px; height: 14px; border-radius: 7px; overflow: hidden; margin-bottom: 8px; }
+.pfx-stack i, .pfx-legl i { display: block; }
+.rg-us { background: var(--accent); } .rg-dev { background: var(--c4); } .rg-em { background: var(--c3); } .rg-other { background: var(--line-2); }
+.pfx-legl { display: grid; gap: 5px; } .pfx-legl > div { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 8px; align-items: center; font-size: 13px; } .pfx-legl i { width: 12px; height: 12px; border-radius: 3px; }
+.pfx-lr { display: grid; grid-template-columns: 26px minmax(0, 1.4fr) minmax(60px, 1fr) 64px; gap: 10px; align-items: center; padding: 7px 10px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-ln { display: grid; gap: 1px; min-width: 0; }
+@media (max-width: 640px) { .pfx-lr { grid-template-columns: 26px minmax(0, 1fr) 60px; } .pfx-lr .pfx-btrack { display: none; } }
+.pfx-ov { display: grid; grid-template-columns: minmax(110px, 150px) minmax(0, 1fr) 48px minmax(0, 160px); gap: 10px; align-items: center; font-size: 13px; }
+@media (max-width: 640px) { .pfx-ov { grid-template-columns: minmax(0, 1fr) 48px; } .pfx-ov .pfx-btrack, .pfx-ov .small { grid-column: 1 / -1; } }
+.pfx-indr { display: grid; gap: 6px; padding: 12px 14px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.pfx-indh { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.pfx-indm { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 10px; align-items: center; } .pfx-indm b { text-align: right; }
+.pfx-indc { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pfx-indr p { margin: 0; line-height: 1.5; }
+.pfx-spark { width: 100%; height: 34px; display: block; }
+.pf-card .pfx-hstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pf-card .pfx-hstats > div { display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; background: var(--sunk); }
+.pf-card .pfx-hstats b { font-size: 13px; }
+
 /* ---- Screener tab */
 #scr { gap: 14px; }
 .scr-head { display: grid; gap: 14px; padding: 18px 20px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%), var(--surface); }
@@ -3453,7 +3539,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   }
 
   /**
-   * Times like this for every window (1M, 3M, 6M, 1Y), for every finished industry in a sector: the five past stretches
+   * Times like this for every window (1M, 3M, 6M, 1Y, 3Y, 5Y), for every finished industry in a sector: the five past stretches
    * most like the last one and what followed (code), and the historian's notes on them (one call per window, reused when
    * the same stretches come back). Run on GitHub from "Update everything from GitHub"; saved on the run as `twin`.
    */
@@ -3463,7 +3549,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     try {
       const rec = await secGet(sector);
       const list = (names || rec?.done?.H || rec?.names || []).filter((n) => !rec?.skip?.[n]);
-      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); if (r?.industry?.summary && r.industry.twin?.date !== today()) have.push(n); }
+      const have = []; for (const n of list) { const r = await idbGet("run:" + slug(n)).catch(() => null); const tw = r?.industry?.twin; if (r?.industry?.summary && !(tw?.date === today() && Object.keys(TW_WIN).every((k) => tw.windows?.[k]?.N))) have.push(n); }
       dr.of = have.length;
       if (!have.length) { S.notices = [{ kind: "info", text: `Every ${sector} industry already has today's Times like this.` }]; return; }
       dr.label = "Macro and market history (no Claude)";
@@ -4935,7 +5021,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <div class="small muted">Each score combines ${Score.QUANT.length} metric pillars and ${Score.SECTION.length} report-section pillars (${nPts} data points), weighted per investor type; the lead strategist can add at most ±${Score.OVERLAY_CAP} for judgment. Open a pillar to see every data point and what it scored.</div>
         <div class="tbl-wrap"><table class="pillars"><thead><tr><th>Pillar</th><th class="n">Score</th><th></th>${PROFILE_KEYS.map((p) => `<th class="n">${Score.PROFILES[p].label} wt</th>`).join("")}</tr></thead><tbody>${pillarRows}</tbody></table></div></section>
       <section class="panel" id="performance"><div class="panel-head"><h2>Performance vs SPY</h2>
-          <div class="seg" role="group" aria-label="Window">${["1M", "3M", "6M", "1Y"].map((k) => `<button type="button" aria-pressed="${k === (S.indRet || "1Y")}" data-ind-ret="${k}">${k}</button>`).join("")}</div><div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
+          <div class="seg" role="group" aria-label="Window">${["1M", "3M", "6M", "1Y", "3Y", "5Y"].map((k) => `<button type="button" aria-pressed="${k === (S.indRet || "1Y")}" data-ind-ret="${k}">${k}</button>`).join("")}</div><div class="seg" role="group" aria-label="Return basis">${[["cw", "Cap-weighted"], ["median", "Median stock"]].map(([k, l]) => `<button aria-pressed="${k === S.basis}" data-b="${k}">${l}</button>`).join("")}</div></div>
         ${note(ag, "performance")}
         <div class="strip" aria-label="SPY and rates">${strip}</div>
         <div class="kpis">${perfK}</div>${charts}${twBlock("industry", d.name, timesSection(d))}</section>
@@ -7817,10 +7903,10 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   /** One ticker's facts (FMP profile and quote), kept a week: name, type, sector, dividend; price and day change are fresh. */
   async function pfInfo(sym) {
     const k = "tkInfo:" + sym; let x = await idbGet(k).catch(() => null);
-    if (!x || x.v !== 2 || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
+    if (!x || x.v !== 3 || Date.now() - Date.parse(x.at || 0) > 7 * 864e5) {
       const p = (await optional(() => fmp("company", { endpoint: "profile-symbol", symbol: sym }), []))?.[0] || {}, type = p.isEtf ? "etf" : p.isFund ? "fund" : p.companyName ? "stock" : "";
       const rt = type === "stock" ? (await optional(() => fmp("statements", { endpoint: "metrics-ratios-ttm", symbol: sym }), []))?.[0] || {} : {};
-      x = jsonSafe({ v: 2, at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", type, lastDiv: num(p.lastDividend), cap: num(p.marketCap), beta: num(p.beta),
+      x = jsonSafe({ v: 3, at: new Date().toISOString(), name: p.companyName || "", sector: p.sector || "", industry: p.industry || "", country: p.country || "", type, lastDiv: num(p.lastDividend), cap: num(p.marketCap), beta: num(p.beta),
         pe: num(rt.priceToEarningsRatioTTM), divYield: num(rt.dividendYieldTTM) });
       await idbPut(k, x).catch(() => {});
     }
@@ -7834,15 +7920,20 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     if (!force && S.pfData?.key === key && S.pfData.day === today() && (S.pfData.from || "") <= need) return;
     S.pfLoading = "Reading prices, quotes and facts…"; S.pfErr = null; renderPortfolio();
     try {
-      const back = Horizon.addDays(today(), -(5 * 366 + 20)), st = Horizon.addDays(pfStart(p), -10), from = st < back ? st : back, series = {};
+      const back = "2007-06-01", st = Horizon.addDays(pfStart(p), -10), from = st < back ? st : back, series = {};
       await pool([...syms, "SPY"], 4, async (sym) => { series[sym] = await trackSeries(sym, from).catch(() => null); }, null);
       const qs = (await optional(() => fmp("quote", { endpoint: "batch-quote", symbols: syms }), [])) || [], quotes = Object.fromEntries(qs.filter((q) => q?.symbol).map((q) => [q.symbol, q]));
       const info = {}; await pool(syms, 4, async (sym) => { info[sym] = await pfInfo(sym).catch(() => ({})); }, null);
       // Funds: their holdings and sector weights (the fund page's own fetch, kept 20 hours).
-      const funds = {}, fsec = {}, fpe = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
+      const funds = {}, fsec = {}, fpe = {}, fexp = {}, fctry = {}, ci0 = await coIndex().catch(() => null); S.pfLoading = "Reading the funds' holdings…"; renderPortfolio();
       await pool(syms.filter((s) => info[s]?.type === "etf" || info[s]?.type === "fund"), 2, async (sym) => { const raw = await fundRaw(sym).catch(() => null); if (!raw) return;
         funds[sym] = (raw.holdings || []).filter((h) => h.ticker || h.name).map((h) => ({ ticker: h.ticker || "", name: h.name, weight: h.weight }));
-        const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name;
+        const f = Portfolio.facts(sym, raw.info, raw.eod); if (!info[sym].name) info[sym].name = f.name; if (isNum(num(f.expense))) fexp[sym] = num(f.expense);
+        // Where the fund's money is: FMP's country weights, kept a week.
+        const cwk = "fundCtry:" + sym, cwc = await idbGet(cwk).catch(() => null);
+        const cw = cwc && Date.now() - Date.parse(cwc.at || 0) < 7 * 864e5 ? cwc.rows : (await optional(() => fmp("etfAndMutualFunds", { endpoint: "country-weighting", symbol: sym }), [])) || [];
+        if (!cwc || cwc.rows !== cw) idbPut(cwk, { at: new Date().toISOString(), rows: cw }).catch(() => {});
+        const cm = {}; for (const r of cw) { const v = num(String(r?.weightPercentage ?? "").replace("%", "")); if (r?.country && v > 0) cm[r.country] = (cm[r.country] || 0) + v; } if (Object.keys(cm).length) fctry[sym] = cm;
         // Sector weights: FMP's own sector weighting for the fund, else EODHD's, else its holdings' sectors (coIndex).
         // Kept a week per fund (it used to be fetched on every load).
         const swk = "fundSecW:" + sym, swc = await idbGet(swk).catch(() => null);
@@ -7855,7 +7946,12 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         // The fund's P/E through its holdings: harmonic, over the holdings whose P/E the industry runs know (half its weight or more).
         let wk = 0, inv = 0; for (const h of funds[sym]) { const pe = num(ci0?.cos?.[h.ticker]?.pe), w = num(h.weight); if (pe > 0 && w > 0) { wk += w; inv += w / pe; } }
         const wt = funds[sym].reduce((a, h) => a + (num(h.weight) || 0), 0); if (inv > 0 && wt > 0 && wk / wt >= 0.5) fpe[sym] = wk / inv; }, null);
-      S.pfData = { key, from, day: today(), series, quotes, info, funds, fsec, fpe, cos: ci0?.cos || {} };
+      // The S&P 500's own sector weights (SPY), kept a week: what the portfolio's sectors are compared with.
+      const sk = await idbGet("spySecW").catch(() => null); let spyRows = sk && Date.now() - Date.parse(sk.at || 0) < 7 * 864e5 ? sk.rows : null;
+      if (!spyRows) { spyRows = (await optional(() => fmp("etfAndMutualFunds", { endpoint: "sector-weighting", symbol: "SPY" }), [])) || []; if (spyRows.length) idbPut("spySecW", { at: new Date().toISOString(), rows: spyRows }).catch(() => {}); }
+      const spySec = {}; for (const r of spyRows) { const v = num(String(r?.weightPercentage ?? "").replace("%", "")); if (r?.sector && v > 0 && !/cash/i.test(r.sector)) spySec[r.sector] = v; }
+      const sst = Object.values(spySec).reduce((a, v) => a + v, 0); if (sst > 0) for (const k of Object.keys(spySec)) spySec[k] /= sst;
+      S.pfData = { key, from, day: today(), series, quotes, info, funds, fsec, fpe, fexp, fctry, spySec: sst > 0 ? spySec : null, cos: ci0?.cos || {} };
     } catch (e) { S.pfErr = FATAL.has(e?.code) ? errText(e) : e?.message || String(e); }
     finally { S.pfLoading = null; renderPortfolio(); }
   }
@@ -7884,7 +7980,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     try { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); } catch (e) { alert("Couldn't save the file: " + (e?.message || e)); } }
 
   // ------------------------------------------------------------- render: Portfolios tab
-  const PF_TABS = [["overview", "Overview"], ["holdings", "Holdings"], ["analysis", "Analysis"], ["changes", "What to change"], ["edit", "Edit holdings"]];
+  const PF_TABS = [["overview", "Dashboard"], ["holdings", "Holdings"], ["changes", "What to change"], ["edit", "Edit holdings"]];
   const GRADE_CLS = (l) => (/^A/.test(l) ? "gA" : /^B/.test(l) ? "gB" : /^C/.test(l) ? "gC" : /^D/.test(l) ? "gD" : /^F/.test(l) ? "gF" : "gC");
   const gradeBadge = (g, size = 56) => (g?.letter && g.letter !== "—" ? `<div class="grade-ring ${GRADE_CLS(g.letter)}" style="--sz:${size}px;--p:${Math.max(0, Math.min(100, g.score || 0))}"><b>${esc(g.letter)}</b></div>` : "");
   const tickColor = (t) => { let h = 0; for (const c of String(t)) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 45%)`; };
@@ -7908,7 +8004,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
           <details class="pf-more"><summary>More</summary><div><button class="sm" data-pf="dup">Duplicate</button><button class="sm" data-pf="csv">Export CSV</button><button class="sm" data-pf="json">Export JSON</button><button class="sm" data-pf="refresh" ${S.pfLoading ? "disabled" : ""}>Fetch prices again</button>${st.list.length > 1 ? `<button class="sm" data-pf="del">Delete portfolio</button>` : ""}</div></details></div></div></section>`;
     const tabs = `<nav class="pf-tabs" role="tablist">${PF_TABS.map(([k, l]) => `<button role="tab" aria-selected="${k === tab}" class="${k === tab ? "on" : ""}" data-pf="tab-${k}">${l}${k === "edit" ? `<i class="dirty-dot" data-dot="edit" title="Edits not saved yet" hidden></i>` : ""}${k === "changes" && g ? ` <span class="pf-mini ${GRADE_CLS(g.letter)}">${esc(g.letter)}</span>` : k === "changes" && running ? ' <span class="pf-dot"></span>' : ""}</button>`).join("")}</nav>`;
     const notes = `${S.pfLoading ? `<div class="notice info"><span>${esc(S.pfLoading)}</span></div>` : ""}${S.pfErr ? `<div class="notice err"><span>${esc(S.pfErr)}</span></div>` : ""}${!S.mcp ? `<div class="notice warn"><span>Open this page in Claude to read prices; the editor works without them.</span></div>` : ""}`;
-    const body = tab === "edit" ? pfEditorView(p, hs) : tab === "analysis" ? pfFundTab(p) : tab === "changes" ? anaView(p, A, job) : tab === "holdings" ? pfHoldingsView(p, hs, D, total, pos) : pfAnalysisView(p, hs, D, total, pos);
+    const body = tab === "edit" ? pfEditorView(p, hs) : tab === "changes" ? anaView(p, A, job) : tab === "holdings" ? pfHoldingsView(p, hs, D, total, pos) : pfDash(p, hs, D, total, pos);
     el.innerHTML = chips + hero + notes + (S.pfRebal ? pfRebalView(p, hs, total, pos) : "") + tabs + `<div class="pf-body">${body}</div>` + questionnaireView();
     wireCharts(el); wireSpy(el); pfBind(el); pfDots();
   }
@@ -8002,7 +8098,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const maxW = Math.max(...hs.map((h) => Math.max(num(h.weight) || 0, num(PR[h.ticker]?.weightNow) || 0)), 1);
     const cards = hs.slice().sort((a, b) => (num(PR[b.ticker]?.value) || mvS[b.ticker] || 0) - (num(PR[a.ticker]?.value) || mvS[a.ticker] || 0)).map((h) => { const r = PR[h.ticker] || {}, value = isNum(num(r.value)) ? r.value : mvS[h.ticker], g = num(r.gain), cost = num(r.cost), ch = num(h.change);
       return `<article class="pf-card"><header>${avatar(h.ticker)}<div style="min-width:0"><button class="linkbtn tick" ${h.asset_type === "stock" ? `data-co="${esc(h.ticker)}"` : `data-fund="${esc(h.ticker)}"`}>${esc(h.ticker)}</button><div class="small ellip ${!D || h.name || isNum(num(h.price)) ? "muted" : "down"}">${esc(h.name || (!D || isNum(num(h.price)) ? "" : "Ticker not found: check the spelling"))}</div></div><span class="pf-type">${esc(h.asset_type === "etf" ? "ETF" : h.asset_type === "fund" ? "Fund" : "Stock")}</span></header>
-        <div class="pf-card-v mono">${esc(usd(value))}</div>
+        <div class="pf-card-v mono">${esc(usd(value))}</div>${pfSpark(D?.series?.[h.ticker])}
+        ${(() => { const c = D?.series?.[h.ticker]?.closes || [], r1 = c.length > 253 ? c[c.length - 1] / c[c.length - 253] - 1 : NaN, X0 = D ? S.pfXc?.x : null, rr = X0?.rc?.rows?.find((x) => x.ticker === h.ticker);
+          return `<div class="pfx-hstats"><div><span class="pfx-tl">1 year</span><b class="mono ${cls(r1)}">${pfPP(r1)}</b></div><div><span class="pfx-tl">Risk share</span><b class="mono">${rr ? pfPc(rr.share, 0) : "—"}</b></div><div><span class="pfx-tl">Yield</span><b class="mono">${pfPc(num(h.yield), 2)}</b></div></div>`; })()}
         <div class="pf-card-row"><span class="${cls(g)}">${isNum(g) ? `${g >= 0 ? "+" : "−"}${esc(usd(Math.abs(g)))} · ${pct(g / cost, true, 1)}` : "—"}</span><span class="${cls(ch / 100)}">${isNum(ch) ? `${ch > 0 ? "+" : ""}${ch.toFixed(2)}% today` : ""}</span></div>
         <div class="pf-wbar"><i style="width:${((num(r.weightNow) || num(h.weight) || 0) / maxW) * 100}%"></i><s style="left:${((num(h.weight) || 0) / maxW) * 100}%" title="target"></s></div>
         <div class="pf-card-row small muted"><span>${isNum(num(r.weightNow)) ? r.weightNow.toFixed(1) : p2v(h.weight)}% now · target ${p2v(h.weight)}%</span><span>${esc(h.sector || "")}</span></div>
@@ -8078,6 +8176,214 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     if (opts.only === "pf-hold") return htab;
     return hero + perf + `<div class="pf-grid2">${alloc}${attr}</div>` + risk + look + evList;
   }
+  // ------------------------------------------------------------- the portfolio dashboard (code only)
+  /*
+   * Everything about the portfolio on one page, with a sidebar: at a glance (numbers and a written read), performance
+   * (value, drawdowns, month by month, rolling), attribution, risk (ratios, who carries the risk, how the holdings move
+   * together, past crises, a range of outcomes), what it owns (sectors and regions against the S&P 500, the companies
+   * inside the funds, how much the funds overlap, the industries and our calls on them), income and costs, and Wall
+   * Street on what it holds. web/pfx.js does the maths; numbers are worked out once per load and kept.
+   */
+  const pfMd = (t) => esc(t).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*]+)\*/g, "<i>$1</i>");
+  const pfPP = (x, d = 1) => (isNum(num(x)) ? `${x > 0 ? "+" : x < 0 ? "−" : ""}${Math.abs(x * 100).toFixed(d)}%` : "—");
+  const pfPc = (x, d = 1) => (isNum(num(x)) ? `${(x * 100).toFixed(d)}%` : "—");
+  const pfHeat = (r, scale = 0.08) => { if (!isNum(num(r))) return ""; const a = Math.min(1, Math.abs(r) / scale); return `background:color-mix(in srgb, ${r >= 0 ? "var(--pos)" : "var(--neg)"} ${Math.round(8 + a * 52)}%, transparent)`; };
+  /** Today's weights (what it's worth now), else the targets. */
+  function pfNowW(hs, pos) { const PR = Object.fromEntries((pos?.rows || []).map((r) => [r.ticker, r])); const w = {}; for (const h of hs) { const x = num(PR[h.ticker]?.weightNow); w[h.ticker] = isNum(x) && x > 0 ? x : num(h.weight) || 0; } return w; }
+  /** The industries' digests (saved runs) for the industries the portfolio is in; read once per holdings list. */
+  async function pfIndLoad(key, names) {
+    if (S.pfDig?.key === key || S.pfDigBusy === key) return; S.pfDigBusy = key;
+    try { const ci = await coIndex(); const dg = await fundDigests(names, ci); S.pfDig = { key, dg }; }
+    catch (e) { S.pfDig = { key, dg: {} }; }
+    finally { S.pfDigBusy = null; if (S.tab === "portfolios") renderPortfolio(); }
+  }
+  function pfX(p, hs, D, total, pos) {
+    const per = S.pfPeriod || "1Y", ser = D.series, cal = ser.SPY?.dates || null, last = (cal || []).slice(-1)[0] || today();
+    const w = pfNowW(hs, pos), sig = [D.key, D.day, per, Object.entries(w).map(([k, v]) => k + v.toFixed(2)).join(","), (p.rebalanceEvents || []).length, p.totalInvestment].join("|");
+    if (S.pfXc?.sig === sig) return S.pfXc.x;
+    const start = p.totalInvestment > 0 ? p.totalInvestment : 10000, evs = p.rebalanceEvents || [], from = PMode.periodStart(last, per), lineup = pfLineup(p, hs, from);
+    const nv = PMode.nav(ser, lineup, { from, start, events: evs, calendar: cal }), m = nv.dates.length > 5 ? PMode.metrics(nv, ser.SPY) : null;
+    const spyNav = PMode.nav({ SPY: ser.SPY }, [{ ticker: "SPY", weight: 100 }], { from, start, calendar: cal }), ms = spyNav.dates.length > 5 ? PMode.metrics(spyNav, ser.SPY) : null;
+    // Today's mix, held through the last 5 years (or since every holding traded): the long view.
+    const nowLine = Object.entries(w).filter(([, x]) => x > 0).map(([ticker, weight]) => ({ ticker, weight })), from5 = Horizon.addDays(last, -(5 * 365 + 2));
+    const bt = PMode.nav(ser, nowLine, { from: from5, start, calendar: cal }), btSpy = bt.dates.length ? PMode.nav({ SPY: ser.SPY }, [{ ticker: "SPY", weight: 100 }], { from: bt.dates[0], start, calendar: cal }) : null;
+    const mbt = bt.dates.length > 60 ? PMode.metrics(bt, ser.SPY) : null, mbtS = btSpy?.dates?.length > 60 ? PMode.metrics(btSpy, ser.SPY) : null;
+    const A = PfX.align(ser, nowLine.map((x) => x.ticker), { from: Horizon.addDays(last, -366), calendar: cal });
+    const As = PfX.align(ser, [...new Set([...nowLine.map((x) => x.ticker), "SPY"])], { from: Horizon.addDays(last, -366), calendar: cal });
+    const betas = Object.fromEntries(hs.map((h) => [h.ticker, num(D.info?.[h.ticker]?.beta)]));
+    const x = { per, start, nv, m, spyNav, ms, bt, btSpy, mbt, mbtS, rc: PfX.riskContrib(A, w), corr: As.tickers.length > 1 ? PfX.correlations(As) : null,
+      dd: PfX.drawdowns(bt, 5), uw: PfX.underwater(bt), uwS: btSpy ? PfX.underwater(btSpy) : [], cal: PfX.calendar(bt, btSpy), ds: PfX.dayStats(bt), ds1: PfX.dayStats(nv), roll: PfX.rolling(bt, btSpy, 126),
+      ep: PfX.episodes(ser, w, ser.SPY, betas), proj: mbt ? PfX.projection(mbt.annReturn, mbt.volatility / 100, total || start) : null, w };
+    S.pfXc = { sig, x }; return x;
+  }
+  /** Regions: funds through their country weights, stocks by where the company is based. */
+  function pfRegions(hs, D, w) {
+    const by = { us: 0, dev: 0, em: 0, other: 0 }; let tot = 0;
+    const put = (rg, x) => { const k = rg === "us" ? "us" : rg === "em" ? "em" : rg ? "dev" : "other"; by[k] += x; };
+    for (const h of hs) { const x = w[h.ticker] || 0; if (!(x > 0)) continue; tot += x; const fc = D.fctry?.[h.ticker];
+      if (fc && Object.keys(fc).length) { const s = Object.values(fc).reduce((a, v) => a + v, 0) || 1; for (const [c, v] of Object.entries(fc)) put(Screener.regionOf(c), (x * v) / s); }
+      else put(Screener.regionOf(D.info?.[h.ticker]?.country || (h.asset_type === "stock" ? "US" : "")), x); }
+    return tot ? Object.fromEntries(Object.entries(by).map(([k, v]) => [k, v / tot])) : null;
+  }
+  function pfDash(p, hs, D, total, pos) {
+    if (!hs.length) return `<section class="panel pf-empty"><h2>No holdings yet</h2><p class="muted">Add stocks, ETFs or mutual funds, by weight or dollar amount.</p><button class="primary" data-pf="tab-edit">Add holdings</button></section>`;
+    if (!D) return `<section class="panel"><div class="skel" style="height:140px"></div><div class="small muted" style="margin-top:8px">${S.pfLoading ? esc(S.pfLoading) : S.mcp ? "Press Fetch prices again to load prices." : "Open this page in Claude to read prices."}</div></section>`;
+    const X = pfX(p, hs, D, total, pos), { per, m, ms, nv, spyNav, bt, btSpy, mbt, mbtS, rc, corr, dd, cal, ds, ds1, roll, ep, proj, w } = X;
+    const wt = Object.values(w).reduce((a, v) => a + v, 0) || 1, wf = (t) => (w[t] || 0) / wt;
+    const nameOf = (t) => hs.find((h) => h.ticker === t)?.name || "";
+    const btFrom = bt.dates[0], btLab = btFrom ? `today's mix, held since ${fmtDate(btFrom)}` : "";
+    // ---- what it owns: sectors vs the S&P 500, regions, look-through, overlap, industries
+    const secs = pfSectors(hs, D), secTot = secs.reduce((a, s) => a + s.weight, 0) || 1, secF = Object.fromEntries(secs.map((s) => [s.sector, s.weight / secTot]));
+    const tilt = PfX.tilt(secF, D.spySec || {}), lt = PMode.lookThrough(hs, D.funds || {});
+    const cos2 = { ...(D.cos || {}) }; for (const h of hs) { const i = D.info?.[h.ticker]; if (h.asset_type === "stock" && i?.industry && !cos2[h.ticker]) cos2[h.ticker] = { industry: i.industry, sector: i.sector }; }
+    const indA = PfX.industries(lt.rows.map((r) => ({ ticker: r.ticker, total: r.total })), cos2), indKey = D.key + "|" + indA.rows.map((r) => r.industry).join(",");
+    if (indA.rows.length && S.pfDig?.key !== indKey) setTimeout(() => pfIndLoad(indKey, indA.rows.map((r) => r.industry)), 0);
+    const dig = S.pfDig?.key === indKey ? S.pfDig.dg : null, mix = dig ? PfX.callMix(indA.rows, dig) : null;
+    const regions = pfRegions(hs, D, w), ov = PfX.overlap(D.funds || {});
+    // ---- income and costs
+    const inc = hs.map((h) => { const v = total * wf(h.ticker), y = num(h.yield), er = h.asset_type === "stock" ? 0 : num(D.fexp?.[h.ticker]); return { h, v, y, income: isNum(y) ? v * y : NaN, er, fee: isNum(er) ? v * er : NaN }; });
+    const incT = inc.reduce((a, r) => a + (isNum(r.income) ? r.income : 0), 0), feeT = inc.reduce((a, r) => a + (isNum(r.fee) ? r.fee : 0), 0), feeCov = inc.filter((r) => isNum(r.er)).reduce((a, r) => a + r.v, 0);
+    const income = { total: incT, yield: total > 0 ? incT / total : NaN }, fees = { total: feeT, ratio: feeCov > 0 ? feeT / feeCov : NaN };
+    // ---- at a glance
+    const reads = PfX.read({ name: p.name, period: per, m: m ? { ...m, totalReturn: m.totalReturn } : null, ms, rc, tiltRows: tilt.filter((t) => D.spySec), look: { rows: lt.rows }, income, fees, mix, dd, corr });
+    const tile = (l, v, sub, tone = "", big = false) => `<div class="pfx-tile ${tone}${big ? " big" : ""}"><span class="pfx-tl">${l}</span><span class="pfx-tv mono">${v}</span>${sub ? `<span class="pfx-ts">${sub}</span>` : ""}</div>`;
+    const vsS = (a, b, better = 1) => (isNum(num(a)) && isNum(num(b)) ? ((a - b) * better >= 0 ? "pos" : "neg") : "");
+    const effN = PMode.effectiveHoldings(Object.values(w)), sh = PMode.sectorHHI(secs), hsc = PMode.healthScore(m, effN, hs.length, sh.hhi);
+    const pe = PMode.weighted(hs, "pe", { harmonic: true });
+    const glance = sec("pfx-glance", "At a glance", `${esc(per)} · ${nv.dates.length ? `${esc(fmtDate(nv.from))} to ${esc(fmtDate(nv.dates[nv.dates.length - 1]))}` : ""}`, `<div class="pfx-tiles">
+      ${tile("Return", pfPP(m?.totalReturn), ms ? `S&amp;P 500 ${pfPP(ms.totalReturn)}` : "", vsS(m?.totalReturn, ms?.totalReturn), true)}
+      ${tile("Ahead of the S&amp;P 500", m && ms ? `${m.totalReturn - ms.totalReturn >= 0 ? "+" : "−"}${Math.abs((m.totalReturn - ms.totalReturn) * 100).toFixed(1)} pts` : "—", isNum(m?.alpha) ? `alpha ${pfPP(m.alpha)} a year` : "", vsS(m?.totalReturn, ms?.totalReturn), true)}
+      ${tile("Volatility", isNum(m?.volatility) ? m.volatility.toFixed(1) + "%" : "—", ms ? `S&amp;P ${ms.volatility.toFixed(1)}%` : "", vsS(ms?.volatility, m?.volatility))}
+      ${tile("Sharpe", isNum(m?.sharpeRatio) ? m.sharpeRatio.toFixed(2) : "—", ms ? `S&amp;P ${ms.sharpeRatio.toFixed(2)}` : "", vsS(m?.sharpeRatio, ms?.sharpeRatio))}
+      ${tile("Max drawdown", isNum(m?.maxDrawdown) ? "−" + m.maxDrawdown.toFixed(1) + "%" : "—", ms ? `S&amp;P −${ms.maxDrawdown.toFixed(1)}%` : "", vsS(ms?.maxDrawdown, m?.maxDrawdown))}
+      ${tile("Beta", isNum(m?.beta) ? m.beta.toFixed(2) : "—", isNum(m?.correlationToSPY) ? `correlation ${m.correlationToSPY.toFixed(2)}` : "")}
+      ${tile("1-day risk (95%)", ds1 ? usd(-ds1.var95 * total) : "—", ds1 ? `${pfPc(-ds1.var95, 2)}: a bad day, 1 in 20` : "")}
+      ${tile("Income", isNum(incT) && incT > 0 ? usd(incT) + "/yr" : "—", isNum(income.yield) ? `yield ${pfPc(income.yield, 2)}` : "")}
+      ${tile("Fund fees", feeCov > 0 ? usd(feeT) + "/yr" : "—", isNum(fees.ratio) ? `${pfPc(fees.ratio, 2)} on the funds` : "")}
+      ${tile("P/E", isNum(pe) ? pe.toFixed(1) : "—", "weighted (harmonic)")}
+      ${tile("Effective holdings", effN.toFixed(1), `of ${hs.length}`)}
+      ${tile("Health", hsc ? `${hsc.score}<small>/100</small>` : "—", hsc ? hsc.parts.map((x) => `${x.label.split(" ")[0]} ${x.score}`).join(" · ") : "", hsc ? (hsc.score >= 70 ? "pos" : hsc.score < 45 ? "neg" : "") : "")}</div>
+      ${reads.length ? `<div class="pfx-read">${reads.map((r) => `<p>${pfMd(r)}</p>`).join("")}</div>` : ""}
+      ${nv.missing?.length ? `<div class="notice warn small"><span>No prices for ${esc(nv.missing.join(", "))}: left out of the numbers. Check the spelling in Edit holdings.</span><button class="sm" data-pf="tab-edit">Edit holdings</button></div>` : ""}`);
+    // ---- performance
+    const up = (m?.totalReturn ?? 0) >= 0, col = up ? "var(--pos)" : "var(--neg)", start = X.start, evs = p.rebalanceEvents || [];
+    const evIdx = evs.map((e) => ({ i: nv.dates.findIndex((d) => d >= e.date), label: e.label || "Rebalance" })).filter((x) => x.i > 0);
+    const wpx = Math.round(Math.max(420, Math.min(1100, (typeof innerWidth === "number" ? innerWidth : 1100) - 60)));
+    const perfLines = [{ name: p.name, color: col, dates: nv.dates, values: nv.values }, ...(S.ppSpy ? [{ name: "S&P 500", color: "var(--bench)", dash: true, dates: spyNav.dates, values: spyNav.values }] : [])];
+    const perf = sec("pf-perf", "Performance", `its value from ${esc(usd(start))}`, `<div class="pfx-perhead"><div class="seg" role="group" aria-label="Period">${PF_PERIODS.map((x) => `<button aria-pressed="${x === per}" data-pf-per="${x}">${x}</button>`).join("")}</div>
+      <button class="pp-tog" data-pp-spy="1" aria-pressed="${!!S.ppSpy}"><i></i>S&amp;P 500</button></div>
+      <div class="chart">${lineChart(perfLines, { height: innerWidth < 720 ? 280 : 260, width: wpx, area: col, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(2) + "M" : (v / 1000).toFixed(v < 10000 ? 1 : 0) + "k"), markers: evIdx })}<div class="tip" hidden></div>
+      <div class="legend"><span><i style="background:${col}"></i>${esc(p.name)} ${pfPP(m?.totalReturn)}</span>${S.ppSpy ? `<span><i class="dash" style="background:var(--bench)"></i>S&amp;P 500 ${pfPP(ms?.totalReturn)}</span>` : ""}${evIdx.length ? `<span class="muted">┊ rebalances</span>` : ""}</div></div>`);
+    // ---- drawdowns
+    const ddSec = bt.dates.length > 60 ? sec("pfx-dd", "Drawdowns", esc(btLab), `<div class="chart">${lineChart([{ name: p.name, color: "var(--neg)", dates: bt.dates, values: X.uw.map((v) => v * 100) }, ...(btSpy ? [{ name: "S&P 500", color: "var(--bench)", dash: true, dates: btSpy.dates, values: X.uwS.map((v) => v * 100) }] : [])], { height: 200, width: wpx, zeroLine: true, area: "var(--neg)", fmtY: (v) => v.toFixed(0) + "%", xLabels: bt.dates.length > 300 ? yearTicks : null })}<div class="tip" hidden></div>
+      <div class="legend"><span><i style="background:var(--neg)"></i>below its last high</span><span><i class="dash" style="background:var(--bench)"></i>S&amp;P 500</span></div></div>
+      <div class="pfx-cards">${dd.map((x, i) => `<div class="pfx-dd"><span class="pfx-rank mono">${i + 1}</span><div><b class="mono neg-t">${pfPP(x.depth)}</b><span class="small muted">${esc(fmtDate(x.start))} → bottom ${esc(fmtDate(x.bottom))}</span><span class="small">${x.end ? `back to the high ${esc(fmtDate(x.end))}: <b>${x.fall_days}</b> trading days down, <b>${x.recover_days}</b> back up` : `<b>not recovered yet</b> (${x.fall_days} trading days down so far)`}</span></div></div>`).join("")}</div>`) : "";
+    // ---- calendar
+    const MO = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const calSec = cal ? sec("pfx-cal", "Month by month", esc(btLab), `<div class="pfx-heat" role="table" aria-label="Monthly returns"><div class="pfx-hrow pfx-hh" role="row"><span role="columnheader">Year</span>${MO.map((x) => `<span role="columnheader">${x}</span>`).join("")}<span role="columnheader">Year</span><span role="columnheader">S&amp;P</span></div>
+      ${cal.years.slice().reverse().map((y) => `<div class="pfx-hrow" role="row"><span class="pfx-hy mono" role="rowheader">${y.year}</span>${y.months.map((r, k) => `<span class="pfx-hc mono" role="cell" style="${pfHeat(r)}" title="${MO[k]} ${y.year}: ${isNum(r) ? pfPP(r) : "—"}"><em>${MO[k]}</em>${isNum(r) ? (r * 100).toFixed(1) : ""}</span>`).join("")}<span class="pfx-hc pfx-ht mono" role="cell" style="${pfHeat(y.total, 0.3)}"><em>Year</em>${pfPP(y.total)}${y.partial ? "<sup>*</sup>" : ""}</span><span class="pfx-hc pfx-hs mono" role="cell"><em>S&amp;P</em>${pfPP(y.spy)}</span></div>`).join("")}</div>
+      <div class="pfx-stats">${[["Best month", cal.best ? `${pfPP(cal.best.r)}` : "—", cal.best ? `${MO[+cal.best.m.slice(5) - 1]} ${cal.best.m.slice(0, 4)}` : ""], ["Worst month", cal.worst ? pfPP(cal.worst.r) : "—", cal.worst ? `${MO[+cal.worst.m.slice(5) - 1]} ${cal.worst.m.slice(0, 4)}` : ""], ["Months up", pfPc(cal.up, 0), `of ${cal.n}`],
+        ["Best day", ds ? pfPP(ds.best.r, 2) : "—", ds ? fmtDate(ds.best.date) : ""], ["Worst day", ds ? pfPP(ds.worst.r, 2) : "—", ds ? fmtDate(ds.worst.date) : ""], ["Days up", ds ? pfPc(ds.up, 0) : "—", ds ? `longest runs: ${ds.upRun} up, ${ds.dnRun} down` : ""]].map(([l, v, s]) => `<div><span class="pfx-tl">${l}</span><b class="mono">${v}</b><span class="pfx-ts">${esc(s)}</span></div>`).join("")}</div>
+      <div class="small muted">* part of a year. Months from month-end values; the first month counts from ${esc(fmtDate(btFrom))}.</div>`) : "";
+    // ---- rolling
+    const rl = roll, rch = (vals, sp, fmtY, name, opts = {}) => lineChart([{ name, color: "var(--accent)", dates: rl.dates, values: vals.map((v) => (isNum(num(v)) ? v * (opts.k ?? 100) : NaN)) }, ...(sp ? [{ name: "S&P 500", color: "var(--bench)", dash: true, dates: rl.dates, values: sp.map((v) => (isNum(num(v)) ? v * 100 : NaN)) }] : [])], { height: 170, width: Math.round(wpx / (innerWidth < 900 ? 1 : 3)) + 60, fmtY, baseLine: opts.base ?? 0, xLabels: yearTicks });
+    const rollSec = rl ? sec("pfx-roll", "Rolling 6 months", `${esc(btLab)}: each point looks back 6 months`, `<div class="pfx-3">
+      <div class="chart"><h3>Return</h3>${rch(rl.ret, rl.spy, (v) => v.toFixed(0) + "%", "Return")}<div class="tip" hidden></div></div>
+      <div class="chart"><h3>Volatility (a year)</h3>${rch(rl.vol, null, (v) => v.toFixed(0) + "%", "Volatility", { base: null })}<div class="tip" hidden></div></div>
+      <div class="chart"><h3>Beta to the S&amp;P 500</h3>${rch(rl.beta, null, (v) => v.toFixed(2), "Beta", { k: 1, base: 1 })}<div class="tip" hidden></div></div></div>
+      <div class="small muted">Latest: return ${pfPP(rl.ret[rl.ret.length - 1])} (S&amp;P ${pfPP(rl.spy[rl.spy.length - 1])}), volatility ${pfPc(rl.vol[rl.vol.length - 1], 0)}, beta ${isNum(num(rl.beta[rl.beta.length - 1])) ? rl.beta[rl.beta.length - 1].toFixed(2) : "—"}. The range over the period: return ${pfPP(Math.min(...rl.ret))} to ${pfPP(Math.max(...rl.ret))}.</div>`) : "";
+    // ---- attribution (by holding and by sector)
+    const ct = PMode.contributions(D.series, pfLineup(p, hs, nv.from || today()), nv, evs), rows = ct.rows;
+    const bySec = {}; for (const r of rows) { const s0 = r.sector || "Other"; bySec[s0] = (bySec[s0] || 0) + r.contribution; }
+    const maxC = Math.max(...rows.map((r) => Math.abs(r.contribution)), 1e-9);
+    const attr = rows.length ? sec("pf-attr", "Where the return came from", `${esc(per)}: weight × the holding's return = its contribution`, `<div class="pfx-bars">${rows.slice().sort((a, b) => b.contribution - a.contribution).map((r) => `<div class="pfx-bar"><span class="pfx-bl"><b class="mono">${esc(r.ticker)}</b><span class="small muted">${pfPc(r.weight / 100, 0)} × ${pfPP(r.return)}</span></span><span class="pfx-btrack"><i class="${r.contribution >= 0 ? "pos" : "neg"}" style="${r.contribution >= 0 ? "left:50%" : `right:50%`};width:${(Math.abs(r.contribution) / maxC) * 50}%"></i></span><b class="mono ${r.contribution >= 0 ? "pos-t" : "neg-t"}">${pfPP(r.contribution, 2)}</b></div>`).join("")}</div>
+      <div class="pfx-sum"><span class="pill ${Math.abs(ct.total - (m?.totalReturn ?? ct.total)) < 1e-6 ? "pos" : "warn"}">Contributions add to ${pfPP(ct.total, 2)} = the portfolio's ${pfPP(m?.totalReturn, 2)}</span>${Object.keys(bySec).length > 1 ? ` <span class="small muted">By sector: ${Object.entries(bySec).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${esc(k)} ${pfPP(v, 2)}`).join(" · ")}</span>` : ""}</div>`) : "";
+    // ---- risk: the table against the S&P 500
+    const rowM = (l, v, sv, fmt, tgt) => `<tr><td>${l}${tgt ? `<div class="small muted">${tgt}</div>` : ""}</td><td class="n"><b>${fmt(v)}</b></td><td class="n muted">${fmt(sv)}</td></tr>`;
+    const f1p = (v) => (isNum(num(v)) ? v.toFixed(1) + "%" : "—"), f2 = (v) => (isNum(num(v)) ? Number(v).toFixed(2) : "—"), f0p = (v) => (isNum(num(v)) ? Math.round(v) + "%" : "—");
+    const riskT = m ? `<div class="tbl-wrap"><table class="wrap-table pfx-rt"><thead><tr><th></th><th class="n">Portfolio</th><th class="n">S&amp;P 500</th></tr></thead><tbody>
+      ${rowM("Volatility (a year)", m.volatility, ms?.volatility, f1p, "how much it swings")}${rowM("Max drawdown", -m.maxDrawdown, -(ms?.maxDrawdown ?? NaN), (v) => (isNum(num(v)) ? v.toFixed(1) + "%" : "—"), "peak to trough")}
+      ${rowM("Sharpe", m.sharpeRatio, ms?.sharpeRatio, f2, "return over cash per unit of volatility; above 1 is strong")}${rowM("Sortino", m.sortinoRatio, ms?.sortinoRatio, f2, "the same, counting only the falls")}${rowM("Calmar", m.calmarRatio, ms?.calmarRatio, f2, "yearly return over the worst fall")}
+      ${rowM("Beta", m.beta, 1, f2, "how much it moves with the S&P 500")}${rowM("Correlation", m.correlationToSPY, 1, f2, "lower diversifies more")}${rowM("Upside capture", m.upsideCapture, 100, f0p, "share of the S&P's up months it caught")}${rowM("Downside capture", m.downsideCapture, 100, f0p, "share of its down months it took")}
+      ${rowM("Alpha (a year)", m.alpha, 0, (v) => pfPP(v), "return beyond what beta explains")}${ds1 ? rowM("Bad day, 1 in 20 (VaR 95%)", ds1.var95 * 100, null, (v) => (isNum(num(v)) ? v.toFixed(2) + "%" : "—"), `${usd(-ds1.var95 * total)} on today's value`) + rowM("Average of the worst 5% of days", ds1.cvar95 * 100, null, (v) => (isNum(num(v)) ? v.toFixed(2) + "%" : "—"), `${usd(-ds1.cvar95 * total)} (CVaR)`) + rowM("Bad day, 1 in 100 (VaR 99%)", ds1.var99 * 100, null, (v) => (isNum(num(v)) ? v.toFixed(2) + "%" : "—"), `${usd(-ds1.var99 * total)}`) : ""}
+      </tbody></table></div>` : "";
+    const riskSec = m ? sec("pfx-risk", "Risk & ratios", `${esc(per)}, against the S&amp;P 500 on the same days`, riskT) : "";
+    // ---- who carries the risk
+    const rcSec = rc ? sec("pfx-rc", "Who carries the risk", `last 12 months of daily moves · portfolio volatility ${pfPc(rc.vol, 1)}`, `<div class="pfx-tiles small3">${tile("Diversification ratio", rc.divRatio.toFixed(2), `owning them together swings ${Math.max(0, Math.round((1 - 1 / rc.divRatio) * 100))}% less than each alone`)}${tile("Biggest risk", esc(rc.rows[0].ticker), `${pfPc(rc.rows[0].share, 0)} of the swings for ${pfPc(rc.rows[0].weight, 0)} of the money`)}${tile("Average correlation", corr && isNum(corr.avg) ? corr.avg.toFixed(2) : "—", "between the holdings")}</div>
+      <div class="pfx-rcl">${rc.rows.map((r) => { const more = r.share - r.weight; return `<div class="pfx-rcr"><span class="pfx-bl"><b class="mono">${esc(r.ticker)}</b><span class="small muted">swings ${pfPc(r.vol, 0)} a year on its own</span></span>
+        <div class="pfx-pair"><div><span class="small muted">money</span><span class="pfx-btrack one"><i style="width:${Math.min(100, r.weight * 100)}%"></i></span><b class="mono">${pfPc(r.weight, 0)}</b></div><div><span class="small muted">risk</span><span class="pfx-btrack one"><i class="${more > 0.02 ? "neg" : more < -0.02 ? "pos" : ""}" style="width:${Math.min(100, Math.max(0, r.share) * 100)}%"></i></span><b class="mono">${pfPc(r.share, 0)}</b></div></div>
+        <span class="small ${more > 0.02 ? "neg-t" : more < -0.02 ? "pos-t" : "muted"}">${more > 0.02 ? `${(more * 100).toFixed(0)} pts more risk than money` : more < -0.02 ? `${(-more * 100).toFixed(0)} pts less risk than money` : "risk in line with its money"}</span></div>`; }).join("")}</div>
+      <div class="small muted">Each holding's share of the portfolio's day-to-day swings: its weight × how it moves with the whole portfolio (from the daily covariances). A holding that swings a lot, or moves with everything else, carries more risk than its weight.</div>`) : "";
+    // ---- how they move together
+    const cTs = corr?.tickers || [], cellC = (v) => (isNum(num(v)) ? `background:color-mix(in srgb, ${v >= 0 ? "var(--accent)" : "var(--c4)"} ${Math.round(Math.abs(v) * 70)}%, transparent)` : "");
+    const pairs = []; for (let i = 0; i < cTs.length; i++) for (let j = i + 1; j < cTs.length; j++) if (isNum(num(corr.m[i][j])) && cTs[i] !== "SPY" && cTs[j] !== "SPY") pairs.push([cTs[i], cTs[j], corr.m[i][j]]);
+    pairs.sort((a, b) => b[2] - a[2]);
+    const corrSec = corr && cTs.length > 1 ? sec("pfx-corr", "How the holdings move together", `correlation of daily returns, last 12 months (${corr.days} days)`, `<div class="pfx-mat ${cTs.length > 6 ? "wide" : ""}" style="--n:${cTs.length}"><span></span>${cTs.map((t) => `<span class="pfx-mh mono">${esc(t)}</span>`).join("")}${cTs.map((a, i) => `<span class="pfx-mh mono">${esc(a)}</span>${cTs.map((b, j) => `<span class="pfx-mc mono${i === j ? " d" : ""}" style="${i === j ? "" : cellC(corr.m[i][j])}" title="${esc(a)} and ${esc(b)}: ${f2(corr.m[i][j])}">${i === j ? "" : f2(corr.m[i][j])}</span>`).join("")}`).join("")}</div>
+      ${pairs.length ? `<div class="pfx-pairs"><div><span class="pfx-tl">Move most alike</span>${pairs.slice(0, 3).map(([a, b, v]) => `<span class="pfx-pr"><b class="mono">${esc(a)} · ${esc(b)}</b> <span class="mono">${f2(v)}</span></span>`).join("")}</div><div><span class="pfx-tl">Diversify each other most</span>${pairs.slice(-3).reverse().map(([a, b, v]) => `<span class="pfx-pr"><b class="mono">${esc(a)} · ${esc(b)}</b> <span class="mono">${f2(v)}</span></span>`).join("")}</div></div>` : ""}
+      <div class="small muted">1 means they move in lockstep, 0 not at all, below 0 opposite ways. Pairs near 1 add little diversification.</div>`) : "";
+    // ---- stress tests
+    const beta = isNum(num(mbt?.beta)) ? mbt.beta : m?.beta;
+    const stressSec = ep.length ? sec("pfx-stress", "Stress test: past crises and rallies", "today's mix through each episode", `<div class="chart" style="max-width:900px">${barsChart(ep.map((e) => ({ label: e.label.replace(/^The /, "").replace(/^(\d{4}(-\d{2})?) /, "$1 "), a: e.port * 100, b: e.spy * 100 })), { fmtY: (v) => v.toFixed(0) + "%", colorA: "var(--accent)", labelW: 22, width: innerWidth < 720 ? 520 : 900, height: 230 })}<div class="legend"><span><i style="background:var(--accent)"></i>${esc(p.name)}</span><span><i style="background:var(--bench)"></i>S&amp;P 500</span></div></div>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Episode</th><th class="n">S&amp;P 500</th><th class="n">Portfolio</th><th class="n">On ${esc(usd(total))}</th><th class="n">Capture</th><th>Hit hardest</th></tr></thead><tbody>${ep.map((e) => `<tr><td><b>${esc(e.label)}</b><div class="small muted mono">${esc(fmtShort(e.from))} ${e.from.slice(0, 4)} → ${esc(fmtShort(e.to))} ${e.to.slice(0, 4)}</div></td><td class="n ${cls(e.spy)}">${pfPP(e.spy)}</td><td class="n ${cls(e.port)}"><b>${pfPP(e.port)}</b>${e.covered < 0.999 ? ` <span class="pill warn" title="${pfPc(1 - e.covered, 0)} of the weight didn't trade then: its beta × the S&P 500">est.</span>` : ""}</td><td class="n ${cls(e.port)}">${e.port >= 0 ? "+" : "−"}${usd(Math.abs(e.port * total))}</td><td class="n">${isNum(num(e.capture)) ? Math.round(e.capture * 100) + "%" : "—"}</td><td class="small">${e.rows.slice(0, 2).map((r) => `${esc(r.ticker)} ${pfPP(r.r)}${r.est ? "*" : ""}`).join(", ")}</td></tr>`).join("")}</tbody></table></div>
+      ${isNum(num(beta)) ? `<h3>If the market fell from here</h3><div class="pfx-tiles small3">${[-0.1, -0.2, -0.3].map((s0) => tile(`S&amp;P 500 ${Math.round(s0 * 100)}%`, `${usd(beta * s0 * total)}`, `about ${pfPP(beta * s0)} at a beta of ${beta.toFixed(2)}`, "neg")).join("")}</div>` : ""}
+      <div class="small muted">Each holding's own move where it traded through the episode; otherwise (*) its beta × the S&amp;P 500's move. Capture: the portfolio's move as a share of the S&amp;P 500's.</div>`) : "";
+    // ---- range of outcomes
+    let projSec = "";
+    if (proj) { const base = new Date(); const pd = proj.path.map((x) => { const t = new Date(base); t.setMonth(t.getMonth() + x.k); return t.toISOString().slice(0, 10); });
+      const yt = (dates) => dates.map((d, i) => [i, d]).filter(([i]) => i % 24 === 0).map(([i, d]) => [i, i ? `+${i / 12}y` : "now"]);
+      projSec = sec("pfx-proj", "A range of outcomes", `if the next years look like ${btFrom ? `the years since ${esc(fmtDate(btFrom))}` : "its history"} for today's mix: ${pfPP(proj.mu)} a year, swinging ${pfPc(proj.sigma, 0)}`, `<div class="chart">${lineChart([{ name: "Middle (50th percentile)", color: "var(--accent)", dates: pd, values: proj.path.map((x) => x.p50) }, { name: "Good case (90th)", color: "var(--pos)", dash: true, dates: pd, values: proj.path.map((x) => x.p90) }, { name: "Bad case (10th)", color: "var(--neg)", dash: true, dates: pd, values: proj.path.map((x) => x.p10) }], { height: 240, width: wpx, band: { lo: proj.path.map((x) => x.p25), hi: proj.path.map((x) => x.p75), color: "var(--accent)" }, fmtY: (v) => "$" + (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : Math.round(v / 1000) + "k"), xLabels: yt, baseLine: total })}<div class="tip" hidden></div>
+        <div class="legend"><span><i style="background:var(--accent)"></i>middle</span><span><i style="background:var(--accent);opacity:.3"></i>half of outcomes</span><span><i class="dash" style="background:var(--pos)"></i>1 in 10 better</span><span><i class="dash" style="background:var(--neg)"></i>1 in 10 worse</span></div></div>
+        <div class="tbl-wrap"><table><thead><tr><th>In</th><th class="n">1 in 10 worse</th><th class="n">Middle</th><th class="n">1 in 10 better</th><th class="n">Chance it's below today</th></tr></thead><tbody>${proj.rows.map((r) => `<tr><td><b>${r.years} year${r.years > 1 ? "s" : ""}</b></td><td class="n">${usd(r.p10)}</td><td class="n"><b>${usd(r.p50)}</b></td><td class="n">${usd(r.p90)}</td><td class="n">${pfPc(r.loss, 0)}</td></tr>`).join("")}</tbody></table></div>
+        <div class="small muted">A lognormal spread around its own yearly return and volatility, from ${esc(usd(total))} with nothing added or taken out. It is what the history implies, not a forecast: the industries' calls are under What it owns.</div>`); }
+    // ---- what it owns: sectors against the S&P 500, regions, types
+    const maxT = Math.max(...tilt.map((t) => Math.max(t.port, t.spy)), 0.01);
+    const types = {}; for (const h of hs) types[h.asset_type] = (types[h.asset_type] || 0) + wf(h.ticker);
+    const RGL = { us: "United States", dev: "Developed markets outside the US", em: "Emerging markets", other: "Not known (no country weights from FMP)" };
+    const allocSec = sec("pfx-alloc", "Sectors, regions and types", `through the funds' own holdings${D.spySec ? ", against the S&amp;P 500" : ""}`, `<div class="pfx-2">
+      <div><h3>Sectors${D.spySec ? " vs the S&amp;P 500" : ""}</h3><div class="pfx-tilt">${tilt.filter((t) => t.port > 0.001 || t.spy > 0.001).map((t) => `<div class="pfx-tr"><span class="pfx-tn">${esc(t.sector)}</span><span class="pfx-tb"><i class="p" style="width:${(t.port / maxT) * 100}%"></i>${D.spySec ? `<i class="s" style="width:${(t.spy / maxT) * 100}%"></i>` : ""}</span><b class="mono">${pfPc(t.port, 0)}</b>${D.spySec ? `<span class="mono small ${t.diff > 0.02 ? "pos-t" : t.diff < -0.02 ? "neg-t" : "muted"}">${t.diff >= 0 ? "+" : "−"}${Math.abs(t.diff * 100).toFixed(0)}</span>` : ""}</div>`).join("")}</div>${D.spySec ? `<div class="legend"><span><i style="background:var(--accent)"></i>portfolio</span><span><i style="background:var(--bench)"></i>S&amp;P 500</span><span class="muted">points over or under</span></div>` : ""}
+        <div class="small muted">Sector concentration (HHI) ${Math.round(sh.hhi).toLocaleString()}: ${esc(PMode.hhiLabel(sh.hhi).toLowerCase())}.</div></div>
+      <div><h3>Regions</h3>${regions ? `<div class="pfx-stack">${Object.entries(regions).filter(([, v]) => v > 0.001).map(([k, v]) => `<i class="rg-${k}" style="flex:${v} 0 0" title="${esc(RGL[k])} ${pfPc(v, 0)}"></i>`).join("")}</div><div class="pfx-legl">${Object.entries(regions).filter(([, v]) => v > 0.001).map(([k, v]) => `<div><i class="rg-${k}"></i><span>${esc(RGL[k])}</span><b class="mono">${pfPc(v, 1)}</b></div>`).join("")}</div>` : `<div class="small muted">Not known yet.</div>`}
+        <h3 style="margin-top:14px">Types</h3><div class="pfx-legl">${Object.entries(types).map(([k, v]) => `<div><i style="background:var(--accent)"></i><span>${esc(k === "etf" ? "ETFs" : k === "fund" ? "Mutual funds" : "Stocks")}</span><b class="mono">${pfPc(v, 1)}</b></div>`).join("")}</div></div></div>`);
+    // ---- the companies inside, and fund overlap
+    const ltMax = lt.rows[0]?.total || 1;
+    const lookSec = lt.rows.length ? sec("pfx-look", "The companies it really owns", "direct holdings plus what's inside each fund", `<div class="pfx-look">${lt.rows.slice(0, 20).map((r, i) => `<div class="pfx-lr"><span class="pfx-rank mono">${i + 1}</span><div class="pfx-ln"><b class="mono">${esc(r.ticker || "—")}</b><span class="small muted">${esc(r.name || "")}</span><span class="small muted">${[r.direct ? `direct ${pct(r.direct, false, 1)}` : "", ...r.via.slice(0, 4).map((v) => `${esc(v.fund)} ${pct(v.weight, false, 1)}`)].filter(Boolean).join(" · ")}</span></div><span class="pfx-btrack one"><i style="width:${(r.total / ltMax) * 100}%"></i></span><b class="mono">${pct(r.total, false, 2)}</b></div>`).join("")}</div>
+      <div class="pfx-tiles small3">${tile("Top 10 companies", pct(lt.rows.slice(0, 10).reduce((a, r) => a + r.total, 0), false, 1), "of the portfolio")}${tile("Companies counted", lt.rows.length.toLocaleString(), "across every fund's holdings")}${tile("Held twice", String(lt.overlap.length), lt.overlap.length ? lt.overlap.slice(0, 3).map((r) => r.ticker).join(", ") + " directly and through funds" : "nothing held both ways")}</div>
+      ${ov.length ? `<h3>How much the funds overlap</h3><div class="pfx-ovl">${ov.slice(0, 6).map((o) => `<div class="pfx-ov"><b class="mono">${esc(o.a)} · ${esc(o.b)}</b><span class="pfx-btrack one"><i style="width:${Math.min(100, o.overlap * 100)}%"></i></span><b class="mono">${pfPc(o.overlap, 0)}</b><span class="small muted">${o.shared} companies in both</span></div>`).join("")}</div><div class="small muted">Overlap: the share of a fund's money in companies the other fund also holds (the smaller of the two weights, added up).</div>` : ""}`) : "";
+    // ---- industries and our calls
+    const CC = (c) => (!c ? "" : /up|bull|rise|higher|outperform/i.test(c) ? "pos" : /down|bear|fall|lower|under/i.test(c) ? "neg" : "neu");
+    const indMax = indA.rows[0]?.weight || 1;
+    const indSec = indA.rows.length ? sec("pfx-ind", "Its industries and where we think they're going", `${pfPc(indA.placed, 0)} of the money placed in an industry${dig ? "" : " · reading your saved industry runs…"}`, `${mix ? `<div class="pfx-tiles small3">${tile("In industries we expect to rise", pfPc(mix.up, 0), "of the money with a 12-month call", "pos")}${tile("In industries we expect to fall", pfPc(mix.down, 0), "", mix.down > 0.25 ? "neg" : "")}${tile("Weighted 12-month expectation", pfPP(mix.expected), `${pfPc(mix.covered, 0)} of the money has a call`)}</div>` : ""}
+      <div class="pfx-inds">${indA.rows.slice(0, 15).map((r) => { const g = dig?.[String(r.industry).toLowerCase()], c12 = g?.lean?.["12M"] || g?.calls?.["12M"]?.call, sc = g?.scores ? Object.values(g.scores).map(num).filter(isNum) : [];
+        return `<div class="pfx-indr"><div class="pfx-indh"><button class="linkbtn" data-open-industry="${esc(r.industry)}"><b>${esc(r.industry)}</b></button><span class="small muted">${esc(r.sector || "")}</span></div>
+          <div class="pfx-indm"><span class="pfx-btrack one"><i style="width:${(r.weight / indMax) * 100}%"></i></span><b class="mono">${pfPc(r.weight, 1)}</b></div>
+          <div class="pfx-indc">${!g ? "" : ["1M", "3M", "6M", "12M"].map((h0) => { const c = g?.lean?.[h0] || g?.calls?.[h0]?.call; return `<span class="pill ${CC(c)}" title="${h0}">${h0} ${c ? esc(String(c)) : "—"}</span>`; }).join("")}${isNum(num(g?.expected12)) ? `<span class="small">12M expected <b class="mono">${pfPP(g.expected12)}</b></span>` : ""}${sc.length ? `<span class="small muted">score ${Math.round(Math.max(...sc))}</span>` : ""}</div>
+          ${g?.headline ? `<p class="small">${esc(g.headline)}</p>` : !g && dig ? `<p class="small muted">No saved run for this industry yet: open it on the Industries tab to analyze it.</p>` : ""}
+          <div class="small muted">${r.names.map((x) => `${esc(x.ticker)} ${pct(x.w, false, 1)}`).join(" · ")}</div></div>`; }).join("")}</div>`) : "";
+    // ---- income and costs
+    const incSec = sec("pfx-inc", "Income and costs", `on today's value of ${esc(usd(total))}`, `<div class="pfx-tiles small3">${tile("Dividends a year", usd(incT), `yield ${pfPc(income.yield, 2)}${pos?.cost > 0 ? ` · ${pfPc(incT / pos.cost, 2)} on what you paid` : ""}`, "pos")}${tile("Fund fees a year", feeCov > 0 ? usd(feeT) : "—", isNum(fees.ratio) ? `${pfPc(fees.ratio, 2)} on the funds · ${pfPc(total > 0 ? feeT / total : NaN, 2)} on everything` : "")}${tile("Fees per $10,000 in funds", isNum(fees.ratio) ? usd(fees.ratio * 10000) + "/yr" : "—", isNum(fees.ratio) ? `${usd(fees.ratio * 10000 * 10)} over 10 years at today's size` : "")}</div>
+      <div class="tbl-wrap"><table class="wrap-table"><thead><tr><th>Holding</th><th class="n">Value</th><th class="n">Yield</th><th class="n">Income a year</th><th class="n">Expense ratio</th><th class="n">Fee a year</th></tr></thead><tbody>${inc.sort((a, b) => (b.income || 0) - (a.income || 0)).map((r) => `<tr><td><b class="tick">${esc(r.h.ticker)}</b><div class="small muted">${esc(r.h.name || "")}</div></td><td class="n">${usd(r.v)}</td><td class="n">${pfPc(r.y, 2)}</td><td class="n"><b>${isNum(r.income) ? usd(r.income) : "—"}</b></td><td class="n">${r.h.asset_type === "stock" ? "—" : pfPc(r.er, 2)}</td><td class="n">${isNum(r.fee) && r.h.asset_type !== "stock" ? usd(r.fee) : "—"}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td><b>Total</b></td><td class="n">${usd(total)}</td><td class="n">${pfPc(income.yield, 2)}</td><td class="n"><b>${usd(incT)}</b></td><td class="n">${pfPc(fees.ratio, 2)}</td><td class="n"><b>${feeCov > 0 ? usd(feeT) : "—"}</b></td></tr></tfoot></table></div>
+      <div class="small muted">Yield: the last 12 months of dividends over today's price. Expense ratios from FMP and EODHD; fees come out of a fund's returns, so they're already in the performance above.</div>`);
+    // ---- Wall Street on what it holds
+    const stItems = lt.rows.filter((r) => r.ticker && (D.cos?.[r.ticker] || D.info?.[r.ticker]?.type === "stock" || /^[A-Z]{1,5}$/.test(r.ticker))).slice(0, 10).map((r) => ({ sym: r.ticker, w: r.total }));
+    const streetSec = stItems.length ? sec("pfx-street", "Wall Street on what it holds", "its 10 biggest companies, counting what the funds hold", streetSlot(stItems, { what: "companies in the portfolio", coverage: stItems.reduce((a, x) => a + x.w, 0), label: p.name })) : "";
+    const evList = evs.length ? sec("pf-events", "Rebalances", `${evs.length}`, `<ul class="dlist small">${evs.slice().reverse().map((e) => `<li><b class="mono">${esc(e.date)}</b> ${esc(e.label || "Rebalance")}: ${(e.trades || []).filter((t) => Math.abs(t.amountUsd) >= 1).map((t) => `<span class="pill ${t.amountUsd > 0 ? "pos" : "neg"}">${t.amountUsd > 0 ? "BUY" : "SELL"} ${esc(t.ticker)} $${Math.abs(Math.round(t.amountUsd)).toLocaleString()}</span>`).join(" ")}</li>`).join("")}</ul>`) : "";
+    const it = (ok, id, l) => (ok ? [id, l] : null);
+    const groups = [{ label: "At a glance", items: [["pfx-glance", "At a glance"]] },
+      { label: "Performance", items: [["pf-perf", "Value"], it(ddSec, "pfx-dd", "Drawdowns"), it(calSec, "pfx-cal", "Month by month"), it(rollSec, "pfx-roll", "Rolling 6 months"), it(attr, "pf-attr", "Where the return came from")] },
+      { label: "Risk", items: [it(riskSec, "pfx-risk", "Risk & ratios"), it(rcSec, "pfx-rc", "Who carries the risk"), it(corrSec, "pfx-corr", "How they move together"), it(stressSec, "pfx-stress", "Stress test"), it(projSec, "pfx-proj", "Range of outcomes")] },
+      { label: "What it owns", items: [["pfx-alloc", "Sectors & regions"], it(lookSec, "pfx-look", "The companies inside"), it(indSec, "pfx-ind", "Industries & our calls")] },
+      { label: "Income & costs", items: [["pfx-inc", "Income & costs"]] },
+      { label: "Wall Street", items: [it(streetSec, "pfx-street", "Ratings")] },
+      { label: "History", items: [it(evList, "pf-events", "Rebalances")] }];
+    return `<div class="shell">${sideNav(groups)}<div class="stream">${glance}${perf}${ddSec}${calSec}${rollSec}${attr}${riskSec}${rcSec}${corrSec}${stressSec}${projSec}${allocSec}${lookSec}${indSec}${incSec}${streetSec}${evList}</div></div>`;
+  }
+  /** A small price line for a holding's card: the last year. */
+  function pfSpark(ser, w = 120, h = 34) {
+    const c = ser?.closes || [], k = Math.min(c.length, 253); if (k < 10) return ""; const v = c.slice(-k), lo = Math.min(...v), hi = Math.max(...v), up = v[v.length - 1] >= v[0];
+    return `<svg class="pfx-spark" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="${up ? "var(--pos)" : "var(--neg)"}" stroke-width="1.6" stroke-linejoin="round" points="${v.map((x, i) => `${((i / (v.length - 1)) * w).toFixed(1)},${(h - 2 - ((x - lo) / (hi - lo || 1)) * (h - 4)).toFixed(1)}`).join(" ")}"/></svg>`;
+  }
+
   /** Numbers typed into the editor arrive as strings: parse them (num() only maps null to NaN). */
   const pfeN = (v) => (v === "" || v === null || v === undefined ? NaN : Number(v));
   const pfeW = (r) => { const w = pfeN(r.weight); return Number.isFinite(w) && w > 0 ? w : 0; };
@@ -10838,7 +11144,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
    * window began. A picked stretch is drawn from the same start (solid), and what came after it is drawn from today's
    * level forward (dashed), as if today went the way it went then.
    */
-  const PP_AHEAD = { "1M": 63, "3M": 126, "6M": 189, "1Y": 252 };
+  const PP_AHEAD = { "1M": 63, "3M": 126, "6M": 189, "1Y": 252, "3Y": 252, "5Y": 252 };
   try { S.ppSpy = localStorage.getItem("ams.ppSpy") === "1"; } catch {}
   function ppSpyFor(from) {
     const b = S.bench?.spy; if (b?.dates?.length && b.dates[0] <= from) return b;
@@ -10861,8 +11167,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       return { name: key, sel, dates: fd.ser.dates.slice(i0), values: fd.ser.closes.slice(i0), win: TW_WIN[w] ? w : null, spy: fd.spy?.dates?.[0] <= fd.ser.dates[i0] ? fd.spy : ppSpyFor(fd.ser.dates[i0]),
         bench: fd.bser && fd.bench?.symbol && fd.bench.symbol !== "SPY" ? { name: fd.bench.symbol, ser: fd.bser } : null };
     }
-    const d = S.industries[slug(key)], idx = d?.index; if (!idx?.dates?.length) return null;
-    const w = S.indRet || "1Y", n = Math.min(idx.dates.length, Math.round(TW_WIN[w] * 21) + 1);
+    const d = S.industries[slug(key)], long = S.twIndSer?.[key], w = S.indRet || "1Y", need = Math.round(TW_WIN[w] * 21) + 1;
+    const idx = long?.dates?.length && (d?.index?.dates?.length || 0) < need ? { dates: long.dates, levels: long.values } : d?.index; if (!idx?.dates?.length) return null;
+    const n = Math.min(idx.dates.length, need);
     return { name: key, short: "The industry", sel: w, dates: idx.dates.slice(-n), values: idx.levels.slice(-n), win: w, spy: ppSpyFor(idx.dates[idx.dates.length - n]) };
   }
   const ppFuture = (last, n) => { const out = []; const t = new Date(last + "T00:00:00Z"); while (out.length < n) { t.setUTCDate(t.getUTCDate() + 1); const g = t.getUTCDay(); if (g && g !== 6) out.push(t.toISOString().slice(0, 10)); } return out; };
@@ -10902,12 +11209,12 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
   function ppRedraw(ck) { for (const el of document.querySelectorAll(".pp[data-pp]")) { if (ck && el.dataset.pp !== ck) continue; const [kind, ...k] = el.dataset.pp.split(":"); el.innerHTML = ppHTML(kind, k.join(":")); wireCharts(el); } }
   document.addEventListener("click", (ev) => {
     const t = ev.target.closest("[data-pp-spy], [data-tw-clear]"); if (!t) return;
-    if (t.dataset.ppSpy) { S.ppSpy = !S.ppSpy; try { localStorage.setItem("ams.ppSpy", S.ppSpy ? "1" : "0"); } catch {} ppRedraw(); return; }
+    if (t.dataset.ppSpy) { S.ppSpy = !S.ppSpy; try { localStorage.setItem("ams.ppSpy", S.ppSpy ? "1" : "0"); } catch {} ppRedraw(); if (S.tab === "portfolios") renderPortfolio(); return; }
     const ck = t.dataset.twClear; if (S.twOver) delete S.twOver[ck]; ppRedraw(ck); for (const el of document.querySelectorAll(".tw")) if (`${el.dataset.tw}:${el.dataset.twKey}` === ck) twSync(el);
   });
   // ------------------------------------------------------------- times like this, by window (inside Performance)
-  const TW_WIN = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12 }, _twHtml = new Map();
-  const TW_LAB = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year" };
+  const TW_WIN = { "1M": 1, "3M": 3, "6M": 6, "1Y": 12, "3Y": 36, "5Y": 60 }, _twHtml = new Map();
+  const TW_LAB = { "1M": "1 month", "3M": "3 months", "6M": "6 months", "1Y": "1 year", "3Y": "3 years", "5Y": "5 years" };
   /** Performance's "Times like this": pick a window, see the five past stretches most like it and what came after. The
    * older monthly view (with the historian's notes) stays underneath, whole. */
   function twBlock(kind, key, old = "") {
@@ -10929,7 +11236,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       let w = exchangeWeights(cons.map((c) => ({ exchange: c.exchange || c.exchangeShortName, market_cap: c.market_cap || c.marketCap })));
       if (!Object.keys(w).length) w = { NASDAQ: 0.5, NYSE: 0.5 };
       const h = await fetchHistory(key, w), ls = History.levelSeries(h.perfRows, w);
-      return ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null;
+      const out = ls.dates.length > 400 ? { dates: ls.dates, values: ls.levels } : null; if (out) (S.twIndSer ||= {})[key] = out; return out;
     }, 6 * 3600 * 1000);
   }
   /** One industry's Times like this for every window, with the historian's notes (reused when the same stretches come back). */
@@ -10958,7 +11265,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const body = el.querySelector(".tw-body"), ck = `${k0}|${win}|${today()}`;
     if (_twHtml.has(ck)) { body.innerHTML = _twHtml.get(ck); twSync(el); return; }
     const pre = kind === "industry" ? S.industries[slug(key)]?.twin : null, preW = pre?.windows?.[win];
-    if (preW?.R && pre.date >= Horizon.addDays(today(), -3)) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; twSync(el); ppRedraw(k0); return; }
+    if (preW?.R && pre.date >= Horizon.addDays(today(), -(kind === "industry" && !S.mcp ? 30 : 3))) { _twState.set(ck, { R: preW.R, N: preW.N, win, kind, key }); const html = twHTML(preW.R, win, kind, key, preW.N); _twHtml.set(ck, html); body.innerHTML = html; twSync(el); ppRedraw(k0); return; }
     if (!S.mcp) { body.innerHTML = `<div class="small muted">Open this page in Claude to find the past stretches most like this one.</div>`; return; }
     body.innerHTML = `<div class="small muted">Finding the 5 past ${TW_LAB[win]} stretches most like the last ${TW_LAB[win]}…</div><div class="skel" style="height:120px;margin-top:8px"></div>`;
     try {
@@ -10966,6 +11273,9 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
       const R = ind ? Regimes.windowEpisodes({ ind, mk: mk || {}, months: TW_WIN[win], today: today() }) : null;
       const draw = (N) => { _twState.set(ck, { R, N, win, kind, key }); const html = twHTML(R, win, kind, key, N); _twHtml.set(ck, html);
         if (S.twWin[k0] !== win) return; for (const x of document.querySelectorAll(".tw")) if (x.dataset.tw === kind && x.dataset.twKey === key) { x.querySelector(".tw-body").innerHTML = html; twSync(x); } ppRedraw(k0); };
+      // An industry's notes come from GitHub (the windows pass, on the API): reused when its stretches are the same ones.
+      const preN = kind === "industry" && preW?.N?.ends && R?.episodes?.length && preW.N.ends.join() === R.episodes.map((e) => e.end).join() ? preW.N : null;
+      if (kind === "industry") { draw(preN || "github"); return; }
       const N0 = twNoteGet(ck); draw(N0 || (R?.episodes?.length && S.sample ? "pending" : null));
       if (!N0 && R?.episodes?.length && S.sample) draw(await twNarrate(kind, key, R, ck));
     } catch (e) { if (FATAL.has(e?.code)) throw e; body.innerHTML = `<div class="small muted">The long price history didn't come back from FMP, so the past stretches can't be found right now.</div>`; }
@@ -11026,7 +11336,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
     const ML = (d) => `${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`;
     const strip = `<div class="tw-base">${HZ.map(([h, l]) => { const b = R.base[h] || {}; return `<div class="tw-b"><span class="eyebrow">${l} later</span><span class="tw-bn"><b>${b.up ?? "—"}</b> of ${b.n ?? 5} higher</span><span class="small">median ${sg(b.median)}</span><span class="small muted">beat the S&amp;P 500 ${b.beat ?? "—"} of ${b.n ?? 5} · range ${isNum(num(b.worst)) ? `${b.worst > 0 ? "+" : ""}${b.worst}%` : "—"} to ${isNum(num(b.best)) ? `${b.best > 0 ? "+" : ""}${b.best}%` : "—"}</span></div>`; }).join("")}</div>`;
     const nowC = `<div class="tw-now"><span class="eyebrow">The last ${TW_LAB[win]}, to ${esc(fmtShort(R.as_of))}</span><div class="tw-chips">${R.features.slice(0, 9).map((k) => `<span class="tw-chip">${esc(lab(k))} <b>${esc(Regimes.wval(k, R.now[k]))}</b></span>`).join("")}</div></div>`;
-    const pend = N === "pending", NN = pend ? null : N, nb = (i) => NN?.episodes?.[i] || null;
+    const gh = N === "github", pend = N === "pending", NN = pend || gh ? null : N, nb = (i) => NN?.episodes?.[i] || null;
     const sgn = (v, u = "%") => (isNum(num(v)) ? `${v > 0 ? "+" : ""}${v}${u}` : "n/a");
     const after = (e) => { const r = e.it, sp = e.spy, ok = ["1M", "3M", "6M", "12M"].filter((h) => isNum(num(r[h])));
       if (!ok.length) return "";
@@ -11046,7 +11356,7 @@ table.cardtable td *, table.stackable td * { max-width: 100%; white-space: norma
         <div class="tw-after"><span class="eyebrow">What came after</span><div class="tw-grid">${HZ.map(([h, l]) => `<div class="tw-cell"><span class="small muted">${l}</span>${sg(e.it[h])}<span class="small muted">S&amp;P ${isNum(num(e.spy[h])) ? `${e.spy[h] > 0 ? "+" : ""}${e.spy[h]}%` : "—"}</span></div>`).join("")}</div>
         ${twAfterChart(e, it)}</div>
         <div class="small"><b>Most alike:</b> ${e.alike.map((k) => esc(lab(k))).join(", ")} · <b>least alike:</b> ${e.unlike.map((k) => esc(lab(k))).join(", ")}</div>${every(e)}</div></details>`; }).join("");
-    return `<div class="tw-list">${rows}</div>${strip}${read}<details class="tw-nowd"><summary>The last ${TW_LAB[win]}, measured</summary>${nowC}</details>`;
+    return `${gh ? `<div class="small muted tw-ghnote">The historian's notes on each stretch are written on GitHub for every industry and window: they arrive with Update everything from GitHub. What came after and every measure are below already.</div>` : ""}<div class="tw-list">${rows}</div>${strip}${read}<details class="tw-nowd"><summary>The last ${TW_LAB[win]}, measured</summary>${nowC}</details>`;
   }
   /** The company's Performance section, with Times like this inside it. */
   function coReturnsAll(co) { return addTo(coReturns(co), twBlock("company", co.sym, co.run ? coTimes(co) : "")); }

@@ -221,7 +221,7 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     ["creditw", "High-yield bonds vs Treasuries, over the {w}", "pp", 0.6], ["oilw", "Oil (USO), over the {w}", "%", 0.5], ["usdw", "US dollar (UUP), over the {w}", "%", 0.5],
   ];
   const WMAP = Object.fromEntries(WFEAT.map(([k, label, unit, w]) => [k, { key: k, label, unit, w }]));
-  const wname = (m) => (m === 12 ? "year" : m === 1 ? "month" : `${m} months`);
+  const wname = (m) => (m === 12 ? "year" : m === 1 ? "month" : m > 12 && m % 12 === 0 ? `${m / 12} years` : `${m} months`);
   function wfingerprint(d, m, mk, ind) {
     const mv = (s, back = 0) => valueAt(s, back ? monthEnd(addMonths(d, -back)) : d, 100);
     const f = {};
@@ -259,7 +259,7 @@ Reply with ONLY this JSON: {"episodes": [{"id": "HE1", "then": "...", "after": "
     if (keys.length < 3) return null;
     const sds = Object.fromEntries(keys.map((kk) => [kk, sd(rows.map((r) => r.f[kk])) || 1])), totW = keys.reduce((a, kk) => a + WMAP[kk].w, 0);
     for (const r of rows) { let s = 0, w = 0; for (const kk of keys) { if (!isNum(r.f[kk])) continue; s += WMAP[kk].w * ((r.f[kk] - fNow[kk]) / sds[kk]) ** 2; w += WMAP[kk].w; } r.dist = w >= totW * 0.6 ? Math.sqrt(s / w) : Infinity; }
-    const ranked = rows.filter((r) => r.dist < Infinity).sort((a, b) => a.dist - b.dist), N = ranked.length, gap = Math.max(months, 3);
+    const ranked = rows.filter((r) => r.dist < Infinity).sort((a, b) => a.dist - b.dist), N = ranked.length, gap = months > 12 ? 12 : Math.max(months, 3); // long windows: stretches a year apart (5 five-year stretches 5 years apart would need 25 years)
     const top = []; for (const r of ranked) { if (top.every((o) => Math.abs((Date.parse(o.d) - Date.parse(r.d)) / (30.44 * 864e5)) >= gap)) top.push(r); if (top.length >= k) break; }
     const spy = mk.spy?.dates?.length ? mk.spy : null, fmt = (kk, v) => (isNum(v) ? r1(v, WMAP[kk].unit === "" ? 0 : 1) : null);
     const ep = top.map((r) => { const fi = forward(ind, r.d), fs = spy ? forward(spy, r.d) : { ret: {}, path: [] };

@@ -1,12 +1,14 @@
 # The Screener tab's data: every US-listed stock, ETF and mutual fund above a size floor, with returns, risk, fund
 # facts and valuation (runner/screener.mjs). No Claude: FMP only, on your key. Runs on the 2nd of every month (like
 # month-end data) and whenever "Update everything from GitHub" finds it more than 25 days old; you can also start it
-# from Actions. Saved to the exports branch as screener/universe.json.gz; the next "Update everything from GitHub"
+# from Actions, or by pushing to the "screener-data" branch (which works before this file is on main). Saved to the exports branch as screener/universe.json.gz; the next "Update everything from GitHub"
 # copies it into the page.
 name: Screener data
 run-name: "Screener data"
 
 on:
+  push:
+    branches: [screener-data]
   schedule:
     - cron: "17 9 2 * *"
   workflow_dispatch:
